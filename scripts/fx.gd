@@ -1,0 +1,68 @@
+extends Node2D
+## Short-lived visual effect: floating text, an expanding ring, a lightning bolt,
+## a flame stream, a beam, a tornado or a musical note.
+
+var mode := "text"
+var text := ""
+var color := Color.WHITE
+var radius := 30.0
+var points := PackedVector2Array()   # bolt/beam path in local coordinates
+var life := 0.7
+var t := 0.0
+
+
+func _process(delta: float) -> void:
+	t += delta
+	if t >= life:
+		queue_free()
+		return
+	if mode == "text":
+		position.y -= 35.0 * delta
+	elif mode == "tornado":
+		position.y -= 220.0 * delta   # whirls off up the field, the way the enemies came
+	elif mode == "note":
+		position += Vector2(sin(t * 9.0) * 25.0, -45.0) * delta
+	queue_redraw()
+
+
+func _draw() -> void:
+	var a := 1.0 - t / life
+	match mode:
+		"text":
+			draw_string_outline(ThemeDB.fallback_font, Vector2(-40, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 80, 18, 4, Color(0, 0, 0, a))
+			draw_string(ThemeDB.fallback_font, Vector2(-40, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 80, 18, Color(color, a))
+		"burst":
+			draw_arc(Vector2.ZERO, radius * (0.4 + 0.6 * t / life), 0, TAU, 32, Color(color, a), 3.0, true)
+		"bolt":
+			draw_polyline(points, Color(color, a), 4.0, true)
+			draw_polyline(points, Color(1, 1, 1, a), 1.5, true)
+		"flame":
+			# Puffs streaming from the mouth to the target, yellow near the source, red at the end.
+			var from := points[0]
+			var to := points[1]
+			for i in 6:
+				var k := fmod(t / life + i / 6.0, 1.0)
+				var p := from.lerp(to, k) + Vector2(sin(i * 2.3 + t * 30.0), cos(i * 1.7 + t * 25.0)) * 4.0 * k
+				var col := Color(1.0, 0.9, 0.3).lerp(Color(1.0, 0.3, 0.1), k)
+				var sz := 3.0 + 5.0 * k
+				draw_rect(Rect2(p - Vector2(sz, sz) / 2, Vector2(sz, sz)), Color(col, a * 0.9))
+		"flash":
+			draw_circle(Vector2.ZERO, radius * (0.6 + 0.4 * t / life), Color(1, 1, 0.9, a * 0.7), true, -1.0, true)
+			draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(1, 1, 0.8, a), 3.0, true)
+		"beam":
+			draw_line(points[0], points[1], Color(color, a * 0.5), radius * 0.4 * a + 2.0, true)
+			draw_line(points[0], points[1], Color(1, 1, 1, a), 3.0, true)
+			draw_circle(points[1], 14.0 * (1.0 - a) + 6.0, Color(color, a * 0.6), true, -1.0, true)
+		"tornado":
+			# A grey funnel of spinning bands, wide at the top.
+			var spin := t * 25.0
+			for i in 7:
+				var y := -i * 8.0
+				var w := radius * (0.25 + i * 0.12)
+				var sway := sin(spin * 0.3 + i * 0.8) * 4.0
+				draw_arc(Vector2(sway, y), w, spin + i, spin + i + PI * 1.4, 12, Color(0.85, 0.88, 0.92, a * 0.8), 3.0, true)
+		"note":
+			# A musical note floating up from the Bard.
+			draw_circle(Vector2.ZERO, 3.5, Color(color, a), true, -1.0, true)
+			draw_line(Vector2(3, 0), Vector2(3, -11), Color(color, a), 2.0, true)
+			draw_line(Vector2(3, -11), Vector2(8, -8), Color(color, a), 2.0, true)
