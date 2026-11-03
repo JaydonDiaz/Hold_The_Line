@@ -26,6 +26,41 @@ var cracks := []      # crack lines, revealed one by one as it takes damage
 
 func _ready() -> void:
 	lay_out()
+	# The castle is drawn over the warriors, so one standing behind the gatehouse or a
+	# tower is hidden by it. Its silhouette shows through, clipped to the castle's shape.
+	clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	var xray := Xray.new()
+	xray.main = main
+	add_child(xray)
+
+
+## Silhouettes of the warriors, in each one's own color. As a child of the castle with
+## clip_children on, only the parts over the castle's stonework are seen.
+class Xray extends Node2D:
+	const SHADER := """
+shader_type canvas_item;
+void fragment() {
+	COLOR = vec4(COLOR.rgb, COLOR.a * texture(TEXTURE, UV).a);
+}
+"""
+	var main
+
+	func _ready() -> void:
+		var mat := ShaderMaterial.new()
+		mat.shader = Shader.new()
+		mat.shader.code = SHADER
+		material = mat
+
+	func _process(_delta: float) -> void:
+		queue_redraw()
+
+	func _draw() -> void:
+		for w in main.get_warriors():
+			if not w.visible or w.xray_tex == null:
+				continue
+			draw_set_transform_matrix(Transform2D(0, w.position) * w.xray_xform)
+			draw_texture_rect(w.xray_tex, w.xray_rect, false, Color(w.data["color"].lightened(0.2), 0.6))
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 ## Picks the crack lines (again when the field changes width). Seeded, so the same

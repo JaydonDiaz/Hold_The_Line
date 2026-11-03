@@ -69,7 +69,9 @@ func _ready() -> void:
 	Engine.time_scale = 1.0
 	paths.setup(self)
 	castle.main = self
-	for layer in [castle, wall_layer, warrior_layer, enemy_layer, fx_layer, overlay]:
+	# The castle goes over the warriors (it hides any standing behind it, showing their
+	# silhouettes) but under the enemies, effects and overlay.
+	for layer in [wall_layer, warrior_layer, castle, enemy_layer, fx_layer, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	hud = Hud.new()

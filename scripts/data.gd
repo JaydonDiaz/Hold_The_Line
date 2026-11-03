@@ -154,7 +154,7 @@ const FROST_PATHS := [
 const WARRIORS := {
 	"swordsman": {
 		"name": "Swordsman", "cost": 50, "color": Color(0.9, 0.72, 0.3),
-		"hp": 120.0, "speed": 120.0,
+		"hp": 120.0, "speed": 90.0,
 		"damage": 16.0, "range": 8.0, "cooldown": 0.6, "attack": "melee",
 		"desc": "Tough and cheap. Charges in and holds enemies in place.",
 		"paths": [
@@ -165,10 +165,10 @@ const WARRIORS := {
 				{"name": "Kingsblade", "cost": 140, "desc": "+60% damage; wide sweeping swings also hit enemies nearby (75%)", "effect": {"damage": 1.6, "cleave": {"arc": 160.0, "reach": 18.0, "damage": 0.75}}},
 			]},
 			{"name": "Speed", "tiers": [
-				{"name": "Quick Hands", "cost": 25, "desc": "Attacks 18% faster, +20% move speed", "effect": {"rate": 0.85, "speed": 1.2}},
-				{"name": "Flurry", "cost": 40, "desc": "Attacks 18% faster, +15% move speed", "effect": {"rate": 0.85, "speed": 1.15}},
-				{"name": "Blade Dance", "cost": 75, "desc": "Dual blades: every attack is followed by an off-hand strike (60%). Attacks 18% faster, +15% move speed", "effect": {"rate": 0.85, "speed": 1.15, "dual": 0.6}},
-				{"name": "Whirlwind", "cost": 140, "desc": "Off-hand strikes hit harder (80%). Attacks 25% faster, +20% move speed", "effect": {"rate": 0.8, "speed": 1.2, "dual": 0.8}},
+				{"name": "Quick Hands", "cost": 25, "desc": "Attacks 18% faster, +10% move speed", "effect": {"rate": 0.85, "speed": 1.1}},
+				{"name": "Flurry", "cost": 40, "desc": "Attacks 18% faster, +8% move speed", "effect": {"rate": 0.85, "speed": 1.08}},
+				{"name": "Blade Dance", "cost": 75, "desc": "Dual blades: every attack is followed by an off-hand strike (60%). Attacks 18% faster, +8% move speed", "effect": {"rate": 0.85, "speed": 1.08, "dual": 0.6}},
+				{"name": "Whirlwind", "cost": 140, "desc": "Off-hand strikes hit harder (80%). Attacks 25% faster, +10% move speed", "effect": {"rate": 0.8, "speed": 1.1, "dual": 0.8}},
 			]},
 			{"name": "Health", "tiers": [
 				{"name": "Padded Armor", "cost": 20, "desc": "+35% health, takes 10% less damage", "effect": {"hp": 1.35, "armor": 0.1}},
@@ -180,7 +180,7 @@ const WARRIORS := {
 	},
 	"archer": {
 		"name": "Archer", "cost": 70, "color": Color(0.4, 0.75, 0.35),
-		"hp": 50.0, "speed": 100.0,
+		"hp": 50.0, "speed": 125.0,
 		"damage": 9.0, "range": 170.0, "cooldown": 0.7, "attack": "arrow",
 		"projectile_speed": 650.0,
 		"desc": "Long range, steady single-target damage. Fragile up close.",
@@ -207,7 +207,7 @@ const WARRIORS := {
 	},
 	"mage": {
 		"name": "Mage", "cost": 120, "color": Color(0.7, 0.4, 0.95),
-		"hp": 45.0, "speed": 90.0,
+		"hp": 45.0, "speed": 95.0,
 		"damage": 12.0, "range": 130.0, "cooldown": 1.4, "attack": "orb",
 		"projectile_speed": 380.0, "splash": 55.0,
 		"desc": "Arcane blasts that hit every enemy in a small area.",
@@ -215,7 +215,7 @@ const WARRIORS := {
 	},
 	"frost": {
 		"name": "Frost Witch", "cost": 90, "color": Color(0.5, 0.85, 1.0),
-		"hp": 55.0, "speed": 95.0,
+		"hp": 55.0, "speed": 105.0,
 		"damage": 4.0, "range": 130.0, "cooldown": 0.9, "attack": "frost",
 		"projectile_speed": 500.0, "slow": 0.4, "slow_time": 1.6,
 		"desc": "Slows enemies so your other warriors get more hits in.",
@@ -223,7 +223,7 @@ const WARRIORS := {
 	},
 	"martial": {
 		"name": "Martial Artist", "cost": 150, "color": Color(0.95, 0.55, 0.15),
-		"hp": 170.0, "speed": 135.0,
+		"hp": 170.0, "speed": 150.0,
 		"damage": 14.0, "range": 8.0, "cooldown": 1.0, "attack": "combo", "combo": 3,
 		"desc": "Strong close-range brawler: lightning-fast three-hit combos.",
 		"paths": [
@@ -287,7 +287,7 @@ const WARRIORS := {
 	},
 	"bard": {
 		"name": "Bard", "cost": 100, "color": Color(0.95, 0.55, 0.85),
-		"hp": 60.0, "speed": 105.0,
+		"hp": 60.0, "speed": 115.0,
 		"damage": 7.0, "range": 150.0, "cooldown": 1.0, "attack": "note",
 		"projectile_speed": 450.0, "song_radius": 110.0,
 		"desc": "Troop. Plucks sharp notes; upgrades into songs that empower allies or unsettle enemies, or into nature spells.",
@@ -318,7 +318,7 @@ const WARRIORS := {
 	},
 	"alchemist": {
 		"name": "Alchemist", "cost": 110, "color": Color(0.55, 0.9, 0.35),
-		"hp": 65.0, "speed": 100.0,
+		"hp": 65.0, "speed": 85.0,
 		"damage": 10.0, "range": 135.0, "cooldown": 1.3, "attack": "flask",
 		"projectile_speed": 330.0, "splash": 28.0,
 		"desc": "Troop. Lobs flasks that splash a small area; upgrades into poison, acid or explosives.",

@@ -96,6 +96,11 @@ var tornado := {}            # radius, push, cooldown
 var confuse := {}            # radius, duration, cooldown
 var spell_timers := {"overgrowth": 1.0, "vines": 2.0, "tornado": 3.0, "confuse": 4.0}
 var song_tick := 0.0
+# The body as last drawn (texture, local transform, rect, tint), so the castle can draw
+# a silhouette of a warrior standing behind it. xray_tex is null when nothing was drawn.
+var xray_tex: Texture2D = null
+var xray_xform := Transform2D.IDENTITY
+var xray_rect := Rect2()
 # Alchemist.
 var poison := {}             # dps, duration, stacks added by each flask
 var cloud := {}              # radius, duration of the toxic cloud a flask leaves
@@ -463,7 +468,7 @@ func stats_text() -> String:
 			s += "\nWrecked" + (" - destroyed in %ds unless revived" % ceili(down_timer) if main.permadeath else ", back in %ds" % ceili(down_timer))
 		return s
 	if kind == "bard":
-		s = "HP %d/%d   Damage %.0f   Every %.2fs   Range %s   Song reach %s" % [ceili(hp), ceili(max_hp), damage, cooldown, Data.ft(attack_range), Data.ft(song_radius)]
+		s = "HP %d/%d   Damage %.0f   Every %.2fs   Range %s   Speed %s/s   Song reach %s" % [ceili(hp), ceili(max_hp), damage, cooldown, Data.ft(attack_range), Data.ft(move_speed), Data.ft(song_radius)]
 		if not aura.is_empty():
 			s += "   Allies:"
 			if aura.has("rate"):
@@ -489,7 +494,7 @@ func stats_text() -> String:
 			s += "\nDown!"
 		return s
 	if kind == "alchemist":
-		s += "   Range %s   Splash %s" % [Data.ft(attack_range), Data.ft(splash)]
+		s += "   Range %s   Speed %s/s   Splash %s" % [Data.ft(attack_range), Data.ft(move_speed), Data.ft(splash)]
 		if multishot > 1:
 			s += "   %d flasks" % multishot
 		if not poison.is_empty():
@@ -516,6 +521,8 @@ func stats_text() -> String:
 			s += "   Downed allies in range recover %.1fx faster" % revive["aura"]
 	elif not is_melee():
 		s += "   Range %s" % Data.ft(attack_range)
+	if move_speed > 0.0:
+		s += "   Speed %s/s" % Data.ft(move_speed)
 	if combo_hits > 0:
 		s += "   Combo %d hits" % combo_hits
 	if not blast.is_empty():
@@ -537,8 +544,6 @@ func stats_text() -> String:
 	if surge_left > 0.0:
 		s += "   SURGING"
 
-	if kind == "swordsman":
-		s += "   Speed %s/s" % Data.ft(move_speed)
 	if armor > 0.0:
 		s += "   Armor %d%%" % roundi(armor * 100)
 	if slow > 0.0:
@@ -1690,6 +1695,7 @@ func _draw() -> void:
 	var frames: Array = Sprites.frames(sprite_name())
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * SCALE
 	var feet := RADIUS
+	xray_tex = null
 	draw_set_transform(Vector2(0, feet), 0, Vector2(1, 0.35))
 	draw_circle(Vector2.ZERO, RADIUS, Color(0, 0, 0, 0.3))
 	if not is_active():
@@ -1697,9 +1703,11 @@ func _draw() -> void:
 		if is_emplacement():
 			draw_set_transform(Vector2(0, feet - size.y / 2 + 4), 0, Vector2(flip, 0.85))
 			draw_texture_rect(frames[0], _tex_rect(frames[0]), false, Color(0.4, 0.38, 0.38, 0.85))
+			_remember_body(frames[0], Transform2D(0, Vector2(flip, 0.85), 0, Vector2(0, feet - size.y / 2 + 4)), _tex_rect(frames[0]))
 		else:
 			draw_set_transform(Vector2(0, 4), PI / 2 * flip, Vector2(flip, 1))
 			draw_texture_rect(frames[0], _tex_rect(frames[0]), false, Color(0.5, 0.5, 0.55, 0.85))
+			_remember_body(frames[0], Transform2D(PI / 2 * flip, Vector2(flip, 1), 0, Vector2(0, 4)), _tex_rect(frames[0]))
 		draw_set_transform(Vector2.ZERO)
 		if main.permadeath:
 			# Bleeding out: a red ring that drains away.
@@ -1765,6 +1773,7 @@ func _draw() -> void:
 	# Tilt and squash pivot on the feet, so it leans and squashes without lifting off.
 	draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
 	draw_texture_rect(tex, body, false, tint)
+	_remember_body(tex, Transform2D(motion[1], Vector2(flip * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
 	draw_set_transform(Vector2.ZERO)
 	_draw_idle_props(origin, size)
 	if dazed > 0.0:
@@ -1818,6 +1827,12 @@ func _draw() -> void:
 		var top := Vector2(-RADIUS, feet - size.y - 2)
 		draw_rect(Rect2(top, Vector2(RADIUS * 2, 4)), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(top, Vector2(RADIUS * 2 * hp / max_hp, 4)), Color(0.35, 0.75, 1.0))
+
+
+func _remember_body(tex: Texture2D, xform: Transform2D, rect: Rect2) -> void:
+	xray_tex = tex
+	xray_xform = xform
+	xray_rect = rect
 
 
 ## Little props for idle animations, drawn over the sprite.
