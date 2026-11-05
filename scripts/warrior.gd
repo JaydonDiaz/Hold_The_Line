@@ -39,6 +39,7 @@ var post := Vector2.ZERO
 var post_u := 0.0              # post's place across the field (0 = left edge, 1 = right), kept through window resizes
 var fitted_post := Vector2.INF # post as of the last resize; if it's changed since, post_u is taken afresh
 var tiers := [0, 0, 0, 0]
+var wall_guard := false      # posted on the castle wall by a castle upgrade: walks along it, out of reach
 var last_path := -1   # the path upgraded most recently (its look wins a tie)
 var summoned := false # a skeleton raised by Necromancy: can't be sold, crumbles at the end of the wave
 var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial Artist a copy came from
@@ -109,6 +110,8 @@ var song_tick := 0.0
 # The body as last drawn (texture, local transform, rect, tint), so the castle can draw
 # a silhouette of a warrior standing behind it. xray_tex is null when nothing was drawn.
 var xray_tex: Texture2D = null
+var _look_key := -1           # see _look()
+var _look_cache := {}
 var xray_xform := Transform2D.IDENTITY
 var xray_rect := Rect2()
 # Alchemist.
@@ -221,6 +224,10 @@ func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
 	spent = d["cost"]
 	_apply_upgrades()
 	hp = max_hp
+	# Units re-pick targets every 0.3s; start each at a different point in that cycle
+	# so an army hired together doesn't all re-pick in the same frame.
+	retarget_timer = randf() * 0.3
+	buff_timer = randf() * 0.25
 
 
 func _apply_upgrades() -> void:
@@ -487,7 +494,7 @@ func is_support() -> bool:
 func shoots_over_walls() -> bool:
 	if data["attack"] == "shell":
 		return mortar
-	return is_emplacement() or data["attack"] == "flask"
+	return is_emplacement() or wall_guard or data["attack"] == "flask"   # towers and the castle wall stand above the barricades
 
 
 func _sees(e) -> bool:
@@ -628,7 +635,8 @@ func upgrade(p: int) -> void:
 
 
 func sell_value() -> int:
-	return int(spent * 0.6)
+	var step: int = main.price_step
+	return int(spent * 0.6) if step <= 1 else roundi(spent * 0.6 / step) * step
 
 
 func stats_text() -> String:
@@ -897,6 +905,7 @@ func _process(delta: float) -> void:
 				main.add_grave(self)
 				if main.selected == self:
 					main.selected = null
+				main.warriors_changed()
 				queue_free()
 			else:
 				hp = max_hp   # gets back up where it fell
@@ -1274,15 +1283,23 @@ func _gap_to(e) -> float:
 
 
 func _is_valid(e) -> bool:
-	if e == null or not is_instance_valid(e) or e.dead or e.position.y < 0.0 or (e.flying and not hits_air()):
+	if e == null or not is_instance_valid(e) or e.dead or (e.flying and not hits_air()):
 		return false
-	# Brawlers can't follow enemies up into their spawn area.
-	return not is_melee() or is_emplacement() or e.position.y + e.radius >= main.DEPLOY_TOP
+	# Nothing reaches into the enemy's spawn area: no one follows them up there or shoots
+	# them there (one poking out of it is fair game).
+	return e.position.y + e.radius >= main.DEPLOY_TOP
 
 
 func _find_target():
 	if is_emplacement():
 		return _pick(main.get_enemies().filter(_in_range))
+	if wall_guard:
+		# Anything it could hit from somewhere along the wall.
+		var reachable := []
+		for e in main.get_enemies():
+			if _is_valid(e) and position.y - e.position.y - RADIUS - e.radius <= attack_range:
+				reachable.append(e)
+		return _pick(reachable)
 	var all: Array = main.get_enemies().filter(_is_valid)
 	if main.paths.has_walls() and not shoots_over_walls():
 		# Rather go after an enemy on this side of the walls than one it can't get at.
@@ -1332,6 +1349,13 @@ func cycle_priority() -> void:
 
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * delta, max_dist)
+	if wall_guard:
+		# Along the wall only: line up under the target until it's in reach.
+		step = minf(step, absf(p.x - position.x))
+		position.x += signf(p.x - position.x) * step
+		walk += step / 12.0
+		moving = step > 0.01
+		return
 	var aim := p
 	# Only go the long way round if a wall or an emplacement is in the way of where it
 	# means to stop.
@@ -1366,6 +1390,13 @@ func _route_step(p: Vector2, delta: float) -> Vector2:
 func _separate() -> void:
 	if is_emplacement():
 		return   # rooted in place; everyone else steps around it
+	if wall_guard:
+		# On the wall: keep to the walkway, and make room for the other guards.
+		for g in main.powers.guards:
+			if g != self and absf(g.position.x - position.x) < RADIUS * 1.6:
+				position.x += (1.0 if position.x >= g.position.x else -1.0) * 0.5
+		position = Vector2(clampf(position.x, main.powers.GUARD_MARGIN * 0.5, main.FIELD_W - main.powers.GUARD_MARGIN * 0.5), main.powers.wall_y())
+		return
 	for w in main.get_warriors():
 		if w == self or not w.is_active():
 			continue
@@ -2137,12 +2168,14 @@ func _crumble() -> void:
 		if is_instance_valid(clone_of) and clone_of.is_active():
 			main.spawn_beam(position + Vector2(0, -16), clone_of.position + Vector2(0, -16), Color(0.7, 0.9, 1.0), 6.0)
 			clone_of.multiform_timer = clone_of.multiform["cooldown"]   # splits again a while after losing it
+		main.warriors_changed()
 		queue_free()
 		return
 	main.spawn_burst(position, 18.0, Color(0.9, 0.88, 0.8))
 	main.sfx("crumble", 1.3)
 	if main.selected == self:
 		main.selected = null
+	main.warriors_changed()
 	queue_free()
 
 
@@ -2401,7 +2434,20 @@ func _sprite_px(origin: Vector2, x: float, y: float) -> Vector2:
 	return origin + Vector2((x + 0.5 - half) * SCALE * flip, (y + 0.5 - half) * SCALE)
 
 
-func _draw() -> void:
+## What this unit looks like right now (sprite, accents, recolors, frames). Worked
+## out again only when something that changes the look does (tiers, the path it last
+## upgraded, Golden form, a Mage's shifting staff), not every frame.
+func _look() -> Dictionary:
+	var high := 0
+	for t in tiers:
+		if t >= 3:
+			high += 1
+	var step := _staff_step() if kind == "mage" and high >= 2 else 0
+	var key: int = tiers[0] | tiers[1] << 3 | tiers[2] << 6 | tiers[3] << 9 | (last_path + 1) << 12 \
+			| (1 if golden_left > 0.0 else 0) << 16 | step << 17
+	if key == _look_key:
+		return _look_cache
+	_look_key = key
 	var look_name := sprite_name()
 	var layers := accent_layers()
 	var tag := accent_tag()
@@ -2410,11 +2456,11 @@ func _draw() -> void:
 		layers.append(Sprites.INSTRUMENT_LAYERS[special])
 		tag += "+" + special
 	var recolor := {}
-	if kind == "mage" and _high_paths().size() >= 2:
+	if kind == "mage" and high >= 2:
 		# Two paths at tier 3: the staff slowly shifts between their colors.
 		var c := _staff_color()
 		recolor = {"o": c, "O": c.darkened(0.3), "w": Color(0.92, 0.9, 0.85).lerp(c, 0.45)}
-		tag += "+orb%d" % _staff_step()
+		tag += "+orb%d" % step
 	if kind == "archer" and tiers[0] > 0:
 		# The arrow nocked in her bow matches the ones she shoots.
 		recolor = {"e": Projectile.ARROW_SHAFTS[tiers[0]], "a": Projectile.ARROW_HEADS[tiers[0]]}
@@ -2422,12 +2468,27 @@ func _draw() -> void:
 	if golden_left > 0.0:
 		recolor = recolor.merged(GOLD_HAIR, true)
 		tag += "+gold"
-	var frames: Array = Sprites.frames(look_name, recolor, tag, layers)
+	_look_cache = {"name": look_name, "layers": layers, "tag": tag, "recolor": recolor,
+			"frames": Sprites.frames(look_name, recolor, tag, layers), "poses": {}}
+	return _look_cache
+
+
+func _pose_tex(look: Dictionary, pose_name: String):
+	var poses: Dictionary = look["poses"]
+	if not poses.has(pose_name):
+		poses[pose_name] = Sprites.pose(look["name"], pose_name, look["recolor"], look["tag"], look["layers"])
+	return poses[pose_name]
+
+
+func _draw() -> void:
+	var look := _look()
+	var frames: Array = look["frames"]
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * SCALE
 	var feet := RADIUS
 	xray_tex = null
-	draw_set_transform(Vector2(0, feet), 0, Vector2(1, 0.35))
-	draw_circle(Vector2.ZERO, RADIUS, Color(0, 0, 0, 0.3))
+	# The shadow, sprite, pips and health bar all come from the sprite atlas, so the
+	# renderer can batch the whole army together.
+	draw_texture_rect(Sprites.shadow(), Rect2(-RADIUS, feet - RADIUS * 0.35, RADIUS * 2.0, RADIUS * 0.7), false, Color(0, 0, 0, 0.3))
 	if not is_active():
 		# Knocked out: lying on the ground (or a wrecked emplacement) with a recovery ring.
 		if is_emplacement():
@@ -2474,7 +2535,7 @@ func _draw() -> void:
 	if surge_left > 0.0:
 		# Power Surge: a flickering red aura.
 		var pulse := 0.25 + 0.1 * sin(Time.get_ticks_msec() / 60.0)
-		draw_circle(Vector2(0, feet - size.y * 0.45), size.y * 0.55, Color(1, 0.2, 0.15, pulse), true, -1.0, true)
+		Sprites.disc(self, Vector2(0, feet - size.y * 0.45), size.y * 0.55, Color(1, 0.2, 0.15, pulse))
 	if not frost_aura.is_empty():
 		# Frost Aura: a frosty ring on the ground with snowflakes drifting round it.
 		var r: float = frost_aura["radius"] + RADIUS
@@ -2490,7 +2551,7 @@ func _draw() -> void:
 		var pulse := 0.2 + 0.08 * sin(Time.get_ticks_msec() / 300.0)
 		draw_set_transform(Vector2.ZERO)
 		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(0.85, 1.0, 0.55, pulse + 0.1), 1.5, true)
-		draw_circle(Vector2.ZERO, r, Color(0.7, 1.0, 0.5, pulse * 0.25), true, -1.0, true)
+		Sprites.disc(self, Vector2.ZERO, r, Color(0.7, 1.0, 0.5, pulse * 0.25))
 	if crimson_left > 0.0 or golden_left > 0.0:
 		# Power forms: a roaring aura of flames around the body, crimson, gold or both.
 		var t := Time.get_ticks_msec() / 70
@@ -2502,7 +2563,7 @@ func _draw() -> void:
 		for c in cols.size():
 			var col: Color = cols[c]
 			var grow := 1.0 + c * 0.25
-			draw_circle(Vector2(0, feet - size.y * 0.45), size.y * 0.5 * grow, Color(col, 0.18), true, -1.0, true)
+			Sprites.disc(self, Vector2(0, feet - size.y * 0.45), size.y * 0.5 * grow, Color(col, 0.18))
 			for i in 9:
 				var x := (-1.0 + i / 4.0) * size.x * 0.42 * grow
 				var h := (10.0 + float((t + i * 5 + c * 3) % 5) * 4.0) * grow
@@ -2514,7 +2575,8 @@ func _draw() -> void:
 		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))
 	var charging := beam_charge > 0.0
 	var tex: Texture2D = frames[int(walk) % 2 if moving else 0]
-	var pose_tex = Sprites.pose(look_name, _pose_name(), recolor, tag, layers)
+	var pose_name := _pose_name()
+	var pose_tex = _pose_tex(look, pose_name) if pose_name != "" else null
 	if pose_tex != null:
 		tex = pose_tex
 	var lunge := facing * (swing / 0.15) * 5.0
@@ -2527,7 +2589,7 @@ func _draw() -> void:
 		var k := fmod(walk, 1.0)
 		var back := Vector2(-signf(facing.x) if absf(facing.x) > 0.2 else 0.0, 0.0)
 		var puff := Vector2(0, feet - 2) + back * (6.0 + 8.0 * k)
-		draw_circle(puff, 3.0 + 3.0 * k, Color(0.75, 0.68, 0.55, 0.45 * (1.0 - k)), true, -1.0, true)
+		Sprites.disc(self, puff, 3.0 + 3.0 * k, Color(0.75, 0.68, 0.55, 0.45 * (1.0 - k)))
 	var motion := _body_motion()
 	var origin: Vector2 = Vector2(0, feet - size.y / 2) + lunge + motion[0]
 	var arrow := _archer_arrow(origin) if kind == "archer" and _idling() and _readying() <= 0.0 else {}
@@ -2559,19 +2621,19 @@ func _draw() -> void:
 		if swing > 0.0:
 			# Flash at the tip of the thrust staff as the spell leaves it.
 			var tip := _sprite_px(origin, 22, 8) if kind == "mage" else _sprite_px(origin, 22, 5)
-			draw_circle(tip, 9.0 * swing / 0.15 + 3.0, Color(glow, 0.5 * swing / 0.15 + 0.2), true, -1.0, true)
+			Sprites.disc(self, tip, 9.0 * swing / 0.15 + 3.0, Color(glow, 0.5 * swing / 0.15 + 0.2))
 		elif _readying() > 0.0:
 			# Gathering power in the staff's orb before the next cast.
 			var k := _readying()
 			var orb := _sprite_px(origin, 14, 2) if kind == "mage" else _sprite_px(origin, 14, 1.5)
-			draw_circle(orb, 3.0 + 6.0 * k, Color(glow, 0.45 * k), true, -1.0, true)
+			Sprites.disc(self, orb, 3.0 + 6.0 * k, Color(glow, 0.45 * k))
 	if charging:
 		# Gathering ki for the beam: a growing, flickering orb in front of the hands.
 		var k := 1.0 - beam_charge / BEAM_CHARGE
 		var orb := Vector2(0, feet - size.y * 0.45) + facing * 14.0
 		var flicker := 1.0 + 0.15 * sin(Time.get_ticks_msec() / 25.0)
-		draw_circle(orb, (4.0 + 10.0 * k) * flicker, Color(KI_COLOR, 0.35), true, -1.0, true)
-		draw_circle(orb, (2.0 + 5.0 * k) * flicker, Color(1, 1, 0.9, 0.9), true, -1.0, true)
+		Sprites.disc(self, orb, (4.0 + 10.0 * k) * flicker, Color(KI_COLOR, 0.35))
+		Sprites.disc(self, orb, (2.0 + 5.0 * k) * flicker, Color(1, 1, 0.9, 0.9))
 	if swing > 0.0 and kind == "swordsman":
 		var a := facing.angle()
 		if cleave.is_empty():
@@ -2600,7 +2662,7 @@ func _draw() -> void:
 		if tiers[p] == 0:
 			continue
 		for i in tiers[p]:
-			draw_rect(Rect2(-(tiers[p] - 1) * 3.0 + i * 6.0 - 2, feet + 4 + row * 5, 4, 4), PATH_COLORS[p])
+			draw_texture_rect(Sprites.white(), Rect2(-(tiers[p] - 1) * 3.0 + i * 6.0 - 2, feet + 4 + row * 5, 4, 4), false, PATH_COLORS[p])
 		row += 1
 	if not multiform.is_empty() and clone_of == null and not _clones().is_empty():
 		# The real one, while split: a small gold marker over his head.
@@ -2609,8 +2671,8 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([m + Vector2(0, -3.5), m + Vector2(2.5, 0), m + Vector2(0, 3.5), m + Vector2(-2.5, 0)]), Color(1.0, 0.85, 0.3))
 	if hp < max_hp:
 		var top := Vector2(-RADIUS, feet - size.y - 2)
-		draw_rect(Rect2(top, Vector2(RADIUS * 2, 4)), Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(top, Vector2(RADIUS * 2 * hp / max_hp, 4)), Color(0.35, 0.75, 1.0))
+		draw_texture_rect(Sprites.white(), Rect2(top, Vector2(RADIUS * 2, 4)), false, Color(0, 0, 0, 0.6))
+		draw_texture_rect(Sprites.white(), Rect2(top, Vector2(RADIUS * 2 * hp / max_hp, 4)), false, Color(0.35, 0.75, 1.0))
 
 
 func _remember_body(tex: Texture2D, xform: Transform2D, rect: Rect2) -> void:
@@ -2632,7 +2694,7 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 		"mage":
 			# Motes of magic circling the staff's orb.
 			var orb := _sprite_px(origin, 14, 2)
-			draw_circle(orb, 5.0 + sin(anim_t * 3.0), Color(_orb_color(), 0.25), true, -1.0, true)
+			Sprites.disc(self, orb, 5.0 + sin(anim_t * 3.0), Color(_orb_color(), 0.25))
 			for i in 3:
 				var p := orb + Vector2.from_angle(anim_t * 3.0 + i * TAU / 3.0) * Vector2(10, 5)
 				draw_rect(Rect2(p - Vector2(1.5, 1.5), Vector2(3, 3)), Color(_orb_color(), 0.9))
@@ -2643,7 +2705,7 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 				var ang := anim_t * 1.6 + i * TAU / 5.0
 				var p := mid + Vector2(cos(ang) * 20.0, sin(ang) * 7.0 - 6.0 + sin(anim_t * 2.0 + i) * 4.0)
 				var col := Color(0.92, 0.98, 1.0, 0.6 + 0.4 * (0.5 + 0.5 * sin(ang)))
-				draw_circle(p, 4.0, Color(0.6, 0.85, 1.0, 0.25), true, -1.0, true)
+				Sprites.disc(self, p, 4.0, Color(0.6, 0.85, 1.0, 0.25))
 				draw_rect(Rect2(p - Vector2(1, 4), Vector2(2, 8)), col)
 				draw_rect(Rect2(p - Vector2(4, 1), Vector2(8, 2)), col)
 		"healer":
@@ -2651,7 +2713,7 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 			for i in 3:
 				var k := fmod(anim_t * 0.6 + i / 3.0, 1.0)
 				var p := origin + Vector2(sin(i * 2.1 + anim_t) * 14.0, size.y * 0.2 - k * 44.0)
-				draw_circle(p, 5.0, Color(0.7, 1.0, 0.6, 0.3 * (1.0 - k)), true, -1.0, true)
+				Sprites.disc(self, p, 5.0, Color(0.7, 1.0, 0.6, 0.3 * (1.0 - k)))
 				draw_rect(Rect2(p - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 0.95, 0.6, 1.0 - k))
 		"alchemist":
 			var h := _toss()
@@ -2661,13 +2723,13 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 				var look := _look_path()
 				draw_set_transform(p, anim_t * 12.0, Vector2.ONE)
 				if look == 2:
-					draw_circle(Vector2.ZERO, 6.0, OUTLINE_COLOR, true, -1.0, true)
-					draw_circle(Vector2.ZERO, 4.5, Color(0.35, 0.35, 0.42), true, -1.0, true)
+					Sprites.disc(self, Vector2.ZERO, 6.0, OUTLINE_COLOR)
+					Sprites.disc(self, Vector2.ZERO, 4.5, Color(0.35, 0.35, 0.42))
 					draw_rect(Rect2(-1, -9, 2, 3), Color(1.0, 0.8, 0.25))
 				else:
-					draw_circle(Vector2(0, 1), 5.5, OUTLINE_COLOR, true, -1.0, true)
+					Sprites.disc(self, Vector2(0, 1), 5.5, OUTLINE_COLOR)
 					draw_rect(Rect2(-2.5, -7, 5, 5), OUTLINE_COLOR)
-					draw_circle(Vector2(0, 1), 4.0, FLASK_COLORS[look] if look >= 0 else data["color"], true, -1.0, true)
+					Sprites.disc(self, Vector2(0, 1), 4.0, FLASK_COLORS[look] if look >= 0 else data["color"])
 					draw_rect(Rect2(-1.5, -6, 3, 4), Color(0.85, 0.95, 0.95))
 				draw_set_transform(Vector2.ZERO)
 

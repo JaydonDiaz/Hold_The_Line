@@ -6,6 +6,7 @@ extends Node2D
 ## lightning; Freeplay is a violet twilight full of magic motes. The enemy camp's fire
 ## and torches burn whatever the mood. Pure decoration: nothing here touches play.
 
+const Sprites = preload("res://scripts/sprites.gd")
 const FieldArt = preload("res://scripts/field_art.gd")
 
 const MOODS := {
@@ -158,11 +159,11 @@ func _draw() -> void:
 		draw_rect(Rect2(p + Vector2(1, -2), Vector2(3 * flap + 0.5, 3)), b["color"])
 	for b in bits.get("fireflies", []):
 		var a := 0.5 + 0.5 * sin(t * 3.0 + b["phase"] * 3.0)
-		draw_circle(b["pos"], 6.0, Color(0.8, 1.0, 0.4, 0.12 * a))
+		Sprites.disc(self, b["pos"], 6.0, Color(0.8, 1.0, 0.4, 0.12 * a))
 		draw_rect(Rect2(b["pos"] - Vector2(1, 1), Vector2(2, 2)), Color(0.85, 1.0, 0.5, a))
 	for b in bits.get("motes", []):
 		var a := 0.5 + 0.5 * sin(t * 2.5 + b["phase"] * 3.0)
-		draw_circle(b["pos"], 7.0, Color(0.75, 0.55, 1.0, 0.12 * a))
+		Sprites.disc(self, b["pos"], 7.0, Color(0.75, 0.55, 1.0, 0.12 * a))
 		draw_rect(Rect2(b["pos"] - Vector2(1, 1), Vector2(2, 2)), Color(0.9, 0.8, 1.0, a))
 	for b in bits.get("embers", []):
 		var a := 0.5 + 0.5 * sin(t * 9.0 + b["phase"] * 5.0)
@@ -181,7 +182,7 @@ func _draw() -> void:
 func _soft_blob(at: Vector2, s: float, col: Color) -> void:
 	for o in [Vector2(-50, 4), Vector2(-15, -8), Vector2(25, -2), Vector2(55, 6), Vector2(5, 10)]:
 		draw_set_transform(at + o * s, 0, Vector2(1, 0.55))
-		draw_circle(Vector2.ZERO, 46.0 * s, col)
+		Sprites.disc(self, Vector2.ZERO, 46.0 * s, col)
 		draw_set_transform(Vector2.ZERO)
 
 
@@ -197,13 +198,13 @@ func _draw_fires(w: float) -> void:
 		for side in [-1.0, 1.0]:
 			var at := Vector2(w / 2.0 + side * 36.0, main.CASTLE_Y - 18.0)
 			var f := 0.85 + 0.15 * sin(t * 11.0 + side)
-			draw_circle(at, 34.0 * f, Color(1.0, 0.65, 0.25, 0.1 * g))
-			draw_circle(at, 16.0 * f, Color(1.0, 0.7, 0.3, 0.12 * g))
+			Sprites.disc(self, at, 34.0 * f, Color(1.0, 0.65, 0.25, 0.1 * g))
+			Sprites.disc(self, at, 16.0 * f, Color(1.0, 0.7, 0.3, 0.12 * g))
 
 
 func _flame(at: Vector2, s: float, glow_a: float) -> void:
 	var f := 0.8 + 0.2 * sin(t * 13.0 + at.x) * sin(t * 7.1 + at.y)
-	draw_circle(at, 30.0 * s * f, Color(1.0, 0.6, 0.2, glow_a * 0.4))
+	Sprites.disc(self, at, 30.0 * s * f, Color(1.0, 0.6, 0.2, glow_a * 0.4))
 	var tip := at + Vector2(sin(t * 8.0 + at.x) * 2.0, -14.0 * s * f)
 	draw_colored_polygon(PackedVector2Array([at + Vector2(-6 * s, 0), at + Vector2(6 * s, 0), tip]), Color(1.0, 0.5, 0.12))
 	draw_colored_polygon(PackedVector2Array([at + Vector2(-3 * s, 0), at + Vector2(3 * s, 0), Vector2(tip.x, at.y + (tip.y - at.y) * 0.6)]), Color(1.0, 0.88, 0.4))
@@ -211,4 +212,4 @@ func _flame(at: Vector2, s: float, glow_a: float) -> void:
 	if s > 1.0:
 		for i in 3:
 			var k := fmod(t * 0.4 + i / 3.0, 1.0)
-			draw_circle(at + Vector2(sin(t + i) * 5.0 + k * 8.0, -16.0 - k * 40.0), 4.0 + k * 7.0, Color(0.4, 0.38, 0.38, 0.35 * (1.0 - k)))
+			Sprites.disc(self, at + Vector2(sin(t + i) * 5.0 + k * 8.0, -16.0 - k * 40.0), 4.0 + k * 7.0, Color(0.4, 0.38, 0.38, 0.35 * (1.0 - k)))

@@ -10,7 +10,7 @@ const Sprites = preload("res://scripts/sprites.gd")
 const Grave = preload("res://scripts/grave.gd")
 
 const W := 640.0
-const H := 960.0
+const H := 1040.0
 const GROUND_Y := 522.0     # the foot of the castle walls
 const EARTH_Y := 604.0      # where the grass gives way to the earth the cards sit on
 const ROWS := [556.0, 590.0]

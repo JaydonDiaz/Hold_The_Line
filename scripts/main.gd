@@ -27,6 +27,16 @@ const MIN_POST_GAP := 30.0
 const FREEPLAY_GOLD := 999999
 const FREEPLAY_MAX_LEVEL := 40
 
+var _enemies := []           # get_enemies() for this frame
+var _enemies_frame := -1
+var _grid := {}              # enemies by grid cell this frame (see enemies_near)
+var _grid_frame := -1
+var _wgrid := {}             # your units by grid cell this frame (see warriors_near)
+var _wgrid_frame := -1
+const GRID := 64.0
+const MAX_ENEMY_RADIUS := 40.0   # at least the biggest enemy's radius (the Ogre King's)
+var _warriors := []          # get_warriors() for this frame
+var _warriors_frame := -1
 var started := false     # set once the player picks a mode
 var selected_grave = null   # Hardcore: a grave clicked to see who fell there
 var grave_layer := Node2D.new()
@@ -39,7 +49,9 @@ var tutorial := false    # tutorial mode: a normal game with a guide, where the 
 var gold: int = Data.START_GOLD
 var difficulty := "normal"   # a key of Data.DIFFICULTIES ("normal" in freeplay)
 var cost_mult := 1.0         # prices for this difficulty
+var price_step := 1          # ...rounded to this many gold (5 on Hard)
 var castle_max: float = Data.CASTLE_HP
+var castle_base: float = Data.CASTLE_HP   # castle_max before the Fortify path's extra health
 var castle_hp: float = Data.CASTLE_HP
 var down_time := 20.0        # seconds a knocked-out warrior stays down (Hardcore: before it dies)
 var margin := Vector2.ZERO   # spare screen above and below the game on a tall window
@@ -66,6 +78,10 @@ var dragging: Warrior = null     # unit being repositioned between waves
 var drag_origin := Vector2.ZERO
 var drag_offset := Vector2.ZERO
 
+const GROUND_OVERSAMPLE := 2
+var ground_vp := SubViewport.new()     # the ground, painted once (see _repaint_ground)
+var ground_painter := Node2D.new()
+var ground_sprite := Sprite2D.new()
 var castle := Castle.new()
 var wall_layer := Node2D.new()
 var warrior_layer := Node2D.new()
@@ -93,9 +109,27 @@ func _ready() -> void:
 	ambience.main = self
 	ambience.setup("normal")
 	powers.main = self
-	for layer in [grave_layer, wall_layer, warrior_layer, castle, enemy_layer, powers, fx_layer, ambience, overlay]:
+	ground_vp.disable_3d = true
+	ground_vp.transparent_bg = false
+	ground_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+	ground_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	ground_painter.scale = Vector2.ONE * GROUND_OVERSAMPLE   # painted at twice the size
+	ground_vp.add_child(ground_painter)
+	ground_painter.draw.connect(func(): _paint_ground(ground_painter))
+	add_child(ground_vp)
+	ground_sprite.centered = false
+	ground_sprite.texture = ground_vp.get_texture()
+	ground_sprite.scale = Vector2.ONE / GROUND_OVERSAMPLE
+	ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # smooth when shown smaller than painted
+	add_child(ground_sprite)
+	castle.top_part.castle = castle
+	for layer in [grave_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
+	for sig in [enemy_layer.child_entered_tree, enemy_layer.child_exiting_tree]:
+		sig.connect(func(_n): enemies_changed())
+	for sig in [warrior_layer.child_entered_tree, warrior_layer.child_exiting_tree]:
+		sig.connect(func(_n): warriors_changed())
 	hud = Hud.new()
 	hud.process_mode = Node.PROCESS_MODE_ALWAYS   # stays clickable while the game is paused
 	add_child(hud)
@@ -114,7 +148,9 @@ func _ready() -> void:
 	hud.freeplay_level_changed.connect(change_freeplay_level)
 	hud.freeplay_spawn_pressed.connect(spawn_single)
 	hud.freeplay_clear_pressed.connect(clear_enemies)
-	hud.castle_pressed.connect(castle_item)
+	hud.castle_pressed.connect(castle_upgrade)
+	hud.ability_pressed.connect(ability_item)
+	hud.repair_pressed.connect(repair_castle)
 	hud.power_pressed.connect(func(k): powers.trigger(k))
 	hud.show_mode_select()
 	get_viewport().size_changed.connect(_fit_screen)
@@ -173,6 +209,7 @@ func _fit_screen() -> void:
 		walls_changed()
 		castle.lay_out()
 	castle.queue_redraw()
+	castle._drawn_state = Vector3(-1, -1, -1)
 	queue_redraw()
 
 
@@ -183,14 +220,17 @@ func choose_mode(mode: String) -> void:
 	difficulty = "normal" if freeplay or tutorial else mode
 	ambience.setup(mode)
 	castle.modulate = ambience.castle_tint()
+	castle.top_part.modulate = castle.modulate
 	queue_redraw()
 	var d: Dictionary = Data.DIFFICULTIES[difficulty]
 	permadeath = d["permadeath"]
 	down_time = d["down_time"]
 	cost_mult = d["cost"]
+	price_step = d.get("round", 1)
 	castle_max = roundf(Data.CASTLE_HP * d["castle"])
+	castle_base = castle_max
 	castle_hp = castle_max
-	hud.set_prices(cost_mult)
+	hud.set_prices(cost_mult, price_step)
 	if freeplay:
 		gold = FREEPLAY_GOLD
 		hud.show_freeplay_bar()
@@ -250,8 +290,69 @@ func _process(delta: float) -> void:
 	overlay.queue_redraw()
 
 
+## The living enemies. Built once a frame and shared (callers mustn't change it); a
+## death or a new arrival makes the next call build a fresh array, so a loop already
+## going over the old one isn't disturbed.
 func get_enemies() -> Array:
-	return enemy_layer.get_children().filter(func(e): return not e.dead)
+	var f := Engine.get_process_frames()
+	if f != _enemies_frame:
+		_enemies_frame = f
+		_enemies = enemy_layer.get_children().filter(func(e): return not e.dead)
+	return _enemies
+
+
+## Living enemies whose centres may be within r of p (some a little further): only the
+## grid cells around p, so crowds of enemies don't each check every other enemy.
+## The grid is built once a frame from where enemies were then.
+func enemies_near(p: Vector2, r: float) -> Array:
+	var f := Engine.get_process_frames()
+	if f != _grid_frame:
+		_grid_frame = f
+		_grid.clear()
+		for e in get_enemies():
+			var c := Vector2i(floori(e.position.x / GRID), floori(e.position.y / GRID))
+			if _grid.has(c):
+				_grid[c].append(e)
+			else:
+				_grid[c] = [e]
+	var lo := Vector2i(floori((p.x - r) / GRID), floori((p.y - r) / GRID))
+	var hi := Vector2i(floori((p.x + r) / GRID), floori((p.y + r) / GRID))
+	var out := []
+	for cy in range(lo.y, hi.y + 1):
+		for cx in range(lo.x, hi.x + 1):
+			var cell = _grid.get(Vector2i(cx, cy))
+			if cell != null:
+				out.append_array(cell)
+	return out
+
+
+## Your units (active or not) whose centres may be within r of p, from a grid built
+## once a frame like enemies_near's.
+func warriors_near(p: Vector2, r: float) -> Array:
+	var f := Engine.get_process_frames()
+	if f != _wgrid_frame:
+		_wgrid_frame = f
+		_wgrid.clear()
+		for w in get_warriors():
+			var c := Vector2i(floori(w.position.x / GRID), floori(w.position.y / GRID))
+			if _wgrid.has(c):
+				_wgrid[c].append(w)
+			else:
+				_wgrid[c] = [w]
+	var lo := Vector2i(floori((p.x - r) / GRID), floori((p.y - r) / GRID))
+	var hi := Vector2i(floori((p.x + r) / GRID), floori((p.y + r) / GRID))
+	var out := []
+	for cy in range(lo.y, hi.y + 1):
+		for cx in range(lo.x, hi.x + 1):
+			var cell = _wgrid.get(Vector2i(cx, cy))
+			if cell != null:
+				out.append_array(cell)
+	return out
+
+
+## Call when an enemy dies or leaves (get_enemies then rebuilds).
+func enemies_changed() -> void:
+	_enemies_frame = -1
 
 
 ## Hardcore: a unit has died for good, so a grave (or a ruin) marks the spot.
@@ -274,8 +375,18 @@ func _grave_at(p: Vector2):
 	return null
 
 
+## Your units on the field (not the castle's wall guards). Shared like get_enemies.
 func get_warriors() -> Array:
-	return warrior_layer.get_children().filter(func(w): return not w.is_queued_for_deletion())
+	var f := Engine.get_process_frames()
+	if f != _warriors_frame:
+		_warriors_frame = f
+		_warriors = warrior_layer.get_children().filter(func(w): return not w.is_queued_for_deletion())
+	return _warriors
+
+
+func warriors_changed() -> void:
+	_warriors_frame = -1
+	_wgrid_frame = -1
 
 
 func get_barricades() -> Array:
@@ -427,6 +538,7 @@ func late_gold(amount: int) -> int:
 
 
 func _on_enemy_died(e) -> void:
+	enemies_changed()
 	sfx("die", 1.3 if e.radius < 14.0 else (0.7 if e.radius > 20.0 else 1.0))
 	var bounty := late_gold(e.bounty)
 	gold += bounty
@@ -448,6 +560,7 @@ func _on_enemy_at_castle(_e) -> void:
 func damage_castle(amount: float) -> void:
 	if game_over or amount <= 0.0:
 		return
+	amount *= 1.0 - powers.armor()
 	castle_hp -= amount
 	castle.struck(amount)
 	sfx("castle")
@@ -462,44 +575,77 @@ func damage_castle(amount: float) -> void:
 
 # --- Castle ---------------------------------------------------------------
 
-## A Castle tab button: "repair", or a castle upgrade (bought if it isn't yet, cast
-## if it's an ability that is).
-func castle_item(key: String) -> void:
+## An Abilities tab button: buys the ability, or uses it once it's bought.
+func ability_item(key: String) -> void:
 	if game_over or not started:
 		return
-	if key == "repair":
-		repair_castle()
-	elif powers.owned.has(key):
+	if powers.owned.has(key):
 		powers.trigger(key)
-	elif powers.buy(key):
-		pass
-	elif not powers.owned.has(key):
+	elif not powers.buy(key):
 		hud.show_message("Not enough gold")
 
 
-## What a repair mends now, and what it costs (less than a full repair's price when
-## the castle needs less than that).
-func repair_amount() -> float:
-	return minf(castle_max * Data.REPAIR_SHARE, castle_max - castle_hp)
+## A Castle tab card: the next tier of castle path p.
+func castle_upgrade(p: int) -> void:
+	if game_over or not started:
+		return
+	if not powers.upgrade(p) and not powers.next_tier(p).is_empty():
+		hud.show_message("Not enough gold")
 
 
-func repair_cost() -> int:
-	var full := price(Data.REPAIR_BASE + Data.REPAIR_PER_WAVE * wave)
-	return maxi(1, ceili(full * repair_amount() / (castle_max * Data.REPAIR_SHARE)))
+## What Repair button i (see Data.REPAIR_CHUNKS) mends now. The full repair, when you
+## can't afford it, becomes as much repair as all your gold buys.
+func repair_amount(i: int) -> float:
+	var amount := minf(roundf(castle_max * Data.REPAIR_CHUNKS[i]), castle_max - castle_hp)
+	if Data.REPAIR_CHUNKS[i] >= 1.0 and repair_cost(amount) > gold:
+		amount = affordable_repair()
+	return amount
 
 
-func can_repair() -> bool:
-	return not wave_active and not game_over and repair_amount() >= 1.0 and gold >= repair_cost()
+## Whether the full repair is beyond your gold (so it spends all you have instead).
+func repair_all_gold() -> bool:
+	return castle_max - castle_hp >= 1.0 and repair_cost(castle_max - castle_hp) > gold
 
 
-func repair_castle() -> void:
+## The most health (whole points) your gold can mend right now.
+func affordable_repair() -> float:
+	var lo := 0
+	var hi := int(castle_max - castle_hp)
+	while lo < hi:
+		var mid := (lo + hi + 1) / 2
+		if repair_cost(mid) <= gold:
+			lo = mid
+		else:
+			hi = mid - 1
+	return float(lo)
+
+
+## What mending `amount` costs: a flat price, its share of max health times
+## REPAIR_FULL_COST (whatever the wave or the castle's state), at this difficulty's prices.
+func repair_cost(amount: float) -> int:
+	if amount <= 0.0:
+		return 0
+	return price(Data.REPAIR_FULL_COST * amount / castle_max)
+
+
+func can_repair(i: int) -> bool:
+	var amount := repair_amount(i)
+	return not wave_active and not game_over and amount >= 1.0 and gold >= repair_cost(amount)
+
+
+func repair_castle(i: int) -> void:
+	if game_over or not started:
+		return
 	if wave_active:
 		hud.show_message("Repairs wait until the wave is over")
 		return
-	if not can_repair():
+	var amount := repair_amount(i)
+	if amount < 1.0:
 		return
-	var amount := repair_amount()
-	gold -= repair_cost()
+	if gold < repair_cost(amount):
+		hud.show_message("Not enough gold")
+		return
+	gold -= repair_cost(amount)
 	castle_hp += amount
 	sfx("place")
 	spawn_text(Vector2(FIELD_W / 2.0, CASTLE_Y - 60), "+%d castle" % roundi(amount), Color(0.5, 1.0, 0.5))
@@ -647,8 +793,8 @@ func wall_cost(a: Vector2, b: Vector2) -> int:
 
 
 ## A price adjusted for the difficulty.
-func price(base: int) -> int:
-	return maxi(1, roundi(base * cost_mult))
+func price(base: float) -> int:
+	return Data.scaled_price(base, cost_mult, price_step)
 
 
 ## What hiring this kind costs (the shortest wall, for a barricade).
@@ -755,6 +901,9 @@ func order_move(p: Vector2) -> void:
 
 
 func upgrade_selected(path: int) -> void:
+	if selected == null and placing_type == "" and hud.hire_tab == "castle":
+		castle_upgrade(path)   # Q/W/E/R work on the Castle tab's paths too
+		return
 	if selected == null or selected.path_state(path) != "ok":
 		return
 	var cost := selected.upgrade_cost(path)
@@ -828,6 +977,7 @@ func sell_selected() -> void:
 	gold += selected.sell_value()
 	sfx("sell")
 	selected.queue_free()
+	warriors_changed()
 	if selected is Barricade:
 		walls_changed()
 	selected = null
@@ -838,7 +988,7 @@ func switch_tab(tab: String) -> void:
 	if dragging != null:
 		_end_drag()
 	selected = null
-	if placing_type != "" and (tab == "castle" or hud.tab_of(placing_type) != tab):
+	if placing_type != "" and hud.tab_of(placing_type) != tab:
 		placing_type = ""   # the hire being placed isn't on the new tab
 		wall_start = null
 	hud.show_tab(tab)
@@ -906,19 +1056,31 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 				# Number keys pick from whichever hire tab is showing.
 				var i: int = event.keycode - KEY_1
-				if hud.hire_tab == "castle":
-					var items: Array = hud.castle_items()
-					if i < items.size():
-						castle_item(items[i])
-					return
+				match hud.hire_tab:
+					"castle":
+						if i < Data.CASTLE_PATHS.size():
+							castle_upgrade(i)
+						return
+					"abilities":
+						if i < Data.ABILITIES.size():
+							ability_item(Data.ABILITIES.keys()[i])
+						return
+					"repair":
+						if i < Data.REPAIR_CHUNKS.size():
+							repair_castle(i)
+						return
 				var kinds: Array = hud.tab_kinds(hud.hire_tab)
 				if i < kinds.size():
 					_on_hire_pressed(kinds[i])
 			KEY_TAB:
-				var order := ["troops", "emplacements", "castle"]
+				var order: Array = hud.TABS.map(func(t): return t[0])
 				switch_tab(order[(order.find(hud.hire_tab) + 1) % order.size()])
 			KEY_C:
 				switch_tab("castle")
+			KEY_V:
+				switch_tab("abilities")
+			KEY_B:
+				switch_tab("repair")
 			KEY_Z:
 				switch_tab("troops")
 			KEY_X:
@@ -1080,8 +1242,24 @@ func spawn_burst(pos: Vector2, radius: float, color: Color) -> void:
 
 func _draw() -> void:
 	_draw_surroundings()
-	# Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
-	# lit for the mode's mood; then the scenery on it (see field_art.gd).
+	_repaint_ground()
+
+
+## The ground never moves, but it's hundreds of tiles and bits of scenery: drawn
+## live, the renderer would resend them all every frame. So it's painted once into
+## a texture (at twice the size, to stay crisp on a big screen) and shown as a single
+## sprite; it's painted again only when the mode or the field's width changes.
+func _repaint_ground() -> void:
+	var size := Vector2i(FIELD_W, FIELD_H) * GROUND_OVERSAMPLE
+	if ground_vp.size != size:
+		ground_vp.size = size
+	ground_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	ground_painter.queue_redraw()
+
+
+## Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
+## lit for the mode's mood; then the scenery on it (see field_art.gd).
+func _paint_ground(ci: CanvasItem) -> void:
 	var tint: Color = ambience.ground_tint()
 	for x in ceili(float(FIELD_W) / TILE):
 		for y in FIELD_H / TILE:
@@ -1089,12 +1267,12 @@ func _draw() -> void:
 			if (y + 1) * TILE > DEPLOY_TOP:
 				var h := (x * 73856093) ^ (y * 19349663)
 				variant = 3 if h % 11 == 0 else absi(h) % 3
-			draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
-	draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
-	FieldArt.draw_meadow(self, FIELD_W, tint)
-	FieldArt.draw_spawn(self, FIELD_W, tint)
+			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
+	ci.draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
+	FieldArt.draw_meadow(ci, FIELD_W, tint)
+	FieldArt.draw_spawn(ci, FIELD_W, tint)
 	for x in range(0, FIELD_W, 16):
-		draw_rect(Rect2(x, DEPLOY_TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
+		ci.draw_rect(Rect2(x, DEPLOY_TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
 
 
 ## The panel's colour carried on under the field across the whole width (the

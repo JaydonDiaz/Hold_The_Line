@@ -2,6 +2,7 @@ extends Node2D
 ## Short-lived visual effect: floating text, an expanding ring, a lightning bolt,
 ## a flame stream, a beam, a tornado, a musical note or a rain of fire arrows.
 
+const Sprites = preload("res://scripts/sprites.gd")
 var mode := "text"
 var text := ""
 var color := Color.WHITE
@@ -47,12 +48,12 @@ func _draw() -> void:
 				var sz := 3.0 + 5.0 * k
 				draw_rect(Rect2(p - Vector2(sz, sz) / 2, Vector2(sz, sz)), Color(col, a * 0.9))
 		"flash":
-			draw_circle(Vector2.ZERO, radius * (0.6 + 0.4 * t / life), Color(1, 1, 0.9, a * 0.7), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, radius * (0.6 + 0.4 * t / life), Color(1, 1, 0.9, a * 0.7))
 			draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(1, 1, 0.8, a), 3.0, true)
 		"beam":
 			draw_line(points[0], points[1], Color(color, a * 0.5), radius * 0.4 * a + 2.0, true)
 			draw_line(points[0], points[1], Color(1, 1, 1, a), 3.0, true)
-			draw_circle(points[1], 14.0 * (1.0 - a) + 6.0, Color(color, a * 0.6), true, -1.0, true)
+			Sprites.disc(self, points[1], 14.0 * (1.0 - a) + 6.0, Color(color, a * 0.6))
 		"tornado":
 			# A grey funnel of spinning bands, wide at the top.
 			var spin := t * 25.0
@@ -70,14 +71,14 @@ func _draw() -> void:
 				var tip := spot + Vector2(-0.3, -1.0) * 70.0 * (1.0 - k)
 				if k < 1.0:
 					draw_line(tip, tip + Vector2(-0.3, -1.0) * 12.0, Color(0.95, 0.85, 0.7, a), 2.0, true)
-					draw_circle(tip, 2.5, Color(1.0, 0.6, 0.15, a), true, -1.0, true)
+					Sprites.disc(self, tip, 2.5, Color(1.0, 0.6, 0.15, a))
 				else:
-					draw_circle(spot, 4.0, Color(1.0, 0.5, 0.1, a * 0.8), true, -1.0, true)
+					Sprites.disc(self, spot, 4.0, Color(1.0, 0.5, 0.1, a * 0.8))
 			draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.6))
-			draw_circle(Vector2.ZERO, radius, Color(1.0, 0.45, 0.1, 0.18 * a), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, radius, Color(1.0, 0.45, 0.1, 0.18 * a))
 			draw_set_transform(Vector2.ZERO)
 		"note":
 			# A musical note floating up from the Bard.
-			draw_circle(Vector2.ZERO, 3.5, Color(color, a), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 3.5, Color(color, a))
 			draw_line(Vector2(3, 0), Vector2(3, -11), Color(color, a), 2.0, true)
 			draw_line(Vector2(3, -11), Vector2(8, -8), Color(color, a), 2.0, true)

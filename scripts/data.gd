@@ -14,41 +14,79 @@ const CASTLE_HP := 450.0     # the castle falls (and the game is lost) when this
 # Difficulties: castle health and prices (hiring, upgrading, walls) are multiplied by
 # "castle" and "cost"; "down_time" is how long a knocked-out warrior stays down (with
 # "permadeath", how long it has before it dies unless a Healer revives it).
-# Castle upgrades (the Castle tab, after Repair: 4 x 2 buttons like the hire tabs): bought once each. Abilities ("cast") are used from
-# the bar on the castle wall and then recharge for "cooldown" seconds; "target" ones are
-# aimed with a click on the field. Passives work on their own once bought. Ability and
-# Ballista damage grows with the wave, like enemy health (see CASTLE_POWER_GROWTH).
-const CASTLE_POWER_GROWTH := 0.9   # power damage x (enemy health multiplier ^ this)
-const REPAIR_SHARE := 0.25         # a repair mends this share of the castle's max health...
-const REPAIR_BASE := 40            # ...for this much gold...
-const REPAIR_PER_WAVE := 4         # ...plus this much per wave cleared (between waves only)
-const CASTLE_UPGRADES := {
+# The castle. Three tabs of its own:
+#   Castle     four upgrade paths of four tiers (CASTLE_PATHS). Unlike a unit's, every
+#              tier of every path can be bought; they just cost more.
+#   Abilities  bought once each (ABILITIES), then used from the bar in the field's top-left corner
+#              and recharged for "cooldown" seconds; "target" ones are aimed with a click.
+#   Repair     mends the castle between waves, a chunk at a time (REPAIR_CHUNKS), at a
+#              flat price: each share of max health costs that share of REPAIR_FULL_COST.
+# Ability damage grows with the wave, like enemy health (see CASTLE_POWER_GROWTH).
+const CASTLE_POWER_GROWTH := 0.9   # ability damage x (enemy health multiplier ^ this)
+const REPAIR_CHUNKS := [0.1, 0.25, 0.5, 1.0]   # share of max health each Repair button mends (1.0 = all the way,
+                                               # or as far as your gold goes when that's not enough)
+const REPAIR_FULL_COST := 750     # gold to mend the castle from nothing to full; smaller repairs cost their share of it
+
+# Castle path tier effects (each tier's numbers are the totals so far, not added on):
+#   armor      the castle takes this much less damage
+#   hp         castle max health x this (the castle gets the extra health at once)
+#   guards     units posted on the castle wall: kind -> [how many, tiers per path]. They
+#              walk along the wall to get in range of an enemy, then shoot; enemies can't
+#              reach them. Each tier replaces the last one's guards. Priced a little under
+#              hiring and upgrading the same troops; maxing Wall Archers costs about two
+#              3-0-3-0 Archers, maxing Wall Mages about a 2-2-2-0 Mage plus a 2-2-2-0 Frost Witch.
+#   power      ability damage x this
+#   recharge   ability recharge times x this
+#   area       ability areas x this
+const CASTLE_PATHS := [
+	{"name": "Fortify", "tiers": [
+		{"name": "Iron Gate", "cost": 120, "desc": "The castle takes 10% less damage", "effect": {"armor": 0.1}},
+		{"name": "Stone Walls", "cost": 200, "desc": "+30% castle health, takes 15% less damage", "effect": {"armor": 0.15, "hp": 1.3}},
+		{"name": "Buttresses", "cost": 320, "desc": "+30% castle health, takes 25% less damage", "effect": {"armor": 0.25, "hp": 1.3}},
+		{"name": "Citadel", "cost": 500, "desc": "+60% castle health, takes 35% less damage", "effect": {"armor": 0.35, "hp": 1.6}},
+	]},
+	{"name": "Wall Archers", "tiers": [
+		{"name": "Archer Post", "cost": 125, "desc": "2 Archers patrol the wall and shoot what comes near", "effect": {"guards": {"archer": [2, [0, 0, 0, 0]]}}},
+		{"name": "Bowmen", "cost": 205, "desc": "A third Archer joins; all 3 upgraded 1-0-1-0", "effect": {"guards": {"archer": [3, [1, 0, 1, 0]]}}},
+		{"name": "Veteran Bowmen", "cost": 270, "desc": "The 3 wall Archers are upgraded 2-0-2-0", "effect": {"guards": {"archer": [3, [2, 0, 2, 0]]}}},
+		{"name": "Royal Longbows", "cost": 210, "desc": "The 3 wall Archers are upgraded 3-0-3-0", "effect": {"guards": {"archer": [3, [3, 0, 3, 0]]}}},
+	]},
+	{"name": "Wall Mages", "tiers": [
+		{"name": "Arcane Watch", "cost": 195, "desc": "A Mage and a Frost Witch patrol the wall", "effect": {"guards": {"mage": [1, [0, 0, 0, 0]], "frost": [1, [0, 0, 0, 0]]}}},
+		{"name": "Apprentices", "cost": 105, "desc": "A second Mage joins the wall", "effect": {"guards": {"mage": [2, [0, 0, 0, 0]], "frost": [1, [0, 0, 0, 0]]}}},
+		{"name": "Circle of Magi", "cost": 300, "desc": "The 2 Mages and the Frost Witch are upgraded 1-1-1-0", "effect": {"guards": {"mage": [2, [1, 1, 1, 0]], "frost": [1, [1, 1, 1, 0]]}}},
+		{"name": "Archmage Tower", "cost": 215, "desc": "2 Mages and 2 Frost Witches, upgraded 2-2-2-0", "effect": {"guards": {"mage": [2, [2, 2, 2, 0]], "frost": [2, [2, 2, 2, 0]]}}},
+	]},
+	{"name": "Ability Power", "tiers": [
+		{"name": "Focus Stones", "cost": 120, "desc": "Abilities hit 20% harder", "effect": {"power": 1.2}},
+		{"name": "War Council", "cost": 200, "desc": "Abilities hit 35% harder and recharge 15% faster", "effect": {"power": 1.35, "recharge": 0.85}},
+		{"name": "Ley Lines", "cost": 320, "desc": "Abilities hit 55% harder, recharge 20% faster, 20% wider", "effect": {"power": 1.55, "recharge": 0.8, "area": 1.2}},
+		{"name": "Crown of Storms", "cost": 500, "desc": "Abilities hit 90% harder, recharge 30% faster, 30% wider", "effect": {"power": 1.9, "recharge": 0.7, "area": 1.3}},
+	]},
+]
+
+const ABILITIES := {
 	"arrows": {"name": "Arrow Storm", "cost": 160, "cast": "target", "cooldown": 25.0, "color": Color(0.95, 0.85, 0.6),
 		"radius": 85.0, "damage": 20.0, "volleys": 4,
-		"desc": "Ability. Archers on the walls loose 4 volleys over 2 seconds onto a wide area. Every enemy under them takes damage each volley, flyers too."},
+		"desc": "Archers on the walls loose 4 volleys over 2 seconds onto a wide area. Every enemy under them takes damage each volley, flyers too."},
 	"fireball": {"name": "Fireball", "cost": 200, "cast": "target", "cooldown": 30.0, "color": Color(1.0, 0.5, 0.2),
 		"radius": 50.0, "damage": 110.0, "burn": [14.0, 4.0],
-		"desc": "Ability. Hurls a ball of fire at a tight group: heavy damage to everything it hits, and it leaves them burning."},
+		"desc": "Hurls a ball of fire at a tight group: heavy damage to everything it hits, and it leaves them burning."},
 	"frost": {"name": "Frost Orb", "cost": 180, "cast": "target", "cooldown": 30.0, "color": Color(0.6, 0.9, 1.0),
 		"radius": 58.0, "damage": 25.0, "freeze": 2.5, "slow": [0.45, 5.0],
-		"desc": "Ability. A ball of ice shatters over a group: they're frozen solid, then slowed while they thaw."},
+		"desc": "A ball of ice shatters over a group: they're frozen solid, then slowed while they thaw."},
 	"lightning": {"name": "Thunderstrike", "cost": 220, "cast": "target", "cooldown": 28.0, "color": Color(0.75, 0.85, 1.0),
 		"radius": 70.0, "damage": 75.0, "chain": 6, "hop": 130.0, "stun": 0.6,
-		"desc": "Ability. Lightning strikes the enemy nearest where you click, then jumps from foe to foe, stunning each one."},
+		"desc": "Lightning strikes the enemy nearest where you click, then jumps from foe to foe, stunning each one."},
 	"horn": {"name": "Rally Horn", "cost": 180, "cast": "instant", "cooldown": 45.0, "color": Color(1.0, 0.85, 0.35),
 		"duration": 8.0, "buff": {"damage": 0.3, "rate": 0.25, "speed": 0.2},
-		"desc": "Ability. The castle sounds the charge: for 8 seconds every unit deals 30% more damage, attacks 25% faster and moves 20% faster."},
-	"walls": {"name": "Stone Walls", "cost": 150, "passive": true, "color": Color(0.8, 0.78, 0.74), "castle": 0.5,
-		"desc": "Passive. Rebuilds the castle in thick stone: +50% max health (and it gets that much back now)."},
-	"ballista": {"name": "Ballistae", "cost": 250, "passive": true, "color": Color(0.85, 0.65, 0.4),
-		"damage": 22.0, "cooldown": 1.4, "range": 320.0,
-		"desc": "Passive. Bolt throwers on the corner towers shoot the enemy closest to the castle, flyers included, while a wave is on."},
+		"desc": "The castle sounds the charge: for 8 seconds every unit deals 30% more damage, attacks 25% faster and moves 20% faster."},
 }
 
 const DIFFICULTIES := {
 	"easy": {"name": "Easy", "castle": 1.5, "cost": 0.8, "down_time": 15.0, "permadeath": false, "color": Color(0.55, 0.9, 0.55), "icon": "healer"},
 	"normal": {"name": "Normal", "castle": 1.0, "cost": 1.0, "down_time": 20.0, "permadeath": false, "color": Color(0.95, 0.85, 0.45), "icon": "swordsman"},
-	"hard": {"name": "Hard", "castle": 0.8, "cost": 1.15, "down_time": 30.0, "permadeath": false, "color": Color(1.0, 0.55, 0.3), "icon": "troll"},
+	"hard": {"name": "Hard", "castle": 0.8, "cost": 1.15, "round": 5, "down_time": 30.0, "permadeath": false, "color": Color(1.0, 0.55, 0.3), "icon": "troll"},
 	"hardcore": {"name": "Hardcore", "castle": 1.0, "cost": 1.0, "down_time": 10.0, "permadeath": true, "color": Color(1.0, 0.3, 0.3), "icon": "warlord"},
 }
 const FINAL_WAVE := 20
@@ -60,6 +98,15 @@ const LATE_HP_GROWTH := 1.16      # health multiplier per wave past FINAL_WAVE (
 const LATE_DAMAGE_GROWTH := 1.06  # damage multiplier per wave past FINAL_WAVE (instead of DAMAGE_GROWTH)
 const LATE_GOLD_STEP := 0.02      # past FINAL_WAVE, bounties and wave bonuses pay this much less per wave...
 const LATE_GOLD_MIN := 0.4        # ...down to this share (mines and interest always pay in full)
+
+
+## A price at a difficulty: base x mult, rounded to the nearest `step` gold (Hard
+## rounds every price to 5g so it doesn't show odd amounts like 863g).
+static func scaled_price(base: float, mult: float, step: int) -> int:
+	var p := base * mult
+	if step > 1:
+		return maxi(step, roundi(p / step) * step)
+	return maxi(1, roundi(p))
 
 
 ## How much an enemy's stat is multiplied at a level: growth per level up to the

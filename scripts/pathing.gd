@@ -9,7 +9,9 @@ extends RefCounted
 
 const CELL := 16
 const WALL_COST := 2000.0
-const DIAG := 1.4142
+const DIAG := 1.4   # matches the 14-tenths diagonal step the fields are built with
+const RING := 16    # open-ground steps cost at most 14 tenths, so 16 buckets go round
+const HEAP_SPAN := 65536.0   # heap keys: cost * HEAP_SPAN + cell index (room for 65536 cells)
 const TROOP_RADIUS := 18.0   # Warrior.RADIUS
 const NEIGHBORS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
@@ -20,7 +22,11 @@ var rows := 0
 var walls := []    # standing barricades as of the last invalidate() (all solid to enemies)
 var troop_walls := []   # the ones your troops can't walk through (not Phase Gates)
 var shot_walls := []    # the ones your troops can't shoot through (not Arcane Lattices)
-var fields := {}   # enemy radius (int) -> {"dist", "breach", "wall"}
+var fields := {}
+var _emp := []          # _emplacements() for this frame
+var _emp_frame := -1
+var old_fields := {}   # the fields from before the walls last changed, by size
+var _built_frame := -1   # enemy radius (int) -> {"dist", "breach", "wall"}
 var troop_grid: AStarGrid2D = null
 var troop_sig := []     # the emplacements troop_grid was built around (it's rebuilt when they change)
 const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to troops (a little under two radii)
@@ -34,6 +40,8 @@ func setup(m) -> void:
 
 ## Call whenever a barricade is built, destroyed, sold or moved.
 func invalidate() -> void:
+	for key in fields:
+		old_fields[key] = fields[key]   # stand-ins while the new ones are built (see _field)
 	fields.clear()
 	troop_grid = null
 	walls = main.get_barricades().filter(func(b): return b.is_active())
@@ -89,7 +97,11 @@ func troop_route(from: Vector2, to: Vector2) -> PackedVector2Array:
 
 ## Emplacements standing on the field (troops walk around them).
 func _emplacements() -> Array:
-	return main.get_warriors().filter(func(w): return w.is_emplacement() and w.is_active())
+	var f := Engine.get_process_frames()
+	if f != _emp_frame:
+		_emp_frame = f
+		_emp = main.get_warriors().filter(func(w): return w.is_emplacement() and w.is_active())
+	return _emp
 
 
 func has_emplacements() -> bool:
@@ -176,15 +188,25 @@ func breach_at(pos: Vector2, radius: float):
 		return null
 	var f := _field(radius)
 	var i: int = f["breach"][_index(_cell(pos))]
-	return walls[i] if i >= 0 else null
+	if i < 0:
+		return null
+	var w = f["walls"][i]
+	return w if is_instance_valid(w) and w.is_active() else null
 
 
 func _field(radius: float) -> Dictionary:
 	# Two sizes are enough: goblins, wolves and orcs share one field, trolls and
 	# warlords the other. Each is built for the biggest enemy in its group.
+	# Building one is the slow part of a wall going up or coming down, so only one is
+	# built a frame: the other size makes do with its last field for a frame.
 	var key := 14 if radius <= 14.0 else 24
 	if not fields.has(key):
+		var frame := Engine.get_process_frames()
+		if frame == _built_frame and old_fields.has(key) and old_fields[key]["cols"] == cols:
+			return old_fields[key]
+		_built_frame = frame
 		fields[key] = _build(key)
+		old_fields.erase(key)
 	return fields[key]
 
 
@@ -207,53 +229,84 @@ func _build(radius: float) -> Dictionary:
 				var p := _center(Vector2i(cx, cy))
 				if Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p) < reach:
 					wall[cy * cols + cx] = i
-	# Dijkstra out from the bottom row. Heap entries pack cost and cell into one
-	# number (cost in thousandths, then the cell index) so the heap is a flat array.
-	var dist := PackedFloat64Array()
-	dist.resize(n)
-	dist.fill(INF)
+	# Dijkstra out from the bottom row, in whole tenths of a cell: a step costs 10 (14
+	# diagonally) on open ground, and 2000 times that into a wall cell. Open-ground
+	# steps only ever reach 10 or 14 past the cell being settled, so they wait in a
+	# ring of 16 buckets (no sorting at all); the rare steps into walls go on a small
+	# heap. Each cell is settled once.
+	var d10 := PackedInt64Array()
+	d10.resize(n)
+	d10.fill(1 << 62)
 	var breach := PackedInt32Array()
 	breach.resize(n)
 	breach.fill(-1)
-	var heap := PackedFloat64Array()
+	var ring: Array[PackedInt32Array] = []
+	for k in RING:
+		ring.append(PackedInt32Array())
+	var near := 0         # cells waiting in the ring
+	var heap := PackedFloat64Array()   # wall steps: cost * HEAP_SPAN + cell
 	var size := 0
-	var dxs := PackedInt32Array([1, -1, 0, 0, 1, -1, 1, -1])
-	var dys := PackedInt32Array([0, 0, 1, -1, 1, 1, -1, -1])
+	var wall_step := int(WALL_COST) * 10
 	for cx in cols:
 		var i := (rows - 1) * cols + cx
-		dist[i] = WALL_COST if wall[i] >= 0 else 1.0
 		breach[i] = wall[i]
-		size = _push(heap, size, _key(dist[i], i))
-	while size > 0:
-		var top := heap[0]
-		size = _pop(heap, size)
-		var i := int(fmod(top, 4096.0))
-		if floorf(dist[i] * 1000.0) < floorf(top / 4096.0):
-			continue   # a stale entry; this cell was reached more cheaply since
-		var cx := i % cols
-		var cy := i / cols
-		for k in 8:
-			var nx := cx + dxs[k]
-			var ny := cy + dys[k]
-			if nx < 0 or ny < 0 or nx >= cols or ny >= rows:
-				continue
-			var step := 1.0
-			if k >= 4:
-				# Diagonal steps can't cut the corner between two wall cells.
-				if wall[cy * cols + nx] >= 0 or wall[ny * cols + cx] >= 0:
+		if wall[i] >= 0:
+			d10[i] = wall_step
+			size = _push(heap, size, float(wall_step) * HEAP_SPAN + i)
+		else:
+			d10[i] = 10
+			ring[10 % RING].append(i)
+			near += 1
+	var dxs := PackedInt32Array([1, -1, 0, 0, 1, -1, 1, -1])
+	var dys := PackedInt32Array([0, 0, 1, -1, 1, 1, -1, -1])
+	var at := 0   # the cost being settled
+	while near > 0 or size > 0:
+		var batch := PackedInt32Array()
+		if near > 0:
+			var slot := at % RING
+			batch = ring[slot]
+			ring[slot] = PackedInt32Array()
+			near -= batch.size()
+		while size > 0 and floorf(heap[0] / HEAP_SPAN) <= at:
+			batch.append(int(fmod(heap[0], HEAP_SPAN)))
+			size = _pop(heap, size)
+		for i in batch:
+			if d10[i] != at:
+				continue   # reached more cheaply since; already settled
+			var cx := i % cols
+			var cy := i / cols
+			var from_breach := breach[i]
+			for k in 8:
+				var nx := cx + dxs[k]
+				var ny := cy + dys[k]
+				if nx < 0 or ny < 0 or nx >= cols or ny >= rows:
 					continue
-				step = DIAG
-			var j := ny * cols + nx
-			var nd: float = dist[i] + step * (WALL_COST if wall[j] >= 0 else 1.0)
-			if nd < dist[j]:
-				dist[j] = nd
-				breach[j] = wall[j] if wall[j] >= 0 else breach[i]
-				size = _push(heap, size, _key(nd, j))
-	return {"dist": dist, "breach": breach, "wall": wall}
-
-
-func _key(cost: float, i: int) -> float:
-	return floorf(cost * 1000.0) * 4096.0 + i
+				var step := 10
+				if k >= 4:
+					# Diagonal steps can't cut the corner between two wall cells.
+					if wall[cy * cols + nx] >= 0 or wall[ny * cols + cx] >= 0:
+						continue
+					step = 14
+				var j := ny * cols + nx
+				var into_wall := wall[j] >= 0
+				var nd := at + (step * int(WALL_COST) if into_wall else step)
+				if nd < d10[j]:
+					d10[j] = nd
+					breach[j] = wall[j] if into_wall else from_breach
+					if into_wall:
+						size = _push(heap, size, float(nd) * HEAP_SPAN + j)
+					else:
+						ring[nd % RING].append(j)
+						near += 1
+		if near > 0:
+			at += 1
+		elif size > 0:
+			at = int(floorf(heap[0] / HEAP_SPAN))   # nothing nearby: jump to the next wall step
+	var dist := PackedFloat64Array()
+	dist.resize(n)
+	for i in n:
+		dist[i] = d10[i] / 10.0
+	return {"dist": dist, "breach": breach, "wall": wall, "walls": walls.duplicate(), "cols": cols}
 
 
 ## Diagonal steps can't cut the corner between two wall cells (that would slip

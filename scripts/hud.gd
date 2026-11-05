@@ -16,7 +16,9 @@ signal freeplay_spawn_pressed(kind: String)
 signal freeplay_clear_pressed
 signal endless_chosen
 signal finish_chosen
-signal castle_pressed(key: String)
+signal castle_pressed(path: int)
+signal ability_pressed(key: String)
+signal repair_pressed(chunk: int)
 signal power_pressed(key: String)
 
 const Data = preload("res://scripts/data.gd")
@@ -25,8 +27,15 @@ const Sprites = preload("res://scripts/sprites.gd")
 const TitleScene = preload("res://scripts/title_scene.gd")
 const PATH_KEYS := ["Q", "W", "E", "R"]
 const TOP := 768.0
+# The panel's tabs: key, label, hotkey.
+const TABS := [["troops", "Troops", "Z"], ["emplacements", "Emplacements", "X"], ["castle", "Castle", "C"],
+		["abilities", "Abilities", "V"], ["repair", "Repair", "B"]]
+const TAB_W := 108.0
+const CONTENT_X := 126.0   # the tabs' contents start right of the tab column
+const CONTENT_Y := 50.0
+const CONTENT_H := 128.0
 const WIDTH := 640.0
-const HEIGHT := 960.0
+const HEIGHT := 1040.0
 
 var gold_label: Label
 var lives_label: Label
@@ -35,8 +44,10 @@ var speed_btn: Button
 var start_btn: Button
 var hire_buttons := {}
 var tab_buttons := {}     # "troops" / "emplacements" / "castle"
-var castle_buttons := {}  # "repair" and each castle upgrade -> its button on the Castle tab
-var power_buttons := {}   # each ability -> its button on the bar along the castle wall
+var castle_cards := []    # the Castle tab: one card per castle path
+var ability_buttons := {} # the Abilities tab: ability -> its buy / use button
+var repair_buttons := []  # the Repair tab: one per Data.REPAIR_CHUNKS
+var power_buttons := {}   # each ability -> its button on the bar in the top-left corner of the field
 var hire_tab := "troops"
 var last_placing := ""
 var info_label: Label
@@ -51,6 +62,7 @@ var title_scene: Control   # the castle scene behind the mode cards (changes as 
 var hard_label: Label       # shows the difficulty, unless it's Normal
 var hire_meta := {}         # kind -> [label, hotkey number, rows] to rebuild hire button text
 var price_mult := 1.0
+var price_step := 1         # prices are rounded to this many gold (5 on Hard)
 var picking := false        # a difficulty card was clicked and its animation is playing
 var freeplay_level_label: Label
 var freeplay_spawn_buttons := {}
@@ -83,9 +95,9 @@ func _ready() -> void:
 	panel.size = Vector2(WIDTH, HEIGHT - TOP)
 	add_child(panel)
 
-	gold_label = _label(panel, Vector2(14, 10), Vector2(112, 30), Color(1, 0.85, 0.3), 20)
-	lives_label = _label(panel, Vector2(122, 12), Vector2(104, 30), Color(1, 0.5, 0.5), 17)
-	wave_label = _label(panel, Vector2(226, 10), Vector2(116, 30), Color(0.8, 0.85, 1), 20)
+	gold_label = _label(panel, Vector2(12, 11), Vector2(116, 30), Color(1, 0.85, 0.3), 18)
+	lives_label = _label(panel, Vector2(130, 12), Vector2(104, 30), Color(1, 0.5, 0.5), 17)
+	wave_label = _label(panel, Vector2(238, 11), Vector2(104, 30), Color(0.8, 0.85, 1), 18)
 	menu_btn = _button(panel, Vector2(342, 8), Vector2(58, 34), "Menu")
 	menu_btn.tooltip_text = "Leave this game and go back to mode select"
 	menu_btn.pressed.connect(show_menu_confirm)
@@ -97,12 +109,13 @@ func _ready() -> void:
 	start_btn.tooltip_text = "Send the next wave [Space]"
 	start_btn.pressed.connect(func(): start_wave_pressed.emit())
 
-	# Hire buttons come in two tabs (troops that move and fight, and emplacements),
-	# and the castle's own upgrades in a third.
-	for t in [["troops", "Troops  [Z]", 48, "Z"], ["emplacements", "Emplacements [X]", 71, "X"], ["castle", "Castle  [C]", 94, "C"]]:
-		var tb := _button(panel, Vector2(12, t[2]), Vector2(98, 21), t[1])
-		tb.add_theme_font_size_override("font_size", 12 if t[0] != "emplacements" else 10)
-		tb.tooltip_text = "Show %s [%s]  (Tab cycles through them)" % [t[0], t[3]]
+	# The tabs down the left: hiring troops and emplacements, then the castle's own
+	# upgrades, its abilities and repairs.
+	for i in TABS.size():
+		var t: Array = TABS[i]
+		var tb := _button(panel, Vector2(12, CONTENT_Y + i * 42.0), Vector2(TAB_W, 38), "%s  [%s]" % [t[1], t[2]])
+		tb.add_theme_font_size_override("font_size", 14 if t[0] != "emplacements" else 12)
+		tb.tooltip_text = "Show %s [%s]  (Tab cycles through the tabs)" % [t[1].to_lower(), t[2]]
 		tb.toggle_mode = true
 		tb.pressed.connect(func(): show_tab(t[0]))
 		tab_buttons[t[0]] = tb
@@ -112,31 +125,44 @@ func _ready() -> void:
 			b.clip_text = true
 			_setup_hire_button(b, kind, Data.WARRIORS[kind])
 
-	for key in castle_items():
-		var cb := _button(panel, Vector2.ZERO, Vector2(10, 10), "")
-		cb.clip_text = true
-		var col: Color = Color(0.5, 1.0, 0.5) if key == "repair" else Data.CASTLE_UPGRADES[key]["color"]
-		cb.add_theme_color_override("font_color", col)
-		cb.add_theme_color_override("font_hover_color", col.lightened(0.3))
-		cb.pressed.connect(func(): castle_pressed.emit(key))
-		cb.mouse_entered.connect(func(): _show_castle_card(key, cb))
-		cb.mouse_exited.connect(func():
-			if hover_kind == "castle:" + key:
+	for p in Data.CASTLE_PATHS.size():
+		var card := _path_card(panel, p)
+		card["button"].pressed.disconnect(card["button"].pressed.get_connections()[0]["callable"])
+		card["button"].pressed.connect(func(): castle_pressed.emit(p))
+		castle_cards.append(card)
+	for key in Data.ABILITIES:
+		var ab := _button(panel, Vector2.ZERO, Vector2(10, 10), "")
+		var col: Color = Data.ABILITIES[key]["color"]
+		ab.icon = _power_icon(key, 3)
+		ab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		ab.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		ab.add_theme_color_override("font_color", col)
+		ab.add_theme_color_override("font_hover_color", col.lightened(0.3))
+		ab.add_theme_color_override("font_disabled_color", Color(col, 0.45))
+		ab.pressed.connect(func(): ability_pressed.emit(key))
+		ab.mouse_entered.connect(func(): _show_ability_card(key, ab))
+		ab.mouse_exited.connect(func():
+			if hover_kind == "ability:" + key:
 				hide_hover())
-		castle_buttons[key] = cb
-	for key in Data.CASTLE_UPGRADES:
-		if Data.CASTLE_UPGRADES[key].has("cast"):
-			power_buttons[key] = _power_button(key)
+		ability_buttons[key] = ab
+	for i in Data.REPAIR_CHUNKS.size():
+		var rb := _button(panel, Vector2.ZERO, Vector2(10, 10), "")
+		rb.add_theme_color_override("font_color", Color(0.55, 1.0, 0.55))
+		rb.add_theme_color_override("font_hover_color", Color(0.75, 1.0, 0.75))
+		rb.pressed.connect(func(): repair_pressed.emit(i))
+		repair_buttons.append(rb)
+	for key in Data.ABILITIES:
+		power_buttons[key] = _power_button(key)
 
 	for p in PATH_KEYS.size():
 		path_cards.append(_path_card(panel, p))
 
-	info_label = _label(panel, Vector2(14, 122), Vector2(614, 64), Color(0.9, 0.9, 0.85), 15)
+	info_label = _label(panel, Vector2(CONTENT_X, 186), Vector2(500, 76), Color(0.9, 0.9, 0.85), 15)
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sell_btn = _button(panel, Vector2(526, 142), Vector2(102, 40), "Sell")
+	sell_btn = _button(panel, Vector2(526, 212), Vector2(102, 48), "Sell")
 	sell_btn.tooltip_text = "Sell for 60% of everything spent on this unit [S]"
 	sell_btn.pressed.connect(func(): sell_pressed.emit())
-	target_btn = _button(panel, Vector2(414, 142), Vector2(106, 40), "")
+	target_btn = _button(panel, Vector2(414, 212), Vector2(106, 48), "")
 	target_btn.add_theme_font_size_override("font_size", 12)
 	target_btn.tooltip_text = ("Which enemy this unit goes after [T]:\n"
 			+ "Closest - nearest to this unit\n"
@@ -145,7 +171,7 @@ func _ready() -> void:
 			+ "Weakest - weakest enemy type (goblin first, warlord last)\n"
 			+ "Bats fly: melee units and Cannoneers can't hit them.")
 	target_btn.pressed.connect(func(): target_pressed.emit())
-	song_btn = _button(panel, Vector2(326, 142), Vector2(84, 40), "")
+	song_btn = _button(panel, Vector2(326, 212), Vector2(84, 48), "")
 	song_btn.add_theme_font_size_override("font_size", 12)
 	song_btn.tooltip_text = "Every instrument is on the field: play the Bards' song between waves, or not [G]"
 	song_btn.pressed.connect(func(): song_pressed.emit())
@@ -220,59 +246,80 @@ func layout(w: float) -> void:
 ## buttons with name and price on one line when they don't. Wide buttons show the
 ## unit's picture too.
 func _layout_hire() -> void:
-	var avail := ui_w - 126.0
+	var avail := ui_w - CONTENT_X - 12.0
 	var font := ThemeDB.fallback_font
 	for t in ["troops", "emplacements"]:
 		var kinds := tab_kinds(t)
 		var rows := 1 if kinds.size() <= 6 or avail >= kinds.size() * 92.0 else 2
 		var per_row := ceili(kinds.size() / float(rows))
-		var w := (avail - 4.0 * (per_row - 1)) / per_row
+		var w := (avail - 6.0 * (per_row - 1)) / per_row
 		if rows == 1:
 			w = minf(w, 82.0 if avail < 600.0 else 180.0)
-		var h := 66.0 if rows == 1 else 31.0
-		var with_icon := rows == 1 and w >= 120.0
+		var h := CONTENT_H if rows == 1 else (CONTENT_H - 6.0) / 2.0
+		var with_icon := w >= 110.0
 		var room := w - 12.0 - (40.0 if with_icon else 0.0)
 		for i in kinds.size():
 			var kind: String = kinds[i]
 			var d: Dictionary = Data.WARRIORS[kind]
 			var price := _price_text(d)
-			var font_size := 14 if with_icon else (12 if w >= 80.0 or rows == 2 else 11)
+			var font_size := 15 if with_icon else (13 if w >= 80.0 else 12)
 			var label: String = d["name"]
 			var text := "%s  %s [%d]" % [label, price, i + 1]
-			if rows == 1:
+			if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > room:
 				# Names too wide for the button go on two lines (e.g. "Martial / Artist").
-				if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > room:
-					label = label.replace(" ", "\n")
-				text = "%s\n%s  [%d]" % [label, price, i + 1]
+				label = label.replace(" ", "\n")
+			text = "%s\n%s  [%d]" % [label, price, i + 1]
 			# Then anything still too wide gets a smaller font until it fits.
 			var widest := 0.0
-			for line in (label if rows == 1 else text).split("\n"):
+			for line in label.split("\n"):
 				widest = maxf(widest, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 			while widest > room and font_size > 9:
 				widest *= (font_size - 1.0) / font_size
 				font_size -= 1
 			var b: Button = hire_buttons[kind]
-			b.position = Vector2(114 + (i % per_row) * (w + 4), 50 + (i / per_row) * (h + 4))
+			b.position = Vector2(CONTENT_X + (i % per_row) * (w + 6), CONTENT_Y + (i / per_row) * (h + 6))
 			b.size = Vector2(w, h)
 			b.text = text
 			b.add_theme_font_size_override("font_size", font_size)
 			b.icon = Sprites.frames(kind)[0] if with_icon else null
 			b.expand_icon = with_icon
-			b.add_theme_constant_override("icon_max_width", 36)
-			hire_meta[kind] = [label, i + 1, rows]
-	# The Castle tab: two rows of four, like the hire tabs (Repair first, then the seven upgrades).
-	var items := castle_items()
-	var per := ceili(items.size() / 2.0)
-	var cw := (avail - 4.0 * (per - 1)) / per
-	for i in items.size():
-		var cb: Button = castle_buttons[items[i]]
-		cb.position = Vector2(114 + (i % per) * (cw + 4), 50 + (i / per) * 35)
-		cb.size = Vector2(cw, 31)
-		cb.add_theme_font_size_override("font_size", 10 if cw < 120.0 else 12)
-		cb.add_theme_constant_override("line_spacing", -3)
+			b.add_theme_constant_override("icon_max_width", 48 if rows == 1 else 40)
+			hire_meta[kind] = [label, i + 1, 1]
+	# The castle's tabs share the same space: four path cards, a button per ability,
+	# a button per repair size.
+	_row(castle_cards.map(func(c): return c["button"]), avail, 1000.0)
+	for card in castle_cards:
+		var cw: float = card["button"].size.x
+		card["title"].size.x = cw - 12.0
+		card["cost"].position.x = cw - 76.0
+		card["tier"].size.x = cw - 12.0
+		card["desc"].size = Vector2(cw - 12.0, CONTENT_H - 50.0)
+		card["desc"].max_lines_visible = 5
+		card["tier"].add_theme_font_size_override("font_size", 13)
+		card["desc"].add_theme_font_size_override("font_size", 12)
+	_row(ability_buttons.values(), avail, 1000.0)
+	for ab in ability_buttons.values():
+		ab.add_theme_font_size_override("font_size", 13 if ab.size.x >= 96.0 else 12)
+	_row(repair_buttons, avail, 1000.0)
+	for rb in repair_buttons:
+		rb.add_theme_font_size_override("font_size", 15)
 	for i in power_buttons.size():
 		var pb: Button = power_buttons.values()[i]
-		pb.position.y = TOP - 30.0
+		pb.position.y = 6.0
+
+
+## Lays buttons out in the tab area: one row of up to `max_w` wide buttons when they
+## fit at 92 or more each, otherwise two rows.
+func _row(buttons: Array, avail: float, max_w: float) -> void:
+	var n := buttons.size()
+	var rows := 1 if avail >= n * 92.0 else 2
+	var per := ceili(n / float(rows))
+	var w := minf((avail - 6.0 * (per - 1)) / per, max_w)
+	var h := CONTENT_H if rows == 1 else (CONTENT_H - 6.0) / 2.0
+	for i in n:
+		var b: Button = buttons[i]
+		b.position = Vector2(CONTENT_X + (i % per) * (w + 6.0), CONTENT_Y + (i / per) * (h + 6.0))
+		b.size = Vector2(w, h)
 
 
 ## Upgrade cards sit in a row across the top of the panel, sharing its width
@@ -282,27 +329,33 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	var cw := minf((ui_w - 12.0 - 6.0 * n) / n, 300.0)
 	var left := (ui_w - (cw * n + 6.0 * (n - 1.0))) / 2.0
 	var b: Button = card["button"]
-	b.position = Vector2(left + p * (cw + 6.0), 48)
-	b.size = Vector2(cw, 84)
+	b.position = Vector2(left + p * (cw + 6.0), CONTENT_Y)
+	b.size = Vector2(cw, 104)
 	card["title"].size.x = cw - 12.0
 	card["cost"].position.x = cw - 76.0
 	card["tier"].size.x = cw - 12.0
-	card["desc"].size.x = cw - 12.0
+	card["desc"].size = Vector2(cw - 12.0, 54)
 	var wide := cw >= 200.0
-	card["tier"].add_theme_font_size_override("font_size", 13 if wide else 12)
-	card["desc"].add_theme_font_size_override("font_size", 11)
-	card["desc"].max_lines_visible = 2
+	card["tier"].add_theme_font_size_override("font_size", 14 if wide else 13)
+	card["desc"].add_theme_font_size_override("font_size", 12)
+	card["desc"].max_lines_visible = 3
+
+
+## A price at this difficulty (see Data.scaled_price).
+func _p(base: float) -> int:
+	return Data.scaled_price(base, price_mult, price_step)
 
 
 ## Barricades are priced by length, so they show the cheapest.
 func _price_text(d: Dictionary) -> String:
-	var cost := maxi(1, roundi(d["cost"] * price_mult))
+	var cost := _p(d["cost"])
 	return "%dg+" % cost if d.has("cost_per_100") else "%dg" % cost
 
 
 ## Difficulty changes the prices on the hire buttons.
-func set_prices(mult: float) -> void:
+func set_prices(mult: float, step := 1) -> void:
 	price_mult = mult
+	price_step = step
 	for kind in hire_meta:
 		var m: Array = hire_meta[kind]
 		var price := _price_text(Data.WARRIORS[kind])
@@ -362,7 +415,7 @@ func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
 func _show_hire_card(kind: String, b: Button) -> void:
 	var d: Dictionary = Data.WARRIORS[kind]
 	var sort := "Emplacement" if d.get("emplacement", false) else "Troop"
-	var price := "%dg + %dg per %s of wall" % [roundi(d["cost_base"] * price_mult), roundi(d["cost_per_100"] * price_mult), Data.ft(100)] if d.has("cost_per_100") else _price_text(d)
+	var price := "%dg + %dg per %s of wall" % [_p(d["cost_base"]), _p(d["cost_per_100"]), Data.ft(100)] if d.has("cost_per_100") else _price_text(d)
 	var body := _plain_desc(d) + "\n\n" + _base_stats(d)
 	var names: Array = d["paths"].map(func(path): return path["name"])
 	body += "\nUpgrades: " + ", ".join(names)
@@ -485,7 +538,7 @@ func refresh(main) -> void:
 		hire_buttons[kind].visible = w == null and grave == null and tab_of(kind) == hire_tab
 	if hover_kind != "" and hire_buttons.has(hover_kind) and not hire_buttons[hover_kind].visible:
 		hide_hover()
-	_refresh_castle(main, w == null and grave == null and hire_tab == "castle")
+	_refresh_castle(main, w == null and grave == null)
 	for t in tab_buttons:
 		tab_buttons[t].visible = w == null and grave == null
 		tab_buttons[t].set_pressed_no_signal(t == hire_tab)
@@ -495,31 +548,38 @@ func refresh(main) -> void:
 	target_btn.visible = w != null and w.uses_targeting()
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
 	if grave != null:
-		info_label.position = Vector2(14, 136)
-		info_label.size = Vector2(ui_w - 26, 52)
+		info_label.position = Vector2(14, 162)
+		info_label.size = Vector2(ui_w - 26, 100)
 		info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
 		info_label.text = grave.info_text()
 		for p in path_cards.size():
 			_grave_card(path_cards[p], grave, p)
 		return
 	if w == null:
-		info_label.position = Vector2(14, 122)
-		info_label.size = Vector2(ui_w - 26, 64)
-		info_label.add_theme_font_size_override("font_size", 15)
+		info_label.position = Vector2(CONTENT_X, CONTENT_Y + CONTENT_H + 8.0)
+		info_label.size = Vector2(ui_w - CONTENT_X - 12.0, HEIGHT - TOP - CONTENT_Y - CONTENT_H - 12.0)
+		info_label.add_theme_font_size_override("font_size", 14)
 		if main.placing_type == "barricade":
 			var d: Dictionary = Data.WARRIORS["barricade"]
 			info_label.text = ("Click where the wall starts, then where it ends (%dg + %dg per %s, as long as you can afford). Enemies go around walls if they can. Right-click cancels."
-					% [roundi(d["cost_base"] * price_mult), roundi(d["cost_per_100"] * price_mult), Data.ft(100)])
+					% [_p(d["cost_base"]), _p(d["cost_per_100"]), Data.ft(100)])
 		elif main.placing_type != "":
 			info_label.text = "Click the field to post your hire there. Hold Shift to hire several. Right-click cancels."
+		elif main.powers.aiming != "":
+			info_label.text = "Click the field to cast %s. Right-click cancels." % Data.ABILITIES[main.powers.aiming]["name"]
 		elif hire_tab == "castle":
-			info_label.text = ("Repair the castle between waves, and buy its upgrades (once each). Abilities appear on the castle wall: click one to use it, then it recharges."
-					if main.powers.aiming == "" else "Click the field to cast %s. Right-click cancels." % Data.CASTLE_UPGRADES[main.powers.aiming]["name"])
+			info_label.text = "Castle upgrades: every tier of every path can be bought (1-4 or Q/W/E/R). Castle %d/%d, takes %d%% less damage." % [
+					ceili(main.castle_hp), roundi(main.castle_max), roundi(main.powers.armor() * 100)]
+		elif hire_tab == "abilities":
+			info_label.text = "Buy an ability once, then use it from here or the bar in the top-left corner (1-5). It recharges after each use."
+		elif hire_tab == "repair":
+			info_label.text = "Castle %d/%d. Masons mend the castle between waves: a full repair from nothing costs %dg, smaller ones their share of that." % [
+					ceili(main.castle_hp), roundi(main.castle_max), main.price(Data.REPAIR_FULL_COST)]
 		else:
 			info_label.text = "Hire warriors to stop enemies reaching the bottom. Click a warrior to select it."
 		return
-	info_label.position = Vector2(14, 136)
-	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 52)
+	info_label.position = Vector2(14, 162)
+	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 100)
 	info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
 	var how := "right-click to send it somewhere" if main.wave_active else "drag to reposition"
 	if w.is_emplacement():
@@ -534,48 +594,83 @@ func refresh(main) -> void:
 		_refresh_card(path_cards[p], w, p, main.gold)
 
 
-## The Castle tab's buttons, in order (number keys follow this order).
-static func castle_items() -> Array:
-	return ["repair"] + Data.CASTLE_UPGRADES.keys()
-
-
 func _refresh_castle(main, show: bool) -> void:
 	var powers = main.powers
-	if hover_kind.begins_with("castle:") and not show:
-		hide_hover()
-	for key in castle_buttons:
-		var b: Button = castle_buttons[key]
-		b.visible = show
-		var n: int = castle_items().find(key) + 1
-		if key == "repair":
-			var need: bool = main.repair_amount() >= 1.0
-			b.text = "Repair +%d\n%dg  [%d]" % [roundi(main.repair_amount()), main.repair_cost(), n] if need else "Repair\nfull  [%d]" % n
-			if main.wave_active and need:
-				b.text = "Repair\nafter wave  [%d]" % n
-			b.disabled = not main.can_repair()
-			continue
-		var d: Dictionary = Data.CASTLE_UPGRADES[key]
+	if (hover_kind.begins_with("ability:") and hire_tab != "abilities") or not show:
+		if hover_kind.begins_with("ability:"):
+			hide_hover()
+	# Castle paths: like a unit's cards, but every tier can be bought.
+	for p in castle_cards.size():
+		var card: Dictionary = castle_cards[p]
+		var b: Button = card["button"]
+		b.visible = show and hire_tab == "castle"
+		var path: Dictionary = Data.CASTLE_PATHS[p]
+		card["title"].text = path["name"]
+		for j in Warrior.MAX_TIER:
+			card["pips"][j].color = Warrior.PATH_COLORS[p] if j < powers.tiers[p] else Color(1, 1, 1, 0.15)
+		var tips := []
+		for i in path["tiers"].size():
+			var t: Dictionary = path["tiers"][i]
+			tips.append("%s (%dg): %s" % [t["name"], powers.tier_cost(p, i), t["desc"]])
+		b.tooltip_text = "\n".join(tips)
+		var nxt: Dictionary = powers.next_tier(p)
+		if nxt.is_empty():
+			var last: Dictionary = path["tiers"][-1]
+			card["tier"].text = last["name"]
+			card["desc"].text = last["desc"]
+			card["cost"].text = "MAX"
+			card["cost"].add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+			b.disabled = true
+		else:
+			var cost: int = powers.tier_cost(p, powers.tiers[p])
+			var ok: bool = main.gold >= cost and not main.game_over
+			card["tier"].text = nxt["name"]
+			card["desc"].text = nxt["desc"]
+			card["cost"].text = "%dg [%d]" % [cost, p + 1]
+			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
+			b.disabled = not ok
+		b.modulate.a = 1.0
+	# Abilities: buy, then use (with the time left to recharge).
+	var n := 0
+	for key in ability_buttons:
+		n += 1
+		var b: Button = ability_buttons[key]
+		b.visible = show and hire_tab == "abilities"
+		var d: Dictionary = Data.ABILITIES[key]
 		if not powers.owned.has(key):
 			b.text = "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
 			b.disabled = main.gold < powers.cost(key) or main.game_over
-		elif d.has("cast"):
-			var left: float = powers.ready_in(key)
-			b.text = "%s\n%s  [%d]" % [d["name"], "%ds" % ceili(left) if left > 0.0 else "Cast", n]
-			b.disabled = left > 0.0 or main.game_over
 		else:
-			b.text = "%s\nBuilt" % d["name"]
-			b.disabled = true
-	# The ability bar along the castle wall, left of the gate.
+			var left: float = powers.ready_in(key)
+			b.text = "%s\n%s  [%d]" % [d["name"], "%ds" % ceili(left) if left > 0.0 else ("Aiming..." if powers.aiming == key else "Use"), n]
+			b.disabled = left > 0.0 or main.game_over
+	# Repairs: how much each size mends, and what it costs right now.
+	for i in repair_buttons.size():
+		var b: Button = repair_buttons[i]
+		b.visible = show and hire_tab == "repair"
+		var share: float = Data.REPAIR_CHUNKS[i]
+		var amount: float = main.repair_amount(i)
+		var label := "Full repair" if share >= 1.0 else "Repair %d%%" % roundi(share * 100)
+		if share >= 1.0 and main.repair_all_gold():
+			label = "Use all gold"
+		if amount < 1.0:
+			b.text = "%s\n%s\n[%d]" % [label, "Castle at full" if main.castle_hp >= main.castle_max - 0.5 else "Not enough gold", i + 1]
+		elif main.wave_active:
+			b.text = "%s\n+%d HP\nafter the wave" % [label, roundi(amount)]
+		else:
+			b.text = "%s\n+%d HP\n%dg  [%d]" % [label, roundi(amount), main.repair_cost(amount), i + 1]
+		b.disabled = not main.can_repair(i)
+	# The ability bar, in the top-left corner of the field (above the enemy camp).
 	var shown := 0
 	for key in power_buttons:
 		var pb: Button = power_buttons[key]
 		pb.visible = main.started and not main.game_over and powers.owned.has(key)
 		if not pb.visible:
 			continue
-		pb.position.x = 66.0 + shown * 38.0
+		pb.position.x = 8.0 + shown * 38.0
 		shown += 1
 		var left: float = powers.ready_in(key)
-		var cd: float = Data.CASTLE_UPGRADES[key]["cooldown"]
+		var cd: float = powers.recharge(key)
 		var shade: ColorRect = pb.get_node("Shade")
 		shade.size = Vector2(pb.size.x, pb.size.y * left / cd)
 		shade.position.y = pb.size.y - shade.size.y
@@ -585,17 +680,17 @@ func _refresh_castle(main, show: bool) -> void:
 		pb.set_pressed_no_signal(powers.aiming == key)
 
 
-## A button on the castle wall for an ability, with its icon, a shade that drains as
+## A button on the ability bar (top-left of the field), with its icon, a shade that drains as
 ## it recharges and the seconds left.
 func _power_button(key: String) -> Button:
-	var d: Dictionary = Data.CASTLE_UPGRADES[key]
+	var d: Dictionary = Data.ABILITIES[key]
 	var b := Button.new()
 	b.size = Vector2(34, 26)
 	b.toggle_mode = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.icon = _power_icon(key)
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	b.tooltip_text = "%s: %s" % [d["name"], d["desc"].trim_prefix("Ability. ")]
+	b.tooltip_text = "%s: %s" % [d["name"], d["desc"]]
 	b.visible = false
 	b.pressed.connect(func(): power_pressed.emit(key))
 	var shade := ColorRect.new()
@@ -629,7 +724,7 @@ const ICON_COLORS := {"w": Color(0.95, 0.95, 1.0), "b": Color(0.6, 0.42, 0.22), 
 	"r": Color(0.85, 0.2, 0.1), "l": Color(0.55, 0.85, 1.0), "k": Color(0.35, 0.33, 0.36)}
 
 
-static func _power_icon(key: String) -> ImageTexture:
+static func _power_icon(key: String, scale := 2) -> ImageTexture:
 	var img := Image.create(12, 12, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	var rows: Array = POWER_ICONS.get(key, [])
@@ -638,45 +733,33 @@ static func _power_icon(key: String) -> ImageTexture:
 			var c: String = rows[y][x]
 			if ICON_COLORS.has(c):
 				img.set_pixel(x, y, ICON_COLORS[c])
-	img.resize(24, 24, Image.INTERPOLATE_NEAREST)
+	img.resize(12 * scale, 12 * scale, Image.INTERPOLATE_NEAREST)
 	return ImageTexture.create_from_image(img)
 
 
-## Hovering a Castle tab button: what it does, with this wave's numbers.
-func _show_castle_card(key: String, b: Button) -> void:
-	var main = get_parent()
-	hover_kind = "castle:" + key
-	if key == "repair":
-		_fill_card("Repair", Color(0.5, 1.0, 0.5), "Between waves only",
-				"Masons patch up the castle: mends %d%% of its max health (%d now) for %dg + %dg per wave cleared. A smaller repair costs less."
-				% [roundi(Data.REPAIR_SHARE * 100), roundi(main.repair_amount()), roundi(Data.REPAIR_BASE * price_mult), roundi(Data.REPAIR_PER_WAVE * price_mult)])
-	else:
-		var d: Dictionary = Data.CASTLE_UPGRADES[key]
-		var powers = main.powers
-		var sort := "Ability" if d.has("cast") else "Passive"
-		var sub := "%s  -  %s" % [sort, "Owned" if powers.owned.has(key) else "%dg" % powers.cost(key)]
-		var body: String = (d["desc"] as String).trim_prefix(sort + ". ")
-		var nums := []
-		if d.has("damage"):
-			nums.append("Damage %d this wave" % roundi(powers.dmg(key)))
-		if d.has("radius"):
-			nums.append("Radius %s" % Data.ft(d["radius"]))
-		if d.has("freeze"):
-			nums.append("Freeze %.1fs, then %d%% slow for %.0fs" % [d["freeze"], roundi(d["slow"][0] * 100), d["slow"][1]])
-		if d.has("chain"):
-			nums.append("Up to %d enemies, stun %.1fs" % [d["chain"], d["stun"]])
-		if d.has("burn"):
-			nums.append("Burns %d/s for %.0fs" % [roundi(d["burn"][0] * powers.power()), d["burn"][1]])
-		if d.has("cast"):
-			nums.append("Recharge %ds" % roundi(d["cooldown"]))
-		elif key == "ballista":
-			nums.append("A bolt every %.1fs, reach %s from the castle" % [d["cooldown"], Data.ft(d["range"])])
-		if not nums.is_empty():
-			body += "\n\n" + "   ".join(nums)
-		_fill_card(d["name"], d["color"], sub, body)
+## Hovering an ability's button: what it does, with this wave's numbers.
+func _show_ability_card(key: String, b: Button) -> void:
+	var powers = get_parent().powers
+	var d: Dictionary = Data.ABILITIES[key]
+	hover_kind = "ability:" + key
+	var sub := "Ability  -  %s" % ("Owned" if powers.owned.has(key) else "%dg" % powers.cost(key))
+	var nums := []
+	if d.has("damage"):
+		nums.append("Damage %d this wave" % roundi(powers.dmg(key)))
+	if d.has("radius"):
+		nums.append("Radius %s" % Data.ft(powers.radius(key)))
+	if d.has("freeze"):
+		nums.append("Freeze %.1fs, then %d%% slow for %.0fs" % [d["freeze"], roundi(d["slow"][0] * 100), d["slow"][1]])
+	if d.has("chain"):
+		nums.append("Up to %d enemies, stun %.1fs" % [d["chain"], d["stun"]])
+	if d.has("burn"):
+		nums.append("Burns %d/s for %.0fs" % [roundi(d["burn"][0] * powers.power()), d["burn"][1]])
+	nums.append("Recharge %ds" % roundi(powers.recharge(key)))
+	_fill_card(d["name"], d["color"], sub, d["desc"] + "\n\n" + "   ".join(nums))
 	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), TOP - hover_card.size.y - 6.0)
 
 
+## The hire tab a unit kind is on.
 static func tab_of(kind: String) -> String:
 	return "emplacements" if Data.WARRIORS[kind].get("emplacement", false) else "troops"
 
@@ -694,20 +777,20 @@ func _path_card(parent: Node, p: int) -> Dictionary:
 	var b := _button(parent, Vector2(12 + p * 156, 48), Vector2(150, 84), "")
 	b.pressed.connect(func(): upgrade_pressed.emit(p))
 	var card := {"button": b, "pips": []}
-	card["title"] = _label(b, Vector2(6, 2), Vector2(138, 18), Warrior.PATH_COLORS[p], 13)
+	card["title"] = _label(b, Vector2(6, 3), Vector2(138, 20), Warrior.PATH_COLORS[p], 14)
 	card["title"].clip_text = true
-	card["cost"] = _label(b, Vector2(74, 17), Vector2(70, 16), Color(1, 0.85, 0.3), 12)
+	card["cost"] = _label(b, Vector2(74, 22), Vector2(70, 16), Color(1, 0.85, 0.3), 13)
 	card["cost"].horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	for j in Warrior.MAX_TIER:
 		var pip := ColorRect.new()
-		pip.position = Vector2(6 + j * 14, 23)
+		pip.position = Vector2(6 + j * 14, 28)
 		pip.size = Vector2(11, 5)
 		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(pip)
 		card["pips"].append(pip)
-	card["tier"] = _label(b, Vector2(6, 31), Vector2(138, 16), Color.WHITE, 12)
+	card["tier"] = _label(b, Vector2(6, 38), Vector2(138, 18), Color.WHITE, 13)
 	card["tier"].clip_text = true
-	card["desc"] = _label(b, Vector2(6, 46), Vector2(138, 36), Color(0.8, 0.8, 0.78), 11)
+	card["desc"] = _label(b, Vector2(6, 56), Vector2(138, 44), Color(0.8, 0.8, 0.78), 12)
 	card["desc"].autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card["desc"].max_lines_visible = 2
 	card["desc"].text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -813,7 +896,7 @@ func show_mode_select() -> void:
 	sub.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.1))
 	sub.add_theme_constant_override("outline_size", 6)
 	# Settings: a small gear tucked in at the top right of the mode cards.
-	var settings := _button(mode_screen, Vector2(WIDTH - 54, 578), Vector2(34, 34), "")
+	var settings := _button(mode_screen, Vector2(WIDTH - 54, 596), Vector2(34, 34), "")
 	settings.tooltip_text = "Settings"
 	var gear := TextureRect.new()
 	gear.texture = _gear_icon()
@@ -849,7 +932,7 @@ func show_mode_select() -> void:
 	modes.append(["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage"])
 	modes.append(["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard"])
 	# Three cards on top, three below.
-	var spots := [Vector2(20, 616), Vector2(225, 616), Vector2(430, 616), Vector2(20, 790), Vector2(225, 790), Vector2(430, 790)]
+	var spots := [Vector2(20, 640), Vector2(225, 640), Vector2(430, 640), Vector2(20, 836), Vector2(225, 836), Vector2(430, 836)]
 	var cards := []
 	for i in modes.size():
 		cards.append(_mode_card(modes[i], spots[i], 0.25 + i * 0.09))

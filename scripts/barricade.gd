@@ -408,7 +408,7 @@ func _draw_energy(a: Vector2, b: Vector2) -> void:
 	for end in [a, b]:
 		draw_rect(Rect2(end + Vector2(-4, -h - 4), Vector2(8, h + 10)), OUTLINE)
 		draw_rect(Rect2(end + Vector2(-2.5, -h - 2.5), Vector2(5, h + 7)), Color(0.35, 0.37, 0.45))
-		draw_circle(end + Vector2(0, -h - 3), 3.5, Color(0.85, 0.98, 1.0, 0.6 + 0.4 * flick), true, -1.0, true)
+		Sprites.disc(self, end + Vector2(0, -h - 3), 3.5, Color(0.85, 0.98, 1.0, 0.6 + 0.4 * flick))
 	if not aegis.is_empty():
 		# Aegis Field: a faint dome of protection over the ground in front of it.
 		draw_set_transform(Vector2.ZERO, half.angle(), Vector2.ONE)
@@ -422,8 +422,8 @@ func _draw_rubble(a: Vector2, b: Vector2) -> void:
 	for i in lumps:
 		var p := a.lerp(b, (i + 0.5) / lumps) + Vector2(0, 2 + (i % 3))
 		var r := 3.0 + float(i * 7 % 4)
-		draw_circle(p, r + 1.0, OUTLINE)
-		draw_circle(p, r, (BRICK_DARK if i % 2 == 0 else STONE_DARK).lightened(0.1))
+		Sprites.disc(self, p, r + 1.0, OUTLINE)
+		Sprites.disc(self, p, r, (BRICK_DARK if i % 2 == 0 else STONE_DARK).lightened(0.1))
 
 
 ## Masonry: a construction crew in hard hats working along the wall (hammering away
@@ -442,8 +442,8 @@ func _draw_crew(a: Vector2, b: Vector2) -> void:
 		draw_rect(Rect2(p + Vector2(-4, -13), Vector2(8, 9)), OUTLINE)
 		draw_rect(Rect2(p + Vector2(-3, -12), Vector2(6, 7)), Color(1.0, 0.55, 0.15))
 		draw_rect(Rect2(p + Vector2(-3, -10), Vector2(6, 1.5)), Color(1.0, 0.95, 0.6))
-		draw_circle(p + Vector2(0, -16), 3.2, OUTLINE)
-		draw_circle(p + Vector2(0, -16), 2.4, Color(0.96, 0.77, 0.6))
+		Sprites.disc(self, p + Vector2(0, -16), 3.2, OUTLINE)
+		Sprites.disc(self, p + Vector2(0, -16), 2.4, Color(0.96, 0.77, 0.6))
 		draw_rect(Rect2(p + Vector2(-4, -20), Vector2(8, 3)), OUTLINE)
 		draw_rect(Rect2(p + Vector2(-3, -19.5), Vector2(6, 2)), Color(1.0, 0.85, 0.2))
 		# Hammer, raised or brought down.

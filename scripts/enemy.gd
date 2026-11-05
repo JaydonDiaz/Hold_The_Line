@@ -96,7 +96,7 @@ var walking := false        # moved this frame (for the waddle)
 var fighting := false       # swinging at a warrior or wall (for the wind-up)
 var drift := 0.0
 var aggro = null            # the unit attacking it that it has turned on
-var aggro_check := 0.0
+var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
 
 
 func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult: float, bounty_mult: float) -> void:
@@ -273,7 +273,10 @@ func _process(delta: float) -> void:
 		drift += delta * 1.3
 		var dir := Vector2(sin(drift) * 0.3, 1.0).normalized()
 		var route: Vector2 = Vector2.ZERO if flying else main.paths.direction(position, radius)
-		if aggro != null:
+		if aggro != null and not breath.is_empty() and position.distance_to(aggro.position) <= breath["range"] * 0.75:
+			# A Wyvern hangs in the air within breath range of whoever's shooting it.
+			dir = Vector2.ZERO
+		elif aggro != null:
 			# Going after the unit that's attacking it.
 			dir = position.direction_to(aggro.position)
 		elif route != Vector2.ZERO:
@@ -357,13 +360,16 @@ func _breathe(delta: float) -> void:
 		return
 	var best = null
 	var best_d: float = breath["range"]
-	for w in main.get_warriors():
-		if not w.is_active():
-			continue
-		var d: float = position.distance_to(w.position) - w.RADIUS
-		if d < best_d:
-			best_d = d
-			best = w
+	if aggro != null and is_instance_valid(aggro) and aggro.is_active() and position.distance_to(aggro.position) - aggro.RADIUS < best_d:
+		best = aggro   # whoever's attacking it gets the fire first
+	else:
+		for w in main.get_warriors():
+			if not w.is_active():
+				continue
+			var d: float = position.distance_to(w.position) - w.RADIUS
+			if d < best_d:
+				best_d = d
+				best = w
 	if best == null:
 		return
 	breath_timer = breath["cooldown"]
@@ -380,10 +386,10 @@ func _breathe(delta: float) -> void:
 ## The unit attacking this enemy that it turns on, if any: the nearest one that has
 ## it as its target and is within range of it (so is shooting or swinging at it, not
 ## just heading its way), within AGGRO_LEASH, with no wall in between. Sappers and
-## non-fighters (wolves, wyverns) never turn aside.
+## wolves never turn aside; a Wyvern flies over to breathe fire on its attacker.
 func _attacker():
-	if not fights or not bomb.is_empty() or boss:
-		return null
+	if (not fights and breath.is_empty()) or not bomb.is_empty() or boss:
+		return null   # wolves slip past, sappers have a job to do (Wyverns breathe on theirs)
 	var best = null
 	var best_d := AGGRO_LEASH
 	for w in main.get_warriors():
@@ -410,6 +416,7 @@ func _wall_across(a: Vector2, b: Vector2) -> bool:
 ## (no bounty for an enemy that blew itself up).
 func _explode() -> void:
 	dead = true
+	main.enemies_changed()
 	var r: float = bomb["radius"]
 	for b in main.get_barricades():
 		if b.is_active() and b.gap_from(position) <= r:
@@ -488,7 +495,7 @@ func _wall_to_break(delta: float):
 func _find_blocker():
 	var best = null
 	var best_d := INF
-	for w in main.get_warriors():
+	for w in main.warriors_near(position, radius + REACH + 24.0):
 		if not w.is_active():
 			continue
 		var d: float = position.distance_to(w.position) - radius - w.RADIUS
@@ -502,12 +509,13 @@ func _find_blocker():
 ## Flyers only bump into other flyers.
 func _push_out() -> void:
 	if not flying and not boss:   # nothing shoves the Ogre King around; others make way
-		for w in main.get_warriors():
+		for w in main.warriors_near(position, radius + 24.0):
 			if w.is_active():
 				_push_from(w.position, radius + w.RADIUS, 1.0)
-	for e in main.get_enemies():
-		if e != self and e.flying == flying and not boss:
-			_push_from(e.position, radius + e.radius, 1.0 if e.boss else 0.5)
+	if not boss:
+		for e in main.enemies_near(position, radius + main.MAX_ENEMY_RADIUS):
+			if e != self and e.flying == flying:
+				_push_from(e.position, radius + e.radius, 1.0 if e.boss else 0.5)
 	position.x = clampf(position.x, radius, main.FIELD_W - radius)
 	if flying:
 		return
@@ -652,8 +660,10 @@ func _draw() -> void:
 	var frames: Array = Sprites.frames(kind)
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * sprite_scale
 	var feet := radius
-	draw_set_transform(Vector2(0, feet), 0, Vector2(1, 0.35))
-	draw_circle(Vector2.ZERO, radius * (0.8 if flying else 1.1), Color(0, 0, 0, 0.22 if flying else 0.3))
+	# Shadow, sprite and health bar all come from the sprite atlas, so the renderer can
+	# batch every enemy on the field together.
+	var sr := radius * (0.8 if flying else 1.1)
+	draw_texture_rect(Sprites.shadow(), Rect2(-sr, feet - sr * 0.35, sr * 2.0, sr * 0.7), false, Color(0, 0, 0, 0.22 if flying else 0.3))
 	if flying:
 		feet -= FLY_HEIGHT + sin(bob * 0.3) * 3.0   # everything else is drawn up in the air
 	if fuse >= 0.0 and int(fuse * 12.0) % 2 == 0:
@@ -681,7 +691,7 @@ func _draw() -> void:
 	draw_texture_rect(frames[frame], Rect2(Vector2(-size.x / 2, -size.y), size), false, tint)
 	if freeze_timer > 0.0:
 		var ice := Rect2(Vector2(-size.x / 2, -size.y) + Vector2(size.x * 0.15, size.y * 0.1), size * Vector2(0.7, 0.9))
-		draw_rect(ice, Color(0.75, 0.92, 1.0, 0.45))
+		draw_texture_rect(Sprites.white(), ice, false, Color(0.75, 0.92, 1.0, 0.45))
 		draw_rect(ice, Color(0.9, 0.97, 1.0, 0.9), false, 2.0)
 	draw_set_transform(Vector2.ZERO)
 	if stun_timer > 0.0:
@@ -697,7 +707,7 @@ func _draw() -> void:
 			var x := (-0.75 + i * 0.5) * radius
 			var sway := sin(Time.get_ticks_msec() / 150.0 + i) * 2.0
 			draw_line(Vector2(x, feet + 2), Vector2(x + sway, feet - size.y * 0.35), Color(0.2, 0.55, 0.15), 3.0, true)
-			draw_circle(Vector2(x + sway, feet - size.y * 0.35), 2.5, Color(0.35, 0.75, 0.25), true, -1.0, true)
+			Sprites.disc(self, Vector2(x + sway, feet - size.y * 0.35), 2.5, Color(0.35, 0.75, 0.25))
 	if confuse_timer > 0.0:
 		# Confused: a spinning purple "?" over the head.
 		var bob_y := sin(Time.get_ticks_msec() / 120.0) * 2.0
@@ -707,7 +717,7 @@ func _draw() -> void:
 	if discord_timer > 0.0:
 		# Unsettled by a Bard's discord: a dark purple note bobbing beside the head.
 		var n := Vector2(radius * 0.9, feet - size.y * 0.85 + sin(Time.get_ticks_msec() / 200.0) * 2.0)
-		draw_circle(n, 2.5, Color(0.55, 0.25, 0.7), true, -1.0, true)
+		Sprites.disc(self, n, 2.5, Color(0.55, 0.25, 0.7))
 		draw_line(n + Vector2(2, 0), n + Vector2(2, -8), Color(0.55, 0.25, 0.7), 1.5, true)
 	if not poisons.is_empty():
 		# Poisoned: green bubbles rising off the body, more with each stack.
@@ -715,7 +725,7 @@ func _draw() -> void:
 		for i in mini(poison_stacks, 4) + 1:
 			var k := fmod(t * 0.9 + i * 0.27 + bob * 0.01, 1.0)
 			var x := sin(i * 2.1 + drift) * radius * 0.6
-			draw_circle(Vector2(x, feet - size.y * (0.35 + 0.5 * k)), 1.5 + k * 1.5, Color(0.55, 1.0, 0.3, 0.9 * (1.0 - k)), true, -1.0, true)
+			Sprites.disc(self, Vector2(x, feet - size.y * (0.35 + 0.5 * k)), 1.5 + k * 1.5, Color(0.55, 1.0, 0.3, 0.9 * (1.0 - k)))
 	if corrode_timer > 0.0:
 		# Acid-burned: yellow-green drips down the body.
 		for i in 3:
@@ -728,8 +738,8 @@ func _draw() -> void:
 		for i in 3:
 			var k := fmod(t * 0.7 + i * 0.33, 1.0)
 			var x := sin(t * 3.0 + i * 2.0) * radius * 0.5
-			draw_circle(Vector2(x, feet - size.y * (0.3 + 0.6 * k)), 2.5 - k, Color(0.5, 0.9, 0.35, 0.8 * (1.0 - k)), true, -1.0, true)
-			draw_circle(Vector2(x + 2, feet - size.y * (0.3 + 0.6 * k) + 2), 1.5, Color(0.35, 0.2, 0.4, 0.7 * (1.0 - k)), true, -1.0, true)
+			Sprites.disc(self, Vector2(x, feet - size.y * (0.3 + 0.6 * k)), 2.5 - k, Color(0.5, 0.9, 0.35, 0.8 * (1.0 - k)))
+			Sprites.disc(self, Vector2(x + 2, feet - size.y * (0.3 + 0.6 * k) + 2), 1.5, Color(0.35, 0.2, 0.4, 0.7 * (1.0 - k)))
 	if thorn_timer > 0.0:
 		# Thorny briars wound round the legs.
 		for i in 3:
@@ -756,5 +766,6 @@ func _draw() -> void:
 	if hp < max_hp:
 		var w := radius * 2.0
 		var top := Vector2(-radius, feet - size.y - 2)
-		draw_rect(Rect2(top, Vector2(w, 4)), Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(top, Vector2(w * hp / max_hp, 4)), Color(0.3, 0.95, 0.3))
+		var bar := Sprites.white()
+		draw_texture_rect(bar, Rect2(top, Vector2(w, 4)), false, Color(0, 0, 0, 0.6))
+		draw_texture_rect(bar, Rect2(top, Vector2(w * hp / max_hp, 4)), false, Color(0.3, 0.95, 0.3))

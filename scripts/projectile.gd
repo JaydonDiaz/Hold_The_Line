@@ -3,6 +3,7 @@ extends Node2D
 ## it still lands where the target was (so splash still hits). Piercing arrows carry on
 ## through more enemies; seeking ones find a new target instead of landing on nothing.
 
+const Sprites = preload("res://scripts/sprites.gd")
 const Zone = preload("res://scripts/zone.gd")
 const PIERCE_RANGE := 220.0   # how far a piercing arrow flies on after a hit
 const SEEK_RANGE := 160.0     # how far a seeking arrow looks for its next target
@@ -97,7 +98,7 @@ func _next_target(p: Vector2):
 	var best = null
 	var best_d := SEEK_RANGE
 	for e in main.get_enemies():
-		if hit_already.has(e) or e.position.y < 0.0:
+		if hit_already.has(e) or e.position.y + e.radius < main.DEPLOY_TOP:   # seekers don't turn into the spawn area
 			continue
 		var d: float = e.position.distance_to(p)
 		if d < best_d:
@@ -302,7 +303,7 @@ static func arrow_shape(ci: CanvasItem, g: int, alpha: float, outline: bool) -> 
 	ci.draw_line(Vector2(-10, 0), Vector2(8, 0), shaft, thick, true)
 	ci.draw_line(Vector2(-10, 0), Vector2(-6, 0), fletch, thick + 2.0, true)
 	if g == 4:
-		ci.draw_circle(Vector2(tip - 3.0, 0), 5.0, Color(1.0, 0.5, 0.15, 0.35 * alpha), true, -1.0, true)
+		Sprites.disc(ci, Vector2(tip - 3.0, 0), 5.0, Color(1.0, 0.5, 0.15, 0.35 * alpha))
 	ci.draw_colored_polygon(tri, head)
 	if g == 1:
 		# Barbs swept back off the head.
@@ -312,66 +313,66 @@ static func arrow_shape(ci: CanvasItem, g: int, alpha: float, outline: bool) -> 
 
 func _draw() -> void:
 	if crit:
-		draw_circle(Vector2.ZERO, 7, Color(1, 0.85, 0.25, 0.45), true, -1.0, true)
+		Sprites.disc(self, Vector2.ZERO, 7, Color(1, 0.85, 0.25, 0.45))
 	match style:
 		"arrow":
 			arrow_shape(self, grade, 1.0, false)
 			if not burn.is_empty():
-				draw_circle(Vector2(11, 0), 3.5, Color(1.0, 0.55, 0.15, 0.85), true, -1.0, true)
+				Sprites.disc(self, Vector2(11, 0), 3.5, Color(1.0, 0.55, 0.15, 0.85))
 			if seek:
 				draw_line(Vector2(-10, 0), Vector2(-16, 0), Color(0.6, 0.9, 1.0, 0.6), 3.0, true)
 		"crossbow":
 			draw_line(Vector2(-6, 0), Vector2(6, 0), Color(0.35, 0.25, 0.15), 3.0, true)
 			draw_colored_polygon(PackedVector2Array([Vector2(10, 0), Vector2(5, -3), Vector2(5, 3)]), ARROW_HEADS[grade])
 			if grade >= 4:
-				draw_circle(Vector2(9, 0), 4.0, Color(1.0, 0.5, 0.15, 0.4), true, -1.0, true)
+				Sprites.disc(self, Vector2(9, 0), 4.0, Color(1.0, 0.5, 0.15, 0.4))
 		"ki":
 			var r := 9.0 if splash <= 0.0 else 12.0
-			draw_circle(Vector2.ZERO, r, Color(color, 0.35), true, -1.0, true)
-			draw_circle(Vector2.ZERO, r * 0.6, color, true, -1.0, true)
-			draw_circle(Vector2.ZERO, 3, Color.WHITE, true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, r, Color(color, 0.35))
+			Sprites.disc(self, Vector2.ZERO, r * 0.6, color)
+			Sprites.disc(self, Vector2.ZERO, 3, Color.WHITE)
 		"orb":
-			draw_circle(Vector2.ZERO, 8, Color(color, 0.35), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 4.5, color.lightened(0.4), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 8, Color(color, 0.35))
+			Sprites.disc(self, Vector2.ZERO, 4.5, color.lightened(0.4))
 		"fireball":
 			# A roaring fireball with a flickering tail streaming behind it.
 			var flick := Time.get_ticks_msec() / 60
 			for i in 4:
 				var k := float(i) / 4.0
 				var off := Vector2(-6.0 - i * 5.0, sin(flick + i * 2.0) * 2.0)
-				draw_circle(off, 6.0 - i * 1.2, Color(1.0, 0.45 - k * 0.2, 0.1, 0.7 - k * 0.15), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 10, Color(1.0, 0.45, 0.1, 0.4), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 6.5, Color(1.0, 0.7, 0.2), true, -1.0, true)
-			draw_circle(Vector2(1, -1), 3.5, Color(1.0, 0.95, 0.6), true, -1.0, true)
+				Sprites.disc(self, off, 6.0 - i * 1.2, Color(1.0, 0.45 - k * 0.2, 0.1, 0.7 - k * 0.15))
+			Sprites.disc(self, Vector2.ZERO, 10, Color(1.0, 0.45, 0.1, 0.4))
+			Sprites.disc(self, Vector2.ZERO, 6.5, Color(1.0, 0.7, 0.2))
+			Sprites.disc(self, Vector2(1, -1), 3.5, Color(1.0, 0.95, 0.6))
 		"shell":
 			# An iron ball lobbed in an arc, its shadow on the ground below.
 			var t := traveled / maxf(traveled + left, 1.0)
 			var h := sin(PI * t) * minf(traveled + left, 260.0) * (0.6 if high_arc else 0.25)
 			draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.5))
-			draw_circle(Vector2.ZERO, 5, Color(0, 0, 0, 0.3), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 5, Color(0, 0, 0, 0.3))
 			draw_set_transform(Vector2.ZERO)
-			draw_circle(Vector2(0, -h), 5.5, Color(0.1, 0.08, 0.1), true, -1.0, true)
-			draw_circle(Vector2(0, -h), 4.5, Color(0.3, 0.3, 0.34) if burn.is_empty() else Color(0.75, 0.3, 0.1), true, -1.0, true)
-			draw_circle(Vector2(-1.5, -h - 1.5), 1.5, Color(0.6, 0.6, 0.65) if burn.is_empty() else Color(1.0, 0.8, 0.3), true, -1.0, true)
+			Sprites.disc(self, Vector2(0, -h), 5.5, Color(0.1, 0.08, 0.1))
+			Sprites.disc(self, Vector2(0, -h), 4.5, Color(0.3, 0.3, 0.34) if burn.is_empty() else Color(0.75, 0.3, 0.1))
+			Sprites.disc(self, Vector2(-1.5, -h - 1.5), 1.5, Color(0.6, 0.6, 0.65) if burn.is_empty() else Color(1.0, 0.8, 0.3))
 		"flask":
 			# A round glass flask tumbling through the air, its shadow on the ground below.
 			var t := traveled / maxf(traveled + left, 1.0)
 			var h := sin(PI * t) * minf(traveled + left, 220.0) * 0.3
 			draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.5))
-			draw_circle(Vector2.ZERO, 4, Color(0, 0, 0, 0.3), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 4, Color(0, 0, 0, 0.3))
 			draw_set_transform(Vector2(0, -h), traveled * 0.05, Vector2.ONE)
-			draw_circle(Vector2(0, 1), 5.5, Color(0.1, 0.07, 0.1), true, -1.0, true)
+			Sprites.disc(self, Vector2(0, 1), 5.5, Color(0.1, 0.07, 0.1))
 			draw_rect(Rect2(-2.5, -7, 5, 5), Color(0.1, 0.07, 0.1))
-			draw_circle(Vector2(0, 1), 4.0, color, true, -1.0, true)
+			Sprites.disc(self, Vector2(0, 1), 4.0, color)
 			draw_rect(Rect2(-1.5, -6, 3, 4), Color(0.85, 0.95, 0.95))
-			draw_circle(Vector2(-1.5, -0.5), 1.2, Color(1, 1, 1, 0.8), true, -1.0, true)
+			Sprites.disc(self, Vector2(-1.5, -0.5), 1.2, Color(1, 1, 1, 0.8))
 			draw_set_transform(Vector2.ZERO)
 		"note":
 			# A Bard's note: an eighth note with a soft glow, always upright.
-			draw_circle(Vector2.ZERO, 7, Color(color, 0.3), true, -1.0, true)
-			draw_circle(Vector2(-1, 2), 3.5, color.lightened(0.3), true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 7, Color(color, 0.3))
+			Sprites.disc(self, Vector2(-1, 2), 3.5, color.lightened(0.3))
 			draw_line(Vector2(2, 2), Vector2(2, -8), color.lightened(0.3), 2.0, true)
 			draw_line(Vector2(2, -8), Vector2(6, -5), color.lightened(0.3), 2.0, true)
 		"frost":
-			draw_circle(Vector2.ZERO, 6, Color(color, 0.4), true, -1.0, true)
-			draw_circle(Vector2.ZERO, 3, Color.WHITE, true, -1.0, true)
+			Sprites.disc(self, Vector2.ZERO, 6, Color(color, 0.4))
+			Sprites.disc(self, Vector2.ZERO, 3, Color.WHITE)

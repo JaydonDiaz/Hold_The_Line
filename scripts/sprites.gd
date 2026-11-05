@@ -3053,7 +3053,85 @@ static func _overlay(rows: Array, changes: Dictionary) -> Array:
 	return out
 
 
-static func _make(rows: Array, palette: Dictionary) -> ImageTexture:
+# --- Atlas ------------------------------------------------------------------
+# Every sprite goes into one shared texture (as an AtlasTexture region of it), along
+# with a white block and a soft round shadow. Drawing from a single texture lets the
+# renderer batch a whole crowd of units into a few draw calls instead of one or more
+# per unit. New sprites are blitted in as they're made and the texture is re-uploaded
+# once, just before the next frame is drawn.
+const ATLAS_SIZE := 1024
+const ATLAS_PAD := 2
+static var _atlas_img: Image = null
+static var _atlas_tex: ImageTexture = null
+static var _shelf := Vector3i(0, 0, 0)   # x, y and height of the shelf being filled
+static var _atlas_dirty := false
+static var _white: AtlasTexture = null
+static var _shadow: AtlasTexture = null
+
+
+## Puts an image in the atlas and returns its region as a texture (or a texture of
+## its own if the atlas is full).
+static func _pack(img: Image) -> Texture2D:
+	if _atlas_img == null:
+		_atlas_img = Image.create(ATLAS_SIZE, ATLAS_SIZE, false, Image.FORMAT_RGBA8)
+		_atlas_tex = ImageTexture.create_from_image(_atlas_img)
+	var w := img.get_width()
+	var h := img.get_height()
+	if _shelf.x + w + ATLAS_PAD > ATLAS_SIZE:
+		_shelf = Vector3i(0, _shelf.y + _shelf.z + ATLAS_PAD, 0)
+	if _shelf.y + h + ATLAS_PAD > ATLAS_SIZE:
+		return ImageTexture.create_from_image(img)
+	var at := Vector2i(_shelf.x + ATLAS_PAD, _shelf.y + ATLAS_PAD)
+	_atlas_img.blit_rect(img, Rect2i(0, 0, w, h), at)
+	_shelf.x += w + ATLAS_PAD
+	_shelf.z = maxi(_shelf.z, h)
+	var tex := AtlasTexture.new()
+	tex.atlas = _atlas_tex
+	tex.region = Rect2(at, Vector2(w, h))
+	if not _atlas_dirty:
+		_atlas_dirty = true
+		RenderingServer.frame_pre_draw.connect(_flush_atlas, CONNECT_ONE_SHOT)
+	return tex
+
+
+static func _flush_atlas() -> void:
+	_atlas_dirty = false
+	_atlas_tex.update(_atlas_img)
+
+
+## A white block in the atlas: draw it tinted for bars and plain shapes that should
+## batch with the sprites.
+static func white() -> Texture2D:
+	if _white == null:
+		var img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+		img.fill(Color.WHITE)
+		_white = _pack(img)
+		_white.region = _white.region.grow(-1.0)   # sample only the middle, never the edge
+	return _white
+
+
+## A round disc in the atlas with a smoothed edge, for shadows, glows and filled
+## circles (draw it squashed and tinted; see disc()).
+static func shadow() -> Texture2D:
+	if _shadow == null:
+		var n := 32
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		for y in n:
+			for x in n:
+				var d := Vector2(x + 0.5 - n / 2.0, y + 0.5 - n / 2.0).length() / (n / 2.0)
+				img.set_pixel(x, y, Color(1, 1, 1, clampf((1.0 - d) * 16.0, 0.0, 1.0)))
+		_shadow = _pack(img)
+	return _shadow
+
+
+## A filled circle drawn with the atlas disc instead of draw_circle: one textured quad
+## that batches with the sprites, where a smooth draw_circle is a many-sided polygon
+## and a draw call of its own.
+static func disc(ci: CanvasItem, center: Vector2, r: float, col: Color) -> void:
+	ci.draw_texture_rect(shadow(), Rect2(center.x - r, center.y - r, r * 2.0, r * 2.0), false, col)
+
+
+static func _make(rows: Array, palette: Dictionary) -> Texture2D:
 	var width := SIZE
 	for row in rows:
 		width = maxi(width, (row as String).length())
@@ -3068,7 +3146,7 @@ static func _make(rows: Array, palette: Dictionary) -> ImageTexture:
 			if ch != "k":
 				col = palette.get(ch, COMMON.get(ch, Color.MAGENTA))
 			img.set_pixel(x, y, col)
-	return ImageTexture.create_from_image(img)
+	return _pack(img)
 
 
 ## 16x16 ground tile. Variants 0-2 are plain grass, 3 has flowers, 4 is dirt.

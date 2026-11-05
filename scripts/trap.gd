@@ -3,6 +3,7 @@ extends Node2D
 ## moment, then blows up when an enemy on foot steps on it, hurting everything in the
 ## blast. It stays put until something sets it off, even between waves.
 
+const Sprites = preload("res://scripts/sprites.gd")
 const ARM_TIME := 0.6
 const TRIGGER := 12.0   # how close an enemy's edge must come to set it off
 
@@ -52,10 +53,10 @@ func _draw() -> void:
 	# A squat clay pot half-buried in the dirt, its fuse light blinking once armed.
 	var a := minf(t / ARM_TIME, 1.0)
 	draw_set_transform(Vector2(0, 3), 0, Vector2(1, 0.45))
-	draw_circle(Vector2.ZERO, 8.0, Color(0, 0, 0, 0.3 * a), true, -1.0, true)
+	Sprites.disc(self, Vector2.ZERO, 8.0, Color(0, 0, 0, 0.3 * a))
 	draw_set_transform(Vector2.ZERO)
-	draw_circle(Vector2(0, 0), 6.0, Color(0.1, 0.07, 0.1, 0.9), true, -1.0, true)
-	draw_circle(Vector2(0, 0), 4.5, Color(0.55, 0.35, 0.2, 0.9) if poison.is_empty() else Color(0.4, 0.55, 0.25, 0.9), true, -1.0, true)
+	Sprites.disc(self, Vector2(0, 0), 6.0, Color(0.1, 0.07, 0.1, 0.9))
+	Sprites.disc(self, Vector2(0, 0), 4.5, Color(0.55, 0.35, 0.2, 0.9) if poison.is_empty() else Color(0.4, 0.55, 0.25, 0.9))
 	draw_rect(Rect2(-1.5, -8, 3, 3), Color(0.1, 0.07, 0.1, 0.9))
 	if t >= ARM_TIME and int(t * 2.5) % 2 == 0:
-		draw_circle(Vector2(0, -8), 2.0, Color(1.0, 0.3, 0.2), true, -1.0, true)
+		Sprites.disc(self, Vector2(0, -8), 2.0, Color(1.0, 0.3, 0.2))

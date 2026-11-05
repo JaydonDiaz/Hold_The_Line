@@ -3,6 +3,7 @@ extends Node2D
 ## Overgrowth (tangled grass that slows, thorny with Thornwild), an Alchemist's toxic
 ## cloud (poisons) or a Cannoneer's napalm (burns).
 
+const Sprites = preload("res://scripts/sprites.gd")
 var main
 var radius := 70.0
 var slow := 0.5
@@ -60,7 +61,7 @@ func _draw() -> void:
 		_draw_fire(a)
 		return
 	draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.6))
-	draw_circle(Vector2.ZERO, radius, Color(0.2, 0.45, 0.15, 0.35 * a), true, -1.0, true)
+	Sprites.disc(self, Vector2.ZERO, radius, Color(0.2, 0.45, 0.15, 0.35 * a))
 	draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.35, 0.7, 0.25, 0.6 * a), 2.0, true)
 	draw_set_transform(Vector2.ZERO)
 	for tuft in tufts:
@@ -69,7 +70,7 @@ func _draw() -> void:
 		var sway := sin(t * 4.0 + p.x * 0.1) * 1.5
 		draw_line(p, p + Vector2(sway, -h), Color(0.3, 0.7, 0.2, a), 2.0)
 		if tuft[2]:
-			draw_circle(p + Vector2(sway, -h), 2.0, Color(1.0, 0.75, 0.85, a), true, -1.0, true)
+			Sprites.disc(self, p + Vector2(sway, -h), 2.0, Color(1.0, 0.75, 0.85, a))
 		elif dps > 0.0:
 			# Thornwild: thorns jutting off the stems.
 			draw_line(p + Vector2(sway * 0.5, -h * 0.5), p + Vector2(sway * 0.5 + 3, -h * 0.5 - 2), Color(0.55, 0.15, 0.12, a), 1.5)
@@ -78,8 +79,8 @@ func _draw() -> void:
 func _draw_toxic(a: float) -> void:
 	# A sickly green haze with bubbles rising and popping.
 	draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.6))
-	draw_circle(Vector2.ZERO, radius, Color(0.45, 0.8, 0.2, 0.22 * a), true, -1.0, true)
-	draw_circle(Vector2(radius * 0.2, -radius * 0.1), radius * 0.6, Color(0.55, 0.3, 0.7, 0.14 * a), true, -1.0, true)
+	Sprites.disc(self, Vector2.ZERO, radius, Color(0.45, 0.8, 0.2, 0.22 * a))
+	Sprites.disc(self, Vector2(radius * 0.2, -radius * 0.1), radius * 0.6, Color(0.55, 0.3, 0.7, 0.14 * a))
 	draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(0.55, 0.9, 0.3, 0.5 * a), 2.0, true)
 	draw_set_transform(Vector2.ZERO)
 	for i in tufts.size() / 2:
@@ -91,8 +92,8 @@ func _draw_toxic(a: float) -> void:
 func _draw_fire(a: float) -> void:
 	# Burning ground: an orange glow with flames licking up.
 	draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.6))
-	draw_circle(Vector2.ZERO, radius, Color(1.0, 0.4, 0.1, 0.25 * a), true, -1.0, true)
-	draw_circle(Vector2.ZERO, radius * 0.6, Color(1.0, 0.7, 0.2, 0.2 * a), true, -1.0, true)
+	Sprites.disc(self, Vector2.ZERO, radius, Color(1.0, 0.4, 0.1, 0.25 * a))
+	Sprites.disc(self, Vector2.ZERO, radius * 0.6, Color(1.0, 0.7, 0.2, 0.2 * a))
 	draw_set_transform(Vector2.ZERO)
 	var flick := int(t * 12.0)
 	for i in tufts.size() / 2:
