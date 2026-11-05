@@ -17,7 +17,9 @@ const NEIGHBORS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0,
 var main
 var cols := 0
 var rows := 0
-var walls := []    # standing barricades as of the last invalidate()
+var walls := []    # standing barricades as of the last invalidate() (all solid to enemies)
+var troop_walls := []   # the ones your troops can't walk through (not Phase Gates)
+var shot_walls := []    # the ones your troops can't shoot through (not Arcane Lattices)
 var fields := {}   # enemy radius (int) -> {"dist", "breach", "wall"}
 var troop_grid: AStarGrid2D = null
 
@@ -33,24 +35,30 @@ func invalidate() -> void:
 	fields.clear()
 	troop_grid = null
 	walls = main.get_barricades().filter(func(b): return b.is_active())
+	troop_walls = walls.filter(func(b): return not b.lets_troops())
+	shot_walls = walls.filter(func(b): return not b.lets_shots())
 
 
 func has_walls() -> bool:
 	return not walls.is_empty()
 
 
+func has_troop_walls() -> bool:
+	return not troop_walls.is_empty()
+
+
 ## Whether a standing wall crosses the straight line from a to b (blocks a shot).
 func wall_between(a: Vector2, b: Vector2) -> bool:
-	for w in walls:
+	for w in shot_walls:
 		if Geometry2D.segment_intersects_segment(a, b, w.seg_a(), w.seg_b()) != null:
 			return true
 	return false
 
 
 ## Whether something `clearance` wide (its radius plus the wall's half thickness)
-## would bump into a wall walking straight from a to b.
+## would bump into a wall walking straight from a to b (troops: Phase Gates don't count).
 func path_blocked(a: Vector2, b: Vector2, clearance: float) -> bool:
-	for w in walls:
+	for w in troop_walls:
 		var pts := Geometry2D.get_closest_points_between_segments(a, b, w.seg_a(), w.seg_b())
 		if pts[0].distance_to(pts[1]) < clearance:
 			return true
@@ -80,8 +88,8 @@ func _troop_grid() -> AStarGrid2D:
 	g.update()
 	# Like the enemy fields, a little narrower than a troop's real reach so the cell
 	# it's standing in is never solid.
-	var reach := maxf(TROOP_RADIUS + walls[0].WALL_HALF - 12.0, 9.0) if not walls.is_empty() else 0.0
-	for w in walls:
+	var reach := maxf(TROOP_RADIUS + troop_walls[0].WALL_HALF - 12.0, 9.0) if not troop_walls.is_empty() else 0.0
+	for w in troop_walls:
 		var a: Vector2 = w.seg_a()
 		var b: Vector2 = w.seg_b()
 		var lo := _cell(Vector2(minf(a.x, b.x), minf(a.y, b.y)) - Vector2(reach, reach))

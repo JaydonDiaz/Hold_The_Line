@@ -66,6 +66,13 @@ var discord_slow := 0.0     # Discord: extra slow
 var discord_timer := 0.0
 var root_timer := 0.0       # Vine Snare: can't move, can still fight
 var confuse_timer := 0.0    # Confusion: attacks other enemies instead of marching
+var confuse_vuln := 0.0     # Puppet Master: takes this much extra damage while confused
+var decay_dps := 0.0        # Necromancy rot
+var decay_timer := 0.0
+var decay_source := 0       # instance id of the Mage whose rot it is (raises a skeleton if this dies rotting)
+var thorn_dps := 0.0        # Thornwild: caught in thorny plants or vines
+var thorn_timer := 0.0
+var charged_timer := 0.0    # struck by lightning: a Storm mage's blasts pull it in
 var burn_timer := 0.0
 # Alchemist effects.
 var poisons := {}           # alchemist id -> [dps per stack, stacks, seconds left]; only the worst one hurts
@@ -146,6 +153,17 @@ func _process(delta: float) -> void:
 	if burn_timer > 0.0:
 		burn_timer -= delta
 		take_damage(burn_dps * delta, false)
+		if dead:
+			return
+	charged_timer = maxf(charged_timer - delta, 0.0)
+	if thorn_timer > 0.0:
+		thorn_timer -= delta
+		take_damage(thorn_dps * delta, false)
+		if dead:
+			return
+	if decay_timer > 0.0:
+		take_damage(decay_dps * delta, false)   # before the timer runs down, so a rot kill still counts
+		decay_timer -= delta
 		if dead:
 			return
 	if corrode_timer > 0.0:
@@ -277,6 +295,7 @@ func _boss_update(delta: float) -> void:
 		var walls: Array = main.get_barricades().filter(func(b): return b.is_active() and b.gap_from(position) <= r)
 		if not near.is_empty() or not walls.is_empty():
 			stomp_timer = stomp["cooldown"]
+			main.sfx("stomp")
 			lunge = 0.15
 			for w in near:
 				w.take_damage(stomp["damage"])
@@ -377,6 +396,7 @@ func _explode() -> void:
 	main.spawn_burst(position, r, Color(1.0, 0.55, 0.2))
 	main.spawn_burst(position, r * 0.55, Color(1.0, 0.9, 0.5))
 	main.spawn_text(position + Vector2(0, -30), "BOOM!", Color(1, 0.55, 0.2))
+	main.sfx("boom", 0.9)
 	queue_free()
 
 
@@ -498,7 +518,7 @@ func _push_from(p: Vector2, min_d: float, share: float) -> void:
 func take_damage(amount: float, show_hit := true) -> void:
 	if dead:
 		return
-	hp -= amount * (1.0 + vuln + corrode)
+	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
 	if show_hit:
 		flash = 0.08
 	if hp <= 0.0:
@@ -562,9 +582,33 @@ func apply_root(duration: float) -> void:
 	root_timer = maxf(root_timer, duration)
 
 
-func apply_confuse(duration: float) -> void:
+func apply_confuse(duration: float, extra_vuln := 0.0) -> void:
 	duration *= cc_mult
+	if confuse_timer <= 0.0:
+		confuse_vuln = 0.0
+	confuse_vuln = maxf(confuse_vuln, extra_vuln)
 	confuse_timer = maxf(confuse_timer, duration)
+
+
+## Necromancy rot: the strongest rot counts, and it remembers whose it is.
+func apply_decay(dps: float, duration: float, source: int) -> void:
+	if decay_timer <= 0.0 or dps >= decay_dps:
+		decay_dps = dps
+		decay_source = source
+	decay_timer = maxf(decay_timer, duration)
+
+
+## Thornwild: thorny plants and vines.
+func apply_thorns(dps: float, duration: float) -> void:
+	if thorn_timer <= 0.0:
+		thorn_dps = 0.0
+	thorn_dps = maxf(thorn_dps, dps)
+	thorn_timer = maxf(thorn_timer, duration)
+
+
+## Struck by lightning: a Storm mage's magnetizing blasts can pull it in.
+func charge(duration: float) -> void:
+	charged_timer = maxf(charged_timer, duration)
 
 
 func apply_slow(strength: float, duration: float) -> void:
@@ -651,6 +695,28 @@ func _draw() -> void:
 			var x := (-0.6 + i * 0.6) * radius
 			var drip := fmod(Time.get_ticks_msec() / 400.0 + i * 0.4, 1.0) * 6.0
 			draw_rect(Rect2(Vector2(x - 1.5, feet - size.y * 0.55 + drip), Vector2(3, 4)), Color(0.85, 0.95, 0.2, 0.85))
+	if decay_timer > 0.0:
+		# Rotting: sickly green wisps curling up off the body.
+		var t := Time.get_ticks_msec() / 1000.0
+		for i in 3:
+			var k := fmod(t * 0.7 + i * 0.33, 1.0)
+			var x := sin(t * 3.0 + i * 2.0) * radius * 0.5
+			draw_circle(Vector2(x, feet - size.y * (0.3 + 0.6 * k)), 2.5 - k, Color(0.5, 0.9, 0.35, 0.8 * (1.0 - k)), true, -1.0, true)
+			draw_circle(Vector2(x + 2, feet - size.y * (0.3 + 0.6 * k) + 2), 1.5, Color(0.35, 0.2, 0.4, 0.7 * (1.0 - k)), true, -1.0, true)
+	if thorn_timer > 0.0:
+		# Thorny briars wound round the legs.
+		for i in 3:
+			var x := (-0.6 + i * 0.6) * radius
+			var y := feet - size.y * 0.2
+			draw_line(Vector2(x - 4, y + 3), Vector2(x + 4, y - 3), Color(0.35, 0.25, 0.1), 2.0, true)
+			draw_line(Vector2(x, y), Vector2(x + 2, y - 4), Color(0.6, 0.15, 0.15), 1.5, true)
+	if charged_timer > 0.0 and int(Time.get_ticks_msec() / 80) % 3 != 0:
+		# Charged: little blue sparks crackling over it.
+		var t := Time.get_ticks_msec() / 80
+		for i in 2:
+			var p := Vector2(sin(t * 1.7 + i * 3.0) * radius * 0.7, feet - size.y * (0.4 + 0.3 * sin(t + i)))
+			draw_line(p, p + Vector2(3, -3), Color(0.6, 0.85, 1.0), 1.5)
+			draw_line(p + Vector2(3, -3), p + Vector2(1, -6), Color(0.85, 0.95, 1.0), 1.5)
 	if burn_timer > 0.0:
 		# Flickering pixel flames on the body.
 		var t := Time.get_ticks_msec() / 90

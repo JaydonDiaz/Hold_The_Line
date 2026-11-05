@@ -1,15 +1,16 @@
 extends Node2D
 ## A hired warrior. Goes after an enemy on the field (chosen by its target
 ## priority), attacks it, and walks back to its post when the field is clear.
-## Upgrades come from three paths (see data.gd): two can be used, only one past tier 2.
+## Upgrades come from four paths (see data.gd): any six upgrades, in any mix of paths.
 
 const Data = preload("res://scripts/data.gd")
 const Projectile = preload("res://scripts/projectile.gd")
+const Trap = preload("res://scripts/trap.gd")
 const Sprites = preload("res://scripts/sprites.gd")
 const Zone = preload("res://scripts/zone.gd")
 const MAX_TIER := 4
-const SECOND_PATH_CAP := 2
-const PATH_COLORS := [Color(1.0, 0.6, 0.3), Color(0.45, 0.8, 1.0), Color(0.7, 1.0, 0.45)]
+const MAX_UPGRADES := 6   # upgrades a unit can have in all, spread over its four paths however you like
+const PATH_COLORS := [Color(1.0, 0.6, 0.3), Color(0.45, 0.8, 1.0), Color(0.7, 1.0, 0.45), Color(0.9, 0.55, 1.0)]
 const RADIUS := 18.0
 const SCALE := 3.0      # sprite pixels to screen pixels
 const REGEN := 0.06     # fraction of max HP healed per second while idle
@@ -18,8 +19,11 @@ const COMBO_GAP := 0.12   # seconds between hits in a combo, and between blasts 
 const KI_COLOR := Color(1.0, 0.88, 0.35)
 const OUTLINE_COLOR := Color(0.1, 0.07, 0.1)
 const BEAM_CHARGE := 0.5   # seconds spent gathering ki before the beam fires
-const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.0, 0.5, 0.15)]
-const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.0, 0.45, 0.15)]
+const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.0, 0.5, 0.15), Color(0.55, 0.95, 0.45)]
+const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.0, 0.45, 0.15), Color(0.95, 0.3, 0.25)]
+const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
+const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
+const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Warrior
 const IDLE_AFTER := 0.8   # seconds with nothing to do before a troop starts its idle animation
 const WINDUP := 0.18      # melee troops rear back over the last moment before a blow
 const ARCHER_LOOP := 5.6  # Archer idle: draw an arrow, twirl it, flip it, twirl, put it back, rest
@@ -34,7 +38,13 @@ var main
 var post := Vector2.ZERO
 var post_u := 0.0              # post's place across the field (0 = left edge, 1 = right), kept through window resizes
 var fitted_post := Vector2.INF # post as of the last resize; if it's changed since, post_u is taken afresh
-var tiers := [0, 0, 0]
+var tiers := [0, 0, 0, 0]
+var last_path := -1   # the path upgraded most recently (its look wins a tie)
+var summoned := false # a skeleton raised by Necromancy: can't be sold, crumbles at the end of the wave
+var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial Artist a copy came from
+var clone_of = null   # Multiform: the real Martial Artist this copy is part of (null for the real one)
+var multiform := {}   # Multiform: copies, power, hp, cooldown
+var multiform_timer := 0.0
 var spent := 0
 var priority := "closest"
 
@@ -107,8 +117,52 @@ var cloud := {}              # radius, duration of the toxic cloud a flask leave
 var corrode := {}            # amount, duration: splashed enemies take more damage
 var melt := 0.0              # share of the direct target's max HP each flask burns away
 var burst := 0.0             # enemies a flask kills explode for this multiple of its damage
+# Fourth paths and tier-3 specials (see data.gd for what each holds).
+var dash := {}               # Swordsman Charge
+var run_time := 0.0          # seconds it has been running at its target without stopping
+var dash_left := 0.0         # > 0 while dashing
+var dash_to := Vector2.ZERO
+var dash_target = null
+var dash_hit := []           # enemies already bowled over by this dash
+var engaged = null           # the enemy it's trading blows with (Unstoppable chains on when it falls)
+var engaged_id := 0          # its instance id (0 = none)
+var pierce := 0              # Archer Trick Shots
+var seek := false
+var magnet := {}             # Mage tier-3 blasts
+var echo := {}
+var fireball := {}
+var decay := {}
+var summon := {}             # Mage Necromancy
+var summon_timer := 2.0
+var frost_aura := {}         # Frost Witch / Frost Tower
+var frost_tick := 0.0
+var aura_freeze_timer := 0.0
+var rage := {}               # Martial Artist Power
+var crimson := {}
+var golden := {}
+var crimson_timer := 0.0
+var crimson_left := 0.0
+var golden_timer := 0.0
+var golden_left := 0.0
+var heal_aura := {}          # Healer Halo
+var heal_tick := 0.0
+var thorns_dps := 0.0        # Bard
+var befuddle := []
+var confuse_vuln := 0.0
+var traps := {}              # Alchemist Trapcraft
+var trap_timer := 0.0
+var my_traps := []
+var burn := []               # Archer Tower / Cannoneer
+var rain := {}
+var rain_timer := 0.0
+var cluster := {}
+var napalm := {}
+var smite := {}              # Medic Bay Consecration
+var smite_timer := 0.0
+var gems := []               # Gold Mine Gemcutters
+var mortar := false          # Cannoneer Mortar: shells clear walls
 # Statue buffs this unit is standing in (the strongest nearby statue for each).
-var buff := {"damage": 0.0, "rate": 0.0, "defense": 0.0, "speed": 0.0}
+var buff := {"damage": 0.0, "rate": 0.0, "defense": 0.0, "speed": 0.0, "regen": 0.0, "recover": 0.0}
 var buff_timer := 0.0
 # Regeneration received from a Healer.
 var regen_rate := 0.0
@@ -172,7 +226,7 @@ func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
 
 func _apply_upgrades() -> void:
 	max_hp = data["hp"]
-	armor = 0.0
+	armor = data.get("armor", 0.0)
 	move_speed = data["speed"]
 	damage = data["damage"]
 	attack_range = data["range"]
@@ -224,7 +278,32 @@ func _apply_upgrades() -> void:
 	corrode = {}
 	melt = 0.0
 	burst = 0.0
-	for p in 3:
+	dash = {}
+	pierce = 0
+	seek = false
+	magnet = {}
+	echo = {}
+	fireball = {}
+	decay = {}
+	summon = {}
+	frost_aura = {}
+	rage = {}
+	crimson = {}
+	golden = {}
+	heal_aura = {}
+	thorns_dps = 0.0
+	befuddle = []
+	confuse_vuln = 0.0
+	traps = {}
+	burn = []
+	rain = {}
+	cluster = {}
+	napalm = {}
+	smite = {}
+	gems = []
+	mortar = false
+	multiform = {}
+	for p in mini(tiers.size(), data["paths"].size()):
 		var path_tiers: Array = data["paths"][p]["tiers"]
 		for t in tiers[p]:
 			var fx: Dictionary = path_tiers[t]["effect"]
@@ -258,7 +337,7 @@ func _apply_upgrades() -> void:
 				if fx.has(key):
 					set(key, fx[key])
 			if fx.has("evade"):
-				evade = fx["evade"]
+				evade = maxf(evade, fx["evade"])   # Afterimage and Limit Break don't stack: the better one counts
 			if fx.has("cleave"):
 				cleave = fx["cleave"]
 			dual = fx.get("dual", dual)
@@ -269,9 +348,18 @@ func _apply_upgrades() -> void:
 			heal_area = fx.get("heal_area", heal_area)
 			regen_grant = fx.get("regen", regen_grant)
 			revive = fx.get("revive", revive)
-			for key in ["damage", "rate", "defense", "speed"]:
+			for key in ["damage", "rate", "defense", "speed", "regen", "recover"]:
 				if fx.has("aura_" + key):
 					aura[key] = fx["aura_" + key]
+			for key in ["dash", "magnet", "echo", "fireball", "decay", "summon", "frost_aura", "rage", "crimson",
+					"golden", "heal_aura", "befuddle", "traps", "burn", "rain", "cluster", "napalm", "smite", "gems", "multiform"]:
+				if fx.has(key):
+					set(key, fx[key])
+			pierce = fx.get("pierce", pierce)
+			mortar = fx.get("mortar", mortar)
+			seek = fx.get("seek", seek)
+			thorns_dps = fx.get("thorns_dps", thorns_dps)
+			confuse_vuln = fx.get("confuse_vuln", confuse_vuln)
 			interest = fx.get("interest", interest)
 			song_radius += fx.get("song_radius", 0.0)
 			for key in ["discord", "overgrowth", "vines", "tornado", "confuse", "poison", "cloud", "corrode"]:
@@ -290,16 +378,88 @@ func _apply_upgrades() -> void:
 	queue_redraw()
 
 
-## Index of the path at tier 3 or higher (only one can be), or -1.
+## The path whose look the unit wears: the highest one at tier 3 or more (the one
+## upgraded last if two tie), or -1.
 func _look_path() -> int:
-	for p in 3:
+	var best := -1
+	for p in tiers.size():
+		if tiers[p] < 3:
+			continue
+		if best < 0 or tiers[p] > tiers[best] or (tiers[p] == tiers[best] and p == last_path):
+			best = p
+	return best
+
+
+## Upgrades bought so far, over all paths.
+func total_upgrades() -> int:
+	var n := 0
+	for t in tiers:
+		n += t
+	return n
+
+
+const STAFF_PERIOD := 4.0   # seconds for a two-path Mage's staff to shift there and back
+const STAFF_STEPS := 16     # shades it passes through (each is a cached sprite)
+
+
+## How far a two-path Mage's staff has shifted from the first path's color to the
+## second's, in STAFF_STEPS steps.
+func _staff_step() -> int:
+	var t := 0.5 - 0.5 * cos(TAU * Time.get_ticks_msec() / 1000.0 / STAFF_PERIOD)
+	return roundi(t * (STAFF_STEPS - 1))
+
+
+## A two-path Mage's staff color right now: between his two paths' orb colors.
+func _staff_color() -> Color:
+	var high := _high_paths()
+	return (MAGE_ORB_COLORS[high[0]] as Color).lerp(MAGE_ORB_COLORS[high[1]], _staff_step() / float(STAFF_STEPS - 1))
+
+
+## Paths at tier 3 or more (two at most, with six upgrades).
+func _high_paths() -> Array:
+	var out := []
+	for p in tiers.size():
 		if tiers[p] >= 3:
-			return p
-	return -1
+			out.append(p)
+	return out
 
 
-## Sprite to draw: tier 3 in a path swaps in that path's look.
+## The combined outfit for two paths both at tier 3, or "".
+func _combo_sprite() -> String:
+	var high := _high_paths()
+	return Sprites.combo(kind, high[0], high[1]) if high.size() >= 2 else ""
+
+
+## Paths that add an accent to the look: every upgraded path except the one (or two)
+## whose outfit it's wearing, unless that outfit shows nothing of it.
+func _accent_paths() -> Array:
+	var combo := _combo_sprite()
+	var wearing := _high_paths().filter(func(p): return not Sprites.combo_silent(combo).has(p)) if combo != "" else [_look_path()]
+	var out := []
+	var accents: Array = Sprites.ACCENTS.get(kind, [])
+	for p in mini(accents.size(), tiers.size()):
+		if tiers[p] > 0 and not wearing.has(p):
+			out.append(p)
+	return out
+
+
+func accent_layers() -> Array:
+	var accents: Array = Sprites.ACCENTS.get(kind, [])
+	return _accent_paths().map(func(p): return accents[p])
+
+
+## Names this mix of accents for the sprite cache.
+func accent_tag() -> String:
+	var paths := _accent_paths()
+	return "" if paths.is_empty() else "+a" + "".join(paths.map(func(p): return str(p)))
+
+
+## Sprite to draw: tier 3 in a path swaps in that path's look, and two paths at
+## tier 3 wear a combination of both.
 func sprite_name() -> String:
+	var combo := _combo_sprite()
+	if combo != "":
+		return combo
 	var p := _look_path()
 	var look := "%s_p%d" % [kind, p]
 	return look if p >= 0 and Sprites.SPRITES.has(look) else kind
@@ -323,10 +483,12 @@ func is_support() -> bool:
 	return data["attack"] in ["mine", "pulse", "aura"]
 
 
-## Emplacements fire from high up and lobbed shells and flasks arc over, so they
-## clear walls; every other attack needs a clear line to its target.
+## Towers fire from high up, mortar shells and flasks arc over, so they clear walls;
+## every other attack (a plain Cannoneer's shells too) needs a clear line to its target.
 func shoots_over_walls() -> bool:
-	return is_emplacement() or data["attack"] in ["shell", "flask"]
+	if data["attack"] == "shell":
+		return mortar
+	return is_emplacement() or data["attack"] == "flask"
 
 
 func _sees(e) -> bool:
@@ -339,11 +501,38 @@ func uses_targeting() -> bool:
 
 
 func _power() -> float:
-	return (surge["damage"] if surge_left > 0.0 else 1.0) * (1.0 + buff["damage"])
+	return (surge["damage"] if surge_left > 0.0 else 1.0) * _form("damage") * (1.0 + buff["damage"]) * _body_share()
+
+
+## Multiform: the share of the Martial Artist's power each of his bodies has right
+## now. Split between him and his copies; all of it back with him once they're gone.
+func _body_share() -> float:
+	var real = clone_of if clone_of != null else self
+	if not is_instance_valid(real) or real.multiform.is_empty():
+		return 1.0
+	var bodies: int = 1 + real._clones().size()
+	return 1.0 if bodies == 1 else real.multiform["power"] / bodies
+
+
+func _clones() -> Array:
+	return main.get_warriors().filter(func(w): return w.clone_of == self)
 
 
 func _rate() -> float:
-	return (surge["rate"] if surge_left > 0.0 else 1.0) * (1.0 + buff["rate"])
+	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"])
+
+
+## Martial Artist Power path: what Limit Break, the crimson aura and the golden form
+## multiply `key` (damage, rate or speed) by right now.
+func _form(key: String) -> float:
+	var m := 1.0
+	if not rage.is_empty() and hp < max_hp * rage["below"]:
+		m *= rage.get(key, 1.0)
+	if crimson_left > 0.0:
+		m *= crimson.get(key, 1.0)
+	if golden_left > 0.0:
+		m *= golden.get(key, 1.0)
+	return m
 
 
 ## How far this unit's buffs reach: a statue's radius, or a bard's song.
@@ -377,6 +566,17 @@ func _update_buffs() -> void:
 	for from in best.values():
 		for key in from:
 			buff[key] += from[key]
+	# A Healer's halo: the best one covering this unit guards it (on top of statues and songs).
+	var guard := 0.0
+	for w in main.get_warriors():
+		if w != self and not w.heal_aura.is_empty() and w.is_active() and w.position.distance_to(position) <= w.heal_aura["radius"] + RADIUS:
+			guard = maxf(guard, w.heal_aura["defense"])
+	buff["defense"] += guard
+	# An Aegis Field wall guards allies standing near it.
+	var field := 0.0
+	for b in main.paths.walls:
+		field = maxf(field, b.aegis_at(position))
+	buff["defense"] += field
 
 
 func is_active() -> bool:
@@ -394,24 +594,12 @@ func order_to(p: Vector2) -> void:
 	ordered = true
 
 
-## "ok", "max", "locked" (two other paths already started) or
-## "capped" (another path is past tier 2, so this one stops at 2).
+## "ok", "max" (this path is at tier 4) or "full" (all six upgrades are used).
 func path_state(p: int) -> String:
 	if tiers[p] >= MAX_TIER:
 		return "max"
-	var started := 0
-	var other_high := false
-	for i in 3:
-		if i == p:
-			continue
-		if tiers[i] > 0:
-			started += 1
-		if tiers[i] > SECOND_PATH_CAP:
-			other_high = true
-	if tiers[p] == 0 and started >= 2:
-		return "locked"
-	if tiers[p] >= SECOND_PATH_CAP and other_high:
-		return "capped"
+	if total_upgrades() >= MAX_UPGRADES:
+		return "full"
 	return "ok"
 
 
@@ -432,6 +620,7 @@ func upgrade(p: int) -> void:
 	spent += upgrade_cost(p)
 	var ratio := hp / max_hp
 	tiers[p] += 1
+	last_path = p
 	_apply_upgrades()
 	hp = max_hp * ratio
 
@@ -461,9 +650,14 @@ func stats_text() -> String:
 					s += "   Revives in %.1fs" % _revive_time()
 			"aura":
 				s = "HP %d/%d   Radius %s  " % [ceili(hp), ceili(max_hp), Data.ft(attack_range)]
-				var names := {"damage": " +%d%% damage", "rate": " +%d%% attack speed", "defense": " -%d%% damage taken", "speed": " +%d%% move speed"}
+				var names := {"damage": " +%d%% damage", "rate": " +%d%% attack speed", "defense": " -%d%% damage taken", "speed": " +%d%% move speed",
+						"recover": " get up %d%% sooner"}
 				for key in aura:
-					s += names[key] % roundi(aura[key] * 100)
+					if key == "regen":
+						s += " +%s%% HP/s" % _pct(aura[key])
+					else:
+						s += names[key] % roundi(aura[key] * 100)
+		s += _extra_stats()
 		if not is_active():
 			s += "\nWrecked" + (" - destroyed in %ds unless revived" % ceili(down_timer) if main.permadeath else ", back in %ds" % ceili(down_timer))
 		return s
@@ -490,6 +684,7 @@ func stats_text() -> String:
 				spells.append(spell_names[spell])
 		if not spells.is_empty():
 			s += "   Spells: " + ", ".join(spells)
+		s += _extra_stats()
 		if not is_active():
 			s += "\nDown!"
 		return s
@@ -507,6 +702,7 @@ func stats_text() -> String:
 			s += "   Melts %d%% max HP" % roundi(melt * 100)
 		if burst > 0.0:
 			s += "   Kills explode %.0fx" % burst
+		s += _extra_stats()
 		if not is_active():
 			s += "\nDown!"
 		return s
@@ -566,11 +762,85 @@ func stats_text() -> String:
 		s += "   Lance %.0f / %.1fs" % [lance["damage"], lance["cooldown"]]
 	if not breath.is_empty():
 		s += "   Breath %.0f / %.2fs, burn %.0f/s" % [breath["damage"], breath["interval"], breath["burn_dps"]]
+	s += _extra_stats()
 	if not is_active():
 		if main.permadeath:
 			s += "\nDown! Dies in %ds unless a Healer revives it" % ceili(down_timer)
 		else:
 			s += "\nKnocked out, back in %ds" % ceili(down_timer)
+	return s
+
+
+## A fraction as a percentage: "4.5", "10".
+static func _pct(f: float) -> String:
+	var v := f * 100.0
+	return "%d" % roundi(v) if absf(v - roundf(v)) < 0.05 else "%.1f" % v
+
+
+## Stats from the fourth paths and the tier-3 specials.
+func _extra_stats() -> String:
+	var s := ""
+	if clone_of != null:
+		s += "   Multiform copy: fades when it falls or the wave ends"
+	elif summoned:
+		s += "   Raised by Necromancy: crumbles when the wave ends"
+	if not multiform.is_empty():
+		var bodies := 1 + _clones().size()
+		s += "   Multiform: %d bod%s, %d%% power each" % [bodies, "y" if bodies == 1 else "ies", roundi(_body_share() * 100)]
+	if not dash.is_empty():
+		s += "   Dash %.0fx%s" % [dash["damage"], " (bowls through)" if dash["through"] else ""]
+	if pierce > 0:
+		s += "   Arrows hit up to %d%s" % [pierce + 1, ", seeking" if seek else ""]
+	if not magnet.is_empty():
+		s += "   Blasts magnetize"
+	if not echo.is_empty():
+		s += "   Arcane burst %d%%" % roundi(echo["damage"] * 100)
+	if not fireball.is_empty():
+		s += "   Fireballs, burn %.0f/s" % fireball["burn_dps"]
+	if not decay.is_empty():
+		s += "   Rot %.0f/s" % decay["dps"]
+	if not summon.is_empty():
+		s += "   Skeletons %d/%d (%.0f HP, %.0f dmg)" % [_minions().size(), int(summon["max"]), summon["hp"], summon["damage"]]
+	if not frost_aura.is_empty():
+		s += "   Frost aura %s: -%d%% speed" % [Data.ft(frost_aura["radius"]), roundi(frost_aura["slow"] * 100)]
+		if frost_aura["dps"] > 0.0:
+			s += ", %.0f dmg/s" % frost_aura["dps"]
+		if frost_aura["freeze_every"] > 0.0:
+			s += ", freezes %.1fs / %.1fs" % [frost_aura["freeze_time"], frost_aura["freeze_every"]]
+	if not rage.is_empty():
+		s += "   Limit Break below %d%% HP" % roundi(rage["below"] * 100)
+	if golden_left > 0.0:
+		s += "   GOLDEN %ds" % ceili(golden_left)
+	elif not golden.is_empty():
+		s += "   Golden in %ds" % ceili(golden_timer)
+	if crimson_left > 0.0:
+		s += "   CRIMSON AURA %ds" % ceili(crimson_left)
+	elif not crimson.is_empty():
+		s += "   Aura in %ds" % ceili(crimson_timer)
+	if not heal_aura.is_empty():
+		s += "   Halo %s: +%s%% HP/s" % [Data.ft(heal_aura["radius"]), _pct(heal_aura["regen"])]
+		if heal_aura["defense"] > 0.0:
+			s += ", -%d%% dmg taken" % roundi(heal_aura["defense"] * 100)
+	if thorns_dps > 0.0:
+		s += "   Thorns %.0f/s" % thorns_dps
+	if not befuddle.is_empty():
+		s += "   Notes confuse %d%% for %.1fs" % [roundi(befuddle[0] * 100), befuddle[1]]
+	if confuse_vuln > 0.0:
+		s += "   Confused foes +%d%% dmg taken" % roundi(confuse_vuln * 100)
+	if not traps.is_empty():
+		s += "   Charges %d/%d: %.0f dmg%s" % [my_traps.size(), int(traps["max"]), traps["damage"], ", stun %.0fs" % traps["stun"] if traps["stun"] > 0.0 else ""]
+	if not burn.is_empty() and fireball.is_empty():
+		s += "   Burn %.0f/s" % burn[0]
+	if not rain.is_empty():
+		s += "   Fire rain %.0f / %.0fs" % [rain["damage"], rain["cooldown"]]
+	if not cluster.is_empty():
+		s += "   %d bomblets" % int(cluster["count"])
+	if not napalm.is_empty():
+		s += "   Napalm %.0f/s" % napalm["dps"]
+	if not smite.is_empty():
+		s += "   Sears foes %.0f" % smite["damage"]
+	if not gems.is_empty():
+		s += "   Gems %d%% x%.0f" % [roundi(gems[0] * 100), gems[1]]
 	return s
 
 
@@ -586,6 +856,9 @@ func take_damage(amount: float) -> void:
 		return
 	hp -= amount * (1.0 - armor) * (1.0 - buff["defense"])
 	hurt = 0.1
+	if hp <= 0.0 and summoned:
+		_crumble()
+		return
 	if hp <= 0.0:
 		hp = 0.0
 		# Gets back up after the difficulty's down time. Hardcore: dies then, unless a Healer revives it first.
@@ -597,13 +870,20 @@ func take_damage(amount: float) -> void:
 		target = null
 		combo_left = 0
 		offhand_timer = 0.0
+		engaged = null
+		engaged_id = 0
 		volley_left = 0
 		beam_charge = 0.0
 		surge_left = 0.0
 		main.spawn_text(position + Vector2(0, -24), "Wrecked!" if is_emplacement() else "Down!", Color(1, 0.4, 0.35))
+		main.sfx("down")
 
 
 func _process(delta: float) -> void:
+	if summoned and (not main.wave_active or not is_instance_valid(summoner) or summoner.is_queued_for_deletion()
+			or (clone_of != null and not summoner.is_active())):
+		_crumble()
+		return
 	hurt = maxf(hurt - delta, 0.0)
 	swing = maxf(swing - delta, 0.0)
 	pose_left = maxf(pose_left - delta, 0.0)
@@ -627,9 +907,17 @@ func _process(delta: float) -> void:
 			position += shove_velocity * delta
 		_separate()
 		return
+	if dash_left > 0.0:
+		_dash_step(delta)
+		return
+	if not dash.is_empty() and dash.get("chain", false) and _chain_dash():
+		return
 	if regen_left > 0.0:
 		regen_left -= delta
-		hp = minf(max_hp, hp + max_hp * regen_rate * delta)
+		_mend(max_hp * regen_rate * delta)
+	if buff["regen"] > 0.0:
+		_mend(max_hp * buff["regen"] * delta)
+	_special_update(delta)
 	cd_timer = maxf(cd_timer - delta, 0.0)
 	chain_timer = maxf(chain_timer - delta, 0.0)
 	lance_timer = maxf(lance_timer - delta, 0.0)
@@ -683,6 +971,7 @@ func _process(delta: float) -> void:
 		surge_left = surge["duration"]
 		surge_timer = surge["cooldown"]
 		main.spawn_text(position + Vector2(0, -50), "Power Surge!", Color(1, 0.35, 0.3))
+		main.sfx("powerup")
 
 	# Re-pick a target a few times a second, or right away if the current one is gone.
 	retarget_timer -= delta
@@ -700,7 +989,7 @@ func _process(delta: float) -> void:
 		if target != null:
 			facing = position.direction_to(target.position)
 		else:
-			hp = minf(max_hp, hp + max_hp * REGEN * delta)
+			_mend(max_hp * REGEN * delta)
 	elif target != null:
 		var gap := _gap_to(target)
 		facing = position.direction_to(target.position)
@@ -715,6 +1004,9 @@ func _process(delta: float) -> void:
 			elif gap > r:
 				_move_toward(target.position, gap - r + 1.0, delta)
 		elif is_melee():
+			if not dash.is_empty() and run_time >= RUN_BEFORE_DASH and gap > 6.0 and gap <= dash["reach"] and _can_dash(target):
+				_start_dash(target)
+				return
 			if gap > 0.0:
 				_move_toward(target.position, gap, delta)
 		elif not _sees(target):
@@ -732,7 +1024,7 @@ func _process(delta: float) -> void:
 		else:
 			lost_time = 0.0
 		if not ordered:
-			hp = minf(max_hp, hp + max_hp * REGEN * delta)
+			_mend(max_hp * REGEN * delta)
 
 	# Attacking happens on the move: hit the target if it's in reach, otherwise anything
 	# else in reach (picked by priority), including while following a move order.
@@ -755,6 +1047,16 @@ func _process(delta: float) -> void:
 				_attack(victim)
 	if absf(facing.x) > 0.2:
 		flip = signf(facing.x)
+	if not dash.is_empty():
+		if target != null and _is_valid(target) and _gap_to(target) <= attack_range + 2.0:
+			engaged = target
+			engaged_id = target.get_instance_id()
+		elif engaged_id != 0 and is_instance_valid(engaged) and not engaged.dead \
+				and (engaged != target or _gap_to(engaged) > attack_range + 12.0):
+			engaged = null   # it walked off from that fight: no chain when that foe falls later
+			engaged_id = 0
+	# Running time toward a target (for a Swordsman's dash): any stop resets it.
+	run_time = run_time + delta if moving and target != null else 0.0
 	_separate()
 
 
@@ -788,6 +1090,7 @@ func _continue_combo(delta: float) -> void:
 	facing = position.direction_to(v.position)
 	swing = 0.1
 	_hold_pose("kick" if combo_left == 0 else "punch", COMBO_GAP)
+	main.sfx("punch", 0.85 if combo_left == 0 else 1.0 + 0.05 * combo_left)
 	v.take_damage(damage * _power())
 	_hit_spark(v)
 	# Only the finishing hit can knock back, so the combo isn't cut short.
@@ -841,6 +1144,7 @@ func _continue_volley(delta: float) -> void:
 	p.target_pos = e.position
 	p.position = position + facing * 16.0 + facing.orthogonal() * volley_hand * 6.0
 	p.damage = blast["damage"] * _power()
+	p.splash = blast.get("splash", 0.0)   # Starburst Barrage: every blast explodes
 	# Like the punch combo, only the volley's last blast can knock back.
 	p.knockback_chance = knockback_chance if volley_left == 0 else 0.0
 	p.knockback_force = knockback_force
@@ -848,13 +1152,14 @@ func _continue_volley(delta: float) -> void:
 	p.style = "ki"
 	p.color = KI_COLOR
 	main.add_projectile(p)
+	main.sfx("ki")
 	swing = 0.1
 	_hold_pose("punch", COMBO_GAP)
 
 
-# Ki tier 4: a beam to the edge of the field hitting every enemy along the line.
+# Techniques tier 4: a beam to the edge of the field hitting every enemy along the line.
 func _beam_target():
-	var r: float = blast["range"] * 1.3
+	var r: float = beam.get("range", blast.get("range", 200.0) * 1.3)
 	return _pick(main.get_enemies().filter(func(x): return _is_valid(x) and _gap_to(x) <= r and _sees(x)))
 
 
@@ -866,7 +1171,7 @@ func _fire_beam() -> void:
 	var from := position + Vector2(0, -14)
 	var to := from + dir * 1200.0
 	# The beam stops at the first wall it hits.
-	for w in main.paths.walls:
+	for w in main.paths.shot_walls:
 		var hit = Geometry2D.segment_intersects_segment(from, to, w.seg_a(), w.seg_b())
 		if hit != null:
 			to = hit
@@ -875,6 +1180,7 @@ func _fire_beam() -> void:
 		if closest.distance_to(x.position) <= beam["width"] / 2.0 + x.radius:
 			x.take_damage(beam["damage"] * _power())
 	main.spawn_beam(from, to, Color(1.0, 0.85, 0.3), beam["width"])
+	main.sfx("beam")
 	facing = dir
 	swing = 0.15
 	_hold_pose("punch", 0.35)
@@ -894,6 +1200,7 @@ func _should_blink(e, gap: float) -> bool:
 
 func _blink_to(e) -> void:
 	main.spawn_burst(position, 22, Color(0.9, 0.95, 1.0))
+	main.sfx("dash", 1.4)
 	# Land between the enemy and the goal (the bottom line): right below it for
 	# brawlers, or just inside blast range below it for Ki users.
 	var gap_after: float = 2.0 if blast.is_empty() else blast["range"] * 0.8
@@ -935,7 +1242,7 @@ func shove(push: Vector2, stun_time: float) -> void:
 
 ## A spot that isn't inside a wall: nudged out onto the side `toward` is on.
 func _clear_of_walls(spot: Vector2, toward: Vector2) -> Vector2:
-	for w in main.paths.walls:
+	for w in main.paths.troop_walls:
 		var c := Geometry2D.get_closest_point_to_segment(spot, w.seg_a(), w.seg_b())
 		var min_d: float = RADIUS + w.WALL_HALF + 1.0
 		if c.distance_to(spot) >= min_d:
@@ -956,6 +1263,7 @@ func _flash() -> bool:
 	for x in victims:
 		x.apply_stun(stun["duration"])
 	main.spawn_flash(position, r)
+	main.sfx("flash")
 	return true
 
 
@@ -1021,11 +1329,11 @@ func cycle_priority() -> void:
 
 
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
-	var step := minf(move_speed * (1.0 + buff["speed"]) * delta, max_dist)
+	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * delta, max_dist)
 	var aim := p
 	# Only go the long way round if a wall is in the way of where it means to stop.
 	var stop := position + position.direction_to(p) * minf(max_dist, position.distance_to(p))
-	if main.paths.has_walls() and main.paths.path_blocked(position, stop, RADIUS + 6.0):
+	if main.paths.has_troop_walls() and main.paths.path_blocked(position, stop, RADIUS + 6.0):
 		aim = _route_step(p, delta)
 	position += position.direction_to(aim) * step
 	walk += step / 12.0   # swap walk frames every 12px
@@ -1062,8 +1370,8 @@ func _separate() -> void:
 		var d := off.length()
 		if d < RADIUS * 2.0 and d > 0.01:
 			position += off / d * (RADIUS * 2.0 - d) * (1.0 if w.is_emplacement() else 0.5)
-	# Walls are solid to troops too.
-	for b in main.paths.walls:
+	# Walls are solid to troops too (Phase Gates aside).
+	for b in main.paths.troop_walls:
 		var c := Geometry2D.get_closest_point_to_segment(position, b.seg_a(), b.seg_b())
 		var min_d: float = RADIUS + b.WALL_HALF
 		var off := position - c
@@ -1092,6 +1400,7 @@ func _attack(e) -> void:
 		hit *= crit_mult
 	if is_melee():
 		e.take_damage(hit)
+		main.sfx("slash" if kind == "swordsman" or kind == "skeleton" else "hit", 0.85 if kind == "skeleton" else 1.0)
 		_hit_spark(e)
 		if not cleave.is_empty():
 			_sweep(e, hit * cleave["damage"])
@@ -1110,8 +1419,57 @@ func _attack(e) -> void:
 		targets.append(nxt)
 	for i in targets.size():
 		_shoot(targets[i], i)
+	_shot_sound()
 	if data["attack"] == "shell":
 		main.spawn_burst(_muzzle(), 14.0, Color(1.0, 0.8, 0.45))
+
+
+## The sound of this unit's ranged attack.
+func _shot_sound() -> void:
+	match data["attack"]:
+		"arrow":
+			main.sfx("bow", 0.85 if kind == "tower" else 1.0)
+		"orb":
+			main.sfx("fire" if not fireball.is_empty() else "magic")
+		"frost":
+			main.sfx("frost")
+		"shell":
+			main.sfx("cannon", 0.8 if mortar else 1.0)
+		"flask":
+			main.sfx("toss")
+		"note":
+			main.audio.play_note(instrument_sound())
+
+
+## A Bard with an unusual spread of upgrades plays a special instrument: a violin
+## with two paths at tier 3, a cello with three at tier 2, a harp with every path
+## started. "" for the rest (they play their outfit's instrument).
+func special_instrument() -> String:
+	if kind != "bard":
+		return ""
+	if _high_paths().size() >= 2:
+		return "violin"
+	if tiers.count(2) >= 3:
+		return "cello"
+	if tiers.all(func(t): return t >= 1):
+		return "harp"
+	return ""
+
+
+## The Bard's note sound: the instrument it's holding (pipa, mouth instrument, flute
+## or drum for its tier-3 outfits; a mix of two plays whichever instrument it shows).
+func instrument_sound() -> String:
+	var special := special_instrument()
+	if special != "":
+		return special
+	var instrument := ["pluck", "reed", "flute", "drum"]
+	var look := _look_path()
+	var combo := _combo_sprite()
+	if combo != "":
+		var src := Sprites.combo_source(combo, "right")
+		if src >= 0:
+			look = src
+	return instrument[look] if look >= 0 else "note"
 
 
 ## Where projectiles leave from: the hands, or an emplacement's archer or muzzle.
@@ -1155,14 +1513,33 @@ func _shoot(e, index: int) -> void:
 	p.corrode = corrode
 	p.melt = melt
 	p.burst = burst
+	p.pierce = pierce
+	p.seek = seek
+	p.burn = burn
+	p.cluster = cluster
+	p.napalm = napalm
+	p.befuddle = befuddle
+	p.confuse_vuln = confuse_vuln
+	p.high_arc = mortar
+	if data["attack"] == "orb":
+		# The Mage's blast changes with each path taken to tier 3.
+		p.magnet = magnet
+		p.echo = echo
+		p.decay = decay
+		if not fireball.is_empty():
+			p.style = "fireball"
+			p.splash = splash * fireball["splash"]
+			p.burn = [fireball["burn_dps"], fireball["burn_time"]]
 	# Tier-3 looks carry over to some attacks.
 	var look := _look_path()
-	if kind == "archer" and look == 0:
-		p.style = "barbed"
-	elif kind == "archer" and look == 1:
+	if kind == "archer":
+		p.grade = tiers[0]   # her Damage path upgrades the arrows themselves
+	if kind == "archer" and look == 1:
 		p.style = "crossbow"
 	elif (kind == "mage" or kind == "magetower") and look >= 0:
-		p.color = MAGE_ORB_COLORS[look]
+		p.color = _staff_color() if kind == "mage" and _high_paths().size() >= 2 else MAGE_ORB_COLORS[look]
+	if data["attack"] == "orb" and not decay.is_empty() and look != 3 and fireball.is_empty():
+		p.color = p.color.lerp(MAGE_ORB_COLORS[3], 0.5)
 	elif kind == "alchemist" and look >= 0:
 		p.color = FLASK_COLORS[look]
 	main.add_projectile(p)
@@ -1192,6 +1569,7 @@ func _offhand_strike() -> void:
 	facing = position.direction_to(v.position)
 	swing = 0.15
 	_hold_pose("strike2", 0.15)
+	main.sfx("slash", 1.15)
 	v.take_damage(damage * dual * _power())
 	_hit_spark(v)
 
@@ -1216,7 +1594,10 @@ func _cast_chain() -> bool:
 		cur = nxt
 	for e in hit:
 		e.take_damage(chain["damage"] * _power())
+		if not magnet.is_empty() and not e.dead:
+			e.charge(3.0)   # Thunderhead: lightning-struck foes get dragged in by the next blast
 	main.spawn_bolt(points, Color(0.7, 0.85, 1.0))
+	main.sfx("zap")
 	swing = 0.15
 	return true
 
@@ -1230,6 +1611,7 @@ func _breathe() -> bool:
 	e.take_damage(breath["damage"] * _power())
 	e.apply_burn(breath["burn_dps"], breath["burn_time"])
 	main.spawn_flame(position + facing * 16 + Vector2(0, -16), e.position)
+	main.sfx("flame")
 	swing = 0.15
 	return true
 
@@ -1243,6 +1625,7 @@ func _cast_lance() -> bool:
 	if best == null:
 		return false
 	main.spawn_beam(position + Vector2(0, -24), best.position, Color(1.0, 0.5, 0.95))
+	main.sfx("lance")
 	best.take_damage(lance["damage"] * _power())
 	swing = 0.15
 	return true
@@ -1282,7 +1665,7 @@ func _healer_update(delta: float) -> void:
 		facing = position.direction_to(post)
 		_move_toward(post, d, delta)
 	else:
-		hp = minf(max_hp, hp + max_hp * REGEN * delta)
+		_mend(max_hp * REGEN * delta)
 
 
 ## Channels a revival on a downed ally; it gets up once the revive time is done.
@@ -1291,6 +1674,7 @@ func _rez_step(downed, delta: float) -> void:
 	if rez_progress >= _revive_time():
 		downed.revived(1.0 if revive.get("full", false) else data["revive_hp"])
 		main.spawn_beam(position + Vector2(0, -24), downed.position, Color(1, 1, 0.7), 14.0)
+		main.sfx("revive")
 		rez_target = null
 		rez_progress = 0.0
 
@@ -1352,13 +1736,16 @@ func _cast_spell(spell: String, sp: Dictionary, at: Vector2) -> void:
 			z.radius = r
 			z.slow = sp["slow"]
 			z.life = sp["duration"]
+			z.dps = thorns_dps
 			z.position = at
 			main.add_projectile(z)
-			main.spawn_text(at + Vector2(0, -30), "Overgrowth", Color(0.5, 0.9, 0.4))
+			main.spawn_text(at + Vector2(0, -30), "Thornwild" if thorns_dps > 0.0 else "Overgrowth", Color(0.5, 0.9, 0.4))
 		"vines":
 			for x in caught:
 				if not x.flying:   # vines can't catch what's in the air
 					x.apply_root(sp["duration"])
+					if thorns_dps > 0.0:
+						x.apply_thorns(thorns_dps, sp["duration"] * x.cc_mult + 0.5)
 			main.spawn_burst(at, r, Color(0.35, 0.75, 0.25))
 			main.spawn_text(at + Vector2(0, -30), "Vine Snare", Color(0.4, 0.85, 0.3))
 		"tornado":
@@ -1368,9 +1755,10 @@ func _cast_spell(spell: String, sp: Dictionary, at: Vector2) -> void:
 			main.spawn_text(at + Vector2(0, -30), "Tornado!", Color(0.85, 0.9, 0.95))
 		"confuse":
 			for x in caught:
-				x.apply_confuse(sp["duration"])
+				x.apply_confuse(sp["duration"], confuse_vuln)
 			main.spawn_burst(at, r, Color(0.8, 0.45, 1.0))
 			main.spawn_text(at + Vector2(0, -30), "Confusion!", Color(0.85, 0.5, 1.0))
+	main.sfx("spell")
 	for i in 3:
 		main.spawn_note(position + Vector2(randf_range(-10, 14), -28), Color(0.6, 1.0, 0.6))
 
@@ -1387,9 +1775,17 @@ func _support_update(delta: float) -> void:
 				cd_timer = cooldown
 				hauls_done += 1
 				var amount := maxi(1, roundi(damage * mine_share()))
+				var gem: bool = not gems.is_empty() and randf() < gems[0]
+				if gem:
+					amount = roundi(amount * gems[1])
 				main.gold += amount
 				swing = 0.15
-				main.spawn_text(position + Vector2(0, -44), "+%dg" % amount, Color(1, 0.85, 0.3))
+				main.sfx("gem" if gem else "coin")
+				if gem:
+					main.spawn_text(position + Vector2(0, -44), "Gem! +%dg" % amount, Color(0.55, 0.95, 1.0))
+					main.spawn_burst(position + Vector2(0, -20), 18.0, Color(0.55, 0.95, 1.0))
+				else:
+					main.spawn_text(position + Vector2(0, -44), "+%dg" % amount, Color(1, 0.85, 0.3))
 				if hauls_done == hauls:
 					main.spawn_text(position + Vector2(0, -64), "Tapped out", Color(0.85, 0.8, 0.6))
 		"pulse":
@@ -1413,10 +1809,28 @@ func _support_update(delta: float) -> void:
 							main.spawn_burst(w.position, 16.0, Color(0.55, 1.0, 0.55))   # reaches them wherever they are
 						w.receive_heal(damage * _power(), regen_grant)
 					main.spawn_burst(position, attack_range + RADIUS, Color(0.55, 1.0, 0.55))
+					main.sfx("heal", 0.8)
+			# Consecration: the pulse sears enemies in its radius too.
+			smite_timer = maxf(smite_timer - delta, 0.0)
+			if not smite.is_empty() and smite_timer <= 0.0:
+				var foes: Array = main.get_enemies().filter(func(e): return position.distance_to(e.position) <= attack_range + RADIUS + e.radius)
+				if not foes.is_empty():
+					smite_timer = cooldown
+					swing = 0.15
+					for e in foes:
+						e.take_damage(smite["damage"] * _power())
+						if e.dead:
+							continue
+						if smite["slow"] > 0.0:
+							e.apply_slow(smite["slow"], 2.0)
+						if smite["stun"] > 0.0:
+							e.apply_stun(smite["stun"])
+					main.spawn_burst(position, attack_range + RADIUS, Color(1.0, 0.95, 0.55))
+					main.sfx("flash", 0.7)
 		"aura":
 			pass   # buffs are read by the units around it (see _update_buffs)
 	if target == null:
-		hp = minf(max_hp, hp + max_hp * REGEN * delta)
+		_mend(max_hp * REGEN * delta)
 
 
 ## Gold paid out by a Gold Mine when a wave ends: its wave bonus (shared like its
@@ -1509,6 +1923,7 @@ func _heal(w) -> void:
 	swing = 0.15
 	var from := position + Vector2(0, -24)
 	main.spawn_beam(from, w.position, Color(0.55, 1.0, 0.55), 8.0)
+	main.sfx("heal")
 	w.receive_heal(damage * _power(), regen_grant)
 	if not heal_area.is_empty():
 		var r: float = heal_area[0]
@@ -1522,12 +1937,17 @@ func receive_heal(amount: float, regen: Array) -> void:
 	if not is_active():
 		return
 	var before := hp
-	hp = minf(max_hp, hp + amount)
+	_mend(amount)
 	if hp - before >= 1.0:
 		main.spawn_text(position + Vector2(randf_range(-8, 8), -40), "+%d" % roundi(hp - before), Color(0.5, 1.0, 0.5))
 	if not regen.is_empty():
 		regen_rate = maxf(regen_rate if regen_left > 0.0 else 0.0, regen[0])
 		regen_left = maxf(regen_left, regen[1])
+
+
+## Healing that tops up to full but never cuts back overheal.
+func _mend(amount: float) -> void:
+	hp = maxf(hp, minf(max_hp, hp + amount))
 
 
 ## Brought back by a Healer, with this share of max HP.
@@ -1538,13 +1958,310 @@ func revived(frac: float) -> void:
 	main.spawn_burst(position, 30, Color(1, 1, 0.7))
 
 
-## Downed (Normal mode): Renewal healers nearby make this unit get up sooner.
+## Downed (Normal mode): Renewal healers, Seraph's Halo and Vigor statues nearby make
+## this unit get up sooner.
 func _recovery_aura() -> float:
 	var rate := 1.0
 	for w in main.get_warriors():
-		if w != self and w.is_active() and not w.revive.is_empty() and (w.covers(self) if w.is_support() else w._ally_gap(self) <= w.attack_range):
+		if w == self or not w.is_active():
+			continue
+		if not w.revive.is_empty() and (w.covers(self) if w.is_support() else w._ally_gap(self) <= w.attack_range):
 			rate = maxf(rate, w.revive["aura"])
+		if w.aura.has("recover") and w.covers(self):
+			rate = maxf(rate, 1.0 + w.aura["recover"])
+		if not w.heal_aura.is_empty() and w.heal_aura["recover"] > 0.0 and w.position.distance_to(position) <= w.heal_aura["radius"] + RADIUS:
+			rate = maxf(rate, 1.0 + w.heal_aura["recover"])
 	return rate
+
+
+# --- Fourth-path specials ---------------------------------------------------
+
+## Abilities that tick on their own: auras, forms, summons, traps and fire rain.
+func _special_update(delta: float) -> void:
+	if not frost_aura.is_empty():
+		_frost_aura_step(delta)
+	if not heal_aura.is_empty():
+		_heal_aura_step(delta)
+	if not crimson.is_empty() or not golden.is_empty():
+		_forms_step(delta)
+	if not summon.is_empty():
+		_summon_step(delta)
+	if not multiform.is_empty() and clone_of == null:
+		_multiform_step(delta)
+	if not traps.is_empty():
+		_trap_step(delta)
+	if not rain.is_empty():
+		rain_timer = maxf(rain_timer - delta, 0.0)
+		if rain_timer <= 0.0:
+			var spot = _spell_spot(rain["radius"])
+			if spot != null:
+				rain_timer = rain["cooldown"]
+				_rain_on(spot.position)
+
+
+## Frost Aura: everything close is slowed and chilled, and now and then frozen solid.
+func _frost_aura_step(delta: float) -> void:
+	var r: float = frost_aura["radius"]
+	frost_tick -= delta
+	aura_freeze_timer = maxf(aura_freeze_timer - delta, 0.0)
+	if frost_tick > 0.0:
+		return
+	frost_tick = 0.25
+	var inside: Array = main.get_enemies().filter(func(e): return position.distance_to(e.position) <= r + RADIUS + e.radius)
+	for e in inside:
+		e.apply_slow(frost_aura["slow"], 0.4)
+		if frost_aura["dps"] > 0.0:
+			e.take_damage(frost_aura["dps"] * 0.25 * _power(), false)
+	if frost_aura["freeze_every"] > 0.0 and aura_freeze_timer <= 0.0 and not inside.is_empty():
+		aura_freeze_timer = frost_aura["freeze_every"]
+		for e in inside:
+			if not e.dead:
+				e.apply_freeze(frost_aura["freeze_time"])
+		main.spawn_burst(position, r + RADIUS, Color(0.75, 0.95, 1.0))
+		main.sfx("freeze")
+
+
+## Halo: allies close by mend a little every moment.
+func _heal_aura_step(delta: float) -> void:
+	heal_tick -= delta
+	if heal_tick > 0.0:
+		return
+	heal_tick = 0.25
+	var r: float = heal_aura["radius"] + RADIUS
+	for w in main.get_warriors():
+		if w.is_active() and w.position.distance_to(position) <= r and w.hp < w.max_hp:
+			w._mend(w.max_hp * heal_aura["regen"] * 0.25)
+
+
+## Power path: the crimson aura and golden form flare up once it's fighting.
+func _forms_step(delta: float) -> void:
+	crimson_timer = maxf(crimson_timer - delta, 0.0)
+	golden_timer = maxf(golden_timer - delta, 0.0)
+	crimson_left = maxf(crimson_left - delta, 0.0)
+	golden_left = maxf(golden_left - delta, 0.0)
+	var fighting := _in_combat()
+	if not golden.is_empty() and golden_timer <= 0.0 and fighting:
+		golden_left = golden["duration"]
+		golden_timer = golden["cooldown"]
+		main.spawn_text(position + Vector2(0, -50), "Golden Warrior!", Color(1.0, 0.88, 0.3))
+		main.sfx("powerup", 1.25)
+		main.spawn_flash(position + Vector2(0, -16), 46.0)
+	if not crimson.is_empty() and crimson_timer <= 0.0 and fighting:
+		crimson_left = crimson["duration"]
+		crimson_timer = crimson["cooldown"]
+		main.spawn_text(position + Vector2(0, -64), "Tenfold Aura!", Color(1.0, 0.3, 0.25))
+		main.sfx("powerup", 0.8)
+		main.spawn_burst(position + Vector2(0, -16), 40.0, Color(1.0, 0.25, 0.2))
+	if crimson_left > 0.0:
+		# The aura strains the body (golden or not): it burns health, but never knocks itself out.
+		hp = maxf(1.0, hp - max_hp * crimson["drain"] * delta)
+
+
+## Necromancy: raise a skeleton now and then while a wave is on.
+func _summon_step(delta: float) -> void:
+	if not main.wave_active:
+		summon_timer = minf(summon_timer, 2.0)
+		return
+	summon_timer -= delta
+	if summon_timer > 0.0 or main.get_enemies().is_empty():
+		return
+	summon_timer = summon["cooldown"]
+	if _minions().size() < int(summon["max"]):
+		var side := Vector2(randf_range(-1.0, 1.0), randf_range(0.2, 1.0)).normalized()
+		raise_skeleton(position + side * (RADIUS * 2.0 + 4.0))
+
+
+## Multiform: once fighting in a wave, split off copies (again a while after one falls).
+func _multiform_step(delta: float) -> void:
+	if not main.wave_active:
+		multiform_timer = 0.0
+		return
+	multiform_timer = maxf(multiform_timer - delta, 0.0)
+	if multiform_timer > 0.0 or not _in_combat() or _clones().size() >= int(multiform["copies"]):
+		return
+	multiform_timer = multiform["cooldown"]
+	var side := Vector2(-facing.y, facing.x) if facing != Vector2.ZERO else Vector2.RIGHT
+	var spot := _clear_of_walls(position + side * RADIUS * 2.2, position)
+	var w = get_script().new()
+	w.tiers = tiers.duplicate()
+	w.last_path = last_path
+	w.summoned = true
+	w.summoner = self
+	w.clone_of = self
+	w.setup(kind, data, main, post)
+	w.multiform = {}   # a copy can't split again
+	w.max_hp *= multiform["hp"]
+	w.hp = w.max_hp
+	w.position = spot
+	w.priority = priority
+	main.add_summon(w)
+	main.spawn_burst(position, 26.0, Color(0.7, 0.9, 1.0))
+	main.spawn_burst(spot, 26.0, Color(0.7, 0.9, 1.0))
+	main.spawn_text(position + Vector2(0, -50), "Multiform!", Color(0.75, 0.9, 1.0))
+	main.sfx("flash", 1.3)
+
+
+func _minions() -> Array:
+	return main.get_warriors().filter(func(w): return w.summoned and w.summoner == self)
+
+
+## A skeleton claws its way up at `at`.
+func raise_skeleton(at: Vector2) -> void:
+	var d: Dictionary = Data.SKELETON.duplicate()
+	d["hp"] = summon["hp"]
+	d["damage"] = summon["damage"]
+	d["armor"] = summon["armor"]
+	var w = get_script().new()
+	w.summoned = true
+	w.summoner = self
+	var spot := _clear_of_walls(at, position)
+	w.setup("skeleton", d, main, spot)
+	w.position = spot
+	w.priority = priority
+	main.add_summon(w)
+	main.spawn_burst(spot, 20.0, Color(0.55, 0.95, 0.45))
+	main.spawn_burst(spot, 12.0, Color(0.9, 0.88, 0.8))
+	main.sfx("rise")
+
+
+## Rotting Touch: an enemy that died rotting rises as a skeleton, if there's room.
+func raise_from_corpse(at: Vector2) -> void:
+	if summon.is_empty() or decay.is_empty() or not main.wave_active:
+		return
+	if _minions().size() >= int(summon["max"]):
+		return
+	raise_skeleton(at)
+	main.spawn_text(at + Vector2(0, -30), "Rise!", Color(0.55, 0.95, 0.45))
+
+
+## A skeleton falls apart (or a Multiform copy fades out, its power going back to the
+## real fighter): when it's beaten, when the wave ends, or when its maker is gone.
+func _crumble() -> void:
+	if is_queued_for_deletion():
+		return
+	if clone_of != null:
+		main.spawn_burst(position, 22.0, Color(0.7, 0.9, 1.0))
+		if is_instance_valid(clone_of) and clone_of.is_active():
+			main.spawn_beam(position + Vector2(0, -16), clone_of.position + Vector2(0, -16), Color(0.7, 0.9, 1.0), 6.0)
+			clone_of.multiform_timer = clone_of.multiform["cooldown"]   # splits again a while after losing it
+		queue_free()
+		return
+	main.spawn_burst(position, 18.0, Color(0.9, 0.88, 0.8))
+	main.sfx("crumble", 1.3)
+	if main.selected == self:
+		main.selected = null
+	queue_free()
+
+
+## Trapcraft: drops a charge every so often while walking.
+func _trap_step(delta: float) -> void:
+	my_traps = my_traps.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
+	if not moving:
+		return
+	trap_timer -= delta
+	if trap_timer > 0.0:
+		return
+	for t in my_traps:
+		if t.position.distance_to(position) < 30.0:
+			return   # already one here
+	trap_timer = traps["every"]
+	while my_traps.size() >= int(traps["max"]):
+		my_traps.pop_front().queue_free()   # the oldest is taken up again
+	var t := Trap.new()
+	t.main = main
+	t.damage = traps["damage"] * _power()
+	t.radius = traps["radius"]
+	t.stun = traps["stun"]
+	t.source = get_instance_id()
+	if traps["brew"]:
+		t.poison = poison
+		t.corrode = corrode
+	t.position = position + Vector2(0, RADIUS * 0.6)
+	main.add_projectile(t)
+	my_traps.append(t)
+
+
+## Fire Rain: a volley of flaming arrows on a spot.
+func _rain_on(at: Vector2) -> void:
+	var r: float = rain["radius"]
+	for e in main.get_enemies():
+		if e.position.distance_to(at) <= r + e.radius:
+			e.take_damage(rain["damage"] * _power())
+			if not e.dead and not burn.is_empty():
+				e.apply_burn(burn[0], burn[1])
+	main.spawn_area("rain", at, r)
+	main.sfx("rain")
+	swing = 0.15
+
+
+## Charge: a dash needs a clear run at the target.
+func _can_dash(e) -> bool:
+	return _is_valid(e) and not e.flying and not main.paths.path_blocked(position, e.position, RADIUS)
+
+
+func _start_dash(e) -> void:
+	dash_target = e
+	dash_hit = []
+	var dir := position.direction_to(e.position)
+	dash_to = e.position - dir * (RADIUS + e.radius)
+	dash_left = DASH_TIME
+	facing = dir
+	run_time = 0.0
+	main.spawn_burst(position + Vector2(0, RADIUS), 14.0, Color(0.75, 0.68, 0.55))
+	main.sfx("dash")
+
+
+## Mid-dash: rushes in, bowling over anything on the way (Unstoppable), then strikes.
+func _dash_step(delta: float) -> void:
+	var left := dash_left
+	dash_left = maxf(dash_left - delta, 0.0)
+	position = position.lerp(dash_to, minf(delta / left, 1.0))
+	walk += 0.5
+	moving = true
+	if dash["through"]:
+		for x in main.get_enemies():
+			if x == dash_target or dash_hit.has(x) or x.flying or position.distance_to(x.position) > RADIUS + x.radius + 4.0:
+				continue
+			dash_hit.append(x)
+			x.take_damage(damage * dash["damage"] * _power())
+			if not x.dead and dash["stun"] > 0.0:
+				x.apply_stun(dash["stun"])
+			_hit_spark(x)
+	if dash_left > 0.0:
+		return
+	var e = dash_target
+	dash_target = null
+	if _is_valid(e):
+		facing = position.direction_to(e.position)
+		swing = 0.15
+		_hold_pose("strike", 0.2)
+		e.take_damage(damage * dash["damage"] * _power())
+		if not e.dead and dash["stun"] > 0.0:
+			e.apply_stun(dash["stun"])
+		_hit_spark(e)
+		main.spawn_burst(e.position, 26.0, Color(1.0, 0.9, 0.6))
+		main.sfx("slash", 0.8)
+		cd_timer = cooldown / _rate()
+		engaged = e   # if that blow felled it, Unstoppable chains on next frame
+		engaged_id = e.get_instance_id()
+	_separate()
+
+
+## Unstoppable: the foe it was fighting has fallen, so it dashes straight on to the
+## next one in reach (no run-up needed). True if it set off.
+func _chain_dash() -> bool:
+	# (A freed enemy compares equal to null, so "was fighting" is kept by its id.)
+	if engaged_id == 0 or (is_instance_id_valid(engaged_id) and not instance_from_id(engaged_id).dead):
+		return false
+	engaged = null
+	engaged_id = 0
+	var next = _pick(main.get_enemies().filter(func(x): return _can_dash(x) and _gap_to(x) > 6.0 and _gap_to(x) <= dash["reach"]))
+	if next == null:
+		return false
+	target = next
+	_start_dash(next)
+	main.spawn_text(position + Vector2(0, -44), "Chain!", Color(1.0, 0.85, 0.4))
+	return true
 
 
 func _hold_pose(p: String, t: float) -> void:
@@ -1692,7 +2409,27 @@ func _sprite_px(origin: Vector2, x: float, y: float) -> Vector2:
 
 
 func _draw() -> void:
-	var frames: Array = Sprites.frames(sprite_name())
+	var look_name := sprite_name()
+	var layers := accent_layers()
+	var tag := accent_tag()
+	var special := special_instrument()
+	if special != "":
+		layers.append(Sprites.INSTRUMENT_LAYERS[special])
+		tag += "+" + special
+	var recolor := {}
+	if kind == "mage" and _high_paths().size() >= 2:
+		# Two paths at tier 3: the staff slowly shifts between their colors.
+		var c := _staff_color()
+		recolor = {"o": c, "O": c.darkened(0.3), "w": Color(0.92, 0.9, 0.85).lerp(c, 0.45)}
+		tag += "+orb%d" % _staff_step()
+	if kind == "archer" and tiers[0] > 0:
+		# The arrow nocked in her bow matches the ones she shoots.
+		recolor = {"e": Projectile.ARROW_SHAFTS[tiers[0]], "a": Projectile.ARROW_HEADS[tiers[0]]}
+		tag += "+g%d" % tiers[0]
+	if golden_left > 0.0:
+		recolor = recolor.merged(GOLD_HAIR, true)
+		tag += "+gold"
+	var frames: Array = Sprites.frames(look_name, recolor, tag, layers)
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * SCALE
 	var feet := RADIUS
 	xray_tex = null
@@ -1745,10 +2482,46 @@ func _draw() -> void:
 		# Power Surge: a flickering red aura.
 		var pulse := 0.25 + 0.1 * sin(Time.get_ticks_msec() / 60.0)
 		draw_circle(Vector2(0, feet - size.y * 0.45), size.y * 0.55, Color(1, 0.2, 0.15, pulse), true, -1.0, true)
+	if not frost_aura.is_empty():
+		# Frost Aura: a frosty ring on the ground with snowflakes drifting round it.
+		var r: float = frost_aura["radius"] + RADIUS
+		draw_set_transform(Vector2.ZERO)
+		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(0.75, 0.95, 1.0, 0.3), 1.5, true)
+		var spin := Time.get_ticks_msec() / 1500.0
+		for i in 6:
+			var p := Vector2.from_angle(spin + i * TAU / 6.0) * r * (0.55 + 0.4 * fmod(i * 0.37, 1.0))
+			draw_rect(Rect2(p - Vector2(1.5, 1.5), Vector2(3, 3)), Color(0.9, 0.97, 1.0, 0.7))
+	if not heal_aura.is_empty():
+		# Halo: a soft golden-green ring around the Healer.
+		var r: float = heal_aura["radius"] + RADIUS
+		var pulse := 0.2 + 0.08 * sin(Time.get_ticks_msec() / 300.0)
+		draw_set_transform(Vector2.ZERO)
+		draw_arc(Vector2.ZERO, r, 0, TAU, 64, Color(0.85, 1.0, 0.55, pulse + 0.1), 1.5, true)
+		draw_circle(Vector2.ZERO, r, Color(0.7, 1.0, 0.5, pulse * 0.25), true, -1.0, true)
+	if crimson_left > 0.0 or golden_left > 0.0:
+		# Power forms: a roaring aura of flames around the body, crimson, gold or both.
+		var t := Time.get_ticks_msec() / 70
+		var cols := []
+		if golden_left > 0.0:
+			cols.append(Color(1.0, 0.85, 0.3))
+		if crimson_left > 0.0:
+			cols.append(Color(1.0, 0.25, 0.2))
+		for c in cols.size():
+			var col: Color = cols[c]
+			var grow := 1.0 + c * 0.25
+			draw_circle(Vector2(0, feet - size.y * 0.45), size.y * 0.5 * grow, Color(col, 0.18), true, -1.0, true)
+			for i in 9:
+				var x := (-1.0 + i / 4.0) * size.x * 0.42 * grow
+				var h := (10.0 + float((t + i * 5 + c * 3) % 5) * 4.0) * grow
+				var base := Vector2(x, feet - 2.0 - absf(x) * 0.6)
+				draw_colored_polygon(PackedVector2Array([base + Vector2(-3, 0), base + Vector2(3, 0), base + Vector2(0, -h - size.y * 0.35)]), Color(col, 0.45))
 	var tint := Color(1, 0.45, 0.45) if hurt > 0.0 else Color.WHITE
+	if clone_of != null:
+		# A Multiform copy: see-through, tinted blue and flickering, so it's never taken for the real one.
+		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))
 	var charging := beam_charge > 0.0
 	var tex: Texture2D = frames[int(walk) % 2 if moving else 0]
-	var pose_tex = Sprites.pose(sprite_name(), _pose_name())
+	var pose_tex = Sprites.pose(look_name, _pose_name(), recolor, tag, layers)
 	if pose_tex != null:
 		tex = pose_tex
 	var lunge := facing * (swing / 0.15) * 5.0
@@ -1770,6 +2543,11 @@ func _draw() -> void:
 		_draw_arrow(arrow["pos"], arrow["angle"], arrow["alpha"])   # sliding out of (or into) the quiver, behind her
 	var body := _tex_rect(tex)
 	body.position.y -= size.y / 2
+	if dash_left > 0.0:
+		# Charging in: fading afterimages trail behind.
+		for i in range(3, 0, -1):
+			draw_set_transform(origin + Vector2(0, size.y / 2) - facing * 12.0 * i, 0, Vector2(flip, 1))
+			draw_texture_rect(tex, body, false, Color(1, 1, 1, 0.12 * (4 - i)))
 	# Tilt and squash pivot on the feet, so it leans and squashes without lifting off.
 	draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
 	draw_texture_rect(tex, body, false, tint)
@@ -1806,7 +2584,7 @@ func _draw() -> void:
 		if cleave.is_empty():
 			draw_arc(facing * 8, 30, a - 0.9, a + 0.9, 12, Color(1, 1, 1, swing / 0.15), 3.0, true)
 		else:
-			# Kingsblade: a broad golden sweep.
+			# Kingsplitter: a broad golden sweep.
 			var half := deg_to_rad(cleave["arc"]) / 2.0
 			var r: float = 30.0 + cleave["reach"]
 			draw_arc(facing * 4, r, a - half, a + half, 20, Color(1, 0.85, 0.35, swing / 0.15), 4.0, true)
@@ -1817,12 +2595,17 @@ func _draw() -> void:
 		draw_arc(facing * 10 + Vector2(0, -6), 20, facing.angle() - 1.1, facing.angle() + 1.1, 12, Color(0.8, 0.88, 1.0, k), 4.0, true)
 	# Upgrade pips, one row per path in that path's color.
 	var row := 0
-	for p in 3:
+	for p in (tiers.size() if clone_of == null else 0):   # copies carry no pips
 		if tiers[p] == 0:
 			continue
 		for i in tiers[p]:
 			draw_rect(Rect2(-(tiers[p] - 1) * 3.0 + i * 6.0 - 2, feet + 4 + row * 5, 4, 4), PATH_COLORS[p])
 		row += 1
+	if not multiform.is_empty() and clone_of == null and not _clones().is_empty():
+		# The real one, while split: a small gold marker over his head.
+		var m := Vector2(0, feet - size.y - 10)
+		draw_colored_polygon(PackedVector2Array([m + Vector2(0, -5), m + Vector2(4, 0), m + Vector2(0, 5), m + Vector2(-4, 0)]), OUTLINE_COLOR)
+		draw_colored_polygon(PackedVector2Array([m + Vector2(0, -3.5), m + Vector2(2.5, 0), m + Vector2(0, 3.5), m + Vector2(-2.5, 0)]), Color(1.0, 0.85, 0.3))
 	if hp < max_hp:
 		var top := Vector2(-RADIUS, feet - size.y - 2)
 		draw_rect(Rect2(top, Vector2(RADIUS * 2, 4)), Color(0, 0, 0, 0.6))
@@ -1929,13 +2712,11 @@ func _archer_arrow(origin: Vector2) -> Dictionary:
 
 
 ## An arrow centered on p, pointing along angle.
+## The arrow she twirls while idle: the same kind she shoots (her Damage tier).
 func _draw_arrow(p: Vector2, angle: float, alpha := 1.0) -> void:
-	var d := Vector2.from_angle(angle) * 9.0
-	draw_line(p - d, p + d, Color(OUTLINE_COLOR, alpha), 3.5, true)
-	draw_line(p - d, p + d, Color(0.92, 0.88, 0.78, alpha), 1.5, true)
-	var side := d.orthogonal().normalized() * 3.0
-	draw_colored_polygon(PackedVector2Array([p + d * 1.35, p + d + side, p + d - side]), Color(0.78, 0.8, 0.86, alpha))
-	draw_line(p - d, p - d * 0.65, Color(0.85, 0.25, 0.2, alpha), 3.5, true)   # fletching
+	draw_set_transform(p, angle, Vector2(0.85, 0.85))
+	Projectile.arrow_shape(self, tiers[0], alpha, true)
+	draw_set_transform(Vector2.ZERO)
 
 
 ## Where to draw a sprite texture: centered on the body, wide poses reaching forward.
@@ -1958,5 +2739,7 @@ func _orb_color() -> Color:
 		return Color(0.75, 0.95, 1.0)
 	if kind == "healer":
 		return Color(0.6, 1.0, 0.6)
+	if kind == "mage" and _high_paths().size() >= 2:
+		return _staff_color()
 	var look := _look_path()
 	return MAGE_ORB_COLORS[look] if look >= 0 else Color(0.85, 0.55, 1.0)

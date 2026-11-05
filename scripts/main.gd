@@ -10,6 +10,8 @@ const Enemy = preload("res://scripts/enemy.gd")
 const Fx = preload("res://scripts/fx.gd")
 const Hud = preload("res://scripts/hud.gd")
 const Sprites = preload("res://scripts/sprites.gd")
+const Audio = preload("res://scripts/audio.gd")
+const Tutorial = preload("res://scripts/tutorial.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -25,6 +27,7 @@ var started := false     # set once the player picks a mode
 var permadeath := false   # Hardcore: knocked-out warriors die for good unless a Healer revives them
 var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn any wave at will
 var freeplay_level := 1  # wave level used for freeplay spawns
+var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
 var gold: int = Data.START_GOLD
 var difficulty := "normal"   # a key of Data.DIFFICULTIES ("normal" in freeplay)
 var cost_mult := 1.0         # prices for this difficulty
@@ -63,10 +66,18 @@ var fx_layer := Node2D.new()
 var overlay := Node2D.new()
 var hud: CanvasLayer
 var paths := Pathing.new()
+var audio: Audio
+var layer_timer := 0.0
+var bard_instruments := []   # what the Bards on the field are playing (see _bard_instruments)
+var last_track := ""
+var song_on := true   # the player can switch the eight-Bard song off (from any Bard's panel)
 
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
+	audio = Audio.new()
+	add_child(audio)
+	audio.set_track("calm")
 	paths.setup(self)
 	castle.main = self
 	# The castle goes over the warriors (it hides any standing behind it, showing their
@@ -82,6 +93,7 @@ func _ready() -> void:
 	hud.upgrade_pressed.connect(upgrade_selected)
 	hud.sell_pressed.connect(sell_selected)
 	hud.target_pressed.connect(cycle_target_priority)
+	hud.song_pressed.connect(toggle_song)
 	hud.speed_pressed.connect(cycle_speed)
 	hud.restart_pressed.connect(_restart)
 	hud.menu_confirmed.connect(_restart)
@@ -151,10 +163,11 @@ func _fit_screen() -> void:
 	queue_redraw()
 
 
-## mode: a difficulty ("easy", "normal", "hard", "hardcore") or "freeplay".
+## mode: a difficulty ("easy", "normal", "hard", "hardcore"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
 	freeplay = mode == "freeplay"
-	difficulty = "normal" if freeplay else mode
+	tutorial = mode == "tutorial"
+	difficulty = "normal" if freeplay or tutorial else mode
 	var d: Dictionary = Data.DIFFICULTIES[difficulty]
 	permadeath = d["permadeath"]
 	down_time = d["down_time"]
@@ -167,6 +180,11 @@ func choose_mode(mode: String) -> void:
 		hud.show_freeplay_bar()
 	started = true
 	hud.hide_mode_select()
+	if tutorial:
+		var guide := Tutorial.new()
+		guide.main = self
+		guide.hud = hud
+		hud.add_child(guide)
 
 
 func _process(delta: float) -> void:
@@ -195,6 +213,19 @@ func _process(delta: float) -> void:
 			else:
 				_end_wave()
 	hud.refresh(self)
+	if not game_over:
+		layer_timer -= delta
+		if layer_timer <= 0.0:
+			layer_timer = 0.5
+			bard_instruments = _bard_instruments()
+			audio.set_layers(bard_instruments)
+		# Between waves, a Bard on every instrument strikes up a song together.
+		var ensemble: bool = song_on and audio._music.has("ensemble") and all_bards_present()
+		audio.set_track("battle" if wave_active else ("ensemble" if ensemble else "calm"))
+		if audio._playing_track != last_track:
+			if audio._playing_track == "ensemble":
+				hud.show_message("The Bards strike up a song together!")
+			last_track = audio._playing_track
 	# Hovering a unit on the field shows its description card.
 	var hovered: Warrior = null
 	if started and not game_over and dragging == null and placing_type == "" and mouse.y <= FIELD_H:
@@ -245,6 +276,7 @@ func start_wave() -> void:
 	if dragging != null:
 		_end_drag()
 	wave += 1
+	sfx("horn")
 	wave_active = true
 	boss_spawned = false
 	gates_warned = false
@@ -328,6 +360,7 @@ func spawn_minion(kind: String, level: int, at: Vector2) -> void:
 
 ## The Ogre King's war horn: a fresh wave marches in from the top of the field.
 func reinforce(kinds: Array, level: int) -> void:
+	sfx("horn", 0.75)
 	spawn_queue.append_array(kinds.map(func(k): return [k, level]))
 	hud.show_message("The war horn sounds! More enemies are coming!")
 
@@ -344,8 +377,14 @@ func _spawn_boss() -> void:
 
 
 func _on_enemy_died(e) -> void:
+	sfx("die", 1.3 if e.radius < 14.0 else (0.7 if e.radius > 20.0 else 1.0))
 	gold += e.bounty
 	spawn_text(e.position, "+%d" % e.bounty, Color(1, 0.85, 0.2))
+	# Necromancy: what dies rotting gets back up on your side.
+	if e.decay_timer > 0.0 and is_instance_id_valid(e.decay_source):
+		var mage = instance_from_id(e.decay_source)
+		if is_instance_valid(mage) and not mage.is_queued_for_deletion() and mage.is_active():
+			mage.raise_from_corpse(e.position)
 
 
 func _on_enemy_at_castle(_e) -> void:
@@ -360,10 +399,11 @@ func damage_castle(amount: float) -> void:
 		return
 	castle_hp -= amount
 	castle.struck(amount)
+	sfx("castle")
 	if amount >= 15.0:
 		spawn_text(Vector2(randf_range(80, FIELD_W - 80), CASTLE_Y - 10), "-%d" % roundi(amount), Color(1, 0.3, 0.3))
-	if freeplay:
-		castle_hp = maxf(castle_hp, 1.0)
+	if freeplay or tutorial:
+		castle_hp = maxf(castle_hp, 1.0)   # can't fall here
 	elif castle_hp <= 0.0:
 		castle_hp = 0.0
 		_finish(false)
@@ -371,6 +411,7 @@ func damage_castle(amount: float) -> void:
 
 func _end_wave() -> void:
 	wave_active = false
+	sfx("fanfare")
 	var bonus := 20 + wave * 5
 	gold += bonus
 	# Gold Mines pay their end-of-wave bonus on top, and the best Treasury pays interest
@@ -432,6 +473,8 @@ func continue_endless() -> void:
 
 
 func _finish(won: bool) -> void:
+	audio.set_track("")
+	sfx("victory" if won else "defeat")
 	choosing = false
 	game_over = true
 	victory = won
@@ -448,7 +491,7 @@ func _finish(won: bool) -> void:
 
 ## Records the waves survived if it beats this mode's best; returns the best from before.
 func _save_record(survived: int) -> int:
-	if records_path == "":
+	if records_path == "" or tutorial:
 		return 0
 	var cfg := ConfigFile.new()
 	cfg.load(records_path)
@@ -549,6 +592,7 @@ func _wall_click(p: Vector2) -> void:
 		hud.show_message("Not enough gold")
 		return
 	gold -= cost
+	sfx("place")
 	var wall := Barricade.new()
 	wall.half = (b - a) / 2.0
 	wall.setup("barricade", Data.WARRIORS["barricade"], self, (a + b) / 2.0)
@@ -575,6 +619,7 @@ func hire_at(p: Vector2) -> void:
 		placing_type = ""
 		return
 	gold -= cost
+	sfx("place")
 	var w := Warrior.new()
 	w.setup(placing_type, data, self, _clamp_post(p))
 	w.spent = cost
@@ -625,7 +670,10 @@ func upgrade_selected(path: int) -> void:
 	var tier_name: String = selected.next_tier(path)["name"]
 	gold -= cost
 	selected.upgrade(path)
+	sfx("upgrade")
 	spawn_text(selected.position + Vector2(0, -50), tier_name, Warrior.PATH_COLORS[path])
+	if selected is Barricade:
+		walls_changed()   # an Energy Wall may now let troops or shots through
 
 
 # Between waves, units can be dragged anywhere and snap straight to the new spot.
@@ -681,7 +729,11 @@ func cycle_target_priority() -> void:
 func sell_selected() -> void:
 	if selected == null:
 		return
+	if selected.summoned:
+		hud.show_message("Skeletons can't be sold")
+		return
 	gold += selected.sell_value()
+	sfx("sell")
 	selected.queue_free()
 	if selected is Barricade:
 		walls_changed()
@@ -709,6 +761,8 @@ func _warrior_at(p: Vector2) -> Warrior:
 	var best: Warrior = null
 	var best_d := Warrior.RADIUS + 6.0
 	for w in get_warriors():
+		if w.summoned:
+			continue   # skeletons can't be picked up, moved or sold
 		var d: float = w.position.distance_to(p)
 		if d < best_d:
 			best_d = d
@@ -767,10 +821,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				upgrade_selected(1)
 			KEY_E:
 				upgrade_selected(2)
+			KEY_R:
+				upgrade_selected(3)
 			KEY_S:
 				sell_selected()
 			KEY_T:
 				cycle_target_priority()
+			KEY_G:
+				toggle_song()
 			KEY_F:
 				cycle_speed()
 			KEY_ESCAPE:
@@ -853,6 +911,49 @@ func spawn_note(pos: Vector2, color: Color) -> void:
 	f.life = 0.9
 	f.position = pos
 	fx_layer.add_child(f)
+
+
+## Fire Rain landing on a spot.
+func spawn_area(mode: String, pos: Vector2, radius: float) -> void:
+	var f := Fx.new()
+	f.mode = mode
+	f.radius = radius
+	f.life = 0.5
+	f.position = pos
+	fx_layer.add_child(f)
+
+
+## A skeleton raised by Necromancy joins the warriors.
+func add_summon(w: Warrior) -> void:
+	warrior_layer.add_child(w)
+
+
+## Whether a Bard is on the field for every instrument (they can play their song).
+func all_bards_present() -> bool:
+	return audio != null and audio.INSTRUMENTS.all(func(i): return i in bard_instruments)
+
+
+## The Song button on a Bard's panel: play the eight-Bard song between waves, or don't.
+func toggle_song() -> void:
+	if selected == null or selected.kind != "bard" or not all_bards_present():
+		return
+	song_on = not song_on
+	hud.show_message("The Bards' song: " + ("on" if song_on else "off"))
+
+
+## The instruments the Bards on the field are holding (each plays along with the music).
+func _bard_instruments() -> Array:
+	var found := {}
+	for w in get_warriors():
+		if w.kind == "bard":
+			found[w.instrument_sound()] = true
+	return found.keys()
+
+
+## Plays a sound effect (see audio.gd).
+func sfx(sound_name: String, pitch := 1.0) -> void:
+	if audio != null:
+		audio.play(sound_name, pitch)
 
 
 func spawn_burst(pos: Vector2, radius: float, color: Color) -> void:

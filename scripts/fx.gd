@@ -1,6 +1,6 @@
 extends Node2D
 ## Short-lived visual effect: floating text, an expanding ring, a lightning bolt,
-## a flame stream, a beam, a tornado or a musical note.
+## a flame stream, a beam, a tornado, a musical note or a rain of fire arrows.
 
 var mode := "text"
 var text := ""
@@ -61,6 +61,21 @@ func _draw() -> void:
 				var w := radius * (0.25 + i * 0.12)
 				var sway := sin(spin * 0.3 + i * 0.8) * 4.0
 				draw_arc(Vector2(sway, y), w, spin + i, spin + i + PI * 1.4, 12, Color(0.85, 0.88, 0.92, a * 0.8), 3.0, true)
+		"rain":
+			# Flaming arrows streaking down into a circle, then a flare on the ground.
+			for i in 10:
+				var ang := i * 2.4
+				var spot := Vector2(cos(ang), sin(ang) * 0.6) * radius * fmod(i * 0.37, 1.0)
+				var k := clampf(t / life * 1.6 - fmod(i * 0.13, 0.5), 0.0, 1.0)
+				var tip := spot + Vector2(-0.3, -1.0) * 70.0 * (1.0 - k)
+				if k < 1.0:
+					draw_line(tip, tip + Vector2(-0.3, -1.0) * 12.0, Color(0.95, 0.85, 0.7, a), 2.0, true)
+					draw_circle(tip, 2.5, Color(1.0, 0.6, 0.15, a), true, -1.0, true)
+				else:
+					draw_circle(spot, 4.0, Color(1.0, 0.5, 0.1, a * 0.8), true, -1.0, true)
+			draw_set_transform(Vector2.ZERO, 0, Vector2(1, 0.6))
+			draw_circle(Vector2.ZERO, radius, Color(1.0, 0.45, 0.1, 0.18 * a), true, -1.0, true)
+			draw_set_transform(Vector2.ZERO)
 		"note":
 			# A musical note floating up from the Bard.
 			draw_circle(Vector2.ZERO, 3.5, Color(color, a), true, -1.0, true)

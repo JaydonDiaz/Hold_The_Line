@@ -88,12 +88,12 @@ const SPRITES := {
 		"poses": {
 			"draw": {
 				2: "..............__k",
-				3: "............____bk",
-				4: "............___wbk",
+				3: "............_k__bk",
+				4: "............s__wbk",
 				5: "............._w_.bk",
 				6: ".............w__.bk",
 				7: ".............w__.bk",
-				8: ".............swwwswak",
+				8: ".............seeeseak",
 				9: ".............w__.bk",
 				10: "............._w_bk",
 				11: ".............__wbk",
@@ -103,20 +103,20 @@ const SPRITES := {
 		"palette": {
 			"g": Color(0.35, 0.65, 0.3), "G": Color(0.22, 0.45, 0.2), "l": Color(0.6, 0.42, 0.25),
 			"L": Color(0.42, 0.28, 0.15), "b": Color(0.62, 0.4, 0.18), "w": Color(0.92, 0.9, 0.85),
-			"a": Color(0.8, 0.82, 0.88),
+			"a": Color(0.8, 0.82, 0.88), "e": Color(0.92, 0.88, 0.78),
 		},
 		"rows": [
 			"................",
 			".....kkkkk......",
 			"....kgggggk...k.",
-			"...kgggggggk..bk",
-			"...kgGsssGgk.wbk",
-			"...kGskssksGkw.b",
+			".k.kgggggggk.kbk",
+			".kskgGsssGgkswbk",
+			"..kkGskssksGkw.b",
 			"...kGssssssGkw.b",
-			"...kkGGGGGGkkw.b",
-			"..klllllllllkssb",
-			"..kLklllllkLkw.b",
-			"..kskLLLLLkskwbk",
+			".kGkkGGGGGGkkw.b",
+			"kGklllllllllkssb",
+			"kGkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
 			"...kllllllk..bk.",
 			"...kppppppk..k..",
 			"...kppkkppk.....",
@@ -618,38 +618,7 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"martial_p1": {  # Combat: wild spiky hair, orange gi, blue undershirt and belt
-		"base": "martial",
-		"palette": {
-			"h": Color(0.2, 0.17, 0.25), "o": Color(0.95, 0.55, 0.15), "B": Color(0.2, 0.3, 0.75),
-			"A": Color(0.95, 0.55, 0.15), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.2, 0.3, 0.75),
-			"F": Color(0.96, 0.77, 0.6), "L": Color(0.95, 0.55, 0.15), "U": Color(0.2, 0.3, 0.75),
-		},
-		"rows": [
-			"......k..k......",
-			"..k..khkkhk..k..",
-			"..khkhhhhhhkhk..",
-			".khhhhhhhhhhhhk.",
-			"..khhshhshhhk...",
-			"...kskssksk.....",
-			"....kssssk......",
-			"..kkoBBBBokk....",
-			".kokooBBoookok..",
-			".kokoooooookok..",
-			".kBkBBBBBBBkBk..",
-			".kskoooooooksk..",
-			"...koookoook....",
-			"...koookoook....",
-			"...kBBk.kBBk....",
-			"...kkkk.kkkk....",
-		],
-		"legs_b": [
-			"....kookook.....",
-			"....kBBkBBk.....",
-			"....kkkkkkk.....",
-		],
-	},
-	"martial_p2": {  # Techniques: shaved head with six dots, orange gi
+	"martial_p2": {  # Techniques (a Krillin nod): his Orin Temple gi: mustard wrap top, maroon belt, orange pants, leg wraps
 		"poses": {
 			"punch": {
 				8: "................kk",
@@ -660,9 +629,11 @@ const SPRITES := {
 		},
 		"base": "martial",
 		"palette": {
-			"d": Color(0.35, 0.25, 0.25), "o": Color(0.95, 0.55, 0.15), "B": Color(0.2, 0.3, 0.75),
-			"A": Color(0.95, 0.55, 0.15), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.2, 0.3, 0.75),
-			"F": Color(0.96, 0.77, 0.6), "L": Color(0.95, 0.55, 0.15), "U": Color(0.2, 0.3, 0.75),
+			"d": Color(0.35, 0.25, 0.25), "Y": Color(0.85, 0.68, 0.25), "y": Color(0.68, 0.52, 0.18),
+			"m": Color(0.5, 0.24, 0.34), "o": Color(0.92, 0.5, 0.2), "c": Color(0.93, 0.85, 0.65),
+			"T": Color(0.8, 0.65, 0.35), "A": Color(0.85, 0.68, 0.25), "Z": Color(0.96, 0.77, 0.6),
+			"X": Color(0.96, 0.77, 0.6), "F": Color(0.96, 0.77, 0.6), "L": Color(0.92, 0.5, 0.2),
+			"U": Color(0.8, 0.65, 0.35),
 		},
 		"rows": [
 			"................",
@@ -673,18 +644,18 @@ const SPRITES := {
 			"...ksdsdsdsk....",
 			"...ksksssksk....",
 			"....ksssssk.....",
-			"...kkoBBBokk....",
-			"..kokoooookok...",
-			"..kBkBBBBBkBk...",
-			"..kskoooooksk...",
+			"...kkYyYYYkk....",
+			"..kYkYYyYYkYk...",
+			"..kskmmmmmksk...",
+			"..kskYYYYYksk...",
 			"...koookoook....",
-			"...koookoook....",
-			"...kBBk.kBBk....",
+			"...kccckccck....",
+			"...kTTk.kTTk....",
 			"...kkkk.kkkk....",
 		],
 		"legs_b": [
-			"....kookook.....",
-			"....kBBkBBk.....",
+			"....kcckcck.....",
+			"....kTTkTTk.....",
 			"....kkkkkkk.....",
 		],
 	},
@@ -845,9 +816,19 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"bard_p0": {  # Inspire: a royal herald in gold with a tall red plume
+	"bard_p0": {  # Inspire: a royal herald in gold with a tall red plume, playing a red pipa
+		"poses": {
+			"strum": {
+				9: "...........s....",
+				10: "...T......s.....",
+			},
+		},
 		"base": "bard",
-		"palette": {"R": Color(0.25, 0.35, 0.85), "F": Color(0.9, 0.2, 0.2), "T": Color(0.9, 0.7, 0.2), "y": Color(0.95, 0.95, 0.95)},
+		"palette": {
+			"R": Color(0.25, 0.35, 0.85), "F": Color(0.9, 0.2, 0.2), "T": Color(0.9, 0.7, 0.2),
+			"y": Color(0.95, 0.95, 0.95), "L": Color(0.78, 0.22, 0.2), "n": Color(0.5, 0.15, 0.12),
+			"o": Color(0.25, 0.08, 0.08),
+		},
 		"rows": [
 			"......kFFkk.....",
 			".....kkRRkFFk...",
@@ -867,33 +848,46 @@ const SPRITES := {
 			"...kkkk.kkkk....",
 		],
 	},
-	"bard_p1": {  # Discord: a jester in purple and black with belled points
+	"bard_p1": {  # Discord: a jester in purple and black with belled points, playing a little mouth instrument
+		"poses": {
+			"strum": {
+				6: ".....ksssskmk...",
+			},
+		},
 		"base": "bard",
-		"palette": {"R": Color(0.5, 0.15, 0.55), "T": Color(0.22, 0.18, 0.28), "y": Color(0.6, 0.9, 0.3), "L": Color(0.45, 0.3, 0.5)},
+		"palette": {
+			"R": Color(0.5, 0.15, 0.55), "T": Color(0.22, 0.18, 0.28), "y": Color(0.6, 0.9, 0.3),
+			"m": Color(0.45, 0.3, 0.18),
+		},
 		"rows": [
 			"..ky.......yk...",
 			"...kRk.kk.kRk...",
 			"....kRRRRRRk....",
 			"...kRRRRRRRk....",
 			"....kskssksk....",
-			"....kssssssk..kk",
-			".....kssssk..knk",
-			"...kkTTyyTTkknk.",
-			"..kTTTTyyTTTnkk.",
-			"..kTkTTTTTkLLLk.",
-			"..kskTTTTkLLoLLk",
-			"...kTTTTTkLLLLLk",
-			"...kppppppkLLLk.",
-			"...kppkkppk.kk..",
+			"....kssssssk....",
+			".....kssssmmk...",
+			"...kkTTyyTTksk..",
+			"..kTTTTyyTTTsk..",
+			"..kTkTTTTTkTk...",
+			"..kskTTTTkTk....",
+			"...kTTTTTk......",
+			"...kppppppk.....",
+			"...kppkkppk.....",
 			"...kffk.kffk....",
 			"...kkkk.kkkk....",
 		],
 	},
-	"bard_p2": {  # Spellsong: a green nature-bard with a flower and a leafy lute
+	"bard_p2": {  # Spellsong: a green nature-bard with a flower, playing a flute
+		"poses": {
+			"strum": {
+				6: ".....ksssskwkwwk",
+			},
+		},
 		"base": "bard",
 		"palette": {
 			"R": Color(0.3, 0.6, 0.25), "F": Color(1.0, 0.6, 0.8), "T": Color(0.42, 0.55, 0.25),
-			"y": Color(0.95, 0.8, 0.4), "l": Color(0.3, 0.7, 0.25),
+			"y": Color(0.95, 0.8, 0.4), "l": Color(0.3, 0.7, 0.25), "w": Color(0.85, 0.72, 0.5),
 		},
 		"rows": [
 			"........kk......",
@@ -901,15 +895,15 @@ const SPRITES := {
 			"....kRRRRRkk....",
 			"...kRRRRRRRk....",
 			"....kskssksk....",
-			"....kssssssk..kk",
-			".....kssssk..knk",
-			"...kkTTyyTTkknk.",
-			"..kTTTTyyTTTnkk.",
-			"..kTkTTTTTkLLLk.",
-			"..kskTTTTkLlolLk",
-			"...kTlTTTkLLlLLk",
-			"...kppppppkLLLk.",
-			"...kppkkppk.kk..",
+			"....kssssssk....",
+			".....ksssskwwwwk",
+			"...kkTTyyTTks.s.",
+			"..kTTTTyyTTTsk..",
+			"..kTkTTTTTkTk...",
+			"..kskTTTTkTk....",
+			"...kTlTTTk......",
+			"...kppppppk.....",
+			"...kppkkppk.....",
 			"...kffk.kffk....",
 			"...kkkk.kkkk....",
 		],
@@ -1674,81 +1668,79 @@ const SPRITES := {
 			".kkkkk..kkk.....",
 		],
 	},
-	"swordsman_p0": {  # Damage: a longsword with a wide crossguard and long grip
+	"swordsman_p0": {  # Damage: a broad axe on a long haft
 		"poses": {
-			"plant": {  # idle: the longsword planted point-down
+			"plant": {  # idle: resting on the axe, its head on the ground
 				0: "............______",
 				1: "............______",
 				2: "............______",
 				3: "............______",
 				4: "............______",
-				5: "............kgk___",
-				6: "............kgk___",
+				5: "............_k____",
+				6: "............kak___",
 				7: "............ksk___",
-				8: "...........kgggk__",
-				9: "............kwk___",
-				10: "..........bkkwk___",
-				11: "............kwk___",
-				12: "............kwk___",
-				13: "............kwk___",
-				14: "............kwk...",
-				15: "............_k....",
+				8: "............kak___",
+				9: "............kak___",
+				10: "..........bkkak___",
+				11: "............kakkk_",
+				12: "............kakwwk",
+				13: "............kakwWk",
+				14: "............kakwwk",
+				15: "............_kkkk.",
 			},
-			"swing": {
-				0: "............_____....kk",
-				1: "............_____...kwk",
-				2: "............_____..kwk",
-				3: "............_____.kwk",
-				4: "............_____kwk",
-				5: "............____kwk",
-				6: "............___kwk",
-				7: "............__kwk",
-				8: "............gkwk_",
-				9: "............kgk___",
-				10: "............skg__",
-				11: "............_k___",
-				12: "............_____",
-				13: "............_____",
+			"swing": {  # raised high to chop
+				0: "............______",
+				1: "............______kkk",
+				2: "............_____kwwwk",
+				3: "............_____kwWWk",
+				4: "............____kawwwk",
+				5: "............___kakkkk",
+				6: "............__kak___",
+				7: "............_kak____",
+				8: "............kak_____",
+				9: "...........kak______",
+				10: "............______",
+				11: "............______",
+				12: "............______",
 			},
-			"strike": {
-				0: "............_____",
-				1: "............_____",
-				2: "............_____",
-				3: "............_____",
-				4: "............_____",
-				5: "............_____",
-				6: "............_k___",
-				7: "............kgk__",
-				8: "............kgkkkkkkkkkkk",
-				9: "............sgwwwwwwwwwwk",
-				10: "............kgkkkkkkkkkk",
-				11: "............kgk__",
-				12: "............_k___",
-				13: "............_____",
+			"strike": {  # the chop, haft out level
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............______",
+				6: "............______..kkk.",
+				7: "............______.kwwwk",
+				8: "............kkkkkkkkwWWk",
+				9: "............saaaaaakwWWk",
+				10: "............kkkkkkkkwwwk",
+				11: "............______",
+				12: "............______",
 			},
 		},
 		"base": "swordsman",
-		"palette": {"g": Color(0.85, 0.65, 0.2)},
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0)},
 		"rows": [
-			"......rr......k...",
-			".....krrk....kwk..",
-			"....khhhhk...kwk..",
-			"...khhhhhHk..kwk..",
-			"...khkkkkHk..kwk..",
-			"...khhhhhHk..kwk..",
-			"....kssssk...kwk..",
-			"..kkTttttTkk.kwk..",
-			"..kTttttttTkkkwkk.",
-			"..kTttttttTkgggggk",
-			"..ksbbbbbbskkskk..",
-			"..kTttttttTk.kbk..",
-			"...kTttttTk..kgk..",
-			"...kppkkppk...k...",
+			"......rr.....k....",
+			".....krrk...kakkk.",
+			"....khhhhk..kakwwk",
+			"...khhhhhHk.kakwWk",
+			"...khkkkkHk.kakwWk",
+			"...khhhhhHk.kakwwk",
+			"....kssssk..kakkk.",
+			"..kkTttttTkkkak...",
+			"..kTttttttTkkak...",
+			"..kTttttttTkkak...",
+			"..ksbbbbbbsksak...",
+			"..kTttttttTkkak...",
+			"...kTttttTk..k....",
+			"...kppkkppk.......",
 			"...kffk.kffk......",
 			"...kkkk.kkkk......",
 		],
 		"legs_b": [
-			"...kppkppk....k...",
+			"...kppkppk........",
 			"....kffkffk.......",
 			"....kkkkkkk.......",
 		],
@@ -1809,6 +1801,99 @@ const SPRITES := {
 			"...kkkk.kkkk....",
 		],
 	},
+	"swordsman_p0p1": {  # Damage and Blades both at tier 3: an axe in each hand
+		"poses": {
+			"plant": {  # idle: resting on the right axe
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............_k____",
+				6: "............kak___",
+				7: "............ksk___",
+				8: "............kak___",
+				9: "............kak___",
+				10: "..........bkkak___",
+				11: "............kakkk_",
+				12: "............kakwwk",
+				13: "............kakwWk",
+				14: "............kakwwk",
+				15: "............_kkkk.",
+			},
+			"swing": {
+				0: "............______",
+				1: "............______kkk",
+				2: "............_____kwwwk",
+				3: "............_____kwWWk",
+				4: "............____kawwwk",
+				5: "............___kakkkk",
+				6: "............__kak___",
+				7: "............_kak____",
+				8: "............kak_____",
+				9: "...........kak______",
+				10: "............______",
+				11: "............______",
+				12: "............______",
+			},
+			"strike": {
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............______",
+				6: "............______..kkk.",
+				7: "............______.kwwwk",
+				8: "............kkkkkkkkwWWk",
+				9: "............saaaaaakwWWk",
+				10: "............kkkkkkkkwwwk",
+				11: "............______",
+				12: "............______",
+			},
+			"strike2": {  # the off-hand axe swept across
+				0: "___",
+				1: "___",
+				2: "___",
+				3: "___",
+				4: "___",
+				5: "___",
+				6: "___",
+				7: "___",
+				8: "___",
+				9: "__................kkkk",
+				10: "__..kkkkkkkkkkkkkkkwWk",
+				11: "__ksaaaaaaaaaaaaaakwWk",
+				12: "....kkkkkkkkkkkkkkkwWk",
+				13: "....k.............kkkk",
+			},
+		},
+		"base": "swordsman",
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0)},
+		"rows": [
+			".kkk..rr.....k....",
+			"kwWk.krrk...kakkk.",
+			"kwWkkhhhhk..kakwwk",
+			"kkakhhhhhHk.kakwWk",
+			"kakkhkkkkHk.kakwWk",
+			"kakkhhhhhHk.kakwwk",
+			"kak.kssssk..kakkk.",
+			"kakkTttttTkkkak...",
+			"kakTttttttTkkak...",
+			"kakTttttttTkkak...",
+			"kaksbbbbbbsksak...",
+			".kkTttttttTkkak...",
+			"...kTttttTk..k....",
+			"...kppkkppk.......",
+			"...kffk.kffk......",
+			"...kkkk.kkkk......",
+		],
+		"legs_b": [
+			"...kppkppk........",
+			"....kffkffk.......",
+			"....kkkkkkk.......",
+		],
+	},
 	"swordsman_p2": {  # Health: full plate with gold trim and a kite shield
 		"base": "swordsman",
 		"palette": {"y": Color(1.0, 0.82, 0.3), "r": Color(0.25, 0.45, 0.95)},
@@ -1836,45 +1921,6 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"archer_p0": {  # Damage: a barbed arrow nocked and ready
-		"poses": {
-			"draw": {
-				0: "............__",
-				1: "............___",
-				2: "............____k",
-				3: "............____bk",
-				4: "............___wbk",
-				5: "............._w_.bk",
-				6: ".............w__.bk",
-				7: ".............w__.bka",
-				8: ".............sennsnaak",
-				9: ".............w__.bka",
-				10: "............._w_bk",
-				11: ".............__wbk",
-				12: "............._..k",
-			},
-		},
-		"base": "archer",
-		"palette": {"a": Color(0.8, 0.82, 0.88), "n": Color(0.7, 0.55, 0.35), "e": Color(0.85, 0.25, 0.2)},
-		"rows": [
-			".............k..",
-			".....kkkkk..kak.",
-			"....kgggggkkaaak",
-			"...kgggggggk.nbk",
-			"...kgGsssGgk.nbk",
-			"...kGskssksGkn.b",
-			"...kGssssssGkn.b",
-			"...kkGGGGGGkkn.b",
-			"..klllllllllkssb",
-			"..kLklllllkLke.b",
-			"..kskLLLLLkskwbk",
-			"...kllllllk..bk.",
-			"...kppppppk..k..",
-			"...kppkkppk.....",
-			"...kffk.kffk....",
-			"...kkkk.kkkk....",
-		],
-	},
 	"archer_p1": {  # Range: a crossbow
 		"poses": {
 			"draw": {
@@ -1890,14 +1936,14 @@ const SPRITES := {
 			"................",
 			".....kkkkk......",
 			"....kgggggk.....",
-			"...kgggggggk....",
-			"...kgGsssGgk....",
-			"...kGskssksGk.k.",
+			".k.kgggggggk.k..",
+			".kskgGsssGgks...",
+			"..kkGskssksGk.k.",
 			"...kGssssssGkkmk",
-			"...kkGGGGGGkkwmk",
-			"..klllllllllsccc",
-			"..kLklllllkLkwmk",
-			"..kskLLLLLksk.mk",
+			".kGkkGGGGGGkkwmk",
+			"kGklllllllllsccc",
+			"kGkLklllllkLkwmk",
+			".kkskLLLLLksk.mk",
 			"...kllllllk...k.",
 			"...kppppppk.....",
 			"...kppkkppk.....",
@@ -1912,14 +1958,14 @@ const SPRITES := {
 			"................",
 			".kek.kkkkk......",
 			".kekkgggggk...k.",
-			".kqkgggggggk..bk",
-			".kqkgGsssGgk.wbk",
+			".kqkgggggggk.kbk",
+			".kqkgGsssGgkswbk",
 			".kqkGskssksGkw.b",
 			".kqkGssssssGkw.b",
 			".kqkkGGGGGGkkw.b",
-			".kklllllllllkssb",
-			"..kLklllllkLkw.b",
-			"..kskLLLLLkskwbk",
+			"kkklllllllllkssb",
+			"kGkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
 			"...kllllllk..bk.",
 			"...kppppppk..k..",
 			"...kppkkppk.....",
@@ -2094,46 +2140,897 @@ const SPRITES := {
 			"................",
 		],
 	},
+	"martial_p1": {  # Combat (a Yamcha nod): his desert-bandit look: long shaggy hair, green tunic, orange scarf, white sash
+		"base": "martial",
+		"palette": {
+			"h": Color(0.15, 0.13, 0.18), "V": Color(0.25, 0.55, 0.28), "O": Color(0.95, 0.55, 0.15),
+			"W": Color(0.95, 0.95, 0.92), "R": Color(0.8, 0.22, 0.2), "c": Color(0.93, 0.87, 0.7),
+			"b": Color(0.15, 0.13, 0.15), "P": Color(0.32, 0.26, 0.5), "A": Color(0.96, 0.77, 0.6),
+			"Z": Color(0.96, 0.77, 0.6), "X": Color(0.15, 0.13, 0.15), "F": Color(0.96, 0.77, 0.6),
+			"L": Color(0.93, 0.87, 0.7), "U": Color(0.32, 0.26, 0.5),
+		},
+		"rows": [
+			"....k..k.k......",
+			"...khkkhkhk.....",
+			"..khhhhhhhhk....",
+			".khhhhhhhhhhk...",
+			".khhshhhshhhk...",
+			".khkskssksk.hk..",
+			".kh.kssssk..hk..",
+			"..kkOOOOOOkk....",
+			".kskVOOOOVVksk..",
+			".kskVVOOVVVksk..",
+			".kbkWWWWWWWkbk..",
+			".kskVWVVVVVksk..",
+			"...kRRRRRRRk....",
+			"...kccckccck....",
+			"...kPPk.kPPk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kcckcck.....",
+			"....kPPkPPk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p1p2": {  # Combat and Techniques both at tier 3: Krillin's head on Yamcha's desert-bandit outfit
+		"poses": {
+			"punch": {
+				8: "................kk",
+				9: "...........kkkkkFFk",
+				10: "...........AAZZXFFk",
+				11: "...........kkkkkkk",
+			},
+		},
+		"base": "martial",
+		"palette": {
+			"d": Color(0.35, 0.25, 0.25), "V": Color(0.25, 0.55, 0.28), "O": Color(0.95, 0.55, 0.15),
+			"W": Color(0.95, 0.95, 0.92), "R": Color(0.8, 0.22, 0.2), "c": Color(0.93, 0.87, 0.7),
+			"b": Color(0.15, 0.13, 0.15), "P": Color(0.32, 0.26, 0.5),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.15, 0.13, 0.15),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.93, 0.87, 0.7), "U": Color(0.32, 0.26, 0.5),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".....kkkkk......",
+			"....ksdsdsk.....",
+			"...ksdsdsdsk....",
+			"...ksksssksk....",
+			"....ksssssk.....",
+			"..kkOOOOOOkk....",
+			".kskVVOOVVVksk..",
+			".kbkWWWWWWWkbk..",
+			".kskVWVVVVVksk..",
+			"...kRRRRRRRk....",
+			"...kccckccck....",
+			"...kPPk.kPPk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kcckcck.....",
+			"....kPPkPPk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p3": {  # Power (a Goku nod): wild spiky hair, orange gi, blue undershirt and belt
+		"base": "martial",
+		"palette": {
+			"h": Color(0.2, 0.17, 0.25), "o": Color(0.95, 0.55, 0.15), "B": Color(0.2, 0.3, 0.75),
+			"A": Color(0.95, 0.55, 0.15), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.2, 0.3, 0.75),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.95, 0.55, 0.15), "U": Color(0.2, 0.3, 0.75),
+		},
+		"rows": [
+			"......k..k......",
+			"..k..khkkhk..k..",
+			"..khkhhhhhhkhk..",
+			".khhhhhhhhhhhhk.",
+			"..khhshhshhhk...",
+			"...kskssksk.....",
+			"....kssssk......",
+			"..kkoBBBBokk....",
+			".kokooBBoookok..",
+			".kokoooooookok..",
+			".kBkBBBBBBBkBk..",
+			".kskoooooooksk..",
+			"...koookoook....",
+			"...koookoook....",
+			"...kBBk.kBBk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kookook.....",
+			"....kBBkBBk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"swordsman_p3": {  # Charge: a samurai: black kabuto with a gold crest, red half-mask, red lacquered armor, hakama and a katana
+		"base": "swordsman",
+		"palette": {
+			"y": Color(0.95, 0.8, 0.3), "h": Color(0.2, 0.18, 0.24), "r": Color(0.78, 0.18, 0.18),
+			"T": Color(0.72, 0.16, 0.16), "t": Color(0.5, 0.1, 0.12), "R": Color(0.75, 0.18, 0.18),
+			"n": Color(0.95, 0.8, 0.35), "p": Color(0.18, 0.2, 0.32), "f": Color(0.9, 0.9, 0.86),
+			"b": Color(0.9, 0.88, 0.8), "g": Color(0.35, 0.3, 0.4),
+		},
+		"rows": [
+			"...yy....yy.....",
+			".....yy.yy......",
+			"....khyyhk....k.",
+			"...khhhhhhk..kwk",
+			".khksksskskhkkwk",
+			".khksssssskhkkwk",
+			"..kkrrrrrrkk.kwk",
+			"kTTkRRRRRRkTTkwk",
+			"kTTkRnnnnRkTTkwk",
+			".ktkRRRRRRktgggk",
+			"..ksbbbbbbskskk.",
+			"..kpppppppppkk..",
+			"..kpppppppppk...",
+			"..kpppkkpppk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"archer_p3": {  # Trick Shots: a blue-hooded mystic with a glowing string and seeker arrows
+		"base": "archer",
+		"palette": {
+			"g": Color(0.28, 0.42, 0.78), "G": Color(0.17, 0.27, 0.55), "w": Color(0.55, 0.95, 1.0),
+			"c": Color(0.6, 1.0, 1.0),
+		},
+		"rows": [
+			"..............c.",
+			".....kkkkk......",
+			"....kgggggk...k.",
+			".k.kgggggggk.kbk",
+			".kskgGsssGgkswbk",
+			"..kkGskssksGkw.b",
+			"...kGssssssGkw.b",
+			".kGkkGGGGGGkkw.b",
+			"kGklllllllllkssc",
+			"kGkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
+			"...kllllllk..bk.",
+			"...kppppppk..k..",
+			"...kppkkppk.c...",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"mage_p3": {  # Necromancy: a black hooded robe, glowing green eyes and a skull-topped staff
+		"base": "mage",
+		"palette": {
+			"P": Color(0.2, 0.22, 0.2), "Q": Color(0.13, 0.15, 0.13), "y": Color(0.45, 0.95, 0.4),
+			"e": Color(0.45, 1.0, 0.45), "W": Color(0.28, 0.3, 0.28), "r": Color(0.2, 0.22, 0.2),
+			"R": Color(0.12, 0.14, 0.12), "o": Color(0.9, 0.88, 0.8), "O": Color(0.55, 0.53, 0.47),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPPk..kOok",
+			".....kPPyPk..kok",
+			"....kPPPPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kseskesk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWyyWWrkswk",
+			"...krrWWWWrrk.wk",
+			"..krrrWWrrrRk.wk",
+			"..kRrrryrrrRk.wk",
+			"..kRrrrrrryRk.wk",
+			"..kRyRrrrrRRk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"frost_p3": {  # Frost Aura: a snow queen in a pale gown and blue cape, a tall ice crown and drifting frost
+		"base": "frost",
+		"palette": {
+			"r": Color(0.9, 0.92, 1.0), "R": Color(0.72, 0.78, 0.95), "C": Color(0.6, 0.8, 1.0),
+			"b": Color(0.3, 0.5, 0.9),
+		},
+		"rows": [
+			"..i.kikkik.i..k.",
+			"....kcccck...kik",
+			"...kccccccCk.kIk",
+			"...kchhhhhCk..k.",
+			"...khskssksk..wk",
+			"...khssssshk.swk",
+			"..bkkhhhhhkk.kwk",
+			".bkCrrrrrrrCk.wk",
+			".bkCrRrrrRrCk.wk",
+			".bkCrrrrrrrCki.k",
+			".bbkRrrrrrRk..wk",
+			".bbkRrirrrRk..wk",
+			".bkRRrrrrrRRk.wk",
+			"i.kRRRrrrRRRk.wk",
+			"...kkkfkfkkk..k.",
+			"..i.........i...",
+		],
+	},
+	"healer_p3": {  # Halo: angelic white-and-gold robes, feathered wings and a halo
+		"base": "healer",
+		"palette": {
+			"u": Color(0.97, 0.97, 1.0), "G": Color(0.95, 0.82, 0.35),
+		},
+		"rows": [
+			".....yyyy.....k.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"uu.kkHHHHHHk.kwk",
+			"uukHHHgggHHHkswk",
+			"kukHHHHyHHHHkswk",
+			".kkHHHyyyHHHk.wk",
+			"..kHHHHyHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kyyyyyyyyyk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"bard_p3": {  # Bewitch: an enchanter in magenta and a masquerade mask, playing a jingling hand drum
+		"poses": {
+			"strum": {
+				9: "..kTkTTTTTkDsDk.",
+			},
+		},
+		"base": "bard",
+		"palette": {
+			"R": Color(0.7, 0.22, 0.58), "T": Color(0.92, 0.48, 0.75), "y": Color(0.98, 0.9, 0.95),
+			"F": Color(0.55, 0.95, 1.0), "m": Color(0.85, 0.3, 0.7), "p": Color(0.35, 0.18, 0.38),
+			"D": Color(0.9, 0.82, 0.62), "j": Color(1.0, 0.85, 0.3),
+		},
+		"rows": [
+			".......kk.k.....",
+			".....kkRRkFk....",
+			"....kRRRRRkk....",
+			"...kRRRRRRRk....",
+			"....kmkmmkmk....",
+			"....kssssssk....",
+			".....kssssk..kk.",
+			"...kkTTyyTTkkDDk",
+			"..kTTTTyyTTkDDDk",
+			"..kTkTTTTTskDjDk",
+			"..kskTTTTkkDDDk.",
+			"...kTTTTTk.kDDk.",
+			"...kppppppk.kk..",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"alchemist_p3": {  # Trapcraft: a sapper with goggles up on a leather cap, an olive coat and a bandolier of red charges
+		"base": "alchemist",
+		"palette": {
+			"h": Color(0.4, 0.27, 0.15), "C": Color(0.42, 0.45, 0.25), "A": Color(0.52, 0.55, 0.32),
+			"n": Color(0.4, 0.27, 0.15), "e": Color(0.88, 0.25, 0.2),
+		},
+		"rows": [
+			"......kkkk......",
+			".....khhhhk.....",
+			"....kGgGGgGk....",
+			"....khhhhhhk....",
+			"....kssssssk....",
+			"....kskssksk....",
+			".....kssssk..kk.",
+			"...kkCnAAACk.kek",
+			"..kCCAenAAACkeek",
+			"..kCkAAenAkCkeek",
+			"..kskAAAenkssk..",
+			"...kaaaaaak.....",
+			"...kAAAAAAk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"tower_p3": {  # Fire Arrows: braziers blazing on both turrets and an orange war banner
+		"base": "tower",
+		"palette": {
+			"e": Color(1.0, 0.55, 0.15), "y": Color(1.0, 0.9, 0.4),
+		},
+		"rows": [
+			".e....kkkk....e.",
+			"eye..kggggk..eye",
+			".kkk.kgssgk.kkk.",
+			".kSk.kGGGGk.kSk.",
+			".kSkkkbbbbkkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSDkeeekSSk..",
+			"..kSSDkeyekSSk..",
+			"..kDDDkeeekDDk..",
+			"..kSDSkekekDSk..",
+			"..kTDSSSSSSDTk..",
+			"..kDDDDDDDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"cannon_p3": {  # Payloads: a soot-black barrel with flame stripes and a crate of incendiary shells
+		"base": "cannon",
+		"palette": {
+			"M": Color(0.18, 0.17, 0.2), "N": Color(1.0, 0.5, 0.15), "e": Color(0.9, 0.25, 0.2),
+			"d": Color(0.5, 0.33, 0.18),
+		},
+		"rows": [
+			"..............e.",
+			"............kkk.",
+			"...........kNNNk",
+			"..........kMNMNk",
+			".........kMNMMk.",
+			"..kkk...kMMNMk..",
+			".kRRRk.kMNMMk...",
+			"..ksk.kMMNMk....",
+			"..ksk.kMMMk.....",
+			".kBBBk.kkkkk....",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.kkkk",
+			".kpppk.kWWWkeeek",
+			".kpkpk.kWkWkdddk",
+			".kfkfk.kWWWkdddk",
+			".kkkkk..kkk.kkkk",
+		],
+	},
+	"magetower_p3": {  # Necromancy: dark stone, a black-hatted necromancer, a skull banner and green-lit windows
+		"base": "magetower",
+		"palette": {
+			"P": Color(0.18, 0.2, 0.18), "Q": Color(0.12, 0.14, 0.12), "y": Color(0.45, 0.95, 0.4),
+			"e": Color(0.45, 1.0, 0.45), "W": Color(0.25, 0.28, 0.25), "S": Color(0.42, 0.44, 0.42),
+			"D": Color(0.3, 0.32, 0.3), "T": Color(0.36, 0.38, 0.36), "R": Color(0.15, 0.3, 0.15),
+			"o": Color(0.9, 0.88, 0.8), "g": Color(0.45, 1.0, 0.45),
+		},
+		"rows": [
+			".......kk.......",
+			"......kPPk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.keskek.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSykRooRkySk..",
+			"..kDDkRgRgkDDk..",
+			"..kSDkRRRRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower_p3": {  # Frost Aura: an ice-blue spire with frost drifting off it and a glowing banner
+		"base": "frosttower",
+		"palette": {
+			"S": Color(0.72, 0.85, 0.95), "D": Color(0.55, 0.7, 0.85), "T": Color(0.62, 0.78, 0.9),
+			"I": Color(0.92, 0.97, 1.0), "e": Color(0.55, 0.95, 1.0), "Y": Color(0.6, 1.0, 1.0),
+		},
+		"rows": [
+			"i.....kkkk.....i",
+			".....kcccck.....",
+			".kkkkcccccckkkk.",
+			".kSkkhseseshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kIIIIIIIIIIIIk.",
+			".kkkkkkkkkkkkkk.",
+			"i.kSSkRRRRkSSk.i",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"i.kSDkRYYRkDSk.i",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			"ikTSSDSSSSDSSTki",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"medbay_p3": {  # Consecration: a gold-trimmed chapel tent with a golden cross and a sunburst
+		"base": "medbay",
+		"palette": {
+			"r": Color(0.95, 0.78, 0.25), "w": Color(0.95, 0.8, 0.35), "y": Color(1.0, 0.92, 0.5),
+		},
+		"rows": [
+			"......y..y......",
+			".....y....y.....",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWWWWwk",
+			"kwWWWkxxxxkWWWwk",
+			"kwWWkxxyyxxkWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"statue_p3": {  # Vigor: a mossy statue on a fountain basin, water spilling over the rim
+		"base": "statue",
+		"palette": {
+			"g": Color(0.35, 0.6, 0.3), "b": Color(0.35, 0.6, 0.95), "w": Color(0.6, 0.85, 1.0),
+		},
+		"rows": [
+			"...........k....",
+			"..........kSk...",
+			"......kk..kSk...",
+			".....kSSk.kSk...",
+			".....kSSk.kSk...",
+			"......kk..kDk...",
+			"....kkSSkkkDk...",
+			"...kSSgSSSSk....",
+			"...kSkSSgSk.....",
+			"...kgkSSSSk.....",
+			"...kDkSgSSk.....",
+			".....kSkSk......",
+			".wkkkkkkkkkkkkw.",
+			".kbbbbbbbbbbbbk.",
+			"wkPPPPPPPPPPPPkw",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"mine_p3": {  # Gemcutters: the rock studded with big cyan and violet crystals, gems piled out front
+		"base": "mine",
+		"palette": {
+			"c": Color(0.55, 0.95, 1.0), "C": Color(0.3, 0.7, 0.9), "v": Color(0.8, 0.5, 1.0),
+			"V": Color(0.55, 0.3, 0.8),
+		},
+		"rows": [
+			"......c.........",
+			".....kckkkk..v..",
+			"...kkRcCRRRkkvk.",
+			"..kRRRRRRrRRvVk.",
+			"..kRRRRRRrRRRk..",
+			".kRrRkkkkkkRRRk.",
+			".kcRkWWWWWWkRrk.",
+			"kcCRkWxxxxWkRRRk",
+			"kRcRkWxxxxWkvRRk",
+			"kRRRkWxxxxWkVvRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kkckkkkkkkkkkvkk",
+			".kcCck....kvVvk.",
+			"..kkk......kkk..",
+		],
+	},
+	"skeleton": {  # Raised by Necromancy: bare bones, green-glowing eyes and a rusty sword
+		"palette": {
+			"B": Color(0.9, 0.88, 0.8), "D": Color(0.62, 0.6, 0.55), "e": Color(0.45, 1.0, 0.55),
+			"w": Color(0.62, 0.58, 0.52), "g": Color(0.45, 0.3, 0.15),
+		},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kBBBBBk..k..",
+			"...kBBBBBBBkkwk.",
+			"...kBkeBkeBkkwk.",
+			"...kBBBkBBBkkwk.",
+			"....kBkBkBk.kwk.",
+			".....kkkkk..kwk.",
+			"...kDBDBDk.kgggk",
+			"..kBkDBDkBk.kBk.",
+			"..kBkkkkkBk.....",
+			"....kDDDDk......",
+			"....kBkkBk......",
+			"....kBk.kBk.....",
+			"....kBk.kBk.....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kBk..kBk.....",
+			"...kBk...kBk....",
+			"..kkkk...kkkk...",
+		],
+	},
+}
+
+## Accents (see Sprites.frames): one per upgrade path, in path order, worn when that
+## path is upgraded but another path sets the outfit. "behind" pixels only fill empty
+## space, so they tuck in behind any outfit; "over" pixels paint over it.
+const ACCENTS := {
+	"swordsman": [
+		{"behind": {7: "k1", 8: "k11", 9: "k11", 10: "k12", 11: "k12", 12: "k12", 13: ".kk"}, "palette": {"1": Color(0.75, 0.15, 0.15), "2": Color(0.55, 0.1, 0.12)}},
+		{"over": {10: "......1111", 11: ".........1", 12: ".........1"}, "palette": {"1": Color(0.8, 0.15, 0.18)}},
+		{"over": {7: "..k55k..k55k", 8: "..k6k....k6k"}, "palette": {"5": Color(0.8, 0.82, 0.88), "6": Color(0.55, 0.58, 0.66)}},
+		{"behind": {0: "...3.....3", 1: "....3...3"}, "palette": {"3": Color(0.95, 0.8, 0.3)}},
+	],
+	"archer": [
+		{"palette": {}},   # Damage: her arrows change instead (see Warrior.ARROW_GRADES)
+		{"behind": {8: "k3", 9: "k33", 10: "k34", 11: "k34", 12: "k34", 13: ".kk"}, "palette": {"3": Color(0.22, 0.42, 0.22), "4": Color(0.15, 0.3, 0.15)}},
+		{"behind": {1: ".5.5", 2: ".k.k", 3: "k66", 4: "k66", 5: "k66", 6: ".kk"}, "palette": {"5": Color(0.92, 0.9, 0.85), "6": Color(0.55, 0.35, 0.18)}},
+		{"behind": {0: ".............7.7", 1: "..............7", 12: "..............7", 13: ".............7"}, "palette": {"7": Color(0.55, 0.95, 1.0)}},
+	],
+	"mage": [
+		{"behind": {1: "...1", 2: "..11", 3: "...1", 4: "..1"}, "palette": {"1": Color(0.6, 0.85, 1.0)}},
+		{"over": {10: ".....3", 11: "....333", 12: ".....3"}, "palette": {"3": Color(1.0, 0.55, 0.95)}},
+		{"over": {1: ".............k5k", 2: "............k65k", 3: ".............k5k"}, "palette": {"5": Color(1.0, 0.55, 0.15), "6": Color(1.0, 0.9, 0.4)}},
+		{"over": {9: "......777", 10: "......878"}, "palette": {"7": Color(0.9, 0.88, 0.8), "8": Color(0.2, 0.5, 0.2)}},
+	],
+	"frost": [
+		{"behind": {0: "...1.1...1.1"}, "over": {1: ".....1..1"}, "palette": {"1": Color(0.75, 0.95, 1.0)}},
+		{"behind": {7: "k3", 8: "k33", 9: "k34", 10: "k34", 11: "k34", 12: "k34", 13: ".kk"}, "palette": {"3": Color(0.95, 0.97, 1.0), "4": Color(0.8, 0.85, 0.92)}},
+		{"over": {4: "......5..5"}, "palette": {"5": Color(0.5, 0.95, 1.0)}},
+		{"behind": {1: "..7", 5: ".7", 9: "7", 12: ".7", 11: "............7"}, "palette": {"7": Color(0.85, 0.97, 1.0)}},
+	],
+	"martial": [
+		{"behind": {9: "1.............1", 10: "1.............1"}, "palette": {"1": Color(1.0, 0.9, 0.35)}},
+		{"behind": {2: "..............k", 3: ".............k4k", 4: "............k4k", 5: "...........k3k", 6: "..........k3k"}, "palette": {"3": Color(0.3, 0.2, 0.15), "4": Color(0.75, 0.77, 0.82)}},
+		{"behind": {1: "5.5", 2: ".5", 3: "5.5"}, "palette": {"5": Color(1.0, 1.0, 0.75)}},
+		{"behind": {11: "7.............7", 12: ".7..........7", 13: "..7........7"}, "palette": {"7": Color(1.0, 0.85, 0.3)}},
+	],
+	"healer": [
+		{"behind": {8: ".k", 9: "k1", 10: "k2", 11: "k1", 12: "k1", 13: ".k"}, "over": {7: "...1", 8: "....1"}, "palette": {"1": Color(0.6, 0.4, 0.2), "2": Color(0.95, 0.3, 0.3)}},
+		{"behind": {0: "..3..........3", 1: "3..........3"}, "palette": {"3": Color(1.0, 0.9, 0.4)}},
+		{"behind": {5: "..5", 6: ".55", 7: "56", 8: ".5"}, "palette": {"5": Color(0.4, 0.8, 0.3), "6": Color(1.0, 0.6, 0.75)}},
+		{"behind": {0: ".....7777"}, "palette": {"7": Color(1.0, 0.92, 0.45)}},
+	],
+	"bard": [
+		{"behind": {0: "...........11", 1: "............1"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {3: "..k", 4: ".343", 5: "..3"}, "palette": {"3": Color(0.55, 0.25, 0.7), "4": Color(1.0, 0.85, 0.3)}},
+		{"behind": {0: "......56", 1: ".......5"}, "palette": {"5": Color(0.35, 0.75, 0.3), "6": Color(1.0, 0.6, 0.8)}},
+		{"over": {4: ".....7k77k7"}, "palette": {"7": Color(0.9, 0.3, 0.7)}},
+	],
+	"alchemist": [
+		{"over": {11: ".....11"}, "palette": {"1": Color(0.65, 0.35, 0.95)}},
+		{"over": {10: "...3.......33"}, "palette": {"3": Color(0.15, 0.15, 0.18)}},
+		{"behind": {9: "6", 10: ".5", 11: "565", 12: ".5"}, "palette": {"5": Color(0.2, 0.2, 0.22), "6": Color(1.0, 0.75, 0.2)}},
+		{"over": {7: "....8", 8: ".....87", 9: "......87", 10: ".......8"}, "palette": {"7": Color(0.9, 0.25, 0.2), "8": Color(0.45, 0.3, 0.15)}},
+	],
+	"tower": [
+		{"over": {9: "...1111..1111"}, "palette": {"1": Color(0.55, 0.57, 0.62)}},
+		{"behind": {0: "..........k33", 1: "..........k3"}, "palette": {"3": Color(0.3, 0.5, 0.9)}},
+		{"over": {7: "......5555", 8: "......5655", 9: "......5555", 10: ".......55"}, "palette": {"5": Color(0.8, 0.2, 0.2), "6": Color(0.95, 0.8, 0.3)}},
+		{"behind": {0: "..7..........7", 1: ".787........787"}, "palette": {"7": Color(1.0, 0.55, 0.15), "8": Color(1.0, 0.9, 0.4)}},
+	],
+	"cannon": [
+		{"behind": {13: ".............kk", 14: "............k11k", 15: "............kkkk"}, "palette": {"1": Color(0.25, 0.25, 0.28)}},
+		{"over": {4: "..........3", 6: "........3"}, "palette": {"3": Color(0.85, 0.2, 0.2)}},
+		{"behind": {9: ".............kkk", 10: ".............k5k", 11: ".............k6k", 12: ".............kkk"}, "palette": {"5": Color(0.55, 0.35, 0.18), "6": Color(0.35, 0.36, 0.4)}},
+		{"behind": {0: "............8.7.", 1: "...............7"}, "palette": {"7": Color(1.0, 0.55, 0.15), "8": Color(1.0, 0.85, 0.35)}},
+	],
+	"magetower": [
+		{"behind": {0: "..1", 1: ".1.1"}, "palette": {"1": Color(0.6, 0.85, 1.0)}},
+		{"behind": {0: ".............3", 1: "............343"}, "palette": {"3": Color(1.0, 0.55, 0.95), "4": Color(1.0, 0.95, 1.0)}},
+		{"behind": {7: ".5", 8: "56", 9: ".k"}, "palette": {"5": Color(1.0, 0.55, 0.15), "6": Color(1.0, 0.9, 0.4)}},
+		{"over": {8: ".......77", 9: ".......88"}, "palette": {"7": Color(0.9, 0.88, 0.8), "8": Color(0.45, 1.0, 0.4)}},
+	],
+	"frosttower": [
+		{"over": {7: "...1........1", 8: "...1........1"}, "palette": {"1": Color(0.85, 0.97, 1.0)}},
+		{"over": {5: "..3..3..3..3"}, "palette": {"3": Color(0.97, 0.98, 1.0)}},
+		{"over": {3: ".......5.5"}, "palette": {"5": Color(0.5, 0.95, 1.0)}},
+		{"behind": {0: "7............7", 8: "7..............7", 11: ".7............7"}, "palette": {"7": Color(0.85, 0.97, 1.0)}},
+	],
+	"medbay": [
+		{"over": {12: ".111", 13: ".121", 14: ".111"}, "palette": {"1": Color(0.6, 0.42, 0.24), "2": Color(0.42, 0.28, 0.15)}},
+		{"behind": {0: ".......k33", 1: ".......k"}, "palette": {"3": Color(0.3, 0.5, 0.9)}},
+		{"over": {10: "............5", 11: "...........555", 12: "............5"}, "palette": {"5": Color(0.4, 0.85, 0.4)}},
+		{"behind": {0: ".....7....7", 1: "......7..7"}, "palette": {"7": Color(1.0, 0.9, 0.45)}},
+	],
+	"statue": [
+		{"behind": {1: ".....1111"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {5: "3", 6: "33", 7: "33", 8: ".3"}, "palette": {"3": Color(0.75, 0.9, 0.85)}},
+		{"over": {8: ".kkk", 9: ".k5k", 10: ".k5k", 11: "..k"}, "palette": {"5": Color(0.35, 0.36, 0.42)}},
+		{"over": {13: "....7..8..7", 14: "...7.88...7.8"}, "palette": {"7": Color(0.4, 0.65, 1.0), "8": Color(0.35, 0.65, 0.3)}},
+	],
+	"mine": [
+		{"over": {4: ".....1......1", 9: "...........1", 11: "..1"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {15: "33...333333...33"}, "palette": {"3": Color(0.5, 0.5, 0.55)}},
+		{"over": {12: "......6.6", 13: ".....k5665k", 14: ".....k5665k", 15: ".....kkkkkk"}, "palette": {"5": Color(0.6, 0.38, 0.18), "6": Color(1.0, 0.85, 0.3)}},
+		{"over": {3: "......7", 6: "..7", 10: "..............8", 11: "..8"}, "palette": {"7": Color(0.55, 0.95, 1.0), "8": Color(0.8, 0.5, 1.0)}},
+	],
+}
+
+## Special Bard instruments (see Warrior.special_instrument): laid over any outfit,
+## they wipe out the instrument it was holding (everything at x >= 10 below the face)
+## and draw the new one there instead.
+const INSTRUMENT_LAYERS := {
+	"violin": {"over": {4: "............$$$$", 5: "..........____kk", 6: "..........__kk#k", 7: "..........kk@@k_", 8: "..........k@#@k_", 9: "..........k@@@k_", 10: ".........._kkk__", 11: "..........k_____", 12: "..........k_____", 13: "..........k_____"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
+	"cello": {"over": {4: "..............k.", 5: "..........___k#k", 6: "..........___k#k", 7: "..........k_k@@k", 8: "..........kk@@@k", 9: "..........$$$$$$", 10: "..........kk@#@k", 11: "..........k_k@@k", 12: "..........k__kk_", 13: "..........k___k_"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
+	"harp": {"over": {5: "..........______", 6: "..........__k&&k", 7: "..........kk&%&k", 8: "..........k&%%&k", 9: "..........s&%%&k", 10: "..........k&%%&k", 11: "..........k&&&&k", 12: "..........kkkkk_", 13: "..........______"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
 }
 
 static var _cache := {}
 
 
-## Returns [walk frame A, walk frame B] for a sprite.
-static func frames(sprite: String) -> Array:
-	if not _cache.has(sprite):
-		var s: Dictionary = SPRITES[sprite]
-		var palette := _palette(sprite)
-		var legs: Array = s.get("legs_b", [])
-		if legs.is_empty() and s.has("base"):
-			legs = SPRITES[s["base"]].get("legs_b", [])
+## Returns [walk frame A, walk frame B] for a sprite. recolor swaps palette letters
+## for other colors (e.g. golden hair), and layers are accents laid on top (see
+## ACCENTS); tag names the variant for the cache.
+static func frames(sprite: String, recolor := {}, tag := "", layers := []) -> Array:
+	var key := sprite + tag
+	if not _cache.has(key):
+		var s: Dictionary = _entry(sprite)
+		var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
 		var rows: Array = s["rows"]
-		var alt := rows.slice(0, SIZE - legs.size()) + legs
-		_cache[sprite] = [_make(rows, palette), _make(alt, palette)]
-	return _cache[sprite]
+		var alt: Array = s["alt"] if s.has("alt") else _alt_rows(sprite)
+		_cache[key] = [_make(_layered(rows, layers), palette), _make(_layered(alt, layers), palette)]
+	return _cache[key]
 
 
 ## An attack pose (see "poses" on the sprites), or null if the sprite has none by
 ## that name. Variants use the base sprite's poses unless they define their own.
-static func pose(sprite: String, pose_name: String):
-	var key := sprite + ":" + pose_name
+static func pose(sprite: String, pose_name: String, recolor := {}, tag := "", layers := []):
+	var key := sprite + tag + ":" + pose_name
 	if not _cache.has(key):
-		var s: Dictionary = SPRITES[sprite]
-		var poses: Dictionary = s.get("poses", {})
-		if not poses.has(pose_name) and s.has("base"):
-			poses = SPRITES[s["base"]].get("poses", {})
+		var s: Dictionary = _entry(sprite)
 		_cache[key] = null
-		if poses.has(pose_name):
-			_cache[key] = _make(_overlay(s["rows"], poses[pose_name]), _palette(sprite))
+		var posed = _posed_rows(sprite, pose_name)
+		if posed != null:
+			var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
+			_cache[key] = _make(_layered(posed, layers), palette)
 	return _cache[key]
+
+
+## A sprite's rows in an attack pose, or null if it has none by that name.
+static func _posed_rows(sprite: String, pose_name: String):
+	var s: Dictionary = _entry(sprite)
+	if s.has("full_poses"):
+		return s["full_poses"].get(pose_name)
+	var poses: Dictionary = s.get("poses", {})
+	if not poses.has(pose_name) and s.has("base"):
+		poses = SPRITES[s["base"]].get("poses", {})
+	return _overlay(s["rows"], poses[pose_name]) if poses.has(pose_name) else null
+
+
+## Second walk frame: the bottom rows swapped for legs_b (the base sprite's, if the
+## variant has none).
+static func _alt_rows(sprite: String) -> Array:
+	var s: Dictionary = _entry(sprite)
+	var legs: Array = s.get("legs_b", [])
+	if legs.is_empty() and s.has("base"):
+		legs = SPRITES[s["base"]].get("legs_b", [])
+	var rows: Array = s["rows"]
+	return rows.slice(0, SIZE - legs.size()) + legs
 
 
 ## Variants inherit the base sprite's palette, overriding some colors.
 static func _palette(sprite: String) -> Dictionary:
-	var s: Dictionary = SPRITES[sprite]
+	var s: Dictionary = _entry(sprite)
 	if s.has("base"):
 		return SPRITES[s["base"]]["palette"].merged(s["palette"], true)
 	return s["palette"]
+
+
+## A drawn sprite, or one made up by combo().
+static func _entry(sprite: String) -> Dictionary:
+	return SPRITES[sprite] if SPRITES.has(sprite) else _generated[sprite]
+
+
+## A recolor of the original letters (e.g. "h" for hair) also reaches a combined
+## sprite, whose letters were renamed when its two outfits were put together.
+static func _recolor_for(s: Dictionary, recolor: Dictionary) -> Dictionary:
+	if recolor.is_empty() or not s.has("from"):
+		return recolor
+	var out := {}
+	for sym in s["from"]:
+		if recolor.has(s["from"][sym]):
+			out[sym] = recolor[s["from"][sym]]
+	return out
+
+
+# --- Combined outfits ------------------------------------------------------------
+# When two of a unit's paths are both at tier 3, it wears a mix of the two outfits:
+# each part of the sprite comes from one of them. "map" cuts the sprite into parts:
+#   figure  head (rows 0..head_rows, left of right_col), left (cols 0..left_col below
+#           the head), right (cols right_col and on; the head rows too if right_full),
+#           body (the rest)
+#   top     head (rows 0..head_rows) and body (the rest)
+#   sides   left (cols 0..split) and right (the rest)
+# "lead" is picked first, by "order" (the first path in the list that's in the pair;
+# else the second path of the pair); every other part listed in "order" goes by its
+# list, and anything else comes from the other path. A hand-drawn sprite named
+# <kind>_p<a>p<b> (e.g. swordsman_p0p1) is used instead when there is one.
+const COMBOS := {
+	"swordsman": {"map": "figure", "head_rows": 6, "left_col": 4, "right_col": 12, "right_full": true,
+		"lead": "body", "order": {"body": [2, 3, 1, 0], "head": [3, 2], "left": [1, 2], "right": [0, 1]}},
+	"archer": {"map": "figure", "head_rows": 7, "left_col": 3, "right_col": 12, "right_full": true,
+		"lead": "head", "order": {"head": [3], "left": [2], "right": [1, 3]}},
+	"mage": {"map": "figure", "head_rows": 5, "left_col": -1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [2, 3, 0, 1], "right": [3, 2, 0, 1]}},
+	"frost": {"map": "figure", "head_rows": 5, "left_col": 1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [3, 0, 2, 1], "left": [3, 1], "right": [2, 3, 0, 1]}},
+	"martial": {"map": "figure", "head_rows": 6, "left_col": -1, "right_col": 16, "right_full": false,
+		"lead": "head", "order": {"head": [3, 0, 1, 2]}, "head_rows_by_body": {2: 7}},
+	"healer": {"map": "figure", "head_rows": 6, "left_col": 1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [0, 3, 2, 1], "left": [3], "right": [2, 0, 1, 3]}},
+	"bard": {"map": "figure", "head_rows": 4, "left_col": -1, "right_col": 10, "right_full": false,
+		"lead": "head", "order": {"head": [1, 0, 3, 2], "right": [2, 3, 0, 1]}},
+	"alchemist": {"map": "figure", "head_rows": 6, "left_col": -1, "right_col": 12, "right_full": false,
+		"lead": "head", "order": {"head": [0, 2, 3, 1], "right": [2, 0, 3, 1]}},
+	"tower": {"map": "top", "head_rows": 6, "lead": "head", "order": {"head": [1, 0, 3, 2]}},
+	"magetower": {"map": "top", "head_rows": 5, "lead": "head", "order": {"head": [1, 2, 0, 3]}},
+	"frosttower": {"map": "top", "head_rows": 5, "lead": "head", "order": {"head": [2, 0, 1, 3]}},
+	"medbay": {"map": "top", "head_rows": 10, "lead": "head", "order": {"head": [3, 2, 1, 0]}},
+	"statue": {"map": "top", "head_rows": 11, "lead": "head", "order": {"head": [0, 1, 2, 3]}},
+	"mine": {"map": "sides", "split": 7, "lead": "left", "order": {"left": [0, 1, 2, 3]}},
+	"cannon": {"map": "sides", "split": 6, "lead": "right", "order": {"right": [0, 2, 3, 1]}},
+}
+const COMBO_SYMBOLS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijlmnopqrstuvwxyz"
+static var _generated := {}
+
+
+## The sprite for a unit with paths a and b (a < b) both at tier 3: a hand-drawn one
+## if there is one, else made up from the two outfits. "" if the unit has no combos.
+static func combo(kind: String, a: int, b: int) -> String:
+	var sprite_name := "%s_p%dp%d" % [kind, a, b]
+	if SPRITES.has(sprite_name) or _generated.has(sprite_name):
+		return sprite_name
+	if not COMBOS.has(kind):
+		return ""
+	_generated[sprite_name] = _build_combo(kind, a, b)
+	return sprite_name
+
+
+## Paths of a combined sprite that ended up showing nothing of their own (their
+## parts look just like the plain unit), so the unit wears their accent instead.
+static func combo_silent(sprite: String) -> Array:
+	return _entry(sprite).get("silent", []) if (SPRITES.has(sprite) or _generated.has(sprite)) else []
+
+
+## Which path a combined sprite took a part ("head", "body", "left", "right") from, or -1.
+static func combo_source(sprite: String, part: String) -> int:
+	if not _generated.has(sprite):
+		return -1
+	return _generated[sprite]["src"].get(part, -1)
+
+
+static func _outfit_of(kind: String, p: int) -> String:
+	var v := "%s_p%d" % [kind, p]
+	return v if SPRITES.has(v) else kind
+
+
+static func _combo_part(spec: Dictionary, x: int, y: int, head_rows: int) -> String:
+	match spec["map"]:
+		"top":
+			return "head" if y <= head_rows else "body"
+		"sides":
+			return "left" if x <= spec["split"] else "right"
+	var right: bool = x >= spec["right_col"] and (spec["right_full"] or y > head_rows)
+	if right:
+		return "right"
+	if y <= head_rows:
+		return "head"
+	return "left" if x <= spec["left_col"] else "body"
+
+
+static func _build_combo(kind: String, a: int, b: int) -> Dictionary:
+	var spec: Dictionary = COMBOS[kind]
+	var order: Dictionary = spec["order"]
+	var pair := [a, b]
+	var pick := func(part: String, fallback: int) -> int:
+		for p in order.get(part, []):
+			if pair.has(p):
+				return p
+		return fallback
+	var src := {}
+	var lead: String = spec["lead"]
+	src[lead] = pick.call(lead, b)
+	var other: int = a if src[lead] == b else b
+	for part in ["head", "body", "left", "right"]:
+		if part != lead:
+			src[part] = pick.call(part, other) if order.has(part) else other
+	var head_rows: int = spec.get("head_rows", 0)
+	head_rows = spec.get("head_rows_by_body", {}).get(src["body"], head_rows)
+	# Rename every color letter so the two outfits' palettes can't clash.
+	var palette := {}
+	var from := {}
+	var symbol := {}   # "outfit|letter" -> new letter
+	var outfits := {a: _outfit_of(kind, a), b: _outfit_of(kind, b)}
+	var unify := func(outfit: String, rows: Array) -> Array:
+		var pal := _palette(outfit)
+		var out := []
+		for row in rows:
+			var r: String = row
+			for x in r.length():
+				var ch := r[x]
+				if ch == "." or ch == "k" or ch == "_":
+					continue
+				var key: String = outfit + "|" + ch
+				if not symbol.has(key):
+					var sym := COMBO_SYMBOLS[symbol.size()]
+					symbol[key] = sym
+					palette[sym] = pal.get(ch, COMMON.get(ch, Color.MAGENTA))
+					from[sym] = ch
+				r[x] = symbol[key]
+			out.append(r)
+		return out
+	var merge := func(by_path: Dictionary) -> Array:
+		var width := SIZE
+		for p in by_path:
+			for row in by_path[p]:
+				width = maxi(width, (row as String).length())
+		var out := []
+		for y in SIZE:
+			var r := ""
+			for x in width:
+				var row: String = by_path[src[_combo_part(spec, x, y, head_rows)]][y]
+				r += row[x] if x < row.length() else "."
+			out.append(r)
+		return out
+	var rows: Array = merge.call({a: unify.call(outfits[a], _entry(outfits[a])["rows"]), b: unify.call(outfits[b], _entry(outfits[b])["rows"])})
+	var alt: Array = merge.call({a: unify.call(outfits[a], _alt_rows(outfits[a])), b: unify.call(outfits[b], _alt_rows(outfits[b]))})
+	var names := {}
+	for o in [outfits[a], outfits[b]]:
+		for n in (_entry(o).get("poses", {}) as Dictionary).keys():
+			names[n] = true
+		var base: String = _entry(o).get("base", "")
+		if base != "":
+			for n in (SPRITES[base].get("poses", {}) as Dictionary).keys():
+				names[n] = true
+	var full_poses := {}
+	for n in names:
+		var by_path := {}
+		for p in pair:
+			var posed = _posed_rows(outfits[p], n)
+			by_path[p] = unify.call(outfits[p], posed if posed != null else _entry(outfits[p])["rows"])
+		full_poses[n] = merge.call(by_path)
+	# A path whose parts look the same as the plain unit's adds its accent instead.
+	var silent := []
+	var plain := _palette(kind)
+	var plain_rows: Array = SPRITES[kind]["rows"]
+	for p in pair:
+		var own: Array = _entry(outfits[p])["rows"]
+		var pal := _palette(outfits[p])
+		var shows := false
+		for y in SIZE:
+			var r: String = own[y]
+			for x in r.length():
+				if src[_combo_part(spec, x, y, head_rows)] != p:
+					continue
+				var base_row: String = plain_rows[y]
+				var mine := r[x]
+				var theirs := base_row[x] if x < base_row.length() else "."
+				var c1 = null if mine == "." else (Color.BLACK if mine == "k" else pal.get(mine, COMMON.get(mine)))
+				var c2 = null if theirs == "." else (Color.BLACK if theirs == "k" else plain.get(theirs, COMMON.get(theirs)))
+				if c1 != c2:
+					shows = true
+					break
+			if shows:
+				break
+		if not shows:
+			silent.append(p)
+	return {"rows": rows, "alt": alt, "palette": palette, "from": from, "full_poses": full_poses, "silent": silent, "src": src}
+
+
+## Accent colors added to a palette.
+static func _layer_palette(palette: Dictionary, layers: Array) -> Dictionary:
+	for l in layers:
+		palette = palette.merged(l["palette"], true)
+	return palette
+
+
+## Lays accents on a sprite's rows: "behind" pixels only fill empty space, "over"
+## pixels paint over whatever is there (see _overlay).
+static func _layered(rows: Array, layers: Array) -> Array:
+	for l in layers:
+		if l.has("behind"):
+			rows = _behind(rows, l["behind"])
+		if l.has("over"):
+			rows = _overlay(rows, l["over"])
+	return rows
+
+
+static func _behind(rows: Array, changes: Dictionary) -> Array:
+	var out := []
+	for y in rows.size():
+		var row: String = rows[y]
+		if changes.has(y):
+			var c: String = changes[y]
+			while row.length() < c.length():
+				row += "."
+			for x in c.length():
+				if c[x] != "." and row[x] == ".":
+					row[x] = c[x]
+		out.append(row)
+	return out
 
 
 ## Paints a pose over a sprite's rows. A pose maps row index to a row of changes:

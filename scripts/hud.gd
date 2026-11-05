@@ -6,6 +6,7 @@ signal start_wave_pressed
 signal upgrade_pressed(path: int)
 signal sell_pressed
 signal target_pressed
+signal song_pressed
 signal speed_pressed
 signal restart_pressed
 signal menu_confirmed
@@ -19,7 +20,7 @@ signal finish_chosen
 const Data = preload("res://scripts/data.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 const Sprites = preload("res://scripts/sprites.gd")
-const PATH_KEYS := ["Q", "W", "E"]
+const PATH_KEYS := ["Q", "W", "E", "R"]
 const TOP := 768.0
 const WIDTH := 640.0
 const HEIGHT := 960.0
@@ -37,6 +38,7 @@ var info_label: Label
 var path_cards := []   # one dict of controls per upgrade path
 var sell_btn: Button
 var target_btn: Button
+var song_btn: Button   # a Bard's switch for the eight-Bard song (only while all eight instruments are out)
 var message_label: Label
 var message_tween: Tween
 var mode_screen: ColorRect
@@ -103,7 +105,7 @@ func _ready() -> void:
 			b.clip_text = true
 			_setup_hire_button(b, kind, Data.WARRIORS[kind])
 
-	for p in 3:
+	for p in PATH_KEYS.size():
 		path_cards.append(_path_card(panel, p))
 
 	info_label = _label(panel, Vector2(14, 122), Vector2(614, 64), Color(0.9, 0.9, 0.85), 15)
@@ -120,6 +122,10 @@ func _ready() -> void:
 			+ "Weakest - weakest enemy type (goblin first, warlord last)\n"
 			+ "Bats fly: melee units and Cannoneers can't hit them.")
 	target_btn.pressed.connect(func(): target_pressed.emit())
+	song_btn = _button(panel, Vector2(326, 142), Vector2(84, 40), "")
+	song_btn.add_theme_font_size_override("font_size", 12)
+	song_btn.tooltip_text = "Every instrument is on the field: play the Bards' song between waves, or not [G]"
+	song_btn.pressed.connect(func(): song_pressed.emit())
 
 	message_label = _label(self, Vector2(0, 20), Vector2(WIDTH, 40), Color.WHITE, 28)
 	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -173,7 +179,8 @@ func layout(w: float) -> void:
 	menu_btn.position.x = ui_w - 298
 	sell_btn.position.x = ui_w - 114
 	target_btn.position.x = ui_w - 226
-	for p in 3:
+	song_btn.position.x = ui_w - 314
+	for p in path_cards.size():
 		_layout_card(path_cards[p], p)
 	_layout_hire()
 	message_label.size.x = ui_w
@@ -233,16 +240,22 @@ func _layout_hire() -> void:
 
 
 ## Upgrade cards sit in a row across the top of the panel, sharing its width
-## (up to 320 each, centred).
+## (up to 300 each, centred).
 func _layout_card(card: Dictionary, p: int) -> void:
-	var cw := minf((ui_w - 36.0) / 3.0, 320.0)
-	var left := (ui_w - (cw * 3.0 + 12.0)) / 2.0
+	var n := float(path_cards.size())
+	var cw := minf((ui_w - 12.0 - 6.0 * n) / n, 300.0)
+	var left := (ui_w - (cw * n + 6.0 * (n - 1.0))) / 2.0
 	var b: Button = card["button"]
 	b.position = Vector2(left + p * (cw + 6.0), 48)
 	b.size = Vector2(cw, 84)
-	card["cost"].position.x = cw - 100.0
-	card["tier"].size.x = cw - 16.0
-	card["desc"].size.x = cw - 16.0
+	card["title"].size.x = cw - 12.0
+	card["cost"].position.x = cw - 76.0
+	card["tier"].size.x = cw - 12.0
+	card["desc"].size.x = cw - 12.0
+	var wide := cw >= 200.0
+	card["tier"].add_theme_font_size_override("font_size", 13 if wide else 12)
+	card["desc"].add_theme_font_size_override("font_size", 11)
+	card["desc"].max_lines_visible = 2
 
 
 ## Barricades are priced by length, so they show the cheapest.
@@ -333,7 +346,7 @@ func show_unit_card(w, at: Vector2) -> void:
 	if hover_kind != "":
 		return   # a hire button's card is up
 	var taken := []
-	for p in 3:
+	for p in mini(w.tiers.size(), w.data["paths"].size()):
 		if w.tiers[p] > 0:
 			var path: Dictionary = w.data["paths"][p]
 			taken.append("%s %d/4: %s" % [path["name"], w.tiers[p], path["tiers"][w.tiers[p] - 1]["name"]])
@@ -365,7 +378,7 @@ static func _base_stats(d: Dictionary) -> String:
 	var parts := ["HP %d" % roundi(d["hp"])]
 	match d["attack"]:
 		"wall":
-			parts = ["HP %d per %s of wall" % [roundi(d["hp"]), Data.ft(100)]]
+			parts = ["HP %d, however long" % roundi(d["hp"])]
 		"mine":
 			parts.append("%dg every %.0fs during waves, %d hauls a wave" % [roundi(d["damage"]), d["cooldown"], d["hauls"]])
 		"pulse":
@@ -385,8 +398,11 @@ static func _base_stats(d: Dictionary) -> String:
 
 
 func refresh(main) -> void:
-	hard_label.visible = main.started and not main.freeplay and main.difficulty != "normal"
-	if hard_label.visible:
+	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial)
+	if hard_label.visible and main.tutorial:
+		hard_label.text = "TUTORIAL"
+		hard_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.55))
+	elif hard_label.visible:
 		var diff: Dictionary = Data.DIFFICULTIES[main.difficulty]
 		hard_label.text = (diff["name"] as String).to_upper()
 		hard_label.add_theme_color_override("font_color", diff["color"])
@@ -438,6 +454,7 @@ func refresh(main) -> void:
 		card["button"].visible = w != null
 	sell_btn.visible = w != null
 	target_btn.visible = w != null and w.uses_targeting()
+	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
 	if w == null:
 		info_label.position = Vector2(14, 122)
 		info_label.size = Vector2(ui_w - 26, 64)
@@ -452,17 +469,18 @@ func refresh(main) -> void:
 			info_label.text = "Hire warriors to stop enemies reaching the bottom. Click a warrior to select it."
 		return
 	info_label.position = Vector2(14, 136)
-	info_label.size = Vector2(ui_w - 244, 52)
+	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 52)
 	info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
 	var how := "right-click to send it somewhere" if main.wave_active else "drag to reposition"
 	if w.is_emplacement():
 		how = "holds its ground" if main.wave_active else "drag to reposition"
 	if not w.uses_targeting():
 		how += "  (no targeting)"
-	info_label.text = "%s - %s\n%s" % [w.data["name"], how, w.stats_text()]
+	info_label.text = "%s - %s   Upgrades %d/%d\n%s" % [w.data["name"], how, w.total_upgrades(), Warrior.MAX_UPGRADES, w.stats_text()]
 	sell_btn.text = "Sell +%dg" % w.sell_value()
 	target_btn.text = "Target [T]\n%s" % Warrior.PRIORITY_NAMES[w.priority]
-	for p in 3:
+	song_btn.text = "Song [G]\n%s" % ("On" if main.song_on else "Off")
+	for p in path_cards.size():
 		_refresh_card(path_cards[p], w, p, main.gold)
 
 
@@ -480,22 +498,27 @@ func show_tab(tab: String) -> void:
 
 
 func _path_card(parent: Node, p: int) -> Dictionary:
-	var b := _button(parent, Vector2(12 + p * 206, 48), Vector2(200, 84), "")
+	var b := _button(parent, Vector2(12 + p * 156, 48), Vector2(150, 84), "")
 	b.pressed.connect(func(): upgrade_pressed.emit(p))
 	var card := {"button": b, "pips": []}
-	card["title"] = _label(b, Vector2(8, 3), Vector2(130, 20), Warrior.PATH_COLORS[p], 14)
-	card["cost"] = _label(b, Vector2(100, 3), Vector2(92, 20), Color(1, 0.85, 0.3), 14)
+	card["title"] = _label(b, Vector2(6, 2), Vector2(138, 18), Warrior.PATH_COLORS[p], 13)
+	card["title"].clip_text = true
+	card["cost"] = _label(b, Vector2(74, 17), Vector2(70, 16), Color(1, 0.85, 0.3), 12)
 	card["cost"].horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	for j in Warrior.MAX_TIER:
 		var pip := ColorRect.new()
-		pip.position = Vector2(8 + j * 16, 24)
-		pip.size = Vector2(12, 5)
+		pip.position = Vector2(6 + j * 14, 23)
+		pip.size = Vector2(11, 5)
 		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		b.add_child(pip)
 		card["pips"].append(pip)
-	card["tier"] = _label(b, Vector2(8, 31), Vector2(184, 18), Color.WHITE, 13)
-	card["desc"] = _label(b, Vector2(8, 49), Vector2(184, 32), Color(0.8, 0.8, 0.78), 11)
+	card["tier"] = _label(b, Vector2(6, 31), Vector2(138, 16), Color.WHITE, 12)
+	card["tier"].clip_text = true
+	card["desc"] = _label(b, Vector2(6, 46), Vector2(138, 36), Color(0.8, 0.8, 0.78), 11)
 	card["desc"].autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card["desc"].max_lines_visible = 2
+	card["desc"].text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	card["desc"].clip_text = true
 	return card
 
 
@@ -527,16 +550,12 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			card["tier"].text = "Fully upgraded"
 			card["desc"].text = ""
 			card["cost"].text = ""
-		"locked":
-			card["tier"].text = "Locked"
-			card["desc"].text = "Two other paths are already in use."
-			card["cost"].text = ""
-		"capped":
-			card["tier"].text = "Capped at tier 2"
-			card["desc"].text = "Another path is past tier 2."
+		"full":
+			card["tier"].text = "Upgrade limit"
+			card["desc"].text = "All %d upgrades are in use." % Warrior.MAX_UPGRADES
 			card["cost"].text = ""
 	b.disabled = state != "ok" or not affordable
-	b.modulate.a = 0.45 if state == "locked" or state == "capped" else 1.0
+	b.modulate.a = 0.45 if state == "full" else 1.0
 
 
 func show_message(text: String) -> void:
@@ -593,8 +612,9 @@ func show_mode_select() -> void:
 		lines.append("Fallen troops die in\n%ds unless revived" % int(d["down_time"]) if d["permadeath"] else "Fallen troops get\nback up after %ds" % int(d["down_time"]))
 		modes.append([key, d["name"], "\n".join(lines), d["color"], d["icon"]])
 	modes.append(["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage"])
-	# Three cards on top, two below.
-	var spots := [Vector2(20, 270), Vector2(225, 270), Vector2(430, 270), Vector2(122, 470), Vector2(327, 470)]
+	modes.append(["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard"])
+	# Three cards on top, three below.
+	var spots := [Vector2(20, 270), Vector2(225, 270), Vector2(430, 270), Vector2(20, 470), Vector2(225, 470), Vector2(430, 470)]
 	var cards := []
 	for i in modes.size():
 		cards.append(_mode_card(modes[i], spots[i], 0.25 + i * 0.09))
@@ -778,6 +798,27 @@ func show_menu_confirm() -> void:
 	stay.pressed.connect(func():
 		get_tree().paused = false
 		dim.queue_free())
+	# Sound: music and effects volume (saved for next time).
+	var audio = get_parent().audio
+	if audio != null:
+		var rows := [["Music", audio.music_volume, audio.set_music_volume], ["Effects", audio.sfx_volume, audio.set_sfx_volume]]
+		for i in rows.size():
+			var y := 550.0 + i * 44.0
+			var l := _label(dim, Vector2(150, y), Vector2(90, 30), Color(0.9, 0.9, 0.85), 18)
+			l.text = rows[i][0]
+			var slider := HSlider.new()
+			slider.position = Vector2(240, y + 4)
+			slider.size = Vector2(250, 24)
+			slider.min_value = 0.0
+			slider.max_value = 1.0
+			slider.step = 0.05
+			slider.value = rows[i][1]
+			slider.focus_mode = Control.FOCUS_NONE
+			var setter: Callable = rows[i][2]
+			slider.value_changed.connect(func(v): setter.call(v))
+			if i == 1:
+				slider.drag_ended.connect(func(_changed): audio.play("coin"))   # a sample at the new volume
+			dim.add_child(slider)
 
 
 ## After the final wave: stop here with the win, or keep going for a record.

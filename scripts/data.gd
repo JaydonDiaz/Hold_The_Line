@@ -28,8 +28,8 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 # range = gap between the warrior's edge and the enemy's edge.
 # Warriors go after the nearest enemy anywhere on the field.
 #
-# Each warrior has three upgrade paths of four tiers. Once two paths have been
-# started the third locks, and only one path may go past tier 2 (so 4 + 2 is the max).
+# Each warrior has four upgrade paths of four tiers. Any six upgrades can be bought,
+# in any mix of paths (MAX_UPGRADES in warrior.gd): 4 + 2, 3 + 3, 2 + 2 + 1 + 1...
 # Tier effects stack in order:
 #   damage / rate / speed  multiply damage, attack cooldown, move speed
 #   hp                     multiplies max health
@@ -45,12 +45,46 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 #   combo                  extra hits per melee combo (extra blasts per volley if Ki is also taken)
 #   knockback              [chance per combo finisher or ki blast, push distance]
 #   blast                  ki blasts at range, thrown one after another: damage, count per volley, range, cooldown
-#   beam                   line beam hitting every enemy in its path: damage, cooldown, width
-#   evade                  chance to dodge an enemy attack
+#   beam                   line beam hitting every enemy in its path: damage, cooldown, width, range (aiming reach)
+#   evade                  chance to dodge an enemy attack (the best one a unit has counts)
+#   multiform              martial Techniques 1: once fighting in a wave, splits into copies that share his
+#                          power: copies (how many), power (all bodies together; each gets power / bodies,
+#                          and a lone body is back to 1), hp (a copy's share of max health), cooldown (to
+#                          split again after a copy falls). Copies can't be sold and merge back when the wave ends.
 #   teleport               blink to distant targets: cooldown, min_dist
 #   stun                   blinding flash: radius, duration, cooldown
 #   surge                  temporary power-up: cooldown, duration, damage mult, attack rate mult
 #   splash                 adds to an exploding shell's blast radius
+#   dash                   swordsman: after a second of running, dashes into a new target:
+#                          damage (x normal), reach (px), stun, through (hits everything on the way),
+#                          chain (when the foe it's fighting falls, dashes at once to the next in reach)
+#   pierce / seek          archer: arrows go on through this many more enemies; seeking arrows
+#                          find a new target when theirs falls and after each pierce
+#   magnet                 mage Storm 3+: blasts pull charged (lightning-struck) enemies in: radius, pull
+#   echo                   mage Arcane 3+: everything a blast hits bursts again: damage share, radius
+#   fireball               mage Fire 3+: blasts are fireballs: splash mult, burn_dps, burn_time
+#   decay                  mage Necromancy 3+: blasts rot what they hit: dps, duration; foes
+#                          that die rotting rise as skeletons (up to the summon max)
+#   summon                 mage Necromancy: raises skeletons during waves: cooldown, max, hp, damage, armor
+#                          (they can't be sold and crumble when the wave ends)
+#   frost_aura             frost: enemies near it are slowed and chilled: radius, slow, dps,
+#                          freeze_every (0 = never), freeze_time
+#   rage / crimson / golden
+#                          martial Power path: rage {below, damage, rate} when hurt; crimson aura and
+#                          golden form {cooldown, duration, damage, rate, speed, drain (HP share/s)}
+#   heal_aura              healer: allies near it regenerate and are guarded: radius, regen
+#                          (max HP share/s), defense, recover (downed allies get up this much faster)
+#   thorns_dps             bard Spellsong 4: plants and vines hurt what they catch (dmg/s)
+#   befuddle               bard: [chance per note, seconds] a note confuses its target
+#   confuse_vuln           bard: confused enemies take this much more damage
+#   traps                  alchemist: drops charges while walking: every, max, damage, radius,
+#                          stun, brew (carries the flasks' poison and acid)
+#   burn                   [dps, seconds] arrows/shells set what they hit burning
+#   rain                   archer tower: flaming arrows on the thickest crowd: damage, radius, cooldown
+#   cluster                cannon: each shell scatters bomblets: count, damage share, radius
+#   napalm                 cannon: shells leave burning ground: dps, duration
+#   smite                  medic bay: each pulse hurts enemies in its radius: damage, slow, stun
+#   gems                   gold mine: [chance per haul, value multiplier]
 #   multishot              projectiles per attack, at different targets in range when possible
 #   shell_stun             seconds every enemy caught in a shell's blast is stunned
 #   heal_area              healer: [radius, fraction] other allies near the target are healed too
@@ -58,9 +92,10 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 #   revive                 healer: rez_speed (revive channel speed mult), aura (how much faster
 #                          downed allies in range recover on their own), full (revive at full HP)
 #
-#   aura_damage / aura_rate / aura_defense / aura_speed
+#   aura_damage / aura_rate / aura_defense / aura_speed / aura_regen / aura_recover
 #                          statue: allies posted in range deal more damage, attack faster, take less
-#                          damage, move faster (fractions; the strongest statue covering them counts).
+#                          damage, move faster, regenerate (max HP share/s), get up sooner when
+#                          knocked out (fractions; the strongest statue covering them counts).
 #                          A Bard's songs work the same way but on whoever is in earshot right now.
 #   song_radius            bard: adds to how far its songs (buffs and debuffs) carry
 #   discord                bard: enemies in earshot take more damage (vuln), deal less (weaken), move slower (slow)
@@ -73,11 +108,15 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 #   corrode                alchemist: {amount, duration} splashed enemies take this much more damage
 #   melt                   alchemist: the direct target also takes this fraction of its max HP
 #   burst                  alchemist: enemies killed by a flask explode for this multiple of its damage
-#   thorns                 barricade: attackers take this fraction of their max HP per strike
+#   thorns                 barricade: attackers take this fraction of their max HP per strike (barbed wire)
 #   wall_slow              barricade: [strength, reach] enemies this close to the wall are slowed
-#   repair                 barricade: HP repaired per second during waves by a 160px wall; scales with length like the
-#                          upgrade price does (walls never heal otherwise)
-#   slits                  barricade: arrows at enemies near the wall: damage, cooldown, range
+#   repair                 barricade: HP repaired per second during waves (the same for any length)
+#   rebuild                barricade: seconds after breaking that the crew puts it back up (at half health)
+#   shots_pass / troops_pass
+#                          barricade: your troops' shots / your troops themselves go through it (enemies never do)
+#   recharge               barricade: [max HP share per second, seconds unhit before it starts]
+#   aegis                  barricade: [damage cut, reach] for allies near the wall
+#   mortar                 cannoneer: shells arc high enough to clear walls (a plain cannon's can't)
 #   interest               gold mine: [fraction of your gold paid at the end of each wave, cap]
 #   wave_bonus             gold mine: flat gold paid at the end of each wave
 #   hauls                  gold mine: more hauls allowed per wave (on top of the mine's "hauls")
@@ -92,11 +131,12 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 # they shoot whatever comes into range. They can still be repositioned between waves.
 #
 # The Barricade ("attack": "wall") is drawn as a line from one click to another. Its
-# price, health and upgrade costs scale with length ("cost" is the price of the
+# price and upgrade costs scale with length, its health doesn't ("cost" is the price of the
 # shortest wall; see barricade.gd). Enemies walk around walls when they can and
 # break through only when there's no way past. Walls are solid to troops as well,
-# and block their attacks; emplacements and lobbed attacks (shells, flasks) fire
-# over them, and a Martial Artist's Flash Step can carry it across.
+# and block their attacks (until the Energy Wall path lets them through); emplacements
+# other than a plain Cannoneer, and lobbed flasks, fire over them (a Cannoneer needs
+# the Mortar path), and a Martial Artist's Flash Step can carry it across.
 # Mage and Frost Witch upgrade paths, shared with the Mage Tower and Frost Tower.
 const MAGE_PATHS := [
 	{"name": "Storm", "tiers": [
@@ -104,30 +144,44 @@ const MAGE_PATHS := [
 			"effect": {"rate": 0.85, "chain": {"damage": 15.0, "jumps": 3, "cooldown": 3.0}}},
 		{"name": "Storm Weave", "cost": 75, "desc": "Casts 11% faster. Chain 22 dmg x4 / 2.6s",
 			"effect": {"rate": 0.9, "chain": {"damage": 22.0, "jumps": 4, "cooldown": 2.6}}},
-		{"name": "Thunderhead", "cost": 125, "desc": "Casts 18% faster. Chain 35 dmg x5 / 2.2s",
-			"effect": {"rate": 0.85, "chain": {"damage": 35.0, "jumps": 5, "cooldown": 2.2}}},
-		{"name": "Tempest", "cost": 210, "desc": "Casts 25% faster. Chain 60 dmg x7 / 1.6s",
-			"effect": {"rate": 0.8, "chain": {"damage": 60.0, "jumps": 7, "cooldown": 1.6}}},
+		{"name": "Thunderhead", "cost": 125, "desc": "Chain 35 dmg x5 / 2.2s. Blasts magnetize: they pull charged foes together",
+			"effect": {"rate": 0.85, "chain": {"damage": 35.0, "jumps": 5, "cooldown": 2.2}, "magnet": {"radius": 90.0, "pull": 45.0}}},
+		{"name": "Tempest", "cost": 210, "desc": "Casts 25% faster. Chain 60 dmg x7 / 1.6s. Stronger pull",
+			"effect": {"rate": 0.8, "chain": {"damage": 60.0, "jumps": 7, "cooldown": 1.6}, "magnet": {"radius": 115.0, "pull": 65.0}}},
 	]},
 	{"name": "Arcane Lance", "tiers": [
 		{"name": "Far Sight", "cost": 50, "desc": "+2.5\u00a0ft range. Lance the toughest foe: 80 dmg / 5s",
 			"effect": {"range": 25.0, "lance": {"damage": 80.0, "cooldown": 5.0}}},
 		{"name": "Focus", "cost": 75, "desc": "+2.5\u00a0ft range. Lance: 140 dmg / 4.5s",
 			"effect": {"range": 25.0, "lance": {"damage": 140.0, "cooldown": 4.5}}},
-		{"name": "Piercing Lance", "cost": 125, "desc": "+3\u00a0ft range. Lance: 240 dmg / 4s",
-			"effect": {"range": 30.0, "lance": {"damage": 240.0, "cooldown": 4.0}}},
-		{"name": "Annihilate", "cost": 210, "desc": "+4\u00a0ft range. Lance: 450 dmg / 3.2s",
-			"effect": {"range": 40.0, "lance": {"damage": 450.0, "cooldown": 3.2}}},
+		{"name": "Piercing Lance", "cost": 125, "desc": "Lance: 240 dmg / 4s. Everything a blast hits bursts again (50%)",
+			"effect": {"range": 30.0, "lance": {"damage": 240.0, "cooldown": 4.0}, "echo": {"damage": 0.5, "radius": 35.0}}},
+		{"name": "Annihilate", "cost": 210, "desc": "+4\u00a0ft range. Lance: 450 dmg / 3.2s. Bursts hit for 75%",
+			"effect": {"range": 40.0, "lance": {"damage": 450.0, "cooldown": 3.2}, "echo": {"damage": 0.75, "radius": 45.0}}},
 	]},
 	{"name": "Fire", "tiers": [
 		{"name": "Kindle", "cost": 40, "desc": "+15% blast dmg. Flame breath 2 dmg / 0.3s, burns 4/s",
 			"effect": {"damage": 1.15, "breath": {"damage": 2.0, "interval": 0.3, "burn_dps": 4.0, "burn_time": 2.0}}},
 		{"name": "Fan the Flames", "cost": 70, "desc": "+15% blast dmg. Breath 3 dmg / 0.25s, burns 7/s",
 			"effect": {"damage": 1.15, "breath": {"damage": 3.0, "interval": 0.25, "burn_dps": 7.0, "burn_time": 2.5}}},
-		{"name": "Firestorm", "cost": 120, "desc": "+20% blast dmg. Breath 5 dmg / 0.2s, burns 12/s",
-			"effect": {"damage": 1.2, "breath": {"damage": 5.0, "interval": 0.2, "burn_dps": 12.0, "burn_time": 3.0}}},
-		{"name": "Dragon's Breath", "cost": 195, "desc": "+30% blast dmg. Breath 8 dmg / 0.15s, burns 22/s",
-			"effect": {"damage": 1.3, "breath": {"damage": 8.0, "interval": 0.15, "burn_dps": 22.0, "burn_time": 3.5}}},
+		{"name": "Firestorm", "cost": 120, "desc": "Breath 5 dmg / 0.2s, burns 12/s. Blasts become fireballs: 40% wider, burn 6/s",
+			"effect": {"damage": 1.2, "breath": {"damage": 5.0, "interval": 0.2, "burn_dps": 12.0, "burn_time": 3.0},
+				"fireball": {"splash": 1.4, "burn_dps": 6.0, "burn_time": 3.0}}},
+		{"name": "Dragon's Breath", "cost": 195, "desc": "+30% dmg. Breath 8 / 0.15s, burns 22/s. Fireballs 60% wider, burn 12/s",
+			"effect": {"damage": 1.3, "breath": {"damage": 8.0, "interval": 0.15, "burn_dps": 22.0, "burn_time": 3.5},
+				"fireball": {"splash": 1.6, "burn_dps": 12.0, "burn_time": 3.5}}},
+	]},
+	{"name": "Necromancy", "note": "Skeletons rise only during waves, can't be sold, and crumble when the wave ends.", "tiers": [
+		{"name": "Grave Call", "cost": 50, "desc": "Raises a skeleton every 8s (up to 2): 45 HP, 6 dmg",
+			"effect": {"summon": {"cooldown": 8.0, "max": 2, "hp": 45.0, "damage": 6.0, "armor": 0.0}}},
+		{"name": "Bone Legion", "cost": 75, "desc": "A skeleton every 7s (up to 3): 70 HP, 9 dmg",
+			"effect": {"summon": {"cooldown": 7.0, "max": 3, "hp": 70.0, "damage": 9.0, "armor": 0.0}}},
+		{"name": "Rotting Touch", "cost": 125, "desc": "Blasts rot foes (5 dmg/s); the rotting dead rise as skeletons. Up to 4: 100 HP, 13 dmg",
+			"effect": {"summon": {"cooldown": 6.0, "max": 4, "hp": 100.0, "damage": 13.0, "armor": 0.0},
+				"decay": {"dps": 5.0, "duration": 4.0}}},
+		{"name": "Lich Lord", "cost": 210, "desc": "Rot 12 dmg/s. A skeleton every 5s (up to 6): 160 HP, 22 dmg, 20% armor",
+			"effect": {"summon": {"cooldown": 5.0, "max": 6, "hp": 160.0, "damage": 22.0, "armor": 0.2},
+				"decay": {"dps": 12.0, "duration": 4.0}}},
 	]},
 ]
 const FROST_PATHS := [
@@ -149,6 +203,16 @@ const FROST_PATHS := [
 		{"name": "Glacial Grip", "cost": 100, "desc": "26% chance to freeze for 1.5s", "effect": {"freeze": [0.26, 1.5]}},
 		{"name": "Shatterfrost", "cost": 155, "desc": "35% chance to freeze for 2s", "effect": {"freeze": [0.35, 2.0]}},
 	]},
+	{"name": "Frost Aura", "tiers": [
+		{"name": "Chill Aura", "cost": 35, "desc": "Enemies within 6\u00a0ft are slowed 20%",
+			"effect": {"frost_aura": {"radius": 60.0, "slow": 0.2, "dps": 0.0, "freeze_every": 0.0, "freeze_time": 0.0}}},
+		{"name": "Biting Cold", "cost": 55, "desc": "Aura: 8\u00a0ft, slows 30%, 3 dmg/s",
+			"effect": {"frost_aura": {"radius": 80.0, "slow": 0.3, "dps": 3.0, "freeze_every": 0.0, "freeze_time": 0.0}}},
+		{"name": "Frozen Ground", "cost": 95, "desc": "Aura: 10\u00a0ft, slows 40%, 5 dmg/s; freezes all in it for 1s every 5s",
+			"effect": {"frost_aura": {"radius": 100.0, "slow": 0.4, "dps": 5.0, "freeze_every": 5.0, "freeze_time": 1.0}}},
+		{"name": "Heart of Winter", "cost": 155, "desc": "Aura: 12\u00a0ft, slows 50%, 9 dmg/s; freezes for 1.5s every 3.5s",
+			"effect": {"frost_aura": {"radius": 120.0, "slow": 0.5, "dps": 9.0, "freeze_every": 3.5, "freeze_time": 1.5}}},
+	]},
 ]
 
 const WARRIORS := {
@@ -159,22 +223,30 @@ const WARRIORS := {
 		"desc": "Tough and cheap. Charges in and holds enemies in place.",
 		"paths": [
 			{"name": "Damage", "tiers": [
-				{"name": "Sharpened Blade", "cost": 25, "desc": "+30% damage", "effect": {"damage": 1.3}},
+				{"name": "Sharpened Axe", "cost": 25, "desc": "+30% damage", "effect": {"damage": 1.3}},
 				{"name": "Heavy Strikes", "cost": 40, "desc": "+30% damage", "effect": {"damage": 1.3}},
-				{"name": "Champion's Edge", "cost": 75, "desc": "+40% damage", "effect": {"damage": 1.4}},
-				{"name": "Kingsblade", "cost": 140, "desc": "+60% damage; wide sweeping swings also hit enemies nearby (75%)", "effect": {"damage": 1.6, "cleave": {"arc": 160.0, "reach": 18.0, "damage": 0.75}}},
+				{"name": "Champion's Axe", "cost": 75, "desc": "+40% damage", "effect": {"damage": 1.4}},
+				{"name": "Kingsplitter", "cost": 140, "desc": "+60% damage; wide sweeping chops also hit enemies nearby (75%)", "effect": {"damage": 1.6, "cleave": {"arc": 160.0, "reach": 18.0, "damage": 0.75}}},
 			]},
-			{"name": "Speed", "tiers": [
-				{"name": "Quick Hands", "cost": 25, "desc": "Attacks 18% faster, +10% move speed", "effect": {"rate": 0.85, "speed": 1.1}},
-				{"name": "Flurry", "cost": 40, "desc": "Attacks 18% faster, +8% move speed", "effect": {"rate": 0.85, "speed": 1.08}},
-				{"name": "Blade Dance", "cost": 75, "desc": "Dual blades: every attack is followed by an off-hand strike (60%). Attacks 18% faster, +8% move speed", "effect": {"rate": 0.85, "speed": 1.08, "dual": 0.6}},
-				{"name": "Whirlwind", "cost": 140, "desc": "Off-hand strikes hit harder (80%). Attacks 25% faster, +10% move speed", "effect": {"rate": 0.8, "speed": 1.1, "dual": 0.8}},
+			{"name": "Blades", "tiers": [
+				{"name": "Quick Hands", "cost": 25, "desc": "Attacks 18% faster", "effect": {"rate": 0.85}},
+				{"name": "Flurry", "cost": 40, "desc": "Attacks 18% faster", "effect": {"rate": 0.85}},
+				{"name": "Blade Dance", "cost": 75, "desc": "Dual blades: every attack is followed by an off-hand strike (60%). Attacks 18% faster", "effect": {"rate": 0.85, "dual": 0.6}},
+				{"name": "Whirlwind", "cost": 140, "desc": "Off-hand strikes hit harder (80%). Attacks 25% faster", "effect": {"rate": 0.8, "dual": 0.8}},
 			]},
 			{"name": "Health", "tiers": [
 				{"name": "Padded Armor", "cost": 20, "desc": "+35% health, takes 10% less damage", "effect": {"hp": 1.35, "armor": 0.1}},
 				{"name": "Chainmail", "cost": 35, "desc": "+35% health, takes 10% less damage", "effect": {"hp": 1.35, "armor": 0.1}},
 				{"name": "Plate and Shield", "cost": 65, "desc": "+40% health, 10% less damage, 15% chance to block a hit", "effect": {"hp": 1.4, "armor": 0.1, "block": 0.15}},
 				{"name": "Juggernaut", "cost": 110, "desc": "+50% health, 15% less damage, 25% block chance", "effect": {"hp": 1.5, "armor": 0.15, "block": 0.25}},
+			]},
+			{"name": "Charge", "tiers": [
+				{"name": "Light Step", "cost": 25, "desc": "+10% move speed", "effect": {"speed": 1.1}},
+				{"name": "Forced March", "cost": 40, "desc": "+8% move speed", "effect": {"speed": 1.08}},
+				{"name": "Running Strike", "cost": 75, "desc": "+8% move speed. After a second of running, dashes into a new target for a 2x strike",
+					"effect": {"speed": 1.08, "dash": {"damage": 2.0, "reach": 70.0, "stun": 0.0, "through": false, "chain": false}}},
+				{"name": "Unstoppable", "cost": 140, "desc": "Dash strikes 3x, bowls through foes and stuns 0.6s. When his foe falls, he dashes straight to the next",
+					"effect": {"speed": 1.1, "dash": {"damage": 3.0, "reach": 90.0, "stun": 0.6, "through": true, "chain": true}}},
 			]},
 		],
 	},
@@ -202,6 +274,13 @@ const WARRIORS := {
 				{"name": "Rapid Fire", "cost": 50, "desc": "Fires 18% faster", "effect": {"rate": 0.85}},
 				{"name": "Volley", "cost": 90, "desc": "Fires 25% faster", "effect": {"rate": 0.8}},
 				{"name": "Arrow Storm", "cost": 160, "desc": "Fires 43% faster", "effect": {"rate": 0.7}},
+			]},
+			{"name": "Trick Shots", "tiers": [
+				{"name": "Split Shot", "cost": 35, "desc": "Fires 2 arrows at different enemies", "effect": {"multishot": 2}},
+				{"name": "Bodkin Points", "cost": 55, "desc": "Arrows pierce: each hits up to 2 enemies", "effect": {"pierce": 1}},
+				{"name": "Seeker Arrows", "cost": 95, "desc": "Arrows home in: a new foe if theirs falls, the next one after each pierce. Hits up to 3",
+					"effect": {"pierce": 2, "seek": true}},
+				{"name": "Storm of Seekers", "cost": 165, "desc": "Fires 3 seeking arrows, each hitting up to 4 enemies", "effect": {"multishot": 3, "pierce": 3}},
 			]},
 		],
 	},
@@ -234,27 +313,36 @@ const WARRIORS := {
 					"effect": {"blast": {"damage": 15.0, "count": 3, "range": 175.0, "cooldown": 1.2}}},
 				{"name": "Prince's Pride", "cost": 230, "desc": "Blasts hit for 34 dmg each, volley every 1.0s",
 					"effect": {"blast": {"damage": 34.0, "count": 3, "range": 190.0, "cooldown": 1.0}}},
-				{"name": "Sovereign Beam", "cost": 380, "desc": "Every 5s, a beam that hits every enemy in a line: 350 dmg",
-					"effect": {"blast": {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9},
-						"beam": {"damage": 350.0, "cooldown": 5.0, "width": 30.0}}},
+				{"name": "Starburst Barrage", "cost": 380, "desc": "Blasts hit for 42 dmg / 0.9s and explode, hitting everything in a 4\u00a0ft splash",
+					"effect": {"blast": {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 40.0}}},
 			]},
 			{"name": "Combat", "note": "With Ki, extra hits become extra blasts per volley.", "tiers": [
-				{"name": "Rapid Strikes", "cost": 80, "desc": "+1 hit per combo", "effect": {"combo": 1}},
-				{"name": "Heavy Blows", "cost": 130, "desc": "+1 hit. 15% chance the finisher knocks back",
+				{"name": "Desert Bandit", "cost": 80, "desc": "+1 hit per combo", "effect": {"combo": 1}},
+				{"name": "Wolf Fang Fist", "cost": 130, "desc": "+1 hit. 15% chance the finisher knocks back",
 					"effect": {"combo": 1, "knockback": [0.15, 40.0]}},
 				{"name": "Battle Instinct", "cost": 220, "desc": "+1 hit, 20% finisher knockback, +30% dmg",
 					"effect": {"combo": 1, "knockback": [0.2, 50.0], "damage": 1.3}},
-				{"name": "Thousand Fists", "cost": 360, "desc": "+2 hits, 25% finisher knockback, +40% dmg",
+				{"name": "Neo Wolf Fang Fist", "cost": 360, "desc": "+2 hits, 25% finisher knockback, +40% dmg",
 					"effect": {"combo": 2, "knockback": [0.25, 60.0], "damage": 1.4}},
 			]},
 			{"name": "Techniques", "tiers": [
-				{"name": "Afterimage", "cost": 85, "desc": "20% chance to dodge enemy attacks", "effect": {"evade": 0.2}},
+				{"name": "Multiform", "cost": 85, "desc": "In battle, splits into 2 bodies sharing his power (60% each). A copy that falls gives its power back",
+					"effect": {"multiform": {"copies": 1, "power": 1.2, "hp": 0.6, "cooldown": 10.0}}},
 				{"name": "Flash Step", "cost": 130, "desc": "Teleports straight to distant targets (every 4s)",
 					"effect": {"teleport": {"cooldown": 4.0, "min_dist": 90.0}}},
 				{"name": "Radiant Flash", "cost": 220, "desc": "Blinds and stuns nearby enemies for 2s (every 9s)",
 					"effect": {"stun": {"radius": 110.0, "duration": 2.0, "cooldown": 9.0}}},
-				{"name": "Power Surge", "cost": 360, "desc": "Every 12s: 2.5x dmg, 50% faster for 4s. Dodge 30%",
-					"effect": {"evade": 0.3, "surge": {"cooldown": 12.0, "duration": 4.0, "damage": 2.5, "rate": 1.5}}},
+				{"name": "Turtle Wave", "cost": 360, "desc": "Every 5s, a beam that hits every enemy in a line: 350 dmg",
+					"effect": {"beam": {"damage": 350.0, "cooldown": 5.0, "width": 30.0, "range": 260.0}}},
+			]},
+			{"name": "Power", "note": "The crimson aura and the golden form stack.", "tiers": [
+				{"name": "Turtle Shell Training", "cost": 85, "desc": "+15% damage, attacks 10% faster", "effect": {"damage": 1.15, "rate": 0.9}},
+				{"name": "Limit Break", "cost": 130, "desc": "30% chance to dodge enemy attacks. Below half health: +40% damage, attacks 25% faster",
+					"effect": {"evade": 0.3, "rage": {"below": 0.5, "damage": 1.4, "rate": 1.25}}},
+				{"name": "Tenfold Aura", "cost": 220, "desc": "Every 15s, a crimson aura for 5s: 2x dmg, 50% faster attacks and moves; burns 3% HP/s",
+					"effect": {"crimson": {"cooldown": 15.0, "duration": 5.0, "damage": 2.0, "rate": 1.5, "speed": 1.5, "drain": 0.03}}},
+				{"name": "Golden Warrior", "cost": 380, "desc": "Goes golden for 12s (every 30s): 2.5x dmg, 40% faster attacks, 30% faster moves",
+					"effect": {"golden": {"cooldown": 30.0, "duration": 12.0, "damage": 2.5, "rate": 1.4, "speed": 1.3}}},
 			]},
 		],
 	},
@@ -283,6 +371,16 @@ const WARRIORS := {
 				{"name": "Second Wind", "cost": 100, "desc": "Revives 40% faster; downed allies in range get up 50% sooner", "effect": {"revive": {"rez_speed": 1.67, "aura": 1.5, "full": false}}},
 				{"name": "Lifebinder", "cost": 180, "desc": "Revives 3x faster at full HP; downed allies in range get up 2.5x sooner", "effect": {"revive": {"rez_speed": 3.0, "aura": 2.5, "full": true}}},
 			]},
+			{"name": "Halo", "tiers": [
+				{"name": "Gentle Presence", "cost": 40, "desc": "Allies within 6\u00a0ft regain 1% HP/s",
+					"effect": {"heal_aura": {"radius": 60.0, "regen": 0.01, "defense": 0.0, "recover": 0.0}}},
+				{"name": "Warm Glow", "cost": 60, "desc": "Aura: 8\u00a0ft, 1.5% HP/s",
+					"effect": {"heal_aura": {"radius": 80.0, "regen": 0.015, "defense": 0.0, "recover": 0.0}}},
+				{"name": "Holy Ground", "cost": 110, "desc": "Aura: 10\u00a0ft, 2.5% HP/s; allies in it take 10% less damage",
+					"effect": {"heal_aura": {"radius": 100.0, "regen": 0.025, "defense": 0.1, "recover": 0.0}}},
+				{"name": "Seraph's Halo", "cost": 190, "desc": "Aura: 12\u00a0ft, 4% HP/s, 20% less damage; downed allies in it get up 2x sooner",
+					"effect": {"heal_aura": {"radius": 120.0, "regen": 0.04, "defense": 0.2, "recover": 1.0}}},
+			]},
 		],
 	},
 	"bard": {
@@ -290,7 +388,7 @@ const WARRIORS := {
 		"hp": 60.0, "speed": 115.0,
 		"damage": 7.0, "range": 150.0, "cooldown": 1.0, "attack": "note",
 		"projectile_speed": 450.0, "song_radius": 110.0,
-		"desc": "Troop. Plucks sharp notes; upgrades into songs that empower allies or unsettle enemies, or into nature spells.",
+		"desc": "Troop. Plucks sharp notes; upgrades into songs that empower allies or unsettle enemies, or into nature spells. Its instrument changes with its upgrades.",
 		"paths": [
 			{"name": "Inspire", "tiers": [
 				{"name": "Marching Song", "cost": 40, "desc": "Allies in earshot attack 10% faster", "effect": {"aura_rate": 0.1}},
@@ -304,15 +402,23 @@ const WARRIORS := {
 				{"name": "Cacophony", "cost": 115, "desc": "Enemies: take 22% more, deal 25% less; song carries 3\u00a0ft further", "effect": {"discord": {"vuln": 0.22, "weaken": 0.25, "slow": 0.0}, "song_radius": 30.0}},
 				{"name": "Requiem", "cost": 200, "desc": "Enemies: take 32% more, deal 35% less, move 20% slower", "effect": {"discord": {"vuln": 0.32, "weaken": 0.35, "slow": 0.2}}},
 			]},
-			{"name": "Spellsong", "note": "Each tier adds a spell; all learned spells keep being cast.", "tiers": [
+			{"name": "Spellsong", "note": "Each of the first three tiers adds a spell; all learned spells keep being cast.", "tiers": [
 				{"name": "Overgrowth", "cost": 45, "desc": "Every 6s: a patch of plants slows enemies 50% for 4s",
 					"effect": {"overgrowth": {"radius": 70.0, "slow": 0.5, "duration": 4.0, "cooldown": 6.0}}},
 				{"name": "Vine Snare", "cost": 70, "desc": "Every 7s: vines hold enemies in place for 1.5s",
 					"effect": {"vines": {"radius": 55.0, "duration": 1.5, "cooldown": 7.0}}},
 				{"name": "Tornado", "cost": 120, "desc": "Every 12s: a tornado throws enemies back up the field",
 					"effect": {"tornado": {"radius": 60.0, "push": 90.0, "cooldown": 12.0}}},
-				{"name": "Confusion", "cost": 210, "desc": "Every 12s: enemies in an area fight each other for 4s",
-					"effect": {"confuse": {"radius": 75.0, "duration": 4.0, "cooldown": 12.0}}},
+				{"name": "Thornwild", "cost": 210, "desc": "Plants and vines grow thorns: anything caught in them takes 10 dmg/s",
+					"effect": {"thorns_dps": 10.0}},
+			]},
+			{"name": "Bewitch", "tiers": [
+				{"name": "Befuddle", "cost": 40, "desc": "Notes have a 15% chance to confuse their target for 1.5s", "effect": {"befuddle": [0.15, 1.5]}},
+				{"name": "Mesmerize", "cost": 65, "desc": "Notes: 25% chance to confuse for 2s", "effect": {"befuddle": [0.25, 2.0]}},
+				{"name": "Confusion", "cost": 115, "desc": "Every 12s: enemies in an area fight each other for 4s",
+					"effect": {"befuddle": [0.25, 2.0], "confuse": {"radius": 75.0, "duration": 4.0, "cooldown": 12.0}}},
+				{"name": "Puppet Master", "cost": 210, "desc": "Confusion every 8s, wider, 5s; confused foes take 25% more damage. Notes: 35% for 2.5s",
+					"effect": {"befuddle": [0.35, 2.5], "confuse": {"radius": 95.0, "duration": 5.0, "cooldown": 8.0}, "confuse_vuln": 0.25}},
 			]},
 		],
 	},
@@ -344,6 +450,16 @@ const WARRIORS := {
 				{"name": "Chain Reaction", "cost": 115, "desc": "Enemies killed by a flask explode for 2x its damage", "effect": {"burst": 2.0}},
 				{"name": "Philosopher's Fire", "cost": 200, "desc": "+50% damage; throws 3 flasks at different enemies", "effect": {"damage": 1.5, "multishot": 3}},
 			]},
+			{"name": "Trapcraft", "note": "Charges are dropped while walking and stay until something steps on them.", "tiers": [
+				{"name": "Tripwire Charges", "cost": 40, "desc": "Drops a hidden charge every 3s while walking (up to 3): 25 dmg blast",
+					"effect": {"traps": {"every": 3.0, "max": 3, "damage": 25.0, "radius": 40.0, "stun": 0.0, "brew": false}}},
+				{"name": "Black Powder", "cost": 65, "desc": "Up to 4 charges: 45 dmg, wider blast",
+					"effect": {"traps": {"every": 2.5, "max": 4, "damage": 45.0, "radius": 48.0, "stun": 0.0, "brew": false}}},
+				{"name": "Alchemical Mines", "cost": 115, "desc": "Up to 5 charges: 70 dmg; they carry your flasks' poison and acid",
+					"effect": {"traps": {"every": 2.0, "max": 5, "damage": 70.0, "radius": 52.0, "stun": 0.0, "brew": true}}},
+				{"name": "Minefield", "cost": 200, "desc": "A charge every 1.5s (up to 8): 110 dmg, stuns 1s",
+					"effect": {"traps": {"every": 1.5, "max": 8, "damage": 110.0, "radius": 58.0, "stun": 1.0, "brew": true}}},
+			]},
 		],
 	},
 	"tower": {
@@ -371,6 +487,14 @@ const WARRIORS := {
 				{"name": "Second Archer", "cost": 110, "desc": "Fires 2 arrows at different enemies", "effect": {"multishot": 2}},
 				{"name": "Full Garrison", "cost": 190, "desc": "Fires 3 arrows, 10% faster", "effect": {"multishot": 3, "rate": 0.9}},
 			]},
+			{"name": "Fire Arrows", "tiers": [
+				{"name": "Pitch-Soaked", "cost": 35, "desc": "Arrows set enemies burning: 4 dmg/s for 3s", "effect": {"burn": [4.0, 3.0]}},
+				{"name": "Oil Pots", "cost": 55, "desc": "Burn 7 dmg/s", "effect": {"burn": [7.0, 3.0]}},
+				{"name": "Fire Rain", "cost": 100, "desc": "Burn 10/s. Every 6s, flaming arrows rain on the thickest crowd: 40 dmg in 6\u00a0ft",
+					"effect": {"burn": [10.0, 3.0], "rain": {"damage": 40.0, "radius": 60.0, "cooldown": 6.0}}},
+				{"name": "Inferno Volley", "cost": 175, "desc": "Burn 18/s. Fire rain every 4s: 90 dmg in 7.5\u00a0ft",
+					"effect": {"burn": [18.0, 3.0], "rain": {"damage": 90.0, "radius": 75.0, "cooldown": 4.0}}},
+			]},
 		],
 	},
 	"cannon": {
@@ -378,13 +502,13 @@ const WARRIORS := {
 		"hp": 200.0, "speed": 0.0, "emplacement": true,
 		"damage": 40.0, "range": 190.0, "cooldown": 3.0, "attack": "shell", "splash": 50.0,
 		"projectile_speed": 360.0,
-		"desc": "Emplacement. Lobs shells that explode on impact. Slow to reload. Never moves.",
+		"desc": "Emplacement. Fires shells that explode on impact. Slow to reload. Never moves. Walls block its shots until it's upgraded to a mortar.",
 		"paths": [
-			{"name": "Firepower", "tiers": [
-				{"name": "Packed Powder", "cost": 50, "desc": "+30% damage", "effect": {"damage": 1.3}},
+			{"name": "Mortar", "tiers": [
+				{"name": "Mortar Tube", "cost": 50, "desc": "Lobs shells high enough to clear walls. +20% damage", "effect": {"damage": 1.2, "mortar": true}},
 				{"name": "Iron Shot", "cost": 80, "desc": "+30% damage", "effect": {"damage": 1.3}},
-				{"name": "Heavy Shells", "cost": 135, "desc": "+40% damage", "effect": {"damage": 1.4}},
-				{"name": "Siege Mortar", "cost": 230, "desc": "+60% damage", "effect": {"damage": 1.6}},
+				{"name": "Siege Mortar", "cost": 135, "desc": "A huge mortar: +40% damage, +3\u00a0ft range", "effect": {"damage": 1.4, "range": 30.0}},
+				{"name": "Great Mortar", "cost": 230, "desc": "+60% damage, +5\u00a0ft range", "effect": {"damage": 1.6, "range": 50.0}},
 			]},
 			{"name": "Blast", "tiers": [
 				{"name": "Wider Charge", "cost": 50, "desc": "+1.5\u00a0ft blast radius", "effect": {"splash": 15.0}},
@@ -397,6 +521,15 @@ const WARRIORS := {
 				{"name": "Powder Monkey", "cost": 80, "desc": "Reloads 15% faster", "effect": {"rate": 0.85}},
 				{"name": "Gun Crew", "cost": 135, "desc": "Reloads 20% faster, +3\u00a0ft range", "effect": {"rate": 0.8, "range": 30.0}},
 				{"name": "Double Barrel", "cost": 230, "desc": "Fires 2 shells per reload", "effect": {"multishot": 2}},
+			]},
+			{"name": "Payloads", "tiers": [
+				{"name": "Incendiary Shot", "cost": 50, "desc": "Shells set enemies burning: 6 dmg/s for 3s", "effect": {"burn": [6.0, 3.0]}},
+				{"name": "Cluster Shells", "cost": 80, "desc": "Burn 8/s. Each shell scatters 3 bomblets (35% dmg)",
+					"effect": {"burn": [8.0, 3.0], "cluster": {"count": 3, "damage": 0.35, "radius": 28.0}}},
+				{"name": "Napalm", "cost": 135, "desc": "Shells leave burning ground for 3s: 15 dmg/s",
+					"effect": {"napalm": {"dps": 15.0, "duration": 3.0}}},
+				{"name": "Hellfire", "cost": 230, "desc": "Burn 14/s. 5 bomblets (50%). Napalm 30 dmg/s for 4s",
+					"effect": {"burn": [14.0, 3.0], "cluster": {"count": 5, "damage": 0.5, "radius": 32.0}, "napalm": {"dps": 30.0, "duration": 4.0}}},
 			]},
 		],
 	},
@@ -443,6 +576,16 @@ const WARRIORS := {
 				{"name": "Surgeons", "cost": 200, "desc": "Revives in 2s at full HP",
 					"effect": {"revive": {"rez_speed": 3.0, "aura": 2.0, "full": true}}},
 			]},
+			{"name": "Consecration", "note": "Pulses at enemies in its radius whenever any are there, hurt allies or not.", "tiers": [
+				{"name": "Blessed Ground", "cost": 40, "desc": "Each pulse sears enemies in its radius for 12 dmg",
+					"effect": {"smite": {"damage": 12.0, "slow": 0.0, "stun": 0.0}}},
+				{"name": "Holy Fire", "cost": 60, "desc": "Pulses sear enemies for 22 dmg and slow them 20%",
+					"effect": {"smite": {"damage": 22.0, "slow": 0.2, "stun": 0.0}}},
+				{"name": "Judgment", "cost": 110, "desc": "Pulses sear enemies for 40 dmg, slow 30%",
+					"effect": {"smite": {"damage": 40.0, "slow": 0.3, "stun": 0.0}}},
+				{"name": "Wrath of Heaven", "cost": 190, "desc": "Pulses sear enemies for 70 dmg, slow 30% and stun 1s",
+					"effect": {"smite": {"damage": 70.0, "slow": 0.3, "stun": 1.0}}},
+			]},
 		],
 	},
 	"statue": {
@@ -468,6 +611,12 @@ const WARRIORS := {
 				{"name": "Iron Will", "cost": 70, "desc": "Allies take 12% less damage", "effect": {"aura_defense": 0.12}},
 				{"name": "Aegis", "cost": 120, "desc": "Allies take 18% less damage, +2.5\u00a0ft radius", "effect": {"aura_defense": 0.18, "range": 25.0}},
 				{"name": "Unbreakable", "cost": 210, "desc": "Allies take 24% less damage, +2.5\u00a0ft radius", "effect": {"aura_defense": 0.24, "range": 25.0}},
+			]},
+			{"name": "Vigor", "tiers": [
+				{"name": "Healing Spring", "cost": 45, "desc": "Allies regenerate 1% HP/s", "effect": {"aura_regen": 0.01}},
+				{"name": "Sacred Waters", "cost": 70, "desc": "Allies regenerate 2% HP/s", "effect": {"aura_regen": 0.02}},
+				{"name": "Fountain of Life", "cost": 120, "desc": "3% HP/s; knocked-out allies get up 50% sooner", "effect": {"aura_regen": 0.03, "aura_recover": 0.5}},
+				{"name": "Eternal Spring", "cost": 210, "desc": "4.5% HP/s; knocked-out allies get up twice as fast", "effect": {"aura_regen": 0.045, "aura_recover": 1.0}},
 			]},
 		],
 	},
@@ -495,20 +644,26 @@ const WARRIORS := {
 				{"name": "Vault", "cost": 130, "desc": "Interest: 4% (max 100)", "effect": {"interest": [0.04, 100]}},
 				{"name": "Royal Treasury", "cost": 220, "desc": "Interest: 6% (max 180)", "effect": {"interest": [0.06, 180]}},
 			]},
+			{"name": "Gemcutters", "tiers": [
+				{"name": "Gem Sifting", "cost": 50, "desc": "Each haul: 10% chance of a gem worth 5x", "effect": {"gems": [0.1, 5.0]}},
+				{"name": "Crystal Seam", "cost": 80, "desc": "Gems: 15% chance, worth 6x", "effect": {"gems": [0.15, 6.0]}},
+				{"name": "Jewelers", "cost": 130, "desc": "Gems: 22% chance, worth 7x", "effect": {"gems": [0.22, 7.0]}},
+				{"name": "Dragon's Hoard", "cost": 220, "desc": "Gems: 30% chance, worth 10x", "effect": {"gems": [0.3, 10.0]}},
+			]},
 		],
 	},
 	"barricade": {
 		"name": "Barricade", "cost": 37, "color": Color(0.75, 0.55, 0.32),
-		"hp": 200.0, "speed": 0.0, "emplacement": true,
+		"hp": 320.0, "speed": 0.0, "emplacement": true,
 		"damage": 0.0, "range": 0.0, "cooldown": 1.0, "attack": "wall",
 		"cost_base": 15, "cost_per_100": 55, "min_length": 40.0,
-		"desc": "Emplacement. Click two points to build a wall between them (price grows with length). Enemies go around it if they can, and break through if they can't. It blocks your troops and their shots too; only emplacements and lobbed flasks fire over it. Walls only heal with Engineering, and a broken wall is gone for good.",
+		"desc": "Emplacement. Click two points to build a wall between them (price grows with length). Enemies go around it if they can, and break through if they can't. It blocks your troops and their shots too (unless it's an Energy Wall); towers, mortars and lobbed flasks fire over it. Walls only heal with Masonry or as an energy barrier, and a broken wall is gone for good unless Master Builders rebuild it.",
 		"paths": [
-			{"name": "Spikes", "tiers": [
-				{"name": "Sharpened Stakes", "cost": 30, "desc": "Attackers take 3% of their max HP per strike", "effect": {"thorns": 0.03}},
-				{"name": "Spiked Palisade", "cost": 50, "desc": "Attackers take 5% of their max HP per strike", "effect": {"thorns": 0.05}},
-				{"name": "Caltrops", "cost": 85, "desc": "7% thorns. Enemies near the wall are slowed 25%", "effect": {"thorns": 0.07, "wall_slow": [0.25, 50.0]}},
-				{"name": "Iron Maiden", "cost": 150, "desc": "10% thorns. Enemies near the wall are slowed 40%", "effect": {"thorns": 0.1, "wall_slow": [0.4, 60.0]}},
+			{"name": "Barbed Wire", "tiers": [
+				{"name": "Barbed Strand", "cost": 30, "desc": "Attackers take 3% of their max HP per strike", "effect": {"thorns": 0.03}},
+				{"name": "Double Strand", "cost": 50, "desc": "Attackers take 5% of their max HP per strike", "effect": {"thorns": 0.05}},
+				{"name": "Razor Wire", "cost": 85, "desc": "Rebuilt as a barbed fence: 7% barbs. Enemies near it are slowed 25%", "effect": {"thorns": 0.07, "wall_slow": [0.25, 50.0]}},
+				{"name": "Concertina Coils", "cost": 150, "desc": "10% barbs. Enemies near it are slowed 40%", "effect": {"thorns": 0.1, "wall_slow": [0.4, 60.0]}},
 			]},
 			{"name": "Fortify", "tiers": [
 				{"name": "Lashed Logs", "cost": 30, "desc": "+20% health", "effect": {"hp": 1.2}},
@@ -516,16 +671,33 @@ const WARRIORS := {
 				{"name": "Stone Wall", "cost": 85, "desc": "+30% health, takes 20% less damage", "effect": {"hp": 1.3, "armor": 0.2}},
 				{"name": "Fortress Wall", "cost": 150, "desc": "+40% health, takes 30% less damage", "effect": {"hp": 1.4, "armor": 0.3}},
 			]},
-			{"name": "Engineering", "tiers": [
-				{"name": "Repair Crew", "cost": 30, "desc": "Repairs 4 HP/s per 16\u00a0ft of wall while a wave is on", "effect": {"repair": 4.0}},
-				{"name": "Work Crew", "cost": 50, "desc": "Repairs 8 HP/s per 16\u00a0ft of wall while a wave is on", "effect": {"repair": 8.0}},
-				{"name": "Arrow Slits", "cost": 85, "desc": "One archer per 15\u00a0ft of wall: 12 dmg / 1s at enemies within 9\u00a0ft",
-					"effect": {"slits": {"damage": 12.0, "cooldown": 1.0, "range": 90.0}}},
-				{"name": "Murder Holes", "cost": 150, "desc": "Arrows hit for 30 dmg every 0.7s, reach 13\u00a0ft",
-					"effect": {"slits": {"damage": 30.0, "cooldown": 0.7, "range": 130.0}}},
+			{"name": "Masonry", "note": "The crew repairs while a wave is on.", "tiers": [
+				{"name": "Repair Crew", "cost": 30, "desc": "A builder repairs 4 HP/s during waves", "effect": {"repair": 4.0}},
+				{"name": "Work Crew", "cost": 50, "desc": "Two builders: repairs 8 HP/s", "effect": {"repair": 8.0}},
+				{"name": "Brick and Mortar", "cost": 85, "desc": "Rebuilt in brick: +30% health, repairs 12 HP/s", "effect": {"hp": 1.3, "repair": 12.0}},
+				{"name": "Master Builders", "cost": 150, "desc": "+30% health, repairs 20 HP/s. If it breaks, the crew rebuilds it 12s later at half health",
+					"effect": {"hp": 1.3, "repair": 20.0, "rebuild": 12.0}},
+			]},
+			{"name": "Energy Wall", "tiers": [
+				{"name": "Arcane Lattice", "cost": 35, "desc": "Your troops' shots pass straight through the wall", "effect": {"shots_pass": true}},
+				{"name": "Phase Gate", "cost": 55, "desc": "Your troops can walk through it too (enemies still can't)", "effect": {"troops_pass": true}},
+				{"name": "Energy Barrier", "cost": 90, "desc": "Turned to pure energy: +30% health; recharges 3% HP/s after 3s unhit",
+					"effect": {"hp": 1.3, "recharge": [0.03, 3.0]}},
+				{"name": "Aegis Field", "cost": 160, "desc": "Recharges 6% HP/s after 2s. Allies within 6\u00a0ft of it take 15% less damage",
+					"effect": {"recharge": [0.06, 2.0], "aegis": [0.15, 60.0]}},
 			]},
 		],
 	},
+}
+
+# Raised by a Mage's (or Mage Tower's) Necromancy. Health, damage and armor come
+# from the summoner's tier; these are the rest. Not hireable.
+const SKELETON := {
+	"name": "Skeleton", "cost": 0, "color": Color(0.88, 0.86, 0.78),
+	"hp": 45.0, "speed": 100.0,
+	"damage": 6.0, "range": 8.0, "cooldown": 0.9, "attack": "melee",
+	"desc": "Raised by Necromancy. Can't be sold; crumbles when the wave ends.",
+	"paths": [],
 }
 
 # Enemies that reach the castle stop and attack it until they're killed.
