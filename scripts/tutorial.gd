@@ -38,7 +38,7 @@ var steps := [
 	["Barricades", "Barricades are walls: pick Barricade, then click where it starts and where it ends. Enemies walk around walls if they can, and break through if they can't.", "hire:barricade", ""],
 	["Another wave", "Start the next wave when you're ready.", "start", "wave_on"],
 	["Keep it up", "Clear this wave too.", "", "wave_done:2"],
-	["Handy controls", "Speed (or F) makes the game run faster. Menu has music and sound sliders. Press Escape to cancel what you're placing.", "speed", ""],
+	["Handy controls", "Speed (or F) makes the game run faster. The Castle tab (C) repairs your castle between waves and buys abilities like Arrow Storm. Press Escape to cancel what you're placing.", "speed", ""],
 	["Tutorial complete!", "You know the basics. Keep playing here (the castle still can't fall), or head back to the menu for a real game.", "", "end"],
 ]
 

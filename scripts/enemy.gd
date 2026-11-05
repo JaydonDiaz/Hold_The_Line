@@ -3,8 +3,10 @@ extends Node2D
 ## attack any warrior in their way; non-fighters (wolves) slip around them.
 ## Barricades are walked around when there's a way past (see pathing.gd); when
 ## there isn't, everyone hacks at the wall in the way, wolves included.
-## Flyers (bats) pass over walls and warriors alike. Sappers go looking for walls
-## and blow themselves up against the first wall or warrior they reach.
+## Flyers (bats) pass over walls and warriors alike. Fighters turn on a unit that's
+## attacking them (one in range of them and not far off, with no wall between) before
+## carrying on to the castle. Sappers ignore your troops: they make for the castle,
+## and blow themselves up against a wall only if it blocks their way there.
 
 signal died(enemy)
 signal reached_castle(enemy)
@@ -15,6 +17,7 @@ const FLY_HEIGHT := 18.0   # how far above its shadow a flyer is drawn
 const FUSE := 0.6          # seconds a Sapper's bomb fizzes before it goes off
 const ENRAGE_SPEED := 1.35
 const ENRAGE_RATE := 0.7
+const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 
 var kind := ""
 var tier := 1      # enemy type rank (data.gd); higher is more dangerous
@@ -92,6 +95,8 @@ var sieging := false        # reached the castle and attacking it
 var walking := false        # moved this frame (for the waddle)
 var fighting := false       # swinging at a warrior or wall (for the wind-up)
 var drift := 0.0
+var aggro = null            # the unit attacking it that it has turned on
+var aggro_check := 0.0
 
 
 func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult: float, bounty_mult: float) -> void:
@@ -217,14 +222,20 @@ func _process(delta: float) -> void:
 		_push_out()
 		queue_redraw()
 		return
-	var blocker = _find_blocker() if fights else null
+	aggro_check -= delta
+	if aggro_check <= 0.0:
+		aggro_check = 0.3
+		aggro = _attacker()
+	elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
+		aggro = null
+	var blocker = _find_blocker() if fights and bomb.is_empty() else null
 	var wall = _wall_to_break(delta) if blocker == null and not flying else null
 	var at_castle: bool = position.y + radius * 0.5 >= main.CASTLE_Y
 	if at_castle and not sieging:
 		sieging = true
 		reached_castle.emit(self)
-	if not bomb.is_empty() and (blocker != null or at_castle or main.barricade_touching(position, radius + REACH) != null):
-		fuse = FUSE   # up against a warrior or a wall: light the bomb
+	if not bomb.is_empty() and (at_castle or wall != null):
+		fuse = FUSE   # at the castle, or up against a wall in the way: light the bomb
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
 		queue_redraw()
 		return
@@ -262,10 +273,9 @@ func _process(delta: float) -> void:
 		drift += delta * 1.3
 		var dir := Vector2(sin(drift) * 0.3, 1.0).normalized()
 		var route: Vector2 = Vector2.ZERO if flying else main.paths.direction(position, radius)
-		var target_wall = _wall_to_bomb() if not bomb.is_empty() else null
-		if target_wall != null:
-			# Sappers make straight for the nearest wall.
-			dir = position.direction_to(Geometry2D.get_closest_point_to_segment(position, target_wall.seg_a(), target_wall.seg_b()))
+		if aggro != null:
+			# Going after the unit that's attacking it.
+			dir = position.direction_to(aggro.position)
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
@@ -367,16 +377,33 @@ func _breathe(delta: float) -> void:
 	main.spawn_burst(at, breath["radius"], Color(1.0, 0.5, 0.15))
 
 
-## Sapper: the standing wall closest to it, or null if there are none.
-func _wall_to_bomb():
+## The unit attacking this enemy that it turns on, if any: the nearest one that has
+## it as its target and is within range of it (so is shooting or swinging at it, not
+## just heading its way), within AGGRO_LEASH, with no wall in between. Sappers and
+## non-fighters (wolves, wyverns) never turn aside.
+func _attacker():
+	if not fights or not bomb.is_empty() or boss:
+		return null
 	var best = null
-	var best_d := INF
-	for b in main.paths.walls:
-		var d: float = b.gap_from(position)
-		if d < best_d:
-			best_d = d
-			best = b
+	var best_d := AGGRO_LEASH
+	for w in main.get_warriors():
+		if not w.is_active() or w.target != self or w.is_emplacement() and w.attack_range <= 0.0:
+			continue
+		var d: float = position.distance_to(w.position)
+		if d > best_d or d - radius - w.RADIUS > w.attack_range + 12.0:
+			continue
+		if not flying and _wall_across(position, w.position):
+			continue
+		best_d = d
+		best = w
 	return best
+
+
+func _wall_across(a: Vector2, b: Vector2) -> bool:
+	for wall in main.paths.walls:
+		if Geometry2D.segment_intersects_segment(a, b, wall.seg_a(), wall.seg_b()) != null:
+			return true
+	return false
 
 
 ## Sapper's bomb: wrecks walls and hurts warriors nearby, and takes the Sapper with it

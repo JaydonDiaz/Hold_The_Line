@@ -22,6 +22,8 @@ var troop_walls := []   # the ones your troops can't walk through (not Phase Gat
 var shot_walls := []    # the ones your troops can't shoot through (not Arcane Lattices)
 var fields := {}   # enemy radius (int) -> {"dist", "breach", "wall"}
 var troop_grid: AStarGrid2D = null
+var troop_sig := []     # the emplacements troop_grid was built around (it's rebuilt when they change)
+const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to troops (a little under two radii)
 
 
 func setup(m) -> void:
@@ -57,7 +59,15 @@ func wall_between(a: Vector2, b: Vector2) -> bool:
 
 ## Whether something `clearance` wide (its radius plus the wall's half thickness)
 ## would bump into a wall walking straight from a to b (troops: Phase Gates don't count).
-func path_blocked(a: Vector2, b: Vector2, clearance: float) -> bool:
+func path_blocked(a: Vector2, b: Vector2, clearance: float, posts := false) -> bool:
+	if posts:
+		# Emplacements are solid too: is one in the way (not one it's stepping away from)?
+		var ab := b - a
+		var len2 := ab.length_squared()
+		for e in _emplacements():
+			var k := clampf((e.position - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.01 else 0.0
+			if k > 0.0 and (a + ab * k).distance_to(e.position) < clearance + TROOP_RADIUS - 6.0:
+				return true
 	for w in troop_walls:
 		var pts := Geometry2D.get_closest_points_between_segments(a, b, w.seg_a(), w.seg_b())
 		if pts[0].distance_to(pts[1]) < clearance:
@@ -77,9 +87,20 @@ func troop_route(from: Vector2, to: Vector2) -> PackedVector2Array:
 	return route
 
 
+## Emplacements standing on the field (troops walk around them).
+func _emplacements() -> Array:
+	return main.get_warriors().filter(func(w): return w.is_emplacement() and w.is_active())
+
+
+func has_emplacements() -> bool:
+	return not _emplacements().is_empty()
+
+
 func _troop_grid() -> AStarGrid2D:
-	if troop_grid != null:
+	var sig := _emplacements().map(func(w): return Vector2i(w.position.round()))
+	if troop_grid != null and sig == troop_sig:
 		return troop_grid
+	troop_sig = sig
 	var g := AStarGrid2D.new()
 	g.region = Rect2i(0, 0, cols, rows)
 	g.cell_size = Vector2(CELL, CELL)
@@ -99,6 +120,14 @@ func _troop_grid() -> AStarGrid2D:
 				var p := _center(Vector2i(cx, cy))
 				if Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p) < reach:
 					g.set_point_solid(Vector2i(cx, cy))
+	for pos in sig:
+		var lo := _cell(Vector2(pos) - Vector2(POST_CLEAR, POST_CLEAR))
+		var hi := _cell(Vector2(pos) + Vector2(POST_CLEAR, POST_CLEAR))
+		for cy in range(lo.y, hi.y + 1):
+			for cx in range(lo.x, hi.x + 1):
+				var c := Vector2i(cx, cy)
+				if _inside(c) and _center(c).distance_to(Vector2(pos)) < POST_CLEAR:
+					g.set_point_solid(c)
 	troop_grid = g
 	return g
 

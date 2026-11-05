@@ -14,6 +14,37 @@ const CASTLE_HP := 450.0     # the castle falls (and the game is lost) when this
 # Difficulties: castle health and prices (hiring, upgrading, walls) are multiplied by
 # "castle" and "cost"; "down_time" is how long a knocked-out warrior stays down (with
 # "permadeath", how long it has before it dies unless a Healer revives it).
+# Castle upgrades (the Castle tab, after Repair: 4 x 2 buttons like the hire tabs): bought once each. Abilities ("cast") are used from
+# the bar on the castle wall and then recharge for "cooldown" seconds; "target" ones are
+# aimed with a click on the field. Passives work on their own once bought. Ability and
+# Ballista damage grows with the wave, like enemy health (see CASTLE_POWER_GROWTH).
+const CASTLE_POWER_GROWTH := 0.9   # power damage x (enemy health multiplier ^ this)
+const REPAIR_SHARE := 0.25         # a repair mends this share of the castle's max health...
+const REPAIR_BASE := 40            # ...for this much gold...
+const REPAIR_PER_WAVE := 4         # ...plus this much per wave cleared (between waves only)
+const CASTLE_UPGRADES := {
+	"arrows": {"name": "Arrow Storm", "cost": 160, "cast": "target", "cooldown": 25.0, "color": Color(0.95, 0.85, 0.6),
+		"radius": 85.0, "damage": 20.0, "volleys": 4,
+		"desc": "Ability. Archers on the walls loose 4 volleys over 2 seconds onto a wide area. Every enemy under them takes damage each volley, flyers too."},
+	"fireball": {"name": "Fireball", "cost": 200, "cast": "target", "cooldown": 30.0, "color": Color(1.0, 0.5, 0.2),
+		"radius": 50.0, "damage": 110.0, "burn": [14.0, 4.0],
+		"desc": "Ability. Hurls a ball of fire at a tight group: heavy damage to everything it hits, and it leaves them burning."},
+	"frost": {"name": "Frost Orb", "cost": 180, "cast": "target", "cooldown": 30.0, "color": Color(0.6, 0.9, 1.0),
+		"radius": 58.0, "damage": 25.0, "freeze": 2.5, "slow": [0.45, 5.0],
+		"desc": "Ability. A ball of ice shatters over a group: they're frozen solid, then slowed while they thaw."},
+	"lightning": {"name": "Thunderstrike", "cost": 220, "cast": "target", "cooldown": 28.0, "color": Color(0.75, 0.85, 1.0),
+		"radius": 70.0, "damage": 75.0, "chain": 6, "hop": 130.0, "stun": 0.6,
+		"desc": "Ability. Lightning strikes the enemy nearest where you click, then jumps from foe to foe, stunning each one."},
+	"horn": {"name": "Rally Horn", "cost": 180, "cast": "instant", "cooldown": 45.0, "color": Color(1.0, 0.85, 0.35),
+		"duration": 8.0, "buff": {"damage": 0.3, "rate": 0.25, "speed": 0.2},
+		"desc": "Ability. The castle sounds the charge: for 8 seconds every unit deals 30% more damage, attacks 25% faster and moves 20% faster."},
+	"walls": {"name": "Stone Walls", "cost": 150, "passive": true, "color": Color(0.8, 0.78, 0.74), "castle": 0.5,
+		"desc": "Passive. Rebuilds the castle in thick stone: +50% max health (and it gets that much back now)."},
+	"ballista": {"name": "Ballistae", "cost": 250, "passive": true, "color": Color(0.85, 0.65, 0.4),
+		"damage": 22.0, "cooldown": 1.4, "range": 320.0,
+		"desc": "Passive. Bolt throwers on the corner towers shoot the enemy closest to the castle, flyers included, while a wave is on."},
+}
+
 const DIFFICULTIES := {
 	"easy": {"name": "Easy", "castle": 1.5, "cost": 0.8, "down_time": 15.0, "permadeath": false, "color": Color(0.55, 0.9, 0.55), "icon": "healer"},
 	"normal": {"name": "Normal", "castle": 1.0, "cost": 1.0, "down_time": 20.0, "permadeath": false, "color": Color(0.95, 0.85, 0.45), "icon": "swordsman"},
@@ -636,7 +667,7 @@ const WARRIORS := {
 		"name": "Gold Mine", "cost": 150, "color": Color(1.0, 0.85, 0.3),
 		"hp": 180.0, "speed": 0.0, "emplacement": true,
 		"damage": 6.0, "range": 0.0, "cooldown": 5.0, "attack": "mine", "hauls": 8,
-		"desc": "Emplacement. Digs up 6 gold every 5 seconds while a wave is on, up to 8 hauls per wave. Mines share the vein: each one after the first digs 30% less than the one before, and only your best Treasury pays interest.",
+		"desc": "Emplacement. Digs up 6 gold every 5 seconds while a wave is on, up to 8 hauls per wave.",
 		"paths": [
 			{"name": "Deeper Shafts", "tiers": [
 				{"name": "Pickaxes", "cost": 50, "desc": "+40% gold per haul", "effect": {"damage": 1.4}},
@@ -748,7 +779,7 @@ const ENEMIES := {
 	"warlord": {"tier": 5, "hp": 600, "speed": 22.0, "damage": 35.0, "cooldown": 1.5, "fights": true, "cc": 0.5, "knock": 0.3,
 			"bounty": 120, "radius": 24.0, "scale": 4.0, "color": Color(0.65, 0.2, 0.2)},
 	# Flying elite: over walls and warriors, scorching whatever's below.
-	"wyvern": {"tier": 5, "hp": 480, "speed": 30.0, "damage": 0.0, "cooldown": 1.5, "fights": false, "flying": true,
+	"wyvern": {"tier": 5, "hp": 420, "speed": 30.0, "damage": 0.0, "cooldown": 1.5, "fights": false, "flying": true,
 			"wall_damage": 30.0, "cc": 0.5, "knock": 0.3,
 			"breath": {"damage": 16.0, "radius": 34.0, "range": 120.0, "cooldown": 2.2},
 			"bounty": 100, "radius": 20.0, "scale": 3.75, "color": Color(0.3, 0.55, 0.45)},

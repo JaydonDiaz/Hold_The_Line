@@ -11,7 +11,11 @@ const Fx = preload("res://scripts/fx.gd")
 const Hud = preload("res://scripts/hud.gd")
 const Sprites = preload("res://scripts/sprites.gd")
 const Audio = preload("res://scripts/audio.gd")
+const Grave = preload("res://scripts/grave.gd")
+const FieldArt = preload("res://scripts/field_art.gd")
+const Ambience = preload("res://scripts/ambience.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
+const CastlePowers = preload("res://scripts/castle_powers.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -24,6 +28,10 @@ const FREEPLAY_GOLD := 999999
 const FREEPLAY_MAX_LEVEL := 40
 
 var started := false     # set once the player picks a mode
+var selected_grave = null   # Hardcore: a grave clicked to see who fell there
+var grave_layer := Node2D.new()
+var ambience := Ambience.new()   # the mood over the field (light, weather, critters), by mode
+var powers := CastlePowers.new()   # the Castle tab: abilities, Stone Walls, Ballistae
 var permadeath := false   # Hardcore: knocked-out warriors die for good unless a Healer revives them
 var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn any wave at will
 var freeplay_level := 1  # wave level used for freeplay spawns
@@ -82,7 +90,10 @@ func _ready() -> void:
 	castle.main = self
 	# The castle goes over the warriors (it hides any standing behind it, showing their
 	# silhouettes) but under the enemies, effects and overlay.
-	for layer in [wall_layer, warrior_layer, castle, enemy_layer, fx_layer, overlay]:
+	ambience.main = self
+	ambience.setup("normal")
+	powers.main = self
+	for layer in [grave_layer, wall_layer, warrior_layer, castle, enemy_layer, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	hud = Hud.new()
@@ -103,6 +114,8 @@ func _ready() -> void:
 	hud.freeplay_level_changed.connect(change_freeplay_level)
 	hud.freeplay_spawn_pressed.connect(spawn_single)
 	hud.freeplay_clear_pressed.connect(clear_enemies)
+	hud.castle_pressed.connect(castle_item)
+	hud.power_pressed.connect(func(k): powers.trigger(k))
 	hud.show_mode_select()
 	get_viewport().size_changed.connect(_fit_screen)
 	_fit_screen()
@@ -168,6 +181,9 @@ func choose_mode(mode: String) -> void:
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
 	difficulty = "normal" if freeplay or tutorial else mode
+	ambience.setup(mode)
+	castle.modulate = ambience.castle_tint()
+	queue_redraw()
 	var d: Dictionary = Data.DIFFICULTIES[difficulty]
 	permadeath = d["permadeath"]
 	down_time = d["down_time"]
@@ -236,6 +252,26 @@ func _process(delta: float) -> void:
 
 func get_enemies() -> Array:
 	return enemy_layer.get_children().filter(func(e): return not e.dead)
+
+
+## Hardcore: a unit has died for good, so a grave (or a ruin) marks the spot.
+func add_grave(w) -> void:
+	if w.summoned or w.clone_of != null or w is Barricade:
+		return
+	var g := Grave.new()
+	g.setup_from(w)
+	grave_layer.add_child(g)
+
+
+func get_graves() -> Array:
+	return grave_layer.get_children()
+
+
+func _grave_at(p: Vector2):
+	for g in get_graves():
+		if g.position.distance_to(p) < 18.0:
+			return g
+	return null
 
 
 func get_warriors() -> Array:
@@ -424,23 +460,64 @@ func damage_castle(amount: float) -> void:
 		_finish(false)
 
 
+# --- Castle ---------------------------------------------------------------
+
+## A Castle tab button: "repair", or a castle upgrade (bought if it isn't yet, cast
+## if it's an ability that is).
+func castle_item(key: String) -> void:
+	if game_over or not started:
+		return
+	if key == "repair":
+		repair_castle()
+	elif powers.owned.has(key):
+		powers.trigger(key)
+	elif powers.buy(key):
+		pass
+	elif not powers.owned.has(key):
+		hud.show_message("Not enough gold")
+
+
+## What a repair mends now, and what it costs (less than a full repair's price when
+## the castle needs less than that).
+func repair_amount() -> float:
+	return minf(castle_max * Data.REPAIR_SHARE, castle_max - castle_hp)
+
+
+func repair_cost() -> int:
+	var full := price(Data.REPAIR_BASE + Data.REPAIR_PER_WAVE * wave)
+	return maxi(1, ceili(full * repair_amount() / (castle_max * Data.REPAIR_SHARE)))
+
+
+func can_repair() -> bool:
+	return not wave_active and not game_over and repair_amount() >= 1.0 and gold >= repair_cost()
+
+
+func repair_castle() -> void:
+	if wave_active:
+		hud.show_message("Repairs wait until the wave is over")
+		return
+	if not can_repair():
+		return
+	var amount := repair_amount()
+	gold -= repair_cost()
+	castle_hp += amount
+	sfx("place")
+	spawn_text(Vector2(FIELD_W / 2.0, CASTLE_Y - 60), "+%d castle" % roundi(amount), Color(0.5, 1.0, 0.5))
+
+
 func _end_wave() -> void:
 	wave_active = false
 	sfx("fanfare")
 	var bonus := late_gold(20 + wave * 5)
 	gold += bonus
-	# Gold Mines pay their end-of-wave bonus on top, and the best Treasury pays interest
-	# (more Treasuries don't add more).
-	var best = null
-	var interest := 0
+	# Gold Mines pay their end-of-wave bonus on top, and every Treasury pays interest
+	# (each on the gold you had before any interest came in).
+	var banked := gold
 	for w in get_warriors():
+		var interest := 0
 		if w.is_active() and not w.interest.is_empty():
-			var amount := mini(int(gold * w.interest[0]), int(w.interest[1]))
-			if amount > interest:
-				interest = amount
-				best = w
-	for w in get_warriors():
-		gold += w.wave_payout(interest if w == best else 0)
+			interest = mini(int(banked * w.interest[0]), int(w.interest[1]))
+		gold += w.wave_payout(interest)
 	if wave == Data.FINAL_WAVE and not endless:
 		choosing = true
 		Engine.time_scale = 1.0
@@ -536,6 +613,7 @@ func _on_hire_pressed(kind: String) -> void:
 		return
 	selected = null
 	wall_start = null
+	powers.aiming = ""
 	placing_type = "" if placing_type == kind else kind
 
 
@@ -760,16 +838,18 @@ func switch_tab(tab: String) -> void:
 	if dragging != null:
 		_end_drag()
 	selected = null
-	if placing_type != "" and hud.tab_of(placing_type) != tab:
+	if placing_type != "" and (tab == "castle" or hud.tab_of(placing_type) != tab):
 		placing_type = ""   # the hire being placed isn't on the new tab
 		wall_start = null
 	hud.show_tab(tab)
 
 
 func _cancel() -> void:
+	powers.aiming = ""
 	placing_type = ""
 	wall_start = null
 	selected = null
+	selected_grave = null
 
 
 func _warrior_at(p: Vector2) -> Warrior:
@@ -802,6 +882,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		var p := get_local_mouse_position()
 		if p.y > FIELD_H or p.y < 0.0 or p.x < 0.0 or p.x > FIELD_W:
 			return   # off the field (the panel, or the scenery around a full screen)
+		if powers.aiming != "":
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				powers.aim_click(p)
+			elif event.button_index == MOUSE_BUTTON_RIGHT:
+				powers.aiming = ""
+			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
 			if selected != null:
 				order_move(p)
@@ -812,18 +898,27 @@ func _unhandled_input(event: InputEvent) -> void:
 				hire_at(p)
 			else:
 				selected = _warrior_at(p)
+				selected_grave = _grave_at(p) if selected == null else null
 				if selected != null and not wave_active:
 					_start_drag(selected)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 				# Number keys pick from whichever hire tab is showing.
-				var kinds: Array = hud.tab_kinds(hud.hire_tab)
 				var i: int = event.keycode - KEY_1
+				if hud.hire_tab == "castle":
+					var items: Array = hud.castle_items()
+					if i < items.size():
+						castle_item(items[i])
+					return
+				var kinds: Array = hud.tab_kinds(hud.hire_tab)
 				if i < kinds.size():
 					_on_hire_pressed(kinds[i])
 			KEY_TAB:
-				switch_tab("emplacements" if hud.hire_tab == "troops" else "troops")
+				var order := ["troops", "emplacements", "castle"]
+				switch_tab(order[(order.find(hud.hire_tab) + 1) % order.size()])
+			KEY_C:
+				switch_tab("castle")
 			KEY_Z:
 				switch_tab("troops")
 			KEY_X:
@@ -985,15 +1080,19 @@ func spawn_burst(pos: Vector2, radius: float, color: Color) -> void:
 
 func _draw() -> void:
 	_draw_surroundings()
-	# Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below.
+	# Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
+	# lit for the mode's mood; then the scenery on it (see field_art.gd).
+	var tint: Color = ambience.ground_tint()
 	for x in ceili(float(FIELD_W) / TILE):
 		for y in FIELD_H / TILE:
 			var variant := 4
 			if (y + 1) * TILE > DEPLOY_TOP:
 				var h := (x * 73856093) ^ (y * 19349663)
 				variant = 3 if h % 11 == 0 else absi(h) % 3
-			draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false)
-	draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(0.4, 0.3, 0.2, 0.55))
+			draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
+	draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
+	FieldArt.draw_meadow(self, FIELD_W, tint)
+	FieldArt.draw_spawn(self, FIELD_W, tint)
 	for x in range(0, FIELD_W, 16):
 		draw_rect(Rect2(x, DEPLOY_TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
 

@@ -211,7 +211,6 @@ var shove_velocity := Vector2.ZERO
 var shove_left := 0.0
 var lost_time := 0.0      # seconds spent trying to get back to its post; teleports there after STUCK_LIMIT
 const STUCK_LIMIT := 10.0
-const MINE_FALLOFF := 0.7   # each Gold Mine after the first digs this much of the one before
 
 
 func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
@@ -566,6 +565,9 @@ func _update_buffs() -> void:
 	for from in best.values():
 		for key in from:
 			buff[key] += from[key]
+	# The castle's Rally Horn.
+	for key in ["damage", "rate", "speed"]:
+		buff[key] += main.powers.rally(key)
 	# A Healer's halo: the best one covering this unit guards it (on top of statues and songs).
 	var guard := 0.0
 	for w in main.get_warriors():
@@ -634,14 +636,11 @@ func stats_text() -> String:
 	if is_support():
 		match data["attack"]:
 			"mine":
-				var share := mine_share()
-				s = "HP %d/%d   %dg every %.1fs during waves   Hauls %d/%d this wave" % [ceili(hp), ceili(max_hp), maxi(1, roundi(damage * share)), cooldown, hauls_done, hauls]
+				s = "HP %d/%d   %dg every %.1fs during waves   Hauls %d/%d this wave" % [ceili(hp), ceili(max_hp), maxi(1, roundi(damage)), cooldown, hauls_done, hauls]
 				if wave_bonus > 0:
-					s += "   +%dg per wave" % roundi(wave_bonus * share)
-				if share < 1.0:
-					s += "\nShares the vein with earlier mines: digs %d%%" % roundi(share * 100)
+					s += "   +%dg per wave" % roundi(wave_bonus)
 				if not interest.is_empty():
-					s += "   Interest %d%% (max %d, only your best Treasury pays)" % [roundi(interest[0] * 100), interest[1]]
+					s += "   Interest %d%% (max %d)" % [roundi(interest[0] * 100), interest[1]]
 			"pulse":
 				s = "HP %d/%d   Heals %.0f to all in radius every %.2fs   Radius %s" % [ceili(hp), ceili(max_hp), damage, cooldown, Data.ft(attack_range)]
 				if not regen_grant.is_empty():
@@ -895,6 +894,9 @@ func _process(delta: float) -> void:
 		if down_timer <= 0.0:
 			if main.permadeath:
 				main.spawn_text(position + Vector2(0, -24), "Destroyed!" if is_emplacement() else "Fallen!", Color(1, 0.3, 0.3))
+				main.add_grave(self)
+				if main.selected == self:
+					main.selected = null
 				queue_free()
 			else:
 				hp = max_hp   # gets back up where it fell
@@ -1331,9 +1333,10 @@ func cycle_priority() -> void:
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * delta, max_dist)
 	var aim := p
-	# Only go the long way round if a wall is in the way of where it means to stop.
+	# Only go the long way round if a wall or an emplacement is in the way of where it
+	# means to stop.
 	var stop := position + position.direction_to(p) * minf(max_dist, position.distance_to(p))
-	if main.paths.has_troop_walls() and main.paths.path_blocked(position, stop, RADIUS + 6.0):
+	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements()) and main.paths.path_blocked(position, stop, RADIUS + 6.0, true):
 		aim = _route_step(p, delta)
 	position += position.direction_to(aim) * step
 	walk += step / 12.0   # swap walk frames every 12px
@@ -1350,7 +1353,7 @@ func _route_step(p: Vector2, delta: float) -> Vector2:
 		route_timer = 0.5
 	# Drop waypoints it has reached, and skip ahead while the next one is in plain view.
 	while route.size() > 1 and (position.distance_to(route[0]) < 8.0
-			or not main.paths.path_blocked(position, route[1], RADIUS + 6.0)):
+			or not main.paths.path_blocked(position, route[1], RADIUS + 6.0, true)):
 		route.remove_at(0)
 	if route.is_empty():
 		return p
@@ -1775,7 +1778,7 @@ func _support_update(delta: float) -> void:
 			elif cd_timer <= 0.0 and hauls_done < hauls:
 				cd_timer = cooldown
 				hauls_done += 1
-				var amount := maxi(1, roundi(damage * mine_share()))
+				var amount := maxi(1, roundi(damage))
 				var gem: bool = not gems.is_empty() and randf() < gems[0]
 				if gem:
 					amount = roundi(amount * gems[1])
@@ -1834,12 +1837,12 @@ func _support_update(delta: float) -> void:
 		_mend(max_hp * REGEN * delta)
 
 
-## Gold paid out by a Gold Mine when a wave ends: its wave bonus (shared like its
-## hauls), plus `extra` (interest, which main pays only through the best Treasury).
+## Gold paid out by a Gold Mine when a wave ends: its wave bonus, plus `extra` (its
+## Treasury's interest, worked out by main).
 func wave_payout(extra: int) -> int:
 	if not is_active() or data["attack"] != "mine":
 		return 0
-	var amount := roundi(wave_bonus * mine_share()) + extra
+	var amount := roundi(wave_bonus) + extra
 	if amount > 0:
 		main.spawn_text(position + Vector2(0, -44), "+%dg" % amount, Color(1, 0.85, 0.3))
 	return amount
@@ -1862,17 +1865,6 @@ func _best_bay(w):
 			best_heal = heal
 			best = b
 	return best
-
-
-## Share of a full haul this Gold Mine digs: every mine built before it takes some of the vein.
-func mine_share() -> float:
-	var rank := 0
-	for w in main.get_warriors():
-		if w == self:
-			break
-		if w.data["attack"] == "mine":
-			rank += 1
-	return pow(MINE_FALLOFF, rank)
 
 
 func _ally_gap(w) -> float:
