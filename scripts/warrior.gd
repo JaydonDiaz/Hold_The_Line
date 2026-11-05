@@ -79,7 +79,7 @@ var teleport := {}           # cooldown, min_dist
 var stun := {}               # radius, duration, cooldown
 var surge := {}              # cooldown, duration, damage, rate
 # Swordsman.
-var cleave := {}             # arc (degrees), reach, damage: Damage tier 4 sweeps
+var cleave := {}             # arc (degrees), reach, damage: Damage tier 3 cleaves, tier 4 spins (arc 360)
 var dual := 0.0              # off-hand strike damage (fraction), Speed tier 3+
 var block := 0.0             # chance to block a hit outright, Health tier 3+
 # Emplacements.
@@ -734,7 +734,7 @@ func stats_text() -> String:
 	if dual > 0.0:
 		s += "   Off-hand %d%%" % roundi(dual * 100)
 	if not cleave.is_empty():
-		s += "   Sweep %d%%" % roundi(cleave["damage"] * 100)
+		s += "   %s %d%%" % ["Spin" if cleave["arc"] >= 360.0 else "Cleave", roundi(cleave["damage"] * 100)]
 	if not stun.is_empty():
 		s += "   Flash stun %.0fs / %.0fs" % [stun["duration"], stun["cooldown"]]
 	if surge_left > 0.0:
@@ -1551,13 +1551,14 @@ func _hit_spark(e) -> void:
 		main.spawn_burst(e.position + (position - e.position).normalized() * e.radius * 0.6, 9.0, Color(1, 1, 0.85))
 
 
-# Swordsman Damage tier 4: the swing carries on through other enemies in a wide arc.
+# Swordsman Damage tier 3+: the swing carries on through other enemies in a wide arc
+# (tier 4: all the way round, a spin attack).
 func _sweep(main_target, hit: float) -> void:
 	var half := deg_to_rad(cleave["arc"]) / 2.0
 	for x in main.get_enemies():
 		if x == main_target or not _is_valid(x) or x.flying or _gap_to(x) > attack_range + cleave["reach"]:
 			continue
-		if absf(angle_difference(facing.angle(), position.direction_to(x.position).angle())) <= half:
+		if half >= PI or absf(angle_difference(facing.angle(), position.direction_to(x.position).angle())) <= half:
 			x.take_damage(hit)
 
 
@@ -1778,6 +1779,7 @@ func _support_update(delta: float) -> void:
 				var gem: bool = not gems.is_empty() and randf() < gems[0]
 				if gem:
 					amount = roundi(amount * gems[1])
+				amount = main.late_gold(amount)
 				main.gold += amount
 				swing = 0.15
 				main.sfx("gem" if gem else "coin")
@@ -1838,7 +1840,7 @@ func _support_update(delta: float) -> void:
 func wave_payout(extra: int) -> int:
 	if not is_active() or data["attack"] != "mine":
 		return 0
-	var amount := roundi(wave_bonus * mine_share()) + extra
+	var amount: int = main.late_gold(roundi(wave_bonus * mine_share()) + extra)
 	if amount > 0:
 		main.spawn_text(position + Vector2(0, -44), "+%dg" % amount, Color(1, 0.85, 0.3))
 	return amount
@@ -2583,8 +2585,16 @@ func _draw() -> void:
 		var a := facing.angle()
 		if cleave.is_empty():
 			draw_arc(facing * 8, 30, a - 0.9, a + 0.9, 12, Color(1, 1, 1, swing / 0.15), 3.0, true)
+		elif cleave["arc"] >= 360.0:
+			# Damage tier 4: a spin attack, a golden whirl all the way round him.
+			var k := swing / 0.15
+			var r: float = 18.0 + cleave["reach"] * (1.2 - 0.4 * k)
+			var turn := (1.0 - k) * TAU * 1.5 + a
+			draw_arc(Vector2.ZERO, r, 0, TAU, 32, Color(1, 0.85, 0.35, 0.35 * k), 3.0, true)
+			draw_arc(Vector2.ZERO, r, turn, turn + PI * 1.3, 24, Color(1, 0.85, 0.35, k), 5.0, true)
+			draw_arc(Vector2.ZERO, r - 6, turn + 0.3, turn + PI, 18, Color(1, 1, 1, 0.7 * k), 2.0, true)
 		else:
-			# Kingsplitter: a broad golden sweep.
+			# Damage tier 3: a broad golden cleave.
 			var half := deg_to_rad(cleave["arc"]) / 2.0
 			var r: float = 30.0 + cleave["reach"]
 			draw_arc(facing * 4, r, a - half, a + half, 20, Color(1, 0.85, 0.35, swing / 0.15), 4.0, true)

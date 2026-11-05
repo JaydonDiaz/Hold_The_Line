@@ -24,6 +24,17 @@ const FINAL_WAVE := 20
 const HP_GROWTH := 1.12      # enemy health multiplier per wave
 const DAMAGE_GROWTH := 1.03  # enemy damage multiplier per wave
 const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
+# Past the final wave (endless), enemies toughen faster and gold comes in slower.
+const LATE_HP_GROWTH := 1.16      # health multiplier per wave past FINAL_WAVE (instead of HP_GROWTH)
+const LATE_DAMAGE_GROWTH := 1.06  # damage multiplier per wave past FINAL_WAVE (instead of DAMAGE_GROWTH)
+const LATE_GOLD := 0.6            # share of gold earned past FINAL_WAVE (bounties, wave bonuses, mines)
+
+
+## How much an enemy's stat is multiplied at a level: growth per level up to the
+## final wave, then the faster late growth on top.
+static func level_growth(level: int, growth: float, late: float) -> float:
+	var early := mini(level, FINAL_WAVE) - 1
+	return pow(growth, early) * pow(late, maxi(0, level - FINAL_WAVE))
 
 # range = gap between the warrior's edge and the enemy's edge.
 # Warriors go after the nearest enemy anywhere on the field.
@@ -223,10 +234,10 @@ const WARRIORS := {
 		"desc": "Tough and cheap. Charges in and holds enemies in place.",
 		"paths": [
 			{"name": "Damage", "tiers": [
-				{"name": "Sharpened Axe", "cost": 25, "desc": "+30% damage", "effect": {"damage": 1.3}},
+				{"name": "Sharpened Edge", "cost": 25, "desc": "+30% damage", "effect": {"damage": 1.3}},
 				{"name": "Heavy Strikes", "cost": 40, "desc": "+30% damage", "effect": {"damage": 1.3}},
-				{"name": "Champion's Axe", "cost": 75, "desc": "+40% damage", "effect": {"damage": 1.4}},
-				{"name": "Kingsplitter", "cost": 140, "desc": "+60% damage; wide sweeping chops also hit enemies nearby (75%)", "effect": {"damage": 1.6, "cleave": {"arc": 160.0, "reach": 18.0, "damage": 0.75}}},
+				{"name": "Champion's Axe", "cost": 75, "desc": "+40% damage; cleaving blows hit every enemy in a wide arc in front (60%)", "effect": {"damage": 1.4, "cleave": {"arc": 150.0, "reach": 22.0, "damage": 0.6}}},
+				{"name": "Kingsplitter", "cost": 140, "desc": "+60% damage; every blow is a spin attack that hits all enemies around him (100%)", "effect": {"damage": 1.6, "cleave": {"arc": 360.0, "reach": 34.0, "damage": 1.0}}},
 			]},
 			{"name": "Blades", "tiers": [
 				{"name": "Quick Hands", "cost": 25, "desc": "Attacks 18% faster", "effect": {"rate": 0.85}},

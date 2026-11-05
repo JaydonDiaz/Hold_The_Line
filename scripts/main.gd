@@ -343,7 +343,8 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 		at = Vector2(FIELD_W / 2.0 if d.get("boss", false) else randf_range(r + 10, FIELD_W - r - 10), -r)
 	var e := Enemy.new()
 	e.setup(kind, d, self, at,
-			pow(Data.HP_GROWTH, level - 1), pow(Data.DAMAGE_GROWTH, level - 1),
+			Data.level_growth(level, Data.HP_GROWTH, Data.LATE_HP_GROWTH),
+			Data.level_growth(level, Data.DAMAGE_GROWTH, Data.LATE_DAMAGE_GROWTH),
 			1.0 + Data.BOUNTY_GROWTH * (level - 1))
 	e.level = level
 	e.died.connect(_on_enemy_died)
@@ -376,10 +377,18 @@ func _spawn_boss() -> void:
 	_spawn_enemy("ogre_king", wave)
 
 
+## Gold earned, cut down past the final wave (endless) so late waves stay a squeeze.
+func late_gold(amount: int) -> int:
+	if wave <= Data.FINAL_WAVE or amount <= 0:
+		return amount
+	return maxi(1, roundi(amount * Data.LATE_GOLD))
+
+
 func _on_enemy_died(e) -> void:
 	sfx("die", 1.3 if e.radius < 14.0 else (0.7 if e.radius > 20.0 else 1.0))
-	gold += e.bounty
-	spawn_text(e.position, "+%d" % e.bounty, Color(1, 0.85, 0.2))
+	var bounty := late_gold(e.bounty)
+	gold += bounty
+	spawn_text(e.position, "+%d" % bounty, Color(1, 0.85, 0.2))
 	# Necromancy: what dies rotting gets back up on your side.
 	if e.decay_timer > 0.0 and is_instance_id_valid(e.decay_source):
 		var mage = instance_from_id(e.decay_source)
@@ -412,7 +421,7 @@ func damage_castle(amount: float) -> void:
 func _end_wave() -> void:
 	wave_active = false
 	sfx("fanfare")
-	var bonus := 20 + wave * 5
+	var bonus := late_gold(20 + wave * 5)
 	gold += bonus
 	# Gold Mines pay their end-of-wave bonus on top, and the best Treasury pays interest
 	# (more Treasuries don't add more).
@@ -469,7 +478,7 @@ func clear_enemies() -> void:
 func continue_endless() -> void:
 	endless = true
 	choosing = false
-	hud.show_message("Endless: how long can you hold?")
+	hud.show_message("Endless: enemies grow stronger faster, and gold is scarcer")
 
 
 func _finish(won: bool) -> void:
