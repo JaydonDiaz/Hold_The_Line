@@ -27,7 +27,8 @@ const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 # Past the final wave (endless), enemies toughen faster and gold comes in slower.
 const LATE_HP_GROWTH := 1.16      # health multiplier per wave past FINAL_WAVE (instead of HP_GROWTH)
 const LATE_DAMAGE_GROWTH := 1.06  # damage multiplier per wave past FINAL_WAVE (instead of DAMAGE_GROWTH)
-const LATE_GOLD := 0.6            # share of gold earned past FINAL_WAVE (bounties, wave bonuses, mines)
+const LATE_GOLD_STEP := 0.02      # past FINAL_WAVE, bounties and wave bonuses pay this much less per wave...
+const LATE_GOLD_MIN := 0.4        # ...down to this share (mines and interest always pay in full)
 
 
 ## How much an enemy's stat is multiplied at a level: growth per level up to the

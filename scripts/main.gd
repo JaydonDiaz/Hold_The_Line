@@ -377,11 +377,17 @@ func _spawn_boss() -> void:
 	_spawn_enemy("ogre_king", wave)
 
 
-## Gold earned, cut down past the final wave (endless) so late waves stay a squeeze.
+## Share of bounties and wave bonuses paid: all of it up to the final wave, then a
+## little less each endless wave (2% per wave, down to 40%).
+func late_gold_share() -> float:
+	return maxf(Data.LATE_GOLD_MIN, 1.0 - Data.LATE_GOLD_STEP * maxi(0, wave - Data.FINAL_WAVE))
+
+
+## Gold from a kill or a cleared wave, trimmed in endless so late waves stay a squeeze.
 func late_gold(amount: int) -> int:
 	if wave <= Data.FINAL_WAVE or amount <= 0:
 		return amount
-	return maxi(1, roundi(amount * Data.LATE_GOLD))
+	return maxi(1, roundi(amount * late_gold_share()))
 
 
 func _on_enemy_died(e) -> void:
@@ -478,7 +484,7 @@ func clear_enemies() -> void:
 func continue_endless() -> void:
 	endless = true
 	choosing = false
-	hud.show_message("Endless: enemies grow stronger faster, and gold is scarcer")
+	hud.show_message("Endless: enemies grow stronger faster, and bounties shrink")
 
 
 func _finish(won: bool) -> void:

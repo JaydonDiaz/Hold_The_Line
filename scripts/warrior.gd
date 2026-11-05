@@ -1779,7 +1779,6 @@ func _support_update(delta: float) -> void:
 				var gem: bool = not gems.is_empty() and randf() < gems[0]
 				if gem:
 					amount = roundi(amount * gems[1])
-				amount = main.late_gold(amount)
 				main.gold += amount
 				swing = 0.15
 				main.sfx("gem" if gem else "coin")
@@ -1840,7 +1839,7 @@ func _support_update(delta: float) -> void:
 func wave_payout(extra: int) -> int:
 	if not is_active() or data["attack"] != "mine":
 		return 0
-	var amount: int = main.late_gold(roundi(wave_bonus * mine_share()) + extra)
+	var amount := roundi(wave_bonus * mine_share()) + extra
 	if amount > 0:
 		main.spawn_text(position + Vector2(0, -44), "+%dg" % amount, Color(1, 0.85, 0.3))
 	return amount

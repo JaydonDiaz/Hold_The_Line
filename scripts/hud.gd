@@ -833,7 +833,7 @@ func show_victory_choice(wave: int) -> void:
 	title.text = "Victory!"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var sub := _label(dim, Vector2(0, 370), Vector2(WIDTH, 60), Color.WHITE, 18)
-	sub.text = "You held out through all %d waves.\nKeep going? From here enemies toughen faster and gold\nearns 40%% less - see how far you can get." % wave
+	sub.text = "You held out through all %d waves.\nKeep going? From here enemies toughen faster, and kills and\nwaves pay a little less each wave - see how far you can get." % wave
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var go := _button(dim, Vector2(110, 460), Vector2(200, 56), "Keep going")
 	go.pressed.connect(func():
