@@ -8,6 +8,10 @@ extends Node2D
 ## carrying on to the castle, unless they're already at it or nearly there (then they
 ## keep at the castle whatever hits them). Sappers ignore your troops: they make for the castle,
 ## and blow themselves up against a wall only if it blocks their way there.
+## Skeleton Archers hang back: they stop once a troop (or the castle) is in bow range and
+## shoot from there. Slimes go for your troops before the castle; blades, arrows and
+## shells sink into them harmlessly ("physical" damage) unless they're iced over, while
+## magic, ki and ice hurt them (ice twice over, and it ices them over). Their blows slow.
 
 signal died(enemy)
 signal reached_castle(enemy)
@@ -20,6 +24,16 @@ const ENRAGE_SPEED := 1.35
 const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
+const EnemyShot = preload("res://scripts/enemy_shot.gd")
+# Damage schools: what a hit is made of. Only Slimes care.
+const PHYSICAL := "physical"   # blades, fists, arrows, shells, flasks, traps, thorns, fire
+const MAGIC := "magic"         # arcane orbs, lightning, flame breath, rot, songs, holy light
+const KI := "ki"               # a Martial Artist's ki blasts and beam
+const ICE := "ice"             # frost bolts, frost auras, the Frost Orb
+const ICE_BONUS := 2.0         # ice does this much more to a Slime...
+const CRUST_TIME := 2.5        # ...and ices it over for this long: physical hits land, it moves slower
+const CRUST_SLOW := 0.4
+const SLIME_SEEK := 420.0      # how far a Slime looks for a troop to go after
 
 var kind := ""
 var tier := 1      # enemy type rank (data.gd); higher is more dangerous
@@ -43,6 +57,12 @@ var cleave := {}            # Ogre King: reach, arc of its sweeping blows
 var summon := {}            # Ogre King: kinds, count, cooldown
 var horn := {}              # Ogre King: kinds, count, cooldown of the war horn's new wave
 var breath := {}            # Wyvern: damage (scaled), radius, range, cooldown
+var ranged := {}            # Skeleton Archer: range, speed of its arrows
+var gooey := false          # Slime: physical hits sink in harmlessly unless it's iced over
+var goo := {}               # Slime: slow, time its blows slow troops by
+var ice_crust := 0.0        # Slime: seconds left iced over
+var absorb_note := 0.0      # Slime: keeps "Absorbed!" from popping up every frame
+static var slimes_out := 0  # Slimes on the field, so troops only look out for them when there are any
 var breath_timer := 1.0
 var horn_timer := 15.0
 var enrage_at := 0.0
@@ -122,6 +142,11 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 		breath = d["breath"].duplicate()
 		breath["damage"] *= dmg_mult
 	cleave = d.get("cleave", {})
+	ranged = d.get("ranged", {})
+	gooey = d.get("gooey", false)
+	if gooey:
+		slimes_out += 1
+	goo = d.get("goo", {})
 	summon = d.get("summon", {})
 	horn = d.get("horn", {})
 	enrage_at = d.get("enrage", 0.0)
@@ -137,6 +162,12 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 	drift = randf() * TAU
 
 
+func _exit_tree() -> void:
+	if gooey:
+		slimes_out -= 1
+		gooey = false   # counted once, whatever frees it
+
+
 func _process(delta: float) -> void:
 	if dead:
 		return
@@ -148,6 +179,8 @@ func _process(delta: float) -> void:
 			slow_factor = 1.0
 	flash = maxf(flash - delta, 0.0)
 	lunge = maxf(lunge - delta, 0.0)
+	ice_crust = maxf(ice_crust - delta, 0.0)
+	absorb_note = maxf(absorb_note - delta, 0.0)
 	cd_timer = maxf(cd_timer - delta, 0.0)
 	root_timer = maxf(root_timer - delta, 0.0)
 	confuse_timer = maxf(confuse_timer - delta, 0.0)
@@ -169,7 +202,7 @@ func _process(delta: float) -> void:
 		if dead:
 			return
 	if decay_timer > 0.0:
-		take_damage(decay_dps * delta, false)   # before the timer runs down, so a rot kill still counts
+		take_damage(decay_dps * delta, false, MAGIC)   # before the timer runs down, so a rot kill still counts
 		decay_timer -= delta
 		if dead:
 			return
@@ -225,7 +258,19 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 	aggro_check -= delta
-	if _set_on_castle():
+	if not ranged.is_empty() and not sieging and _shoot_from_range():
+		_push_out()
+		progress = position.y
+		queue_redraw()
+		return
+	if gooey and not sieging:
+		# Troops before the castle: it goes after the nearest one it can get at.
+		if aggro_check <= 0.0:
+			aggro_check = 0.3
+			aggro = _nearest_troop()
+		elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
+			aggro = null
+	elif _set_on_castle():
 		aggro = null   # going for the castle, whatever's hitting it
 	elif aggro_check <= 0.0:
 		aggro_check = 0.3
@@ -254,6 +299,8 @@ func _process(delta: float) -> void:
 			lunge = 0.15
 			if cleave.is_empty():
 				blocker.take_damage(damage * (1.0 - weaken))
+				if not goo.is_empty() and blocker.is_active():
+					blocker.apply_goo(goo["slow"], goo["time"])
 			else:
 				_cleave()
 	elif wall != null:
@@ -287,7 +334,7 @@ func _process(delta: float) -> void:
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
-		position += dir * speed * slow_factor * (1.0 - discord_slow) * delta
+		position += dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * delta
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
 		bob += delta * (20.0 if flying else 10.0)   # bats flap fast
@@ -393,8 +440,8 @@ func _breathe(delta: float) -> void:
 ## just heading its way), within AGGRO_LEASH, with no wall in between. Sappers and
 ## wolves never turn aside; a Wyvern flies over to breathe fire on its attacker.
 func _attacker():
-	if (not fights and breath.is_empty()) or not bomb.is_empty() or boss:
-		return null   # wolves slip past, sappers have a job to do (Wyverns breathe on theirs)
+	if (not fights and breath.is_empty()) or not bomb.is_empty() or boss or not ranged.is_empty():
+		return null   # wolves slip past, sappers have a job to do (Wyverns breathe on theirs), archers shoot back from where they stand
 	var best = null
 	var best_d := AGGRO_LEASH
 	for w in main.get_warriors():
@@ -408,6 +455,68 @@ func _attacker():
 		best_d = d
 		best = w
 	return best
+
+
+## Skeleton Archer: with a troop in bow range (and no wall in the way), or the castle,
+## it stands and shoots. Returns whether it did (or is waiting to draw again).
+func _shoot_from_range() -> bool:
+	var r: float = ranged["range"]
+	var mark = null
+	var best := INF
+	for w in main.warriors_near(position, r + 40.0):
+		if not w.is_active():
+			continue
+		var d: float = position.distance_to(w.position) - w.RADIUS - radius
+		if d <= r and d < best and not _wall_across(position, w.position):
+			best = d
+			mark = w
+	var at_wall: bool = position.y + radius >= main.CASTLE_Y - r
+	if mark == null and not at_wall:
+		return false
+	fighting = true
+	var aim: Vector2 = mark.position if mark != null else Vector2(position.x, main.CASTLE_Y + 10.0)
+	lunge_dir = position.direction_to(aim)
+	if absf(lunge_dir.x) > 0.2:
+		flip = signf(lunge_dir.x)
+	if cd_timer <= 0.0:
+		cd_timer = attack_cd
+		lunge = 0.15
+		var shot := EnemyShot.new()
+		shot.main = main
+		shot.target = mark
+		shot.target_pos = aim
+		shot.position = position + Vector2(8.0 * flip, -radius * 1.2)
+		shot.speed = ranged["speed"]
+		shot.damage = (damage if mark != null else wall_damage) * (1.0 - weaken)
+		main.add_projectile(shot)
+		main.sfx("bow", 0.8)
+	return true
+
+
+## Slime: the nearest of your troops (not emplacements or walls) it can get at.
+func _nearest_troop():
+	var best = null
+	var best_d := SLIME_SEEK
+	for w in main.get_warriors():
+		if not w.is_active() or w.is_emplacement():
+			continue
+		var d: float = position.distance_to(w.position)
+		if d < best_d and not _wall_across(position, w.position):
+			best_d = d
+			best = w
+	return best
+
+
+## Whether a hit of this school does nothing: only a Slime that isn't iced over
+## shrugs off physical hits.
+func resists(school: String) -> bool:
+	return gooey and school == PHYSICAL and freeze_timer <= 0.0 and ice_crust <= 0.0
+
+
+## Slime: iced over for a while, so blades and arrows bite.
+func ice_over() -> void:
+	if gooey:
+		ice_crust = maxf(ice_crust, CRUST_TIME * cc_mult)
 
 
 ## At the castle, or close enough to it to be set on it: it doesn't turn aside for
@@ -561,9 +670,18 @@ func _push_from(p: Vector2, min_d: float, share: float) -> void:
 	position += away.normalized() * (min_d - d) * share
 
 
-func take_damage(amount: float, show_hit := true) -> void:
+func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 	if dead:
 		return
+	if gooey:
+		if resists(school):
+			if show_hit and absorb_note <= 0.0:
+				absorb_note = 0.8
+				main.spawn_text(position + Vector2(0, -30), "Absorbed!", Color(0.55, 0.95, 0.5))
+			return
+		if school == ICE:
+			amount *= ICE_BONUS
+			ice_over()
 	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
 	if show_hit:
 		flash = 0.08
@@ -613,6 +731,7 @@ func apply_knockback(push: Vector2) -> void:
 func apply_freeze(duration: float) -> void:
 	duration *= cc_mult
 	freeze_timer = maxf(freeze_timer, duration)
+	ice_over()
 
 
 ## Bard Discord song: refreshed while the enemy stays in earshot.
@@ -664,7 +783,7 @@ func apply_slow(strength: float, duration: float) -> void:
 
 func _draw() -> void:
 	var tint := Color.WHITE
-	if slow_timer > 0.0 or freeze_timer > 0.0:
+	if slow_timer > 0.0 or freeze_timer > 0.0 or ice_crust > 0.0:
 		tint = Color(0.6, 0.85, 1.3)
 	if flash > 0.0:
 		tint = Color(3, 3, 3)
@@ -700,6 +819,11 @@ func _draw() -> void:
 		sc = Vector2(1.12, 0.88)
 	draw_set_transform(Vector2(0, feet) + nudge, rot, Vector2(flip * sc.x, sc.y))
 	draw_texture_rect(frames[frame], Rect2(Vector2(-size.x / 2, -size.y), size), false, tint)
+	if ice_crust > 0.0 and freeze_timer <= 0.0:
+		# Iced over: a frosty glaze and a rim of ice.
+		var glaze := Rect2(Vector2(-size.x / 2, -size.y) + Vector2(size.x * 0.1, size.y * 0.45), size * Vector2(0.8, 0.55))
+		draw_texture_rect(Sprites.white(), glaze, false, Color(0.8, 0.95, 1.0, 0.3 * minf(ice_crust / 0.5, 1.0)))
+		draw_rect(glaze, Color(0.9, 0.97, 1.0, 0.7 * minf(ice_crust / 0.5, 1.0)), false, 1.5)
 	if freeze_timer > 0.0:
 		var ice := Rect2(Vector2(-size.x / 2, -size.y) + Vector2(size.x * 0.15, size.y * 0.1), size * Vector2(0.7, 0.9))
 		draw_texture_rect(Sprites.white(), ice, false, Color(0.75, 0.92, 1.0, 0.45))

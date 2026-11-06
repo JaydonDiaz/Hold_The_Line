@@ -516,12 +516,14 @@ func _build_wave(n: int) -> Array:
 	var pool := ["goblin", "goblin"]
 	if n >= 2:
 		pool.append("orc")
+		pool.append("skeleton_archer")
 	if n >= 3:
 		pool.append("wolf")
 	if n >= 4:
 		pool.append("bat")
 	if n >= 6:
 		pool.append("troll")
+		pool.append("slime")
 	if n >= 7:
 		pool.append("sapper")
 	var list := []
@@ -551,7 +553,18 @@ func _wyverns(n: int) -> int:
 	return 1 + maxi(0, n - Data.FINAL_WAVE) / 10
 
 
+## A word of warning the first time a game sees one of these.
+const FOE_HINTS := {
+	"skeleton_archer": "Skeleton Archers! They hang back and shoot: rush them down.",
+	"slime": "Slimes! Blades and arrows can't hurt them. Use magic, ki or ice (ice lets steel bite).",
+}
+var _foes_seen := {}
+
+
 func _spawn_enemy(kind: String, level: int, at = null) -> void:
+	if FOE_HINTS.has(kind) and not _foes_seen.has(kind):
+		_foes_seen[kind] = true
+		hud.show_message(FOE_HINTS[kind])
 	var d: Dictionary = Data.ENEMIES[kind]
 	var r: float = d["radius"]
 	if at == null:

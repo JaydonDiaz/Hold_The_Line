@@ -814,6 +814,12 @@ const SKELETON := {
 #          {damage, radius of the splash, range, cooldown}
 # bomb = (Sapper) heads for walls and blows itself up against the first wall or warrior
 #        it reaches: "wall" damage to walls, "units" to warriors, within "radius".
+# ranged = (Skeleton Archer) {range, speed}: stops once a troop or the castle wall is within
+#          "range" and shoots arrows ("damage" at troops, "wall_damage" at the castle)
+# gooey = (Slime) blades, arrows, shells, flasks and fire sink in harmlessly unless it's iced
+#         over; magic, ki and ice hurt it, ice twice over (see enemy.gd). It goes after troops
+#         before the castle. goo = {slow, time}: its blows slow a troop's moving (and its
+#         attacking by half as much).
 # tier ranks how dangerous an enemy type is; "Strongest" targeting goes for the highest.
 const ENEMIES := {
 	"goblin": {"tier": 1, "hp": 30, "speed": 45.0, "damage": 4.0, "cooldown": 1.0, "fights": true,
@@ -824,6 +830,14 @@ const ENEMIES := {
 			"bounty": 6, "radius": 12.0, "scale": 2.5, "color": Color(0.6, 0.6, 0.65)},
 	"bat": {"tier": 2, "hp": 26, "speed": 62.0, "damage": 0.0, "cooldown": 1.0, "fights": false, "flying": true, "wall_damage": 3.0,
 			"bounty": 6, "radius": 11.0, "scale": 2.5, "color": Color(0.4, 0.3, 0.45)},
+	# Hangs back out of reach and shoots: send something quick (or a ranged troop) at it.
+	"skeleton_archer": {"tier": 2, "hp": 24, "speed": 40.0, "damage": 5.0, "wall_damage": 4.0, "cooldown": 1.7, "fights": true,
+			"ranged": {"range": 150.0, "speed": 340.0},
+			"bounty": 5, "radius": 11.0, "scale": 2.4, "color": Color(0.88, 0.86, 0.78)},
+	# Only magic, ki and ice touch it, until it's iced over.
+	"slime": {"tier": 3, "hp": 70, "speed": 30.0, "damage": 6.0, "wall_damage": 8.0, "cooldown": 1.3, "fights": true,
+			"gooey": true, "goo": {"slow": 0.45, "time": 2.5},
+			"bounty": 9, "radius": 14.0, "scale": 2.6, "color": Color(0.4, 0.85, 0.35)},
 	"sapper": {"tier": 3, "hp": 45, "speed": 42.0, "damage": 0.0, "cooldown": 1.0, "fights": true,
 			"bomb": {"wall": 250.0, "units": 40.0, "radius": 60.0},
 			"bounty": 9, "radius": 12.0, "scale": 2.4, "color": Color(0.55, 0.6, 0.3)},

@@ -32,6 +32,7 @@ var melt := 0.0      # flasks: share of the direct target's max HP burned away
 var burst := 0.0     # flasks: enemies killed explode for this multiple of the damage
 var crit := false   # critical hit: glows gold and pops a "Crit!" on impact
 var style := "arrow"
+var school := "physical"   # what it's made of (see the damage schools in enemy.gd)
 var color := Color.WHITE
 # Upgrades from the fourth paths and the mage's tier-3 blasts.
 var pierce := 0      # arrows: how many more enemies it goes on through
@@ -98,7 +99,7 @@ func _next_target(p: Vector2):
 	var best = null
 	var best_d := SEEK_RANGE
 	for e in main.get_enemies():
-		if hit_already.has(e) or e.position.y + e.radius < main.DEPLOY_TOP:   # seekers don't turn into the spawn area
+		if hit_already.has(e) or e.position.y + e.radius < main.DEPLOY_TOP or e.resists(school):   # seekers don't turn into the spawn area, or after what they can't hurt
 			continue
 		var d: float = e.position.distance_to(p)
 		if d < best_d:
@@ -120,7 +121,7 @@ func _hit() -> void:
 				continue   # shells burst on the ground
 			if e.position.distance_to(position) <= splash + e.radius:
 				var at: Vector2 = e.position
-				e.take_damage(damage)
+				e.take_damage(damage, true, school)
 				struck.append([e, at])
 				if e.dead:
 					if burst > 0.0:
@@ -166,7 +167,7 @@ func _hit() -> void:
 	elif is_instance_valid(target) and not target.dead:
 		var heading := Vector2.from_angle(rotation)
 		var at: Vector2 = target.position
-		target.take_damage(damage)
+		target.take_damage(damage, true, school)
 		struck.append([target, at])
 		if knockback_chance > 0.0 and randf() < knockback_chance and not target.dead:
 			target.apply_knockback(heading * knockback_force)
@@ -211,7 +212,7 @@ func _after_hit(struck: Array) -> void:
 			var at: Vector2 = pair[1]
 			for x in main.get_enemies():
 				if x.position.distance_to(at) <= r + x.radius:
-					x.take_damage(damage * echo["damage"])
+					x.take_damage(damage * echo["damage"], true, school)
 			main.spawn_burst(at, r, Color(1.0, 0.55, 0.95))
 	if not napalm.is_empty():
 		var z := Zone.new()
