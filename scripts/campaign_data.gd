@@ -139,7 +139,7 @@ const MISSIONS := {
 	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 3, "gold": 320,
 		"count": [5, 2], "mood": "normal",
 		"pool": {1: ["goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
-		"extra": {3: ["troll"], 5: ["troll", "sapper", "sapper"]},
+		"extra": {2: ["skeleton_archer"], 3: ["troll"], 4: ["skeleton_archer", "skeleton_archer"], 5: ["troll", "sapper"]},
 		"notes": {3: "Sappers! They'll blow holes in any wall in their way.", 5: "Trolls at the quarry gate!"},
 		"allies": [{"kind": "swordsman", "at": Vector2(220, 520)}, {"kind": "swordsman", "at": Vector2(420, 520)}],
 		"lend": ["barricade", "repair", "engineers"], "reward": "stonehollow", "training": 3, "track": {},

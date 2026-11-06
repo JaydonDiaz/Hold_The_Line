@@ -9,7 +9,8 @@ extends SceneTree
 ##                    be used by button, hotkey or direct call; earned and lent ones can
 ## M  missions        waves, pools, starting gold and allies; winning, losing, retrying,
 ##                    leaving mid-mission; the map's territory states; story conditions
-## D  data            every mission, faction and story entry is well-formed; no flying enemy
+## D  data            every mission, faction and story entry is well-formed; no Slime
+##                    without magic, ki or ice in every alliance set it could meet; no flying enemy
 ##                    where some valid alliance set would have nothing to hit it with
 ## T  training       tiers II-IV need troop training: enforced by card, hotkey and call; points
 ##                    are earned by first wins, spent in order, shared by tower crews, saved
@@ -24,6 +25,9 @@ const Data = preload("res://scripts/data.gd")
 const TEST_SAVE := "user://campaign_test.cfg"
 const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note"]   # Data "attack"s that can hit fliers
 const AIR_KEYS := ["path:1", "path:2"]   # wall archers and wall mages shoot fliers too
+# What can hurt a Slime: magic, ice and ki (Martial Artists' Ki Blast is a tier I path).
+const SLIME_ATTACKS := ["orb", "frost", "note", "combo"]
+const SLIME_KEYS := ["path:2", "ability:fireball", "ability:lightning", "ability:frost"]
 
 var main
 var campaign
@@ -433,22 +437,29 @@ func _data() -> void:
 	check(problems.is_empty(), "D  campaign data is well-formed%s" % ("" if problems.is_empty() else ": " + "; ".join(problems)))
 	# Flying enemies only where every valid alliance set (plus the mission's own help)
 	# has something that can hit them.
+	# Likewise Slimes, which only magic, ki and ice can hurt.
 	var air_problems := []
+	var slime_problems := []
 	var sets_checked := 0
 	for mid in CD.MISSIONS:
 		var m: Dictionary = CD.MISSIONS[mid]
 		var fliers := false
-		for w in m["pool"]:
-			for e in m["pool"][w]:
+		var slimes := false
+		for list in m["pool"].values() + m.get("extra", {}).values():
+			for e in list:
 				fliers = fliers or Data.ENEMIES[e].get("flying", false)
-		for w in m.get("extra", {}):
-			for e in m["extra"][w]:
-				fliers = fliers or Data.ENEMIES[e].get("flying", false)
+				slimes = slimes or Data.ENEMIES[e].get("gooey", false)
 		for allies in alliance_sets_for(m["territory"]):
 			sets_checked += 1
-			if fliers and not _has_air_cover(allies, m):
+			if fliers and not _has_cover(allies, m, AIR_KEYS, AIR_ATTACKS):
 				air_problems.append("%s with %s" % [mid, str(allies)])
+			if slimes and not _has_cover(allies, m, SLIME_KEYS, SLIME_ATTACKS):
+				slime_problems.append("%s with %s" % [mid, str(allies)])
 	check(air_problems.is_empty(), "D  no flying enemies without anti-air (%d alliance sets checked)%s" % [sets_checked, "" if air_problems.is_empty() else ": " + ", ".join(air_problems)])
+	check(slime_problems.is_empty(), "D  no Slimes without magic, ki or ice to fight them%s" % ("" if slime_problems.is_empty() else ": " + ", ".join(slime_problems)))
+	# The check itself: a mission with Slimes and only Swordsmen fails it; lend a Mage and it passes.
+	check(not _has_cover([], {"lend": []}, SLIME_KEYS, SLIME_ATTACKS) and _has_cover([], {"lend": ["mage"]}, SLIME_KEYS, SLIME_ATTACKS),
+			"D  ...(Swordsmen alone can't fight Slimes; a lent Mage can)")
 
 
 func _valid_key(key: String) -> bool:
@@ -506,14 +517,14 @@ func _consistent(won: Array) -> bool:
 	return true
 
 
-func _has_air_cover(allies: Array, m: Dictionary) -> bool:
+func _has_cover(allies: Array, m: Dictionary, cover_keys: Array, attacks: Array) -> bool:
 	var keys: Array = CD.START_UNLOCKS.duplicate() + m.get("lend", [])
 	for f in allies:
 		keys.append_array(CD.FACTIONS[f]["unlocks"])
 	for a in m.get("allies", []):
 		keys.append(a["kind"])
 	for k in keys:
-		if AIR_KEYS.has(k) or (Data.WARRIORS.has(k) and AIR_ATTACKS.has(Data.WARRIORS[k].get("attack", ""))):
+		if cover_keys.has(k) or (Data.WARRIORS.has(k) and attacks.has(Data.WARRIORS[k].get("attack", ""))):
 			return true
 	return false
 
