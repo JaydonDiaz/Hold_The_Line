@@ -285,7 +285,7 @@ func _thunder(p: Vector2, d: Dictionary) -> void:
 		hit.append(e)
 		main.spawn_bolt(PackedVector2Array([from, e.position]), d["color"])
 		var at: Vector2 = e.position
-		e.take_damage(dmg("lightning") * (1.0 if hit.size() == 1 else 0.8))
+		e.take_damage(dmg("lightning") * (1.0 if hit.size() == 1 else 0.8), true, "magic")
 		e.apply_stun(d["stun"])
 		from = at
 		e = _nearest_enemy(at, d["hop"], hit)
@@ -356,15 +356,15 @@ func _land(f: Dictionary) -> void:
 			var d := info("fireball")
 			main.sfx("boom")
 			for e in _in_area(p, radius("fireball")):
-				e.take_damage(dmg("fireball"))
+				e.take_damage(dmg("fireball"), true, "magic")
 				e.apply_burn(d["burn"][0] * power(), d["burn"][1])
 			shows.append({"kind": "blast", "at": p, "t": 0.0, "life": 0.5, "r": radius("fireball"), "col": d["color"]})
 		"frost":
 			var d := info("frost")
 			main.sfx("frost", 0.7)
 			for e in _in_area(p, radius("frost")):
-				e.take_damage(dmg("frost"))
 				e.apply_freeze(d["freeze"])
+				e.take_damage(dmg("frost"), true, "ice")
 				e.apply_slow(d["slow"][0], d["freeze"] + d["slow"][1])
 			shows.append({"kind": "shatter", "at": p, "t": 0.0, "life": 0.6, "r": radius("frost"), "col": d["color"]})
 

@@ -61,6 +61,8 @@ var splash := 0.0
 var slow := 0.0
 var slow_time := 0.0
 var slow_radius := 0.0
+var goo_timer := 0.0     # hit by a Slime: slowed (moving, and attacking at half that) until this runs out
+var goo_slow := 0.0
 var freeze_chance := 0.0
 var freeze_time := 0.0
 var crit_chance := 0.0
@@ -480,6 +482,32 @@ func is_melee() -> bool:
 	return data["attack"] == "melee" or data["attack"] == "combo"
 
 
+## What this unit's main attack is made of (see the damage schools in enemy.gd).
+func school() -> String:
+	match data["attack"]:
+		"orb", "note":
+			return "magic"
+		"frost":
+			return "ice"
+	return "physical"
+
+
+## Whether this unit can hurt e at all: a Slime that isn't iced over takes nothing from
+## blades and arrows, so only magic, ice and ki users go after one.
+func can_hurt(e) -> bool:
+	return not e.gooey or not e.resists(school()) or not blast.is_empty()
+
+
+## Slime blows: slowed (moving and attacking) for a while.
+func apply_goo(strength: float, duration: float) -> void:
+	goo_slow = maxf(goo_slow if goo_timer > 0.0 else 0.0, strength)
+	goo_timer = maxf(goo_timer, duration)
+
+
+func _goo_factor() -> float:
+	return 1.0 - goo_slow if goo_timer > 0.0 else 1.0
+
+
 func is_healer() -> bool:
 	return data["attack"] == "heal"
 
@@ -530,7 +558,7 @@ func _clones() -> Array:
 
 
 func _rate() -> float:
-	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"])
+	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"]) * (1.0 - (1.0 - _goo_factor()) * 0.5)
 
 
 ## Martial Artist Power path: what Limit Break, the crimson aura and the golden form
@@ -908,6 +936,7 @@ func _process(delta: float) -> void:
 		return
 	hurt = maxf(hurt - delta, 0.0)
 	swing = maxf(swing - delta, 0.0)
+	goo_timer = maxf(goo_timer - delta, 0.0)
 	pose_left = maxf(pose_left - delta, 0.0)
 	block_flash = maxf(block_flash - delta, 0.0)
 	queue_redraw()
@@ -1097,7 +1126,7 @@ func _victim():
 ## In reach for this unit's main attack: melee blows can't reach a flyer (a Martial
 ## Artist's ki can, but its punches can't).
 func _can_strike(e) -> bool:
-	return _in_range(e) and not (is_melee() and e.flying)
+	return _in_range(e) and not (is_melee() and (e.flying or e.gooey and e.resists("physical")))
 
 
 ## Whether this unit can hurt flyers at all: not with melee blows (unless it has ki
@@ -1180,6 +1209,7 @@ func _continue_volley(delta: float) -> void:
 	p.knockback_force = knockback_force
 	p.speed = 520.0
 	p.style = "ki"
+	p.school = "ki"
 	p.color = KI_COLOR
 	main.add_projectile(p)
 	main.sfx("ki")
@@ -1208,7 +1238,7 @@ func _fire_beam() -> void:
 	for x in main.get_enemies():
 		var closest := Geometry2D.get_closest_point_to_segment(x.position, from, to)
 		if closest.distance_to(x.position) <= beam["width"] / 2.0 + x.radius:
-			x.take_damage(beam["damage"] * _power())
+			x.take_damage(beam["damage"] * _power(), true, "ki")
 	main.spawn_beam(from, to, Color(1.0, 0.85, 0.3), beam["width"])
 	main.sfx("beam")
 	facing = dir
@@ -1302,7 +1332,7 @@ func _gap_to(e) -> float:
 
 
 func _is_valid(e) -> bool:
-	if e == null or not is_instance_valid(e) or e.dead or (e.flying and not hits_air()):
+	if e == null or not is_instance_valid(e) or e.dead or (e.flying and not hits_air()) or (e.gooey and not can_hurt(e)):
 		return false
 	# Nothing reaches into the enemy's spawn area: no one follows them up there or shoots
 	# them there (one poking out of it is fair game).
@@ -1364,7 +1394,7 @@ func cycle_priority() -> void:
 
 
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
-	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * delta, max_dist)
+	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * delta, max_dist)
 	if wall_guard:
 		return   # wall guards hold their posts
 	var aim := p
@@ -1529,14 +1559,20 @@ func under_construction() -> bool:
 ## Ranged troops (Healers too) keep their distance: when an enemy that can hurt them gets close,
 ## they step back away from it (leaning toward their post) and keep shooting, until
 ## there's room again. Melee troops (Martial Artists too, ki blasts and all, since they
-## can still brawl) stand and fight. Returns whether it's backing off this frame.
+## can still brawl) stand and fight, except against a Slime their blows can't hurt:
+## that they back away from too. Returns whether it's backing off this frame.
 func _kite(delta: float) -> bool:
-	if is_melee() or wall_guard or summoned or clone_of != null:
+	if wall_guard:
 		return false
+	var brawler := is_melee() or summoned or clone_of != null
+	if brawler and main.Enemy.slimes_out <= 0:
+		return false   # only Slimes make a brawler back off
 	var threat = null
 	var near := INF
 	for e in main.enemies_near(position, KITE_CLEAR + RADIUS + 30.0):
 		if e.dead or not e.fights or not e.bomb.is_empty() or e.stun_timer > 0.0 or e.freeze_timer > 0.0:
+			continue
+		if brawler and not e.resists("physical"):
 			continue
 		var gap: float = _gap_to(e)
 		if gap < near:
@@ -1596,6 +1632,7 @@ func _shoot(e, index: int) -> void:
 	p.freeze_time = freeze_time
 	p.speed = data["projectile_speed"]
 	p.style = data["attack"]
+	p.school = school()
 	p.color = data["color"]
 	p.poison = poison
 	p.source = get_instance_id()
@@ -1684,7 +1721,7 @@ func _cast_chain() -> bool:
 				nxt = e
 		cur = nxt
 	for e in hit:
-		e.take_damage(chain["damage"] * _power())
+		e.take_damage(chain["damage"] * _power(), true, "magic")
 		if not magnet.is_empty() and not e.dead:
 			e.charge(3.0)   # Thunderhead: lightning-struck foes get dragged in by the next blast
 	main.spawn_bolt(points, Color(0.7, 0.85, 1.0))
@@ -1699,7 +1736,7 @@ func _breathe() -> bool:
 	if e == null:
 		return false
 	facing = position.direction_to(e.position)
-	e.take_damage(breath["damage"] * _power())
+	e.take_damage(breath["damage"] * _power(), true, "magic")
 	e.apply_burn(breath["burn_dps"], breath["burn_time"])
 	main.spawn_flame(position + facing * 16 + Vector2(0, -16), e.position)
 	main.sfx("flame")
@@ -1717,7 +1754,7 @@ func _cast_lance() -> bool:
 		return false
 	main.spawn_beam(_muzzle() if kind == "magetower" else position + Vector2(0, -24), best.position, Color(1.0, 0.5, 0.95))
 	main.sfx("lance")
-	best.take_damage(lance["damage"] * _power())
+	best.take_damage(lance["damage"] * _power(), true, "magic")
 	swing = 0.15
 	return true
 
@@ -1921,7 +1958,7 @@ func _support_update(delta: float) -> void:
 					smite_timer = cooldown
 					swing = 0.15
 					for e in foes:
-						e.take_damage(smite["damage"] * _power())
+						e.take_damage(smite["damage"] * _power(), true, "magic")
 						if e.dead:
 							continue
 						if smite["slow"] > 0.0:
@@ -2103,8 +2140,9 @@ func _frost_aura_step(delta: float) -> void:
 	var inside: Array = main.get_enemies().filter(func(e): return position.distance_to(e.position) <= r + RADIUS + e.radius)
 	for e in inside:
 		e.apply_slow(frost_aura["slow"], 0.4)
+		e.ice_over()
 		if frost_aura["dps"] > 0.0:
-			e.take_damage(frost_aura["dps"] * 0.25 * _power(), false)
+			e.take_damage(frost_aura["dps"] * 0.25 * _power(), false, "ice")
 	if frost_aura["freeze_every"] > 0.0 and aura_freeze_timer <= 0.0 and not inside.is_empty():
 		aura_freeze_timer = frost_aura["freeze_every"]
 		for e in inside:
@@ -2762,6 +2800,8 @@ func _draw() -> void:
 				var base := Vector2(x, feet - 2.0 - absf(x) * 0.6)
 				draw_colored_polygon(PackedVector2Array([base + Vector2(-3, 0), base + Vector2(3, 0), base + Vector2(0, -h - size.y * 0.35)]), Color(col, 0.45))
 	var tint := Color(1, 0.45, 0.45) if hurt > 0.0 else Color.WHITE
+	if goo_timer > 0.0 and hurt <= 0.0:
+		tint = Color(0.7, 1.15, 0.6)   # slimed: green and sticky
 	if clone_of != null:
 		# A Multiform copy: see-through, tinted blue and flickering, so it's never taken for the real one.
 		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))
