@@ -1526,7 +1526,7 @@ func under_construction() -> bool:
 	return build_left > 0.0
 
 
-## Ranged troops keep their distance: when an enemy that can hurt them gets close,
+## Ranged troops (Healers too) keep their distance: when an enemy that can hurt them gets close,
 ## they step back away from it (leaning toward their post) and keep shooting, until
 ## there's room again. Melee troops (Martial Artists too, ki blasts and all, since they
 ## can still brawl) stand and fight. Returns whether it's backing off this frame.
@@ -1735,6 +1735,18 @@ func _healer_update(delta: float) -> void:
 			facing = position.direction_to(post)
 			_move_toward(post, position.distance_to(post), delta)
 			return
+	if _kite(delta):
+		# Backing off from an enemy, like the other ranged troops; still heals (or keeps
+		# channelling a revive) on anyone already within reach, but won't close in.
+		var downed_near = _pick_downed()
+		if downed_near != null and downed_near == rez_target and _ally_gap(downed_near) <= attack_range:
+			_rez_step(downed_near, delta)
+		else:
+			var hurt_near = _pick_hurt()
+			if hurt_near != null and cd_timer <= 0.0 and _ally_gap(hurt_near) <= attack_range:
+				cd_timer = cooldown
+				_heal(hurt_near)
+		return
 	var downed = _pick_downed()
 	if downed != rez_target:
 		rez_target = downed
