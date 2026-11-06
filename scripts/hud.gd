@@ -22,11 +22,17 @@ signal ability_pressed(key: String)
 signal repair_pressed(chunk: int)
 signal power_pressed(key: String)
 signal group_kind_pressed(kind: String)
+signal campaign_retry
+signal campaign_map
 
 const Data = preload("res://scripts/data.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 const Sprites = preload("res://scripts/sprites.gd")
 const TitleScene = preload("res://scripts/title_scene.gd")
+const WorldMap = preload("res://scripts/world_map.gd")
+const Story = preload("res://scripts/story.gd")
+const Cutscene = preload("res://scripts/cutscene.gd")
+const LOCKED_TINT := Color(1, 1, 1, 0.4)
 const PATH_KEYS := ["Q", "W", "E", "R"]
 const TOP := 768.0
 # The panel's tabs: key, label, hotkey.
@@ -65,7 +71,12 @@ var message_label: Label
 var message_tween: Tween
 var mode_screen: ColorRect
 var title_scene: Control   # the castle scene behind the mode cards (changes as cards are hovered)
-var hard_label: Label       # shows the difficulty, unless it's Normal
+var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
+var world_map: Control = null   # the campaign map, while it's up
+var story: Control = null       # a story scene, while one is playing
+var mode_title: Label
+var mode_sub: Label
+var mode_cards := []            # the title screen's cards now showing
 var hire_meta := {}         # kind -> [label, hotkey number, rows] to rebuild hire button text
 var price_mult := 1.0
 var price_step := 1         # prices are rounded to this many gold (5 on Hard)
@@ -455,7 +466,8 @@ func _show_hire_card(kind: String, b: Button) -> void:
 	var names: Array = d["paths"].map(func(path): return path["name"])
 	body += "\nUpgrades: " + ", ".join(names)
 	hover_kind = kind
-	_fill_card(d["name"], d["color"], "%s  -  %s" % [sort, price], body)
+	var note: String = get_parent().lock_note(kind) if get_parent().has_method("lock_note") else ""
+	_fill_card(d["name"], d["color"], note if note != "" else "%s  -  %s" % [sort, price], body)
 	# Just above the panel, lined up with the button.
 	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), TOP - hover_card.size.y - 6.0)
 
@@ -535,8 +547,12 @@ static func _base_stats(d: Dictionary) -> String:
 
 
 func refresh(main) -> void:
-	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial)
-	if hard_label.visible and main.tutorial:
+	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial or main.campaign)
+	if hard_label.visible and main.campaign:
+		var diff_name: String = Data.DIFFICULTIES[main.difficulty]["name"]
+		hard_label.text = (main.mission["name"] as String).to_upper() + ("" if main.difficulty == "normal" else "  ·  " + diff_name.to_upper())
+		hard_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+	elif hard_label.visible and main.tutorial:
 		hard_label.text = "TUTORIAL"
 		hard_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.55))
 	elif hard_label.visible:
@@ -566,7 +582,7 @@ func refresh(main) -> void:
 	else:
 		gold_label.text = "Gold %d" % main.gold
 		lives_label.text = "Castle %d" % ceili(main.castle_hp)
-		wave_label.text = "Endless %d" % main.wave if main.endless else "Wave %d/%d" % [main.wave, Data.FINAL_WAVE]
+		wave_label.text = "Endless %d" % main.wave if main.endless else "Wave %d/%d" % [main.wave, main.last_wave()]
 		start_btn.disabled = main.wave_active or main.game_over or main.choosing
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
 		if main.auto_play and not main.wave_active and not main.game_over and not main.choosing:
@@ -574,8 +590,10 @@ func refresh(main) -> void:
 	for kind in hire_buttons:
 		var b: Button = hire_buttons[kind]
 		var cost: int = main.hire_cost(kind)
+		var open: bool = main.allowed(kind)
 		b.set_pressed_no_signal(main.placing_type == kind)
-		b.disabled = main.game_over or (main.gold < cost and main.placing_type != kind)
+		b.disabled = main.game_over or not open or (main.gold < cost and main.placing_type != kind)
+		b.modulate = Color.WHITE if open else LOCKED_TINT
 
 	# A selected unit swaps the hire row for its upgrade paths (a selected grave shows
 	# the paths the fallen unit had, with nothing left to buy).
@@ -645,6 +663,8 @@ func refresh(main) -> void:
 			info_label.text = "Click the field to cast %s. Right-click cancels." % Data.ABILITIES[main.powers.aiming]["name"]
 		elif hire_tab == "abilities":
 			info_label.text = "Buy an ability once, then use it from here or the bar in the top-left corner (1-6). It recharges after each use."
+		elif hire_tab == "repair" and not main.allowed("repair"):
+			info_label.text = main.lock_note("repair") + ". Until then, the castle can't be repaired."
 		elif hire_tab == "repair":
 			info_label.text = "Castle %d/%d. Masons mend the castle between waves: a full repair from nothing costs %dg, smaller ones their share of that." % [
 					ceili(main.castle_hp), roundi(main.castle_max), main.price(Data.REPAIR_FULL_COST)]
@@ -709,7 +729,14 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			tips.append("%s (%dg): %s" % [t["name"], powers.tier_cost(p, i), t["desc"]])
 		b.tooltip_text = "\n".join(tips)
 		var nxt: Dictionary = powers.next_tier(p)
-		if nxt.is_empty():
+		var path_open: bool = main.allowed("path:%d" % p)
+		if not path_open:
+			card["tier"].text = path["tiers"][0]["name"]
+			card["desc"].text = main.lock_note("path:%d" % p)
+			card["cost"].text = "LOCKED"
+			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			b.disabled = true
+		elif nxt.is_empty():
 			var last: Dictionary = path["tiers"][-1]
 			card["tier"].text = last["name"]
 			card["desc"].text = last["desc"]
@@ -724,7 +751,7 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			card["cost"].text = "%dg [%d]" % [cost, p + 1]
 			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
 			b.disabled = not ok
-		b.modulate.a = 1.0
+		b.modulate = Color.WHITE if path_open else LOCKED_TINT
 	# Abilities: buy, then use (with the time left to recharge).
 	var n := 0
 	for key in ability_buttons:
@@ -732,7 +759,12 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 		var b: Button = ability_buttons[key]
 		b.visible = show and hire_tab == "abilities"
 		var d: Dictionary = Data.ABILITIES[key]
-		if not powers.owned.has(key):
+		var ab_open: bool = main.allowed("ability:" + key)
+		b.modulate = Color.WHITE if ab_open else LOCKED_TINT
+		if not ab_open:
+			b.text = "%s\nLocked  [%d]" % [d["name"], n]
+			b.disabled = true
+		elif not powers.owned.has(key):
 			b.text = "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
 			b.disabled = main.gold < powers.cost(key) or main.game_over
 		else:
@@ -748,7 +780,10 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 		var label := "Full repair" if share >= 1.0 else "Repair %d%%" % roundi(share * 100)
 		if share >= 1.0 and main.repair_all_gold():
 			label = "Use all gold"
-		if not main.repair_job.is_empty():
+		b.modulate = Color.WHITE if main.allowed("repair") else LOCKED_TINT
+		if not main.allowed("repair"):
+			b.text = "%s\nLocked\n[%d]" % [label, i + 1]
+		elif not main.repair_job.is_empty():
 			b.text = "%s\nRepairing...\n%d%% done" % [label, roundi(100.0 * (1.0 - main.repair_job["left"] / main.repair_job["total"]))]
 		elif amount < 1.0:
 			b.text = "%s\n%s\n[%d]" % [label, "Castle at full" if main.castle_hp >= main.castle_max - 0.5 else "Not enough gold", i + 1]
@@ -842,6 +877,9 @@ func _show_ability_card(key: String, b: Button) -> void:
 	var d: Dictionary = Data.ABILITIES[key]
 	hover_kind = "ability:" + key
 	var sub := "Ability  -  %s" % ("Owned" if powers.owned.has(key) else "%dg" % powers.cost(key))
+	var note: String = get_parent().lock_note("ability:" + key)
+	if note != "":
+		sub = note
 	var nums := []
 	if d.has("damage"):
 		nums.append("Damage %d this wave" % roundi(powers.dmg(key)))
@@ -935,8 +973,20 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			card["tier"].text = "Upgrade limit"
 			card["desc"].text = "All %d upgrades are in use." % Warrior.MAX_UPGRADES
 			card["cost"].text = ""
+		"untrained":
+			var t: Dictionary = w.next_tier(p)
+			card["tier"].text = t["name"]
+			card["desc"].text = "Train %s to tier %s at the Training Grounds" % [_trainee_name(w.kind), ["I", "II", "III", "IV"][w.tiers[p]]]
+			card["cost"].text = "TRAINING"
+			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	b.disabled = state != "ok" or not affordable
-	b.modulate.a = 0.45 if state == "full" else 1.0
+	b.modulate.a = 0.45 if state == "full" or state == "untrained" else 1.0
+
+
+## Whose training a unit uses, in words ("Archers" for an Archer Tower's crew).
+func _trainee_name(kind: String) -> String:
+	var name: String = Data.WARRIORS[Campaign.train_key(kind)]["name"]
+	return name + ("es" if name.ends_with("ch") else "s")
 
 
 ## A fallen unit's path, as it was when it fell: no price, nothing to buy.
@@ -967,9 +1017,9 @@ func show_message(text: String) -> void:
 	message_tween.tween_property(message_label, "modulate:a", 0.0, 0.6)
 
 
-## The difficulty picker. Cards fly in one after another; hovering lifts a card, and
-## picking one makes it pulse and burst while the others fall away, then the screen
-## fades into the game.
+## The title screen. Cards fly in one after another; hovering lifts a card, and
+## picking a mode makes it pulse and burst while the others fall away, then the screen
+## fades into the game (Classic and the Campaign open a second set of cards first).
 func show_mode_select() -> void:
 	picking = false
 	mode_screen = ColorRect.new()
@@ -1004,27 +1054,64 @@ func show_mode_select() -> void:
 	sub.modulate.a = 0.0
 	create_tween().tween_property(sub, "modulate:a", 1.0, 0.4).set_delay(0.35)
 
-	var castle := Data.CASTLE_HP
+	mode_title = title
+	mode_sub = sub
+	_show_cards("top")
+
+
+## The cards on the title screen. "top": Campaign, Classic, Freeplay, Tutorial,
+## Settings; "classic": the three difficulties; "campaign": continue or start one;
+## "new": a new campaign's difficulty. Each card is [key, name, text, colour, icon,
+## the title scene's look]; a "goto:<set>" key opens another set of cards.
+func _show_cards(set_name: String) -> void:
+	for c in mode_cards:
+		var away := create_tween()
+		away.tween_property(c, "modulate:a", 0.0, 0.15)
+		away.tween_callback(c.queue_free)
+	mode_cards = []
+	picking = false
 	var modes := []
-	for key in Data.DIFFICULTIES:
-		var d: Dictionary = Data.DIFFICULTIES[key]
-		var lines := ["Castle %d HP" % roundi(castle * d["castle"])]
-		if d["cost"] < 1.0:
-			lines.append("Everything %d%% cheaper" % roundi((1.0 - d["cost"]) * 100))
-		elif d["cost"] > 1.0:
-			lines.append("Everything %d%% pricier" % roundi((d["cost"] - 1.0) * 100))
-		else:
-			lines.append("Standard prices")
-		lines.append("Fallen troops die after\n%ds unless revived" % int(d["down_time"]) if d["permadeath"] else "Fallen troops get\nback up after %ds" % int(d["down_time"]))
-		modes.append([key, d["name"], "\n".join(lines), d["color"], d["icon"]])
-	modes.append(["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage"])
-	modes.append(["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard"])
-	modes.append(["settings", "Settings", "Music and\nsound effects\nvolume", Color(0.82, 0.84, 0.9), "engineer"])
-	# Three cards on top, three below: the difficulties, then Freeplay, the Tutorial and Settings.
-	var spots := [Vector2(20, 636), Vector2(225, 636), Vector2(430, 636), Vector2(20, 834), Vector2(225, 834), Vector2(430, 834)]
+	var top := [Vector2(20, 636), Vector2(225, 636), Vector2(430, 636)]
+	var spots := []
+	var back := ["goto:top", "Back", "Back to the\nmain menu", Color(0.8, 0.8, 0.8), "goblin", ""]
+	match set_name:
+		"top":
+			mode_sub.text = "Choose a mode"
+			var save_note := "Alliances %d/8 so far" % Campaign.alliance_count() if Campaign.has_save() else "against the\nOgre King"
+			modes = [["goto:campaign", "Campaign", "Unite the peoples\nof the continent\n" + save_note, Color(1.0, 0.72, 0.45), "swordsman", "campaign"],
+				["goto:classic", "Classic", "Survive 20 waves\nwith every unit,\nthen go endless", Color(0.95, 0.85, 0.45), "archer", "normal"],
+				["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage", "freeplay"],
+				["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard", "tutorial"],
+				["settings", "Settings", "Music and\nsound effects\nvolume", Color(0.82, 0.84, 0.9), "engineer", "settings"]]
+			spots = top + [Vector2(122, 834), Vector2(327, 834)]
+		"classic":
+			mode_sub.text = "Classic Survival: choose your difficulty"
+			for key in Data.DIFFICULTIES:
+				modes.append(_difficulty_card(key, key))
+			modes.append(back)
+			spots = top + [Vector2(225, 834)]
+		"campaign":
+			mode_sub.text = "Campaign: The Line"
+			if Campaign.has_save():
+				var diff_name: String = Data.DIFFICULTIES[Campaign.difficulty]["name"]
+				modes.append(["campaign:continue", "Continue", "%s\nAlliances %d/8\nBack to the map" % [diff_name, Campaign.alliance_count()], Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
+				modes.append(["goto:new", "New", "Start again at\nAshwatch Keep\n(replaces the\nsaved campaign)", Color(0.95, 0.85, 0.45), "engineer", "campaign"])
+				spots = [Vector2(122, 636), Vector2(327, 636)]
+			else:
+				modes.append(["goto:new", "New", "Start at\nAshwatch Keep\nwith a handful\nof swordsmen", Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
+				spots = [Vector2(225, 636)]
+			modes.append(back)
+			spots.append(Vector2(225, 834))
+		"new":
+			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
+			for key in Data.DIFFICULTIES:
+				modes.append(_difficulty_card(key, "campaign:new:" + key))
+			modes.append(["goto:campaign", "Back", "Back to the\ncampaign menu", Color(0.8, 0.8, 0.8), "goblin", ""])
+			spots = top + [Vector2(225, 834)]
 	var cards := []
 	for i in modes.size():
-		cards.append(_mode_card(modes[i], spots[i], 0.25 + i * 0.09))
+		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07))
+	mode_cards = cards
 	for i in cards.size():
 		var key: String = modes[i][0]
 		var card: Button = cards[i]
@@ -1032,8 +1119,27 @@ func show_mode_select() -> void:
 			card.pressed.connect(func():
 				if not picking:
 					show_settings())
+		elif key.begins_with("goto:"):
+			card.pressed.connect(func():
+				if not picking:
+					title_scene.set_look("")
+					_show_cards(key.substr(5)))
 		else:
-			card.pressed.connect(func(): _pick_mode(key, card, cards, title, sub))
+			card.pressed.connect(func(): _pick_mode(key, card, cards, mode_title, mode_sub))
+
+
+## A difficulty's card (Classic, or a new campaign's), keyed `key`.
+func _difficulty_card(diff: String, key: String) -> Array:
+	var d: Dictionary = Data.DIFFICULTIES[diff]
+	var lines := ["Castle %d HP" % roundi(Data.CASTLE_HP * d["castle"])]
+	if d["cost"] < 1.0:
+		lines.append("Everything %d%% cheaper" % roundi((1.0 - d["cost"]) * 100))
+	elif d["cost"] > 1.0:
+		lines.append("Everything %d%% pricier" % roundi((d["cost"] - 1.0) * 100))
+	else:
+		lines.append("Standard prices")
+	lines.append("Fallen troops die after\n%ds unless revived" % int(d["down_time"]) if d["permadeath"] else "Fallen troops get\nback up after %ds" % int(d["down_time"]))
+	return [key, d["name"], "\n".join(lines), d["color"], d["icon"], diff]
 
 
 func _mode_card(m: Array, at: Vector2, delay: float) -> Button:
@@ -1066,9 +1172,11 @@ func _mode_card(m: Array, at: Vector2, delay: float) -> Button:
 	bob.tween_property(icon, "position:y", 42.0, 0.5 + delay * 0.3).set_trans(Tween.TRANS_SINE)
 	icon.tree_exiting.connect(bob.kill)
 	# Hovering lifts the card and sets the scene behind for that mode.
+	var look: String = m[5] if m.size() > 5 else m[0]
+	b.set_meta("look", look)
 	b.mouse_entered.connect(func():
 		if not picking:
-			title_scene.set_look(m[0])
+			title_scene.set_look(look)
 			create_tween().tween_property(b, "scale", Vector2(1.07, 1.07), 0.12))
 	b.mouse_exited.connect(func():
 		if not picking:
@@ -1083,7 +1191,7 @@ func _pick_mode(key: String, card: Button, cards: Array, title: Label, sub: Labe
 	if picking:
 		return
 	picking = true
-	title_scene.set_look(key)
+	title_scene.set_look(card.get_meta("look", key))
 	for c in cards:
 		c.disabled = c != card
 		if c != card:
@@ -1326,6 +1434,82 @@ func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
 	rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var btn := _button(dim, Vector2(220, 480), Vector2(200, 56), "Play again")
 	btn.pressed.connect(func(): restart_pressed.emit())
+
+
+# --- Campaign ----------------------------------------------------------------
+
+## A story scene over everything; `then` runs once it's over (or skipped).
+func play_story(lines: Array, then: Callable = Callable()) -> void:
+	if lines.is_empty():
+		if then.is_valid():
+			then.call()
+		return
+	var s := Story.new()
+	s.setup(lines)
+	story = s
+	s.finished.connect(func():
+		story = null
+		if then.is_valid():
+			then.call())
+	add_child(s)
+	_center(s)
+
+
+## The campaign's prologue cutscene; `then` runs once it's over (or skipped).
+func play_prologue(then: Callable) -> void:
+	var c := Cutscene.new()
+	story = c   # the game takes no input underneath it
+	c.finished.connect(func():
+		story = null
+		centered.erase(c)
+		then.call())
+	add_child(c)
+	_center(c)
+
+
+func show_world_map(campaign) -> Control:
+	hide_world_map()
+	var m := WorldMap.new()
+	m.campaign = campaign
+	m.ability_icon = func(key): return _power_icon(key, 3)
+	world_map = m
+	add_child(m)
+	_center(m)
+	return m
+
+
+func hide_world_map() -> void:
+	if world_map:
+		centered.erase(world_map)
+		world_map.queue_free()
+		world_map = null
+
+
+## A mission is over: won (on to the map, where its story and reward wait) or lost
+## (try it again, or go back to the map; nothing is lost either way).
+func show_campaign_end(won: bool, mission: Dictionary, survived: int) -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.size = Vector2(WIDTH, HEIGHT)
+	add_child(dim)
+	_center(dim)
+	_bleed(dim)
+	var title := _label(dim, Vector2(0, 300), Vector2(WIDTH, 60), Color(1, 0.85, 0.3) if won else Color(1, 0.4, 0.35), 44)
+	title.text = "Victory!" if won else "The line has broken"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := _label(dim, Vector2(40, 370), Vector2(WIDTH - 80, 60), Color.WHITE, 18)
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if won:
+		sub.text = "%s: you held through all %d waves." % [mission["name"], mission["waves"]]
+		var go := _button(dim, Vector2(200, 460), Vector2(240, 56), "Continue to the map")
+		go.pressed.connect(func(): campaign_map.emit())
+	else:
+		sub.text = "%s: you held %d of %d waves. Nothing is lost; try again with what you've learned." % [mission["name"], survived, mission["waves"]]
+		var again := _button(dim, Vector2(110, 460), Vector2(200, 56), "Try again")
+		again.pressed.connect(func(): campaign_retry.emit())
+		var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
+		map_btn.pressed.connect(func(): campaign_map.emit())
 
 
 func _label(parent: Node, pos: Vector2, size: Vector2, color: Color, font_size: int) -> Label:

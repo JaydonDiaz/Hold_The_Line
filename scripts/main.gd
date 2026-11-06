@@ -47,6 +47,9 @@ var permadeath := false   # downed warriors die for good unless revived (every d
 var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn any wave at will
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
+var campaign := false    # a story campaign battle (the Campaign autoload says which mission)
+var mission := {}        # that mission's data (campaign_data.gd MISSIONS); empty outside the campaign
+var temp_allies := []    # units the mission put on the field from the start
 var gold: int = Data.START_GOLD
 var difficulty := "normal"   # a key of Data.DIFFICULTIES ("normal" in freeplay)
 var cost_mult := 1.0         # prices for this difficulty
@@ -155,10 +158,12 @@ func _ready() -> void:
 	hud.speed_pressed.connect(cycle_speed)
 	hud.auto_pressed.connect(toggle_auto)
 	hud.restart_pressed.connect(_restart)
-	hud.menu_confirmed.connect(_restart)
+	hud.menu_confirmed.connect(func(): back_to_map() if campaign else _restart())
+	hud.campaign_retry.connect(retry_mission)
+	hud.campaign_map.connect(back_to_map)
 	hud.endless_chosen.connect(continue_endless)
 	hud.finish_chosen.connect(func(): _finish(true))
-	hud.mode_chosen.connect(choose_mode)
+	hud.mode_chosen.connect(_on_mode_chosen)
 	hud.freeplay_level_changed.connect(change_freeplay_level)
 	hud.freeplay_spawn_pressed.connect(spawn_single)
 	hud.freeplay_clear_pressed.connect(clear_enemies)
@@ -167,9 +172,9 @@ func _ready() -> void:
 	hud.repair_pressed.connect(repair_castle)
 	hud.power_pressed.connect(func(k): powers.trigger(k))
 	hud.group_kind_pressed.connect(func(k): filter_group(k, Input.is_key_pressed(KEY_SHIFT)))
-	hud.show_mode_select()
 	get_viewport().size_changed.connect(_fit_screen)
 	_fit_screen()
+	_open_start_screen()
 
 
 ## Opens the window big and centred: about 90% of the screen's usable height and 70%
@@ -251,10 +256,14 @@ func _fit_screen() -> void:
 
 ## mode: a difficulty ("easy", "normal", "hard"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
+	campaign = mode == "campaign"
+	mission = Campaign.mission() if campaign else {}
+	if campaign:
+		_lock_portrait(true)
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
-	difficulty = "normal" if freeplay or tutorial else mode
-	ambience.setup(mode)
+	difficulty = Campaign.difficulty if campaign else ("normal" if freeplay or tutorial else mode)
+	ambience.setup(mission.get("mood", "normal") if campaign else mode)
 	castle.modulate = ambience.castle_tint()
 	castle.top_part.modulate = castle.modulate
 	queue_redraw()
@@ -272,6 +281,8 @@ func choose_mode(mode: String) -> void:
 		hud.show_freeplay_bar()
 	started = true
 	hud.hide_mode_select()
+	if campaign:
+		_begin_mission()
 	if tutorial:
 		var guide := Tutorial.new()
 		guide.main = self
@@ -478,9 +489,13 @@ func start_wave() -> void:
 	wave_active = true
 	boss_spawned = false
 	gates_warned = false
-	spawn_queue = _build_wave(wave).map(func(k): return [k, wave])
-	spawn_interval = maxf(0.35, 0.9 - wave * 0.03)
+	var level := wave_level(wave)
+	spawn_queue = _build_wave(wave).map(func(k): return [k, level])
+	spawn_interval = maxf(0.35, 0.9 - level * 0.03)
 	spawn_timer = 0.0
+	if campaign:
+		hud.show_message(mission.get("notes", {}).get(wave, "Wave %d of %d" % [wave, last_wave()]))
+		return
 	var warlords := _warlords(wave)
 	var wyverns := _wyverns(wave)
 	if warlords > 1:
@@ -496,6 +511,8 @@ func start_wave() -> void:
 
 
 func _build_wave(n: int) -> Array:
+	if campaign:
+		return _mission_wave(n)
 	var pool := ["goblin", "goblin"]
 	if n >= 2:
 		pool.append("orc")
@@ -580,7 +597,7 @@ func reinforce(kinds: Array, level: int) -> void:
 ## The final wave, and every tenth wave past it, ends with the Ogre King once
 ## everything else is beaten.
 func _boss_due() -> bool:
-	return not boss_spawned and wave >= Data.FINAL_WAVE and (wave - Data.FINAL_WAVE) % 10 == 0
+	return not campaign and not boss_spawned and wave >= Data.FINAL_WAVE and (wave - Data.FINAL_WAVE) % 10 == 0
 
 
 func _spawn_boss() -> void:
@@ -641,7 +658,7 @@ func damage_castle(amount: float) -> void:
 
 ## An Abilities tab button: buys the ability, or uses it once it's bought.
 func ability_item(key: String) -> void:
-	if game_over or not started:
+	if game_over or not started or _locked("ability:" + key):
 		return
 	if powers.owned.has(key):
 		powers.trigger(key)
@@ -651,7 +668,7 @@ func ability_item(key: String) -> void:
 
 ## A Castle tab card: the next tier of castle path p.
 func castle_upgrade(p: int) -> void:
-	if game_over or not started:
+	if game_over or not started or _locked("path:%d" % p):
 		return
 	if not powers.upgrade(p) and not powers.next_tier(p).is_empty():
 		hud.show_message("Not enough gold")
@@ -694,11 +711,11 @@ func repair_cost(amount: float) -> int:
 
 func can_repair(i: int) -> bool:
 	var amount := repair_amount(i)
-	return not wave_active and not game_over and repair_job.is_empty() and amount >= 1.0 and gold >= repair_cost(amount)
+	return allowed("repair") and not wave_active and not game_over and repair_job.is_empty() and amount >= 1.0 and gold >= repair_cost(amount)
 
 
 func repair_castle(i: int) -> void:
-	if game_over or not started:
+	if game_over or not started or _locked("repair"):
 		return
 	if wave_active:
 		hud.show_message("Repairs wait until the wave is over")
@@ -793,6 +810,9 @@ func _end_wave() -> void:
 		if w.is_active() and not w.interest.is_empty():
 			interest = mini(int(banked * w.interest[0]), int(w.interest[1]))
 		gold += w.wave_payout(interest)
+	if campaign and wave >= last_wave():
+		_finish(true)   # the mission's last wave: it's won
+		return
 	if wave == Data.FINAL_WAVE and not endless:
 		choosing = true
 		Engine.time_scale = 1.0
@@ -800,6 +820,166 @@ func _end_wave() -> void:
 		hud.show_victory_choice(wave)
 	else:
 		hud.show_message("Wave %d cleared! +%d gold" % [wave, bonus])
+
+
+# --- Campaign ------------------------------------------------------------
+
+## Where a fresh scene starts: the title screen, or (between campaign battles, which
+## reload the scene) the map or a mission.
+func _open_start_screen() -> void:
+	var where: String = Campaign.screen
+	Campaign.screen = ""
+	if where == "map":
+		open_world_map()
+	elif where == "battle" and not Campaign.mission().is_empty():
+		choose_mode("campaign")
+	else:
+		_lock_portrait(false)
+		hud.show_mode_select()
+
+
+## A title-screen choice: a Classic difficulty, Freeplay, the Tutorial, or the campaign
+## ("campaign:continue", "campaign:new:<difficulty>").
+func _on_mode_chosen(key: String) -> void:
+	if key == "campaign:continue":
+		if Campaign.load_game():
+			open_world_map()
+		else:
+			hud.show_mode_select()
+			hud.show_message(Campaign.load_error if Campaign.load_error != "" else "No campaign saved yet")
+	elif key.begins_with("campaign:new:"):
+		Campaign.new_campaign(key.get_slice(":", 2))
+		play_prologue()
+	else:
+		choose_mode(key)
+
+
+func open_world_map() -> void:
+	_lock_portrait(true)
+	hud.hide_mode_select()
+	audio.set_track("calm")
+	var m = hud.show_world_map(Campaign)
+	m.defend.connect(start_mission)
+	m.menu.connect(func():
+		Campaign.screen = ""
+		_restart())
+	m.sound.connect(func(n): sfx(n))
+	m.prologue.connect(play_prologue)
+
+
+## The prologue cutscene (a new campaign, or replayed from the Ledger), then the map.
+func play_prologue() -> void:
+	_lock_portrait(true)
+	hud.hide_mode_select()
+	hud.hide_world_map()
+	hud.play_prologue(open_world_map)
+
+
+func start_mission(id: String) -> void:
+	Campaign.mission_id = id
+	hud.hide_world_map()
+	choose_mode("campaign")
+
+
+## Campaign maps and battles keep the 640-wide portrait field whatever the window's
+## shape (scaled to fit, with bars at the sides); Classic and the rest widen the field
+## on a wide window, as before.
+func _lock_portrait(on: bool) -> void:
+	var root := get_tree().root
+	var want := Window.CONTENT_SCALE_ASPECT_KEEP if on else Window.CONTENT_SCALE_ASPECT_EXPAND
+	if root.content_scale_aspect != want:
+		root.content_scale_aspect = want
+		_fit_screen()
+
+
+## The mission's opening: its starting gold, the help already on the field, and its story.
+func _begin_mission() -> void:
+	gold = mission.get("gold", Data.START_GOLD)
+	for a in mission.get("allies", []):
+		var kind: String = a["kind"]
+		var w := Warrior.new()
+		w.setup(kind, Data.WARRIORS[kind], self, a["at"])
+		w.spent = 0   # on loan: selling it brings nothing
+		w.position = w.post
+		warrior_layer.add_child(w)
+		temp_allies.append(w)
+	var intro: String = mission.get("intro", "")
+	if intro != "" and not Campaign.seen.has(intro):
+		Campaign.mark_seen(intro)
+		hud.play_story(Campaign.story_lines(intro))
+
+
+## The mission's waves: wave n draws from every enemy kind its pool has added by then,
+## plus that wave's extras.
+func _mission_wave(n: int) -> Array:
+	var pool := []
+	for w in mission["pool"]:
+		if n >= w:
+			pool.append_array(mission["pool"][w])
+	var c: Array = mission.get("count", [6, 2])
+	var list := []
+	for i in c[0] + c[1] * n:
+		list.append(pool.pick_random())
+	for k in mission.get("extra", {}).get(n, []):
+		list.insert(randi_range(list.size() / 2, list.size()), k)
+	return list
+
+
+## Enemy strength on wave n (Classic: the wave number; a mission starts at its level).
+func wave_level(n: int) -> int:
+	return int(mission["level"]) + n - 1 if campaign else n
+
+
+## The wave that ends the game (or, in Classic, offers endless).
+func last_wave() -> int:
+	return int(mission["waves"]) if campaign else Data.FINAL_WAVE
+
+
+## Story flags the mission sets on a win: each "track" flag whose starting ally is still up.
+func _mission_flags() -> Array:
+	var out := []
+	var track: Dictionary = mission.get("track", {})
+	for flag in track:
+		for w in temp_allies:
+			if is_instance_valid(w) and not w.is_queued_for_deletion() and w.kind == track[flag] and w.is_active():
+				out.append(flag)
+				break
+	return out
+
+
+## Whether unlock key `key` (a unit kind, "ability:x", "path:n", "repair") can be used
+## in this game. Only a campaign mission locks anything.
+func allowed(key: String) -> bool:
+	return not campaign or Campaign.allows(key, mission.get("lend", []))
+
+
+## The highest upgrade tier `kind` may take here: all four outside the campaign; in it,
+## what the Line's troops have been trained for (see Campaign.trained_tier).
+func max_tier(kind: String) -> int:
+	return Campaign.trained_tier(kind) if campaign else Warrior.MAX_TIER
+
+
+## Why `key` is locked ("" if it isn't).
+func lock_note(key: String) -> String:
+	return "" if allowed(key) else Campaign.lock_reason(key, mission.get("lend", []))
+
+
+## Stops a locked action with a message saying who unlocks it.
+func _locked(key: String) -> bool:
+	if allowed(key):
+		return false
+	hud.show_message(lock_note(key))
+	return true
+
+
+func retry_mission() -> void:
+	Campaign.screen = "battle"
+	_restart()
+
+
+func back_to_map() -> void:
+	Campaign.screen = "map"
+	_restart()
 
 
 # --- Freeplay ------------------------------------------------------------
@@ -852,6 +1032,10 @@ func _finish(won: bool) -> void:
 	warrior_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	wall_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	var survived := wave if won else wave - 1
+	if campaign:
+		Campaign.finish_mission(won, _mission_flags() if won else [])
+		hud.show_campaign_end(won, mission, survived)
+		return
 	var previous := _save_record(survived)
 	hud.show_end(won, survived, previous, endless)
 
@@ -884,7 +1068,7 @@ func cycle_speed() -> void:
 # --- Warriors ------------------------------------------------------------
 
 func _on_hire_pressed(kind: String) -> void:
-	if game_over:
+	if game_over or _locked(kind):
 		return
 	selected = null
 	group.clear()
@@ -977,6 +1161,9 @@ func _wall_click(p: Vector2) -> void:
 
 
 func hire_at(p: Vector2) -> void:
+	if placing_type != "" and not allowed(placing_type):
+		placing_type = ""   # never place something the campaign hasn't unlocked
+		return
 	if placing_type == "barricade":
 		_wall_click(p)
 		return
@@ -1317,7 +1504,7 @@ func _warrior_at(p: Vector2) -> Warrior:
 # --- Input ---------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
-	if game_over or not started:
+	if game_over or not started or hud.story != null:
 		return
 	if event is InputEventMouseButton and event.pressed:
 		var p := get_local_mouse_position()
