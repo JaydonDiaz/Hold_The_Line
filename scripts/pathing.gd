@@ -6,6 +6,16 @@ extends RefCounted
 ## when every route is sealed.
 ## Troops: walls are solid to them, so they get an A* route to wherever they're going.
 ## Everything is rebuilt lazily whenever a wall goes up, comes down or moves.
+##
+## Terrain (campaign maps, see maps.gd): rocks, cliffs, trees and pits block walking,
+## for good. When a map is set, two grids are worked out once:
+##   clear       per cell, the distance from its centre to the nearest terrain (0 inside),
+##               so a unit only routes through cells with room for its own radius
+##   troop_open  cells a troop can stand in and walk to from the castle gate
+## Movement goes through slide(), which stops a step short of entering terrain by
+## sliding along it; push_out() puts back anything that ended up overlapping (pushes,
+## knockback) and is only the safety net. With no map, every terrain call returns at
+## once and nothing behaves differently.
 
 const CELL := 16
 const WALL_COST := 2000.0
@@ -13,6 +23,7 @@ const DIAG := 1.4   # matches the 14-tenths diagonal step the fields are built w
 const RING := 16    # open-ground steps cost at most 14 tenths, so 16 buckets go round
 const HEAP_SPAN := 65536.0   # heap keys: cost * HEAP_SPAN + cell index (room for 65536 cells)
 const TROOP_RADIUS := 18.0   # Warrior.RADIUS
+const SOLID := -2          # a field cell terrain makes impassable (walls are their index, open ground -1)
 const NEIGHBORS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
 
@@ -30,12 +41,287 @@ var _built_frame := -1   # enemy radius (int) -> {"dist", "breach", "wall"}
 var troop_grid: AStarGrid2D = null
 var troop_sig := []     # the emplacements troop_grid was built around (it's rebuilt when they change)
 const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to troops (a little under two radii)
+const HALF_DIAG := 11.32   # from a cell's centre to its corner: how far `clear` can be off anywhere in the cell
+const MELEE_REACH := 30.0  # a cell is in melee reach if a troop can stand this close to its centre
+
+var terrain := []          # {"kind", "poly": PackedVector2Array, "box": Rect2}
+var lanes := []            # Vector2(x from, x to) along the top edge where enemies come in
+var no_build := []         # Rect2s nothing may be posted in
+var clear := PackedFloat32Array()
+var troop_open := PackedByteArray()
+var melee_reach := PackedByteArray()   # cells a melee troop can get within striking distance of
+var enemy_grids := {}      # size key -> AStarGrid2D for enemies chasing a unit around terrain
+var _map := {}
 
 
 func setup(m) -> void:
 	main = m
 	cols = ceili(float(m.FIELD_W) / CELL)
 	rows = ceili(float(m.FIELD_H) / CELL)
+	if not _map.is_empty():
+		set_map(_map)
+
+
+# --- Terrain ---------------------------------------------------------------------------
+
+## Lays out a battlefield (a maps.gd entry), or clears it with {}.
+func set_map(m: Dictionary) -> void:
+	_map = m
+	terrain.clear()
+	lanes.clear()
+	no_build = m.get("no_build", []).duplicate()
+	for l in m.get("lanes", []):
+		lanes.append(Vector2(l[0], l[1]))
+	for t in m.get("terrain", []):
+		var poly := PackedVector2Array(t["poly"])
+		var lo := poly[0]
+		var hi := poly[0]
+		for q in poly:
+			lo = Vector2(minf(lo.x, q.x), minf(lo.y, q.y))
+			hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
+		terrain.append({"kind": t["kind"], "poly": poly, "box": Rect2(lo, hi - lo)})
+	_build_clearance()
+	enemy_grids.clear()
+	for key in fields:
+		old_fields.erase(key)
+	fields.clear()
+	old_fields.clear()
+	troop_grid = null
+
+
+func has_terrain() -> bool:
+	return not terrain.is_empty()
+
+
+## Exact distance from p to the nearest terrain (0 if it's inside some), or INF with none.
+func terrain_gap(p: Vector2) -> float:
+	var best := INF
+	for t in terrain:
+		var poly: PackedVector2Array = t["poly"]
+		if Geometry2D.is_point_in_polygon(p, poly):
+			return 0.0
+		var box: Rect2 = t["box"]
+		# Nothing in this shape can be nearer than its bounding box.
+		var bd := Vector2(maxf(maxf(box.position.x - p.x, p.x - box.end.x), 0.0), maxf(maxf(box.position.y - p.y, p.y - box.end.y), 0.0)).length()
+		if bd >= best:
+			continue
+		for i in poly.size():
+			var c := Geometry2D.get_closest_point_to_segment(p, poly[i], poly[(i + 1) % poly.size()])
+			best = minf(best, c.distance_to(p))
+	return best
+
+
+## Whether a unit of radius r standing at p would overlap terrain.
+func blocked(p: Vector2, r: float) -> bool:
+	if terrain.is_empty():
+		return false
+	var c := _cell(p)
+	var room: float = clear[_index(c)]
+	if room - HALF_DIAG >= r:
+		return false   # the common case: open ground all round, no geometry needed
+	return terrain_gap(p) < r
+
+
+## Whether something of radius r walking straight from a to b would touch terrain.
+func segment_blocked(a: Vector2, b: Vector2, r: float) -> bool:
+	if terrain.is_empty():
+		return false
+	var span := Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs()).grow(r)
+	for t in terrain:
+		if not span.intersects(t["box"]):
+			continue
+		var poly: PackedVector2Array = t["poly"]
+		if Geometry2D.is_point_in_polygon(a, poly) or Geometry2D.is_point_in_polygon(b, poly):
+			return true
+		for i in poly.size():
+			var pts := Geometry2D.get_closest_points_between_segments(a, b, poly[i], poly[(i + 1) % poly.size()])
+			if pts[0].distance_to(pts[1]) < r:
+				return true
+	return false
+
+
+## The safety net: p moved the least distance that leaves a radius-r unit clear of all
+## terrain (out of a shape it's inside, or off an edge it overlaps).
+func push_out(p: Vector2, r: float) -> Vector2:
+	if terrain.is_empty() or not blocked(p, r):
+		return p
+	for pass_ in 3:
+		var moved := false
+		for t in terrain:
+			var box: Rect2 = t["box"]
+			if not box.grow(r).has_point(p):
+				continue
+			var poly: PackedVector2Array = t["poly"]
+			var inside := Geometry2D.is_point_in_polygon(p, poly)
+			var best := Vector2.ZERO
+			var best_d := INF
+			for i in poly.size():
+				var c := Geometry2D.get_closest_point_to_segment(p, poly[i], poly[(i + 1) % poly.size()])
+				var d := c.distance_to(p)
+				if d < best_d:
+					best_d = d
+					best = c
+			if not inside and best_d >= r:
+				continue
+			var out: Vector2
+			if inside:
+				out = best - p   # from inside, out through the nearest edge
+			else:
+				out = p - best
+			if out.length() < 0.001:
+				out = Vector2.DOWN
+			p = best + out.normalized() * (r + 0.5)
+			moved = true
+		if not moved:
+			break
+	return p
+
+
+## Where a radius-r unit stepping from `from` toward `to` ends up: `to` if that's clear,
+## else slid along the terrain it would have walked into, else it stays put. Steps are
+## a few pixels, far thinner than any terrain, so nothing tunnels through.
+func slide(from: Vector2, to: Vector2, r: float) -> Vector2:
+	if terrain.is_empty() or not blocked(to, r):
+		return to
+	var q := push_out(to, r)
+	if blocked(q, r) or q.distance_to(from) > from.distance_to(to) + 2.0:
+		return from   # wedged in a corner: don't move
+	return q
+
+
+## Whether p is open ground a troop could reach from the castle gate.
+func troop_can_stand(p: Vector2) -> bool:
+	if terrain.is_empty():
+		return true
+	return troop_open[_index(_cell(p))] == 1 and not blocked(p, TROOP_RADIUS)
+
+
+## Whether melee troops can get close enough to strike something standing at p.
+func melee_can_reach(p: Vector2) -> bool:
+	if terrain.is_empty():
+		return true
+	return melee_reach[_index(_cell(p))] == 1
+
+
+## The nearest spot to p a troop could stand on and reach (p itself if it's fine).
+func open_spot(p: Vector2) -> Vector2:
+	if terrain.is_empty() or troop_can_stand(p):
+		return p
+	var c := _cell(p)
+	var best := p
+	var best_d := INF
+	for r in range(1, 12):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if absi(dx) != r and absi(dy) != r:
+					continue   # just the ring
+				var n := c + Vector2i(dx, dy)
+				if not _inside(n) or troop_open[_index(n)] == 0:
+					continue
+				var q := _center(n)
+				var d := q.distance_to(p)
+				if d < best_d:
+					best_d = d
+					best = q
+		if best_d < INF:
+			break
+	return best
+
+
+## Whether p is in one of the map's no-build zones.
+func in_no_build(p: Vector2) -> bool:
+	for z in no_build:
+		if z.has_point(p):
+			return true
+	return false
+
+
+## A random spot along one of the map's lanes for an enemy of radius r to come in at,
+## or INF with no lanes (then it comes in anywhere along the top).
+func lane_spawn(r: float) -> Vector2:
+	if lanes.is_empty():
+		return Vector2.INF
+	var total := 0.0
+	for l in lanes:
+		total += maxf(l.y - l.x - 2.0 * r, 1.0)
+	var pick := randf() * total
+	for l in lanes:
+		var w := maxf(l.y - l.x - 2.0 * r, 1.0)
+		if pick <= w:
+			return Vector2(l.x + r + pick, -r)
+		pick -= w
+	return Vector2((lanes[0].x + lanes[0].y) / 2.0, -r)
+
+
+## Waypoints for an enemy of radius r from `from` to `to` around terrain (walls aside:
+## it breaks those). Empty if there's no way.
+func enemy_route(from: Vector2, to: Vector2, r: float) -> PackedVector2Array:
+	var key := _size_key(r)
+	if not enemy_grids.has(key):
+		var g := AStarGrid2D.new()
+		g.region = Rect2i(0, 0, cols, rows)
+		g.cell_size = Vector2(CELL, CELL)
+		g.offset = Vector2(CELL, CELL) / 2.0
+		g.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+		g.update()
+		for i in cols * rows:
+			if clear[i] < key:
+				g.set_point_solid(Vector2i(i % cols, i / cols))
+		enemy_grids[key] = g
+	var grid: AStarGrid2D = enemy_grids[key]
+	var a := _free_near(grid, _cell(from))
+	var b := _free_near(grid, _cell(to))
+	var route := grid.get_point_path(a, b, true)
+	if not route.is_empty():
+		route.remove_at(0)
+	return route
+
+
+## Enemies are routed in three sizes: up to an orc's, up to a warlord's, and bigger.
+func _size_key(r: float) -> int:
+	return 14 if r <= 14.0 else (24 if r <= 24.0 else 32)
+
+
+func _build_clearance() -> void:
+	var n := cols * rows
+	clear = PackedFloat32Array()
+	clear.resize(n)
+	troop_open = PackedByteArray()
+	troop_open.resize(n)
+	melee_reach = PackedByteArray()
+	melee_reach.resize(n)
+	if terrain.is_empty():
+		clear.fill(INF)
+		troop_open.fill(1)
+		melee_reach.fill(1)
+		return
+	for i in n:
+		clear[i] = terrain_gap(_center(Vector2i(i % cols, i / cols)))
+	# Troops: open ground below the enemy camp, flooded out from the castle gate.
+	var top := int(ceilf((main.DEPLOY_TOP + TROOP_RADIUS) / float(CELL)))
+	var gate := _cell(Vector2(main.FIELD_W / 2.0, main.CASTLE_Y - TROOP_RADIUS))
+	var stack := [gate]
+	while not stack.is_empty():
+		var c: Vector2i = stack.pop_back()
+		var i := _index(c)
+		if troop_open[i] == 1 or clear[i] < TROOP_RADIUS or c.y < top:
+			continue
+		troop_open[i] = 1
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nb: Vector2i = c + d
+			if _inside(nb):
+				stack.append(nb)
+	# Melee reach: within MELEE_REACH of a cell a troop can stand in.
+	var span := ceili(MELEE_REACH / CELL)
+	for i in n:
+		if troop_open[i] == 0:
+			continue
+		var c := Vector2i(i % cols, i / cols)
+		for dy in range(-span, span + 1):
+			for dx in range(-span, span + 1):
+				var nb := c + Vector2i(dx, dy)
+				if _inside(nb) and _center(nb).distance_to(_center(c)) <= MELEE_REACH:
+					melee_reach[_index(nb)] = 1
 
 
 ## Call whenever a barricade is built, destroyed, sold or moved.
@@ -80,7 +366,7 @@ func path_blocked(a: Vector2, b: Vector2, clearance: float, posts := false) -> b
 		var pts := Geometry2D.get_closest_points_between_segments(a, b, w.seg_a(), w.seg_b())
 		if pts[0].distance_to(pts[1]) < clearance:
 			return true
-	return false
+	return segment_blocked(a, b, minf(clearance, TROOP_RADIUS))
 
 
 ## Waypoints for a troop from `from` to `to` around the walls. If walls cut it off,
@@ -132,6 +418,10 @@ func _troop_grid() -> AStarGrid2D:
 				var p := _center(Vector2i(cx, cy))
 				if Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p) < reach:
 					g.set_point_solid(Vector2i(cx, cy))
+	if not terrain.is_empty():
+		for i in cols * rows:
+			if troop_open[i] == 0:
+				g.set_point_solid(Vector2i(i % cols, i / cols))
 	for pos in sig:
 		var lo := _cell(Vector2(pos) - Vector2(POST_CLEAR, POST_CLEAR))
 		var hi := _cell(Vector2(pos) + Vector2(POST_CLEAR, POST_CLEAR))
@@ -148,7 +438,7 @@ func _troop_grid() -> AStarGrid2D:
 func _free_near(g: AStarGrid2D, c: Vector2i) -> Vector2i:
 	if not g.is_point_solid(c):
 		return c
-	for r in range(1, 4):
+	for r in range(1, 8 if not terrain.is_empty() else 4):
 		for dy in range(-r, r + 1):
 			for dx in range(-r, r + 1):
 				var n := c + Vector2i(dx, dy)
@@ -159,7 +449,7 @@ func _free_near(g: AStarGrid2D, c: Vector2i) -> Vector2i:
 ## Which way an enemy of this size should walk from `pos`, or ZERO when there are
 ## no walls (enemies then just march straight down as usual).
 func direction(pos: Vector2, radius: float) -> Vector2:
-	if walls.is_empty():
+	if walls.is_empty() and terrain.is_empty():
 		return Vector2.ZERO
 	var f := _field(radius)
 	var dist: PackedFloat64Array = f["dist"]
@@ -170,14 +460,24 @@ func direction(pos: Vector2, radius: float) -> Vector2:
 	var best_cost: float = dist[_index(c)] + 0.001
 	for d in NEIGHBORS:
 		var n: Vector2i = c + d
-		if not _inside(n) or not _can_step(c, d, wall):
+		if not _inside(n) or not _can_step(c, d, wall) or wall[_index(n)] == SOLID:
 			continue
 		var cost: float = dist[_index(n)] + (DIAG if d.x != 0 and d.y != 0 else 1.0)
 		if cost < best_cost:
 			best_cost = cost
 			best = n
 	if best == c:
+		if not terrain.is_empty() and wall[_index(c)] == SOLID:
+			# Squeezed into a cell too tight for it: back out away from the terrain.
+			var away := push_out(pos, radius + HALF_DIAG) - pos
+			if away.length() > 0.01:
+				return away.normalized()
 		return Vector2.DOWN
+	if not terrain.is_empty() and wall[_index(c)] != SOLID and wall[_index(best)] != SOLID:
+		# Head along the line between the two cell centres (not straight at the next
+		# one), so the unit stays on the route the field was worked out for.
+		var aim := _center(best) + (pos - _center(c)) * 0.5
+		return pos.direction_to(aim)
 	return pos.direction_to(_center(best))
 
 
@@ -199,7 +499,7 @@ func _field(radius: float) -> Dictionary:
 	# warlords the other. Each is built for the biggest enemy in its group.
 	# Building one is the slow part of a wall going up or coming down, so only one is
 	# built a frame: the other size makes do with its last field for a frame.
-	var key := 14 if radius <= 14.0 else 24
+	var key := (14 if radius <= 14.0 else 24) if terrain.is_empty() else _size_key(radius)
 	if not fields.has(key):
 		var frame := Engine.get_process_frames()
 		if frame == _built_frame and old_fields.has(key) and old_fields[key]["cols"] == cols:
@@ -218,6 +518,10 @@ func _build(radius: float) -> Dictionary:
 	var wall := PackedInt32Array()
 	wall.resize(n)
 	wall.fill(-1)
+	if not terrain.is_empty():
+		for i in n:
+			if clear[i] < radius:
+				wall[i] = SOLID   # too tight for this size, for good
 	for i in walls.size():
 		var a: Vector2 = walls[i].seg_a()
 		var b: Vector2 = walls[i].seg_b()
@@ -227,7 +531,7 @@ func _build(radius: float) -> Dictionary:
 		for cy in range(lo.y, hi.y + 1):
 			for cx in range(lo.x, hi.x + 1):
 				var p := _center(Vector2i(cx, cy))
-				if Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p) < reach:
+				if Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p) < reach and wall[cy * cols + cx] != SOLID:
 					wall[cy * cols + cx] = i
 	# Dijkstra out from the bottom row, in whole tenths of a cell: a step costs 10 (14
 	# diagonally) on open ground, and 2000 times that into a wall cell. Open-ground
@@ -249,6 +553,8 @@ func _build(radius: float) -> Dictionary:
 	var wall_step := int(WALL_COST) * 10
 	for cx in cols:
 		var i := (rows - 1) * cols + cx
+		if wall[i] == SOLID:
+			continue
 		breach[i] = wall[i]
 		if wall[i] >= 0:
 			d10[i] = wall_step
@@ -283,11 +589,13 @@ func _build(radius: float) -> Dictionary:
 					continue
 				var step := 10
 				if k >= 4:
-					# Diagonal steps can't cut the corner between two wall cells.
-					if wall[cy * cols + nx] >= 0 or wall[ny * cols + cx] >= 0:
+					# Diagonal steps can't cut the corner between two wall (or terrain) cells.
+					if wall[cy * cols + nx] != -1 or wall[ny * cols + cx] != -1:
 						continue
 					step = 14
 				var j := ny * cols + nx
+				if wall[j] == SOLID:
+					continue
 				var into_wall := wall[j] >= 0
 				var nd := at + (step * int(WALL_COST) if into_wall else step)
 				if nd < d10[j]:
@@ -314,7 +622,7 @@ func _build(radius: float) -> Dictionary:
 func _can_step(c: Vector2i, d: Vector2i, wall: PackedInt32Array) -> bool:
 	if d.x == 0 or d.y == 0:
 		return true
-	return wall[_index(Vector2i(c.x + d.x, c.y))] < 0 and wall[_index(Vector2i(c.x, c.y + d.y))] < 0
+	return wall[_index(Vector2i(c.x + d.x, c.y))] == -1 and wall[_index(Vector2i(c.x, c.y + d.y))] == -1
 
 
 func _cell(p: Vector2) -> Vector2i:

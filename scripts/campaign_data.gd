@@ -125,10 +125,11 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #   training     training points the first win earns (see TRAINING_COSTS)
 #   track        story flag -> kind: set if one of the starting allies of that kind is still standing at the end
 #   mood         the field's light (an ambience.gd mood)
+#   map          the battlefield it's fought on (maps.gd)
 #   intro / outro   STORY keys: before the first wave, and on the map after a win
 const MISSIONS := {
 	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 220,
-		"count": [7, 3], "mood": "normal",
+		"count": [7, 3], "mood": "normal", "map": "ashwatch_ridge",
 		"pool": {1: ["goblin", "goblin"], 2: ["wolf"], 3: ["orc"]},
 		"extra": {3: ["orc"], 4: ["orc", "orc", "orc", "wolf", "wolf"]},
 		"notes": {2: "Wolves! They run straight for the walls.", 4: "Their vanguard is coming in force!"},
@@ -137,7 +138,7 @@ const MISSIONS := {
 		"lend": [], "reward": "", "training": 2, "track": {"watchtower_stood": "tower"},
 		"intro": "ashwatch_intro", "outro": "ashwatch_outro"},
 	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 3, "gold": 320,
-		"count": [5, 2], "mood": "normal",
+		"count": [5, 2], "mood": "normal", "map": "stonehollow_quarry",
 		"pool": {1: ["goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
 		"extra": {2: ["skeleton_archer"], 3: ["troll"], 4: ["skeleton_archer", "skeleton_archer"], 5: ["troll", "sapper"]},
 		"notes": {3: "Sappers! They'll blow holes in any wall in their way.", 5: "Trolls at the quarry gate!"},

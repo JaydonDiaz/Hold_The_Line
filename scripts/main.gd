@@ -17,6 +17,7 @@ const Ambience = preload("res://scripts/ambience.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 const CastlePowers = preload("res://scripts/castle_powers.gd")
 const Engineer = preload("res://scripts/engineer.gd")
+const Maps = preload("res://scripts/maps.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -260,6 +261,11 @@ func choose_mode(mode: String) -> void:
 	mission = Campaign.mission() if campaign else {}
 	if campaign:
 		_lock_portrait(true)
+	# The battlefield: a campaign mission's own map (terrain, lanes, castle), or the
+	# open meadow everywhere else.
+	paths.set_map(Maps.get_map(mission.get("map", "")) if campaign else {})
+	if paths.has_terrain():
+		_repaint_ground()
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
 	difficulty = Campaign.difficulty if campaign else ("normal" if freeplay or tutorial else mode)
