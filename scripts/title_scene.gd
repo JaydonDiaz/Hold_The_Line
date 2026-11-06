@@ -5,7 +5,8 @@ extends Control
 ## weak enemies for Easy, clouds and tougher ones for Normal, a dark sky and downed
 ## troops and graves for Hard, a twilight of conjured enemies for Freeplay, and
 ## Engineers at work (on emplacement construction sites, mending the castle wall,
-## one tossing his hammer) for Settings. Pure decoration: nothing here touches the game.
+## one tossing his hammer) for Settings, and a dawn with the keep's last two
+## swordsmen facing the first raiders for the Campaign. Pure decoration: nothing here touches the game.
 
 const Sprites = preload("res://scripts/sprites.gd")
 const Grave = preload("res://scripts/grave.gd")
@@ -40,6 +41,9 @@ const LOOKS := {
 	"freeplay": {"top": Color(0.1, 0.06, 0.28), "low": Color(0.6, 0.32, 0.58), "clouds": 4, "cloud": Color(0.56, 0.44, 0.7),
 		"sun": 0.0, "moon": 0.7, "stars": 1.0, "light": Color(0.72, 0.64, 0.86), "windows": 1.0, "storm": 0.0,
 		"guards": ["mage", "frost", "mage"], "foes": ["goblin", "orc", "wolf", "troll", "bat", "sapper", "warlord"], "scene": "conjure"},
+	"campaign": {"top": Color(0.32, 0.36, 0.62), "low": Color(1.0, 0.72, 0.5), "clouds": 7, "cloud": Color(1.0, 0.86, 0.78),
+		"sun": 0.6, "moon": 0.0, "stars": 0.0, "light": Color(1.0, 0.9, 0.82), "windows": 1.0, "storm": 0.0,
+		"guards": ["swordsman", "swordsman"], "foes": ["goblin", "goblin", "orc"], "scene": "battle"},
 	"settings": {"top": Color(0.36, 0.6, 0.93), "low": Color(0.82, 0.9, 0.98), "clouds": 5, "cloud": Color(1, 1, 1),
 		"sun": 0.9, "moon": 0.0, "stars": 0.0, "light": Color(1.02, 1.0, 0.96), "windows": 0.0, "storm": 0.0,
 		"guards": [], "foes": [], "scene": "workshop"},
@@ -115,6 +119,8 @@ func _layout_title() -> void:
 ## Show the scene for a mode ("" is the plain title screen). Going back to "" waits a
 ## moment, so sliding from one card to the next doesn't flash the plain scene between.
 func set_look(key: String) -> void:
+	if not LOOKS.has(key):
+		key = ""   # a card with no scene of its own (Back, the campaign's sub-menus)
 	if key == "":
 		pending_default = 0.25
 		return

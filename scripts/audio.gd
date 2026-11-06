@@ -5,6 +5,9 @@ extends Node
 ## between waves and a battle one during them) are composed note by note on a
 ## background thread. Each loop also gets a part for every Bard instrument, played in
 ## sync and faded in while a Bard with that instrument is on the field. Music and effects have their own volume (saved between games).
+## Each finished piece is kept for as long as the game runs (see _cache), so the scene
+## reloads between campaign battles don't compose everything again; a scene that's
+## leaving stops its composer after the piece in hand instead of waiting for the rest.
 
 const RATE := 22050
 const SETTINGS := "user://settings.cfg"
@@ -77,6 +80,10 @@ var _last := {}        # effect name -> when it last started (seconds)
 var _music := {}       # "calm" / "battle" -> AudioStreamWAV, once composed
 var _music_players: Array[AudioStreamPlayer] = []
 var _layers := []      # Bard instruments playing along with the music right now
+var _stop := false     # the scene is going: the composer thread stops after its current piece
+var _picked := 0       # how many cached pieces this player has taken up so far
+static var _cache := {}             # piece -> AudioStreamWAV: "fx:<effect>", "calm", "battle", "<track>:<instrument>", "ensemble"
+static var _cache_lock := Mutex.new()
 const INSTRUMENTS := ["note", "pluck", "reed", "flute", "drum", "violin", "cello", "harp"]   # lute, pipa, mouth instrument, flute, hand drum, and the special three
 const LAYER_OFF := -60.0
 var _playing_track := ""
@@ -111,12 +118,16 @@ func _ready() -> void:
 		add_child(m)
 		_music_players.append(m)
 	# Making the sounds and composing the music takes a few seconds, so it's done off
-	# the main thread; effects are ready first, and play() skips any that aren't yet.
-	_thread = Thread.new()
-	_thread.start(_compose_all)
+	# the main thread (once per run of the game: later scenes reuse the pieces); effects
+	# are ready first, and play() skips any that aren't yet.
+	_pick_up()
+	if _picked < _piece_count():
+		_thread = Thread.new()
+		_thread.start(_compose_all)
 
 
 func _exit_tree() -> void:
+	_stop = true
 	if _thread != null and _thread.is_started():
 		_thread.wait_to_finish()
 	# Stop everything so no sound is left playing as the game closes.
@@ -156,6 +167,8 @@ func set_track(track: String) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _picked < _piece_count():
+		_pick_up()
 	if _wanted_track == _playing_track:
 		return
 	if _wanted_track != "" and not _music.has(_wanted_track):
@@ -164,6 +177,8 @@ func _process(_delta: float) -> void:
 	var out: AudioStreamPlayer = _music_players[0]
 	var into: AudioStreamPlayer = _music_players[1]
 	_music_players.reverse()
+	if not out.playing and _playing_track == "":
+		return   # nothing to fade out or in
 	var fade := create_tween().set_parallel(true)
 	if out.playing:
 		fade.tween_property(out, "volume_db", -60.0, 1.2)
@@ -294,23 +309,78 @@ static func _hz(midi: float) -> float:
 	return 440.0 * pow(2.0, (midi - 69.0) / 12.0)
 
 
+## Every piece, in the order they're made: the effects, both tracks (so the music can
+## start), then the Bard parts, and the ensemble.
+static func _pieces() -> Array:
+	var out := []
+	for sound_name in SOUNDS:
+		out.append("fx:" + sound_name)
+	out.append_array(["calm", "battle"])
+	for track in ["calm", "battle"]:
+		for instrument in INSTRUMENTS:
+			out.append(track + ":" + instrument)
+	out.append("ensemble")
+	return out
+
+
+static func _piece_count() -> int:
+	return SOUNDS.size() + 2 + 2 * INSTRUMENTS.size() + 1
+
+
+## The composer thread: makes each piece not already cached, and caches it.
 func _compose_all() -> void:
+	for piece in _pieces():
+		if _stop:
+			return
+		_cache_lock.lock()
+		var have := _cache.has(piece)
+		_cache_lock.unlock()
+		if have:
+			continue
+		var made: AudioStreamWAV
+		if piece.begins_with("fx:"):
+			made = _render_effect(SOUNDS[piece.substr(3)])
+		elif piece == "calm":
+			made = _compose_calm()
+		elif piece == "battle":
+			made = _compose_battle()
+		elif piece == "ensemble":
+			made = _compose_ensemble()
+		else:
+			made = _compose_part(piece.get_slice(":", 0), piece.get_slice(":", 1))
+		_cache_lock.lock()
+		_cache[piece] = made
+		_cache_lock.unlock()
+
+
+## Takes up the pieces cached so far: effects as they come, each track plain at first
+## and swapped for its full version (in place, without a skip) once all its parts are in.
+func _pick_up() -> void:
+	_cache_lock.lock()
+	var cache := _cache.duplicate()
+	_cache_lock.unlock()
+	if cache.size() == _picked:
+		return
+	_picked = cache.size()
 	var effects := {}
 	for sound_name in SOUNDS:
-		effects[sound_name] = _render_effect(SOUNDS[sound_name])
-	call_deferred("_effects_ready", effects)
-	# Both tracks first, so the music can start; then the Bard parts, each track
-	# swapped for its full version (in place, without a skip) as its parts are done.
-	var bases := {"calm": _compose_calm()}
-	call_deferred("_music_ready", {"calm": [bases["calm"]]})
-	bases["battle"] = _compose_battle()
-	call_deferred("_music_ready", {"battle": [bases["battle"]]})
+		if not _streams.has(sound_name) and cache.has("fx:" + sound_name):
+			effects[sound_name] = cache["fx:" + sound_name]
+	if not effects.is_empty():
+		_effects_ready(effects)
 	for track in ["calm", "battle"]:
-		var parts := [bases[track]]
+		if not cache.has(track):
+			continue
+		var parts := [cache[track]]
 		for instrument in INSTRUMENTS:
-			parts.append(_compose_part(track, instrument))
-		call_deferred("_music_ready", {track: parts})
-	call_deferred("_music_ready", {"ensemble": [_compose_ensemble()]})
+			if cache.has(track + ":" + instrument):
+				parts.append(cache[track + ":" + instrument])
+		var full := parts.size() == INSTRUMENTS.size() + 1
+		var shown: int = (_music[track] as AudioStreamSynchronized).stream_count if _music.has(track) else 0
+		if shown == 0 or (full and shown < parts.size()):
+			_music_ready({track: parts if full else [parts[0]]})
+	if cache.has("ensemble") and not _music.has("ensemble"):
+		_music_ready({"ensemble": [cache["ensemble"]]})
 
 
 func _effects_ready(effects: Dictionary) -> void:

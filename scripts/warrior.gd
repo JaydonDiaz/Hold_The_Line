@@ -614,6 +614,8 @@ func path_state(p: int) -> String:
 		return "max"
 	if total_upgrades() >= MAX_UPGRADES:
 		return "full"
+	if tiers[p] >= main.max_tier(kind):
+		return "untrained"   # campaign: the next tier needs troop training first
 	return "ok"
 
 
@@ -2548,8 +2550,9 @@ func _look() -> Dictionary:
 # --- Mounted emplacements ----------------------------------------------------
 # The Archer, Mage and Frost Witch towers are drawn bigger, with the troop they're
 # named for standing on the battlements: it turns to face its target and goes through
-# its own attack poses. The Cannon has a Cannoneer beside it who touches off the fuse,
-# then swabs and rams the barrel to reload. (See Sprites.mount_frames.)
+# its own attack poses. The Cannon has a Cannoneer beside it who works the gun drill:
+# flinching at the blast, fetching and loading a ball, ramming it home, and touching
+# off the fuse for the next shot. (See Sprites.mount_frames.)
 const MOUNTS := Sprites.MOUNT_CREW   # see Sprites.draw_mount for the layout
 
 
@@ -2583,7 +2586,7 @@ func _crew_look() -> Dictionary:
 
 
 ## The crew's pose this frame: an Archer drawing, a Mage or Frost Witch casting, a
-## Cannoneer touching off the fuse, then ramming the barrel while it reloads.
+## Cannoneer working the gun drill (see the "cannon" case).
 func _crew_pose() -> String:
 	match kind:
 		"tower":
@@ -2593,11 +2596,22 @@ func _crew_pose() -> String:
 			if swing > 0.0:
 				return "cast"
 		"cannon":
-			var since := cooldown / _rate() - cd_timer   # time since the last shot
+			# The gun drill: flinch at the blast, fetch a ball, load it, ram it home,
+			# then stand ready and touch off the fuse as the next shot comes up.
+			var reload := cooldown / _rate()
+			var since := reload - cd_timer   # time since the last shot
 			if _readying() > 0.45:
 				return "light"
-			if since > 0.2 and since < cooldown / _rate() * 0.6 and target != null:
-				return "ram" if fmod(since, 0.36) < 0.18 else ""
+			if since < 0.0 or since >= reload * 0.7 or (target == null and since > 0.35):
+				return ""
+			var k := since / reload
+			if since < 0.35:
+				return "cover"
+			if k < 0.3:
+				return "carry"
+			if k < 0.42:
+				return "load"
+			return "ram" if fmod(since, 0.36) < 0.18 else ""
 	return ""
 
 
