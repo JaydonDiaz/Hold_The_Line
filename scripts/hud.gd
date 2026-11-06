@@ -280,10 +280,16 @@ func _layout_hire() -> void:
 			w = minf(w, 82.0 if avail < 600.0 else 180.0)
 		var h := CONTENT_H if rows == 1 else (CONTENT_H - 6.0) / 2.0
 		var with_icon := w >= 110.0
-		var room := w - 12.0 - (40.0 if with_icon else 0.0)
+		var icon_w := 48.0 if rows == 1 else 40.0
 		for i in kinds.size():
 			var kind: String = kinds[i]
 			var d: Dictionary = Data.WARRIORS[kind]
+			# The room the name really has: the button less its padding, and less the
+			# picture and the gap after it when there is one.
+			var style: StyleBox = hire_buttons[kind].get_theme_stylebox("normal")
+			var room := w - style.get_margin(SIDE_LEFT) - style.get_margin(SIDE_RIGHT) - 4.0
+			if with_icon:
+				room -= icon_w + hire_buttons[kind].get_theme_constant("h_separation")
 			var price := _price_text(d)
 			var font_size := 15 if with_icon else (13 if w >= 80.0 else 12)
 			var label: String = d["name"]
@@ -299,6 +305,11 @@ func _layout_hire() -> void:
 			while widest > room and font_size > 9:
 				widest *= (font_size - 1.0) / font_size
 				font_size -= 1
+			# And the lines (name, maybe on two, then the price) have to fit its height.
+			var lines := label.count("\n") + 2
+			var tall := h - style.get_margin(SIDE_TOP) - style.get_margin(SIDE_BOTTOM)
+			while lines * font.get_height(font_size) > tall and font_size > 11:
+				font_size -= 1
 			var b: Button = hire_buttons[kind]
 			b.position = Vector2(CONTENT_X + (i % per_row) * (w + 6), CONTENT_Y + (i / per_row) * (h + 6))
 			b.size = Vector2(w, h)
@@ -309,7 +320,7 @@ func _layout_hire() -> void:
 			# The mounted towers' pictures are drawn big and shrunk smoothly onto the button.
 			b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if mounted else CanvasItem.TEXTURE_FILTER_PARENT_NODE
 			b.expand_icon = with_icon
-			b.add_theme_constant_override("icon_max_width", 48 if rows == 1 else 40)
+			b.add_theme_constant_override("icon_max_width", int(icon_w))
 			hire_meta[kind] = [label, i + 1, 1]
 	# The castle's tabs share the same space: four path cards, a button per ability,
 	# a button per repair size.
