@@ -27,21 +27,21 @@ const SPRITES := {
 				9: "............kgk_",
 				10: "............skg",
 			},
-			"plant": {  # idle: leaning on the sword, point planted in the dirt
+			"plant": {  # idle: the sword planted point-down in front of him, both hands on the pommel
 				2: "............____",
 				3: "............____",
 				4: "............____",
 				5: "............____",
-				6: "............kgk_",
-				7: "............ksk_",
-				8: "...........kgggk",
-				9: "............kwk_",
-				10: "..........bkkwk_",
-				11: "............kwk.",
-				12: "............kwk.",
-				13: "............kwk.",
-				14: "............kwk.",
-				15: "............_k..",
+				6: "............____",
+				7: "......kgk...____",
+				8: ".....ksgsk..____",
+				9: "....kwwwwwk.____",
+				10: "...T.kkwkkT.___",
+				11: "......kwk...._..",
+				12: "......kwk.......",
+				13: "......kwk.......",
+				14: "......kwk.......",
+				15: ".......k........",
 			},
 			"strike": {
 				2: "............____",
@@ -109,12 +109,12 @@ const SPRITES := {
 			"................",
 			".....kkkkk......",
 			"....kgggggk...k.",
-			".k.kgggggggk.kbk",
-			".kskgGsssGgkswbk",
-			"..kkGskssksGkw.b",
-			"...kGssssssGkw.b",
-			".kGkkGGGGGGkkw.b",
-			"kGklllllllllkssb",
+			".k.kgGgggGgk.kbk",
+			".kskggGsGggkswbk",
+			"..kkgskssksgkw.b",
+			"...kgssssssgkw.b",
+			".kLkkLLLLLLkkw.b",
+			"kLklllllllllkssb",
 			"kGkLklllllkLkw.b",
 			".kkskLLLLLkskwbk",
 			"...kllllllk..bk.",
@@ -554,6 +554,15 @@ const SPRITES := {
 				14: "........kkkkkkkkkkk",
 				15: "........____",
 			},
+			"stance": {   # fighting stance: both fists raised in guard by the chin
+				5: ".kk.......kk",
+				6: "kFFk.....kFFk",
+				7: "kFFk.....kFFk",
+				8: ".kZk.....kZk",
+				9: ".kZk.....kZk",
+				10: ".__.........__",
+				11: ".__.........__",
+			},
 		},
 		"palette": {
 			"h": Color(0.2, 0.17, 0.25), "r": Color(0.85, 0.2, 0.2), "g": Color(0.93, 0.93, 0.9),
@@ -661,6 +670,23 @@ const SPRITES := {
 	},
 	"healer": {  # White hooded robe, green trim, a gold cross and a glowing staff
 		"poses": {
+			"raise": {  # the splash: the staff held up before him in both hands, its orb over his head
+				0: "......kok.....__",
+				1: ".....kOok....___",
+				2: "......kok...____",
+				3: "......kwk....___",
+				4: "......kwk....___",
+				5: "......kwk....___",
+				6: "......kwk....___",
+				7: ".....skwks...___",
+				8: ".....skwks...___",
+				9: ".......k......__",
+				10: ".............___",
+				11: ".............___",
+				12: ".............___",
+				13: ".............___",
+				14: "..............__",
+			},
 			"cast": {
 				0: "............____",
 				1: "............____",
@@ -785,6 +811,20 @@ const SPRITES := {
 			"strum": {
 				9: "...........s",
 				10: "...T......s",
+			},
+			"serenade": {  # the splash: lute swung up to the shoulder, neck to the sky, singing
+				2: "..............kk",
+				3: ".............knk",
+				4: "............knk.",
+				5: ".......o...knk__",
+				6: "..........kLLLk_",
+				7: ".........kLLoLLk",
+				8: ".........sLLLLLk",
+				9: "..........kLLLk_",
+				10: ".........k______",
+				11: ".........k______",
+				12: "..........k_____",
+				13: "...........____.",
 			},
 		},
 		"palette": {
@@ -918,6 +958,21 @@ const SPRITES := {
 				9: "............k___",
 				10: "...........k____",
 			},
+			"brew": {  # the splash: a green flask raised high, an orange one at the hip
+				1: ".............kk.",
+				2: ".............kvk",
+				3: "............kxxk",
+				4: "............kxxk",
+				5: "............ks..",
+				6: "............C__.",
+				7: "............C___",
+				8: "............____",
+				9: ".k..........____",
+				10: "kvk........k___.",
+				11: "kOOk",
+				12: "kOOk",
+				13: ".kk.",
+			},
 			"throw": {
 				1: ".............kk.",
 				2: ".............kvk",
@@ -935,6 +990,7 @@ const SPRITES := {
 			"h": Color(0.45, 0.28, 0.15), "G": Color(0.8, 0.6, 0.25), "g": Color(0.6, 0.9, 0.95),
 			"A": Color(0.55, 0.38, 0.22), "a": Color(0.38, 0.25, 0.13), "C": Color(0.3, 0.5, 0.35),
 			"v": Color(0.85, 0.95, 0.95), "x": Color(0.45, 0.95, 0.35), "b": Color(0.15, 0.13, 0.15),
+			"O": Color(1.0, 0.55, 0.15),
 		},
 		"rows": [
 			"......kkkk......",
@@ -1487,6 +1543,80 @@ const SPRITES := {
 			"..kkk.....kkkkk.",
 		],
 	},
+	"engineer": {  # A yellow hard hat, an orange vest over blue overalls, a hammer on the shoulder
+		"palette": {"Y": Color(1.0, 0.78, 0.18), "y": Color(1.0, 0.95, 0.6), "O": Color(1.0, 0.55, 0.15),
+			"B": Color(0.25, 0.38, 0.62), "M": Color(0.62, 0.64, 0.7), "W": Color(0.55, 0.35, 0.18)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kYYYYYk.....",
+			"...kYYyYYYYk....",
+			"..kkkkkkkkkkk...",
+			"....kskssksk.kkk",
+			".....kssssk.kMMk",
+			"...kkOBBBBOkkMMk",
+			"..kOOOBBBBOOkkWk",
+			"..kOkBBBBBBkskWk",
+			"..kskBBBBBBk.kWk",
+			"...kBBBBBBBk..k.",
+			"...kBBBBBBBk....",
+			"...kBBkkBBk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [   # mid-stride, for the walk cycle (like the troops')
+			"...kBBkBBk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+		"poses": {
+			"toss": {  # hand open, the hammer up in the air (drawn on its own)
+				5: ".............___",
+				6: "............____",
+				7: "............____",
+				8: "............kk__",
+				9: "............ksk_",
+				10: "............kk__",
+				11: "..............__",
+			},
+			"strike": {  # the hammer swung down in front of him
+				5: "............____",
+				6: "............____",
+				7: "............____",
+				8: ".............kkkkkk",
+				9: "............sWWWMMk",
+				10: "............kkkkMMk",
+				11: "..............__kk",
+			},
+		},
+	},
+	"cannoneer": {  # A gunner in a red cap and blue coat, a smouldering linstock in hand
+		"palette": {"R": Color(0.8, 0.18, 0.15), "B": Color(0.22, 0.32, 0.62), "Y": Color(0.95, 0.78, 0.3),
+			"p": Color(0.3, 0.26, 0.32), "f": Color(0.25, 0.17, 0.12), "W": Color(0.55, 0.36, 0.18),
+			"M": Color(1.0, 0.55, 0.15), "D": Color(0.3, 0.3, 0.34)},
+		"rows": [
+			"................",
+			"....kkkkk....k..",
+			"...kRRRRRk..kMk.",
+			"..kRRRRRRRk.kMk.",
+			"...kssssk...kWk.",
+			"...kskssk...kWk.",
+			"....kssk....kWk.",
+			"...kBBBBBk..kWk.",
+			"..kBBYBBBBkkkWk.",
+			"..kBBYBBBBkssWk.",
+			"..kBBYBBBBkkkWk.",
+			"..ksBBBBBk..kWk.",
+			"...kppppk...kWk.",
+			"...kpkkpk...kWk.",
+			"...kfk.kfk..kWk.",
+			"...kkk.kkk..kkk.",
+		],
+		"poses": {
+			"light": {1: "............____", 2: "............____", 3: "............____", 4: "............____", 5: "............____", 6: "............____", 7: "............____", 8: "..........kkkk", 9: "..........kssWWWWk", 10: "..........kkkkkkWkMk", 11: "................kMMk", 12: ".................kk", 13: "............____", 14: "............____", 15: "............____"},
+			"ram": {1: "............____", 2: "............____", 3: "............____", 4: "............____", 5: "............____", 6: "............____", 7: "............____", 8: "..........kkkkkkkkkkkk", 9: "..........ksWWWWWWWWDDk", 10: "..........kkkkkkkkkkDDk", 11: "....................kk", 12: "............____", 13: "............____", 14: "............____", 15: "............____"},
+		},
+	},
 	"tower": {  # Stone tower, an archer at the battlements
 		"palette": {
 			"g": Color(0.35, 0.65, 0.3), "G": Color(0.22, 0.45, 0.2), "b": Color(0.62, 0.4, 0.18),
@@ -1936,12 +2066,12 @@ const SPRITES := {
 			"................",
 			".....kkkkk......",
 			"....kgggggk.....",
-			".k.kgggggggk.k..",
-			".kskgGsssGgks...",
-			"..kkGskssksGk.k.",
-			"...kGssssssGkkmk",
-			".kGkkGGGGGGkkwmk",
-			"kGklllllllllsccc",
+			".k.kgGgggGgk.k..",
+			".kskggGsGggks...",
+			"..kkgskssksgk.k.",
+			"...kgssssssgkkmk",
+			".kLkkLLLLLLkkwmk",
+			"kLklllllllllsccc",
 			"kGkLklllllkLkwmk",
 			".kkskLLLLLksk.mk",
 			"...kllllllk...k.",
@@ -1958,11 +2088,11 @@ const SPRITES := {
 			"................",
 			".kek.kkkkk......",
 			".kekkgggggk...k.",
-			".kqkgggggggk.kbk",
-			".kqkgGsssGgkswbk",
-			".kqkGskssksGkw.b",
-			".kqkGssssssGkw.b",
-			".kqkkGGGGGGkkw.b",
+			".kqkgGgggGgk.kbk",
+			".kqkggGsGggkswbk",
+			".kqkgskssksgkw.b",
+			".kqkgssssssgkw.b",
+			".kqkkLLLLLLkkw.b",
 			"kkklllllllllkssb",
 			"kGkLklllllkLkw.b",
 			".kkskLLLLLkskwbk",
@@ -2272,7 +2402,7 @@ const SPRITES := {
 			"...kkkk.kkkk....",
 		],
 	},
-	"archer_p3": {  # Trick Shots: a blue-hooded mystic with a glowing string and seeker arrows
+	"archer_p3": {  # Trick Shots: a mystic with blue hair, a glowing string and seeker arrows
 		"base": "archer",
 		"palette": {
 			"g": Color(0.28, 0.42, 0.78), "G": Color(0.17, 0.27, 0.55), "w": Color(0.55, 0.95, 1.0),
@@ -2282,13 +2412,13 @@ const SPRITES := {
 			"..............c.",
 			".....kkkkk......",
 			"....kgggggk...k.",
-			".k.kgggggggk.kbk",
-			".kskgGsssGgkswbk",
-			"..kkGskssksGkw.b",
-			"...kGssssssGkw.b",
-			".kGkkGGGGGGkkw.b",
-			"kGklllllllllkssc",
-			"kGkLklllllkLkw.b",
+			".k.kgGgggGgk.kbk",
+			".kskggGsGggkswbk",
+			"..kkgskssksgkw.b",
+			"...kgssssssgkw.b",
+			".kLkkLLLLLLkkw.b",
+			"kLklllllllllkssc",
+			"kLkLklllllkLkw.b",
 			".kkskLLLLLkskwbk",
 			"...kllllllk..bk.",
 			"...kppppppk..k..",
@@ -2553,28 +2683,26 @@ const SPRITES := {
 			"kkkkkkkkkkkkkkkk",
 		],
 	},
-	"statue_p3": {  # Vigor: a mossy statue on a fountain basin, water spilling over the rim
+	"statue_p3": {  # March: a copper standard-bearer, a red banner streaming from the raised pole
 		"base": "statue",
-		"palette": {
-			"g": Color(0.35, 0.6, 0.3), "b": Color(0.35, 0.6, 0.95), "w": Color(0.6, 0.85, 1.0),
-		},
+		"palette": {"S": Color(0.78, 0.5, 0.32), "D": Color(0.55, 0.33, 0.2), "R": Color(0.85, 0.2, 0.18), "Y": Color(1.0, 0.82, 0.3)},
 		"rows": [
-			"...........k....",
-			"..........kSk...",
-			"......kk..kSk...",
-			".....kSSk.kSk...",
-			".....kSSk.kSk...",
+			"...........kkkkk",
+			"..........kSRRRk",
+			"......kk..kSRYRk",
+			".....kSSk.kSRRk.",
+			".....kSSk.kSkk..",
 			"......kk..kDk...",
 			"....kkSSkkkDk...",
-			"...kSSgSSSSk....",
-			"...kSkSSgSk.....",
-			"...kgkSSSSk.....",
-			"...kDkSgSSk.....",
-			".....kSkSk......",
-			".wkkkkkkkkkkkkw.",
-			".kbbbbbbbbbbbbk.",
-			"wkPPPPPPPPPPPPkw",
-			".kkkkkkkkkkkkkk.",
+			"...kSSSSSSSk....",
+			"...kSkSSSSk.....",
+			"...kSkSSSSk.....",
+			"...kDkSSSSk.....",
+			"....kSk.kSk.....",
+			"...kkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
 		],
 	},
 	"mine_p3": {  # Gemcutters: the rock studded with big cyan and violet crystals, gems piled out front
@@ -2719,7 +2847,7 @@ const ACCENTS := {
 		{"behind": {1: ".....1111"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
 		{"behind": {5: "3", 6: "33", 7: "33", 8: ".3"}, "palette": {"3": Color(0.75, 0.9, 0.85)}},
 		{"over": {8: ".kkk", 9: ".k5k", 10: ".k5k", 11: "..k"}, "palette": {"5": Color(0.35, 0.36, 0.42)}},
-		{"over": {13: "....7..8..7", 14: "...7.88...7.8"}, "palette": {"7": Color(0.4, 0.65, 1.0), "8": Color(0.35, 0.65, 0.3)}},
+		{"over": {0: "............77", 1: "............777", 2: "............77"}, "palette": {"7": Color(0.85, 0.2, 0.18)}},
 	],
 	"mine": [
 		{"over": {4: ".....1......1", 9: "...........1", 11: "..1"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
@@ -2740,12 +2868,43 @@ const INSTRUMENT_LAYERS := {
 
 static var _cache := {}
 
+# Hair laid onto every look of a troop (all its outfits, combos and poses), after its
+# own layers: "behind" pixels only fill empty space, "over" paints on top.
+const HAIR := {
+	"archer": {   # her hair in a braid over her shoulder, tied in red: green, or blue as the Mystic
+		"over": {5: "...7", 6: ".k7k", 7: ".k8k", 8: ".k7k", 9: ".k8k", 10: ".k9k", 11: "..k."},
+		"palette": {"7": Color(0.35, 0.65, 0.3), "8": Color(0.22, 0.45, 0.2), "9": Color(0.85, 0.2, 0.2)},
+		"by_path": {3: {"7": Color(0.28, 0.42, 0.78), "8": Color(0.17, 0.27, 0.55)}},   # hair color by the look her head comes from
+	},
+	"bard": {   # long brown hair, one lock swept over her front shoulder
+		"behind": {4: "..k7", 5: "..k7", 6: "...k7"},
+		"over": {4: "...........7k", 5: "...........7k", 6: "..........77k", 7: "..........78k", 8: ".........k7k"},
+		"palette": {"7": Color(0.5, 0.3, 0.16), "8": Color(0.36, 0.2, 0.1)},
+	},
+}
+
+
+## A troop's layers plus its hair (see HAIR), by the kind its sprite name starts with.
+static func _with_hair(sprite: String, layers: Array) -> Array:
+	var kind := sprite.get_slice("_", 0)
+	var hair = HAIR.get(kind)
+	if hair == null:
+		return layers
+	# Some looks color the hair differently: match the one her head comes from.
+	for p in hair.get("by_path", {}):
+		if sprite == "%s_p%d" % [kind, p] or combo_source(sprite, "head") == p:
+			var recolored: Dictionary = hair.duplicate()
+			recolored["palette"] = (hair["palette"] as Dictionary).merged(hair["by_path"][p], true)
+			return layers + [recolored]
+	return layers + [hair]
+
 
 ## Returns [walk frame A, walk frame B] for a sprite. recolor swaps palette letters
 ## for other colors (e.g. golden hair), and layers are accents laid on top (see
 ## ACCENTS); tag names the variant for the cache.
 static func frames(sprite: String, recolor := {}, tag := "", layers := []) -> Array:
 	var key := sprite + tag
+	layers = _with_hair(sprite, layers)
 	if not _cache.has(key):
 		var s: Dictionary = _entry(sprite)
 		var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
@@ -2755,10 +2914,142 @@ static func frames(sprite: String, recolor := {}, tag := "", layers := []) -> Ar
 	return _cache[key]
 
 
+# --- Mounted emplacements ----------------------------------------------------
+# The Archer, Mage and Frost Witch towers are drawn bigger with a real troop standing
+# on the battlements, and the Cannon with its own Cannoneer beside it. The tower art
+# has a little figure built into its top (and the cannon a gunner on its left): the
+# mounted versions have them cleared away. [first col, last col, rows above the
+# parapet] of the figure, and the parapet row filled in with stone.
+const MOUNT_CLEAR := {
+	"tower": [4, 11, 5],
+	"tower_p1": [1, 14, 6],   # the Range lookout's roof comes off; its eaves become the parapet
+	"magetower": [4, 11, 5],
+	"frosttower": [4, 11, 5],
+	"cannon": [0, 6, 16],
+}
+
+
+const MOUNT_CREW := {"tower": "archer", "magetower": "mage", "frosttower": "frost", "cannon": "cannoneer"}
+const TOWER_GROW := 1.4     # mounted towers are drawn this much bigger than other emplacements
+const CANNON_GROW := 1.25
+const CREW_STAND := 8.5     # tower rows down from the top where the troop's feet are (behind the parapet)
+const CREW_BESIDE := 9.5    # cannon pixels from its centre to where the Cannoneer stands
+
+
+## Where a mounted emplacement's parts go, for a unit drawn `scale` screen pixels per
+## sprite pixel: the tower's (or cannon's) scale and left edge, and where the crew's
+## feet are relative to the post.
+static func mount_layout(kind: String, scale: float) -> Dictionary:
+	if kind == "cannon":
+		var k := scale * CANNON_GROW
+		return {"k": k, "left": -11.5 * k, "crew": Vector2(-CREW_BESIDE * k, 0)}   # centred once its gunner's cleared
+	var k := scale * TOWER_GROW
+	return {"k": k, "left": -SIZE / 2.0 * k, "crew": Vector2(0, -(SIZE - CREW_STAND) * k)}
+
+
+## Draws a mounted emplacement facing `flip` (1 right, -1 left): the crew first (so a
+## tower's parapet hides the troop's legs; a Cannoneer stands beside the gun), then
+## the tower or cannon at `foot` (which a cannon's recoil moves; the crew stays at
+## base_foot). Returns the tower's rect, in the transform at `foot`.
+static func draw_mount(ci: CanvasItem, kind: String, foot: Vector2, base_foot: Vector2, flip: float,
+		base_tex: Texture2D, crew_tex: Texture2D, tint := Color.WHITE, breathe := 1.0, scale := 3.0) -> Rect2:
+	var lay := mount_layout(kind, scale)
+	var crew := lay["crew"] as Vector2
+	ci.draw_set_transform(base_foot + Vector2(crew.x * flip, crew.y), 0, Vector2(flip, breathe))
+	ci.draw_texture_rect(crew_tex, Rect2(-SIZE / 2.0 * scale, -SIZE * scale, crew_tex.get_width() * scale, SIZE * scale), false, tint)
+	var k: float = lay["k"]
+	var rect := Rect2(lay["left"], -SIZE * k, base_tex.get_width() * k, SIZE * k)
+	ci.draw_set_transform(foot, 0, Vector2(flip, 1))
+	ci.draw_texture_rect(base_tex, rect, false, tint)
+	ci.draw_set_transform(Vector2.ZERO)
+	return rect
+
+
+## A hire-button picture of a mounted emplacement as it looks on the field (crew and
+## all), built at whole-pixel scales (the tower 7 or 5 to the crew's 5 or 4) with
+## mipmaps, so it shrinks smoothly onto the button.
+static func mount_icon(kind: String) -> Texture2D:
+	var key := "icon#" + kind
+	if _cache.has(key):
+		return _cache[key]
+	var scale := 5.0 if kind != "cannon" else 4.0
+	var lay := mount_layout(kind, scale)
+	var k: float = lay["k"]
+	var base := _image_of(mount_frames(kind, kind)[0])
+	var crew := _image_of(frames(MOUNT_CREW[kind])[0])
+	var crew_at := (lay["crew"] as Vector2) + Vector2(-SIZE / 2.0 * scale, -SIZE * scale)
+	var base_at := Vector2(lay["left"], -SIZE * k)
+	var lo := Vector2(minf(crew_at.x, base_at.x), minf(crew_at.y, base_at.y))
+	var hi := Vector2(maxf(crew_at.x + crew.get_width() * scale, base_at.x + base.get_width() * k), 0)
+	var img := Image.create(ceili(hi.x - lo.x), ceili(hi.y - lo.y), false, Image.FORMAT_RGBA8)
+	for part in [[crew, scale, crew_at], [base, k, base_at]]:
+		var src: Image = part[0].duplicate()
+		src.resize(roundi(src.get_width() * part[1]), roundi(src.get_height() * part[1]), Image.INTERPOLATE_NEAREST)
+		img.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), Vector2i((part[2] - lo).round()))
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_cache[key] = tex
+	return tex
+
+
+## A sprite's pixels (out of the atlas if that's where it is).
+static func _image_of(tex: Texture2D) -> Image:
+	if tex is AtlasTexture:
+		return _atlas_img.get_region(Rect2i((tex as AtlasTexture).region))
+	return tex.get_image()
+
+
+## A tower's (or cannon's) frames with the figure on it cleared away, for drawing a
+## troop there instead. Same arguments as frames().
+static func mount_frames(sprite: String, kind: String, recolor := {}, tag := "", layers := []) -> Array:
+	var key := sprite + tag + "#mount"
+	if not _cache.has(key):
+		var s: Dictionary = _entry(sprite)
+		var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
+		var rows: Array = _layered(s["rows"], layers)
+		var alt: Array = _layered(s["alt"] if s.has("alt") else _alt_rows(sprite), layers)
+		var spec := _mount_spec(sprite, kind)
+		_cache[key] = [_make(_clear_mount(rows, spec), palette), _make(_clear_mount(alt, spec), palette)]
+	return _cache[key]
+
+
+## How to clear a sprite: by its own entry if it has one, a combined sprite by the
+## outfit its top came from, else by its kind.
+static func _mount_spec(sprite: String, kind: String) -> Array:
+	var outfit := sprite
+	if _generated.has(sprite):
+		var top := combo_source(sprite, "head")
+		if top < 0:
+			top = combo_source(sprite, "right")
+		outfit = "%s_p%d" % [kind, top] if top >= 0 else kind
+	return MOUNT_CLEAR.get(outfit, MOUNT_CLEAR[kind])
+
+
+static func _clear_mount(rows: Array, c: Array) -> Array:
+	# The parapet is filled with the tower's own stone (combined sprites rename their
+	# colors, so it's read off the wall below rather than assumed to be "S").
+	var stone := "S"
+	if c[2] + 2 < rows.size():
+		var below: String = rows[c[2] + 2]
+		if below.length() > 3 and below[3] != "k" and below[3] != ".":
+			stone = below[3]
+	var out := []
+	for y in rows.size():
+		var r: String = rows[y]
+		for x in range(c[0], mini(c[1] + 1, r.length())):
+			if y < c[2]:
+				r[x] = "."
+			elif y == c[2] and r[x] != "k":
+				r[x] = stone   # the parapet the troop stands behind
+		out.append(r)
+	return out
+
+
 ## An attack pose (see "poses" on the sprites), or null if the sprite has none by
 ## that name. Variants use the base sprite's poses unless they define their own.
 static func pose(sprite: String, pose_name: String, recolor := {}, tag := "", layers := []):
 	var key := sprite + tag + ":" + pose_name
+	layers = _with_hair(sprite, layers)
 	if not _cache.has(key):
 		var s: Dictionary = _entry(sprite)
 		_cache[key] = null

@@ -39,7 +39,7 @@ var post := Vector2.ZERO
 var post_u := 0.0              # post's place across the field (0 = left edge, 1 = right), kept through window resizes
 var fitted_post := Vector2.INF # post as of the last resize; if it's changed since, post_u is taken afresh
 var tiers := [0, 0, 0, 0]
-var wall_guard := false      # posted on the castle wall by a castle upgrade: walks along it, out of reach
+var wall_guard := false      # posted on the castle wall by a castle upgrade: stands at its post, out of reach
 var last_path := -1   # the path upgraded most recently (its look wins a tie)
 var summoned := false # a skeleton raised by Necromancy: can't be sold, crumbles at the end of the wave
 var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial Artist a copy came from
@@ -200,6 +200,11 @@ var hurt := 0.0
 var down_timer := 0.0
 var walk := 0.0
 var moving := false
+var build_left := 0.0      # an emplacement still being built: seconds of an Engineer's work left
+var build_total := 0.0
+var kiting := false        # a ranged troop backing away from an enemy that got too close
+const KITE_GAP := 45.0     # ranged troops back off from enemies closer than this...
+const KITE_CLEAR := 70.0   # ...until they're this far off again
 var facing := Vector2.UP
 var flip := 1.0
 var target = null
@@ -563,7 +568,7 @@ func _update_buffs() -> void:
 		buff[key] = 0.0
 	var best := {}   # source kind -> strongest value of each buff from that kind
 	for w in main.get_warriors():
-		if w == self or w.aura.is_empty() or not w.is_active():
+		if w == self or w.aura.is_empty() or not w.is_active() or w.build_left > 0.0:
 			continue
 		if w.covers(self):
 			var from: Dictionary = best.get_or_add(w.kind, {})
@@ -640,6 +645,8 @@ func sell_value() -> int:
 
 
 func stats_text() -> String:
+	if build_left > 0.0:
+		return "Under construction - an Engineer has %.1fs of work left on it" % build_left
 	var s := "HP %d/%d   Damage %.0f   Every %.2fs" % [ceili(hp), ceili(max_hp), damage, cooldown]
 	if is_support():
 		match data["attack"]:
@@ -655,10 +662,14 @@ func stats_text() -> String:
 					s += "   Regen %.1f%%/s for %.0fs" % [regen_grant[0] * 100, regen_grant[1]]
 				if not revive.is_empty():
 					s += "   Revives in %.1fs" % _revive_time()
+				if aura.has("regen"):
+					s += "   Allies regen %s%% HP/s" % _pct(aura["regen"])
+				if aura.has("recover"):
+					s += ("   Downed allies hold on %d%% longer" if main.permadeath else "   Downed allies get up %d%% sooner") % roundi(aura["recover"] * 100)
 			"aura":
 				s = "HP %d/%d   Radius %s  " % [ceili(hp), ceili(max_hp), Data.ft(attack_range)]
 				var names := {"damage": " +%d%% damage", "rate": " +%d%% attack speed", "defense": " -%d%% damage taken", "speed": " +%d%% move speed",
-						"recover": " get up %d%% sooner"}
+						"recover": " downed hold on %d%% longer" if main.permadeath else " downed get up %d%% sooner"}
 				for key in aura:
 					if key == "regen":
 						s += " +%s%% HP/s" % _pct(aura[key])
@@ -868,7 +879,8 @@ func take_damage(amount: float) -> void:
 		return
 	if hp <= 0.0:
 		hp = 0.0
-		# Gets back up after the difficulty's down time. Hardcore: dies then, unless a Healer revives it first.
+		# Dies after the difficulty's down time unless it's revived first (in the Tutorial
+		# and Freeplay it gets back up then instead).
 		down_timer = main.down_time
 		dazed = 0.0
 		shove_left = 0.0
@@ -887,6 +899,9 @@ func take_damage(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if build_left > 0.0 and down_timer <= 0.0:
+		queue_redraw()   # a construction site: nothing works until the Engineer's done
+		return
 	if summoned and (not main.wave_active or not is_instance_valid(summoner) or summoner.is_queued_for_deletion()
 			or (clone_of != null and not summoner.is_active())):
 		_crumble()
@@ -898,7 +913,9 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	_animate(delta)
 	if down_timer > 0.0:
-		down_timer -= delta * (1.0 if main.permadeath else _recovery_aura())
+		# Healers and Medic Bays nearby keep a downed unit alive longer (or, without
+		# permadeath, get it up sooner).
+		down_timer -= delta / _recovery_aura() if main.permadeath else delta * _recovery_aura()
 		if down_timer <= 0.0:
 			if main.permadeath:
 				main.spawn_text(position + Vector2(0, -24), "Destroyed!" if is_emplacement() else "Fallen!", Color(1, 0.3, 0.3))
@@ -1001,6 +1018,8 @@ func _process(delta: float) -> void:
 			facing = position.direction_to(target.position)
 		else:
 			_mend(max_hp * REGEN * delta)
+	elif not ordered and _kite(delta):
+		pass   # backing off from an enemy that got too close (still shooting)
 	elif target != null:
 		var gap := _gap_to(target)
 		facing = position.direction_to(target.position)
@@ -1294,12 +1313,7 @@ func _find_target():
 	if is_emplacement():
 		return _pick(main.get_enemies().filter(_in_range))
 	if wall_guard:
-		# Anything it could hit from somewhere along the wall.
-		var reachable := []
-		for e in main.get_enemies():
-			if _is_valid(e) and position.y - e.position.y - RADIUS - e.radius <= attack_range:
-				reachable.append(e)
-		return _pick(reachable)
+		return _pick(main.get_enemies().filter(_in_range))
 	var all: Array = main.get_enemies().filter(_is_valid)
 	if main.paths.has_walls() and not shoots_over_walls():
 		# Rather go after an enemy on this side of the walls than one it can't get at.
@@ -1310,6 +1324,8 @@ func _find_target():
 
 
 func _in_range(e) -> bool:
+	if wall_guard:
+		return _is_valid(e) and main.powers.in_guard_reach(e)   # a set reach out from the castle wall
 	return _is_valid(e) and _gap_to(e) <= attack_range and _sees(e)
 
 
@@ -1350,12 +1366,7 @@ func cycle_priority() -> void:
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * delta, max_dist)
 	if wall_guard:
-		# Along the wall only: line up under the target until it's in reach.
-		step = minf(step, absf(p.x - position.x))
-		position.x += signf(p.x - position.x) * step
-		walk += step / 12.0
-		moving = step > 0.01
-		return
+		return   # wall guards hold their posts
 	var aim := p
 	# Only go the long way round if a wall or an emplacement is in the way of where it
 	# means to stop.
@@ -1391,11 +1402,7 @@ func _separate() -> void:
 	if is_emplacement():
 		return   # rooted in place; everyone else steps around it
 	if wall_guard:
-		# On the wall: keep to the walkway, and make room for the other guards.
-		for g in main.powers.guards:
-			if g != self and absf(g.position.x - position.x) < RADIUS * 1.6:
-				position.x += (1.0 if position.x >= g.position.x else -1.0) * 0.5
-		position = Vector2(clampf(position.x, main.powers.GUARD_MARGIN * 0.5, main.FIELD_W - main.powers.GUARD_MARGIN * 0.5), main.powers.wall_y())
+		position = post   # standing at its post on the wall
 		return
 	for w in main.get_warriors():
 		if w == self or not w.is_active():
@@ -1506,14 +1513,63 @@ func instrument_sound() -> String:
 	return instrument[look] if look >= 0 else "note"
 
 
+## An Engineer has finished building this emplacement: it starts working.
+func finish_build() -> void:
+	build_left = 0.0
+	main.spawn_burst(position + Vector2(0, -20), 30.0, Color(1.0, 0.9, 0.6))
+	main.spawn_text(position + Vector2(0, -50), "Built!", Color(1.0, 0.9, 0.6))
+	main.sfx("upgrade", 1.2)
+	main.warriors_changed()
+
+
+func under_construction() -> bool:
+	return build_left > 0.0
+
+
+## Ranged troops keep their distance: when an enemy that can hurt them gets close,
+## they step back away from it (leaning toward their post) and keep shooting, until
+## there's room again. Melee troops (Martial Artists too, ki blasts and all, since they
+## can still brawl) stand and fight. Returns whether it's backing off this frame.
+func _kite(delta: float) -> bool:
+	if is_melee() or wall_guard or summoned or clone_of != null:
+		return false
+	var threat = null
+	var near := INF
+	for e in main.enemies_near(position, KITE_CLEAR + RADIUS + 30.0):
+		if e.dead or not e.fights or not e.bomb.is_empty() or e.stun_timer > 0.0 or e.freeze_timer > 0.0:
+			continue
+		var gap: float = _gap_to(e)
+		if gap < near:
+			near = gap
+			threat = e
+	if threat == null or near > (KITE_CLEAR if kiting else KITE_GAP):
+		kiting = false
+		return false
+	# Away from the threat, drawn a little back toward its post; within the deployment area.
+	var away: Vector2 = (position - threat.position).normalized()
+	var home := position.direction_to(post) if position.distance_to(post) > 4.0 else Vector2.ZERO
+	var dir := (away + home * 0.35).normalized()
+	var dest: Vector2 = (position + dir * 60.0).clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
+	if position.distance_to(dest) < 10.0:
+		kiting = false   # cornered: stand and fight
+		return false
+	kiting = true
+	if target != null and _is_valid(target):
+		facing = position.direction_to(target.position)
+	_move_toward(dest, position.distance_to(dest), delta)
+	return true
+
+
 ## Where projectiles leave from: the hands, or an emplacement's archer or muzzle.
 func _muzzle() -> Vector2:
 	var f := signf(facing.x) if absf(facing.x) > 0.2 else flip
 	match kind:
 		"tower":
-			return position + Vector2(0, -24)
+			return position + Vector2(10.0 * f, -36)   # the archer on top
+		"magetower", "frosttower":
+			return position + Vector2(10.0 * f, -42)   # the staff of the Mage or Frost Witch on top
 		"cannon":
-			return position + Vector2(19.0 * f, -22)
+			return position + Vector2(14.0 * f, -33)   # the mouth of the (bigger) cannon
 	return position + facing * 18.0
 
 
@@ -1615,7 +1671,7 @@ func _cast_chain() -> bool:
 	if cur == null:
 		return false
 	var hit := []
-	var points := PackedVector2Array([position + Vector2(0, -24)])
+	var points := PackedVector2Array([_muzzle() if kind == "magetower" else position + Vector2(0, -24)])
 	while cur != null and hit.size() < int(chain["jumps"]):
 		hit.append(cur)
 		points.append(cur.position)
@@ -1659,7 +1715,7 @@ func _cast_lance() -> bool:
 			best = e
 	if best == null:
 		return false
-	main.spawn_beam(position + Vector2(0, -24), best.position, Color(1.0, 0.5, 0.95))
+	main.spawn_beam(_muzzle() if kind == "magetower" else position + Vector2(0, -24), best.position, Color(1.0, 0.5, 0.95))
 	main.sfx("lance")
 	best.take_damage(lance["damage"] * _power())
 	swing = 0.15
@@ -1982,12 +2038,13 @@ func revived(frac: float) -> void:
 	main.spawn_burst(position, 30, Color(1, 1, 0.7))
 
 
-## Downed (Normal mode): Renewal healers, Seraph's Halo and Vigor statues nearby make
-## this unit get up sooner.
+## Downed: how much more slowly this unit bleeds out (or, in the Tutorial and Freeplay,
+## how much sooner it gets up) with Renewal healers, a Seraph's Halo or a Medic Bay's
+## Field Hospital nearby. 1 = no help.
 func _recovery_aura() -> float:
 	var rate := 1.0
 	for w in main.get_warriors():
-		if w == self or not w.is_active():
+		if w == self or not w.is_active() or w.build_left > 0.0:
 			continue
 		if not w.revive.is_empty() and (w.covers(self) if w.is_support() else w._ally_gap(self) <= w.attack_range):
 			rate = maxf(rate, w.revive["aura"])
@@ -2470,7 +2527,126 @@ func _look() -> Dictionary:
 		tag += "+gold"
 	_look_cache = {"name": look_name, "layers": layers, "tag": tag, "recolor": recolor,
 			"frames": Sprites.frames(look_name, recolor, tag, layers), "poses": {}}
+	if MOUNTS.has(kind):
+		_look_cache["mount"] = Sprites.mount_frames(look_name, kind, recolor, tag, layers)
+		_look_cache["crew"] = _crew_look()
 	return _look_cache
+
+
+# --- Mounted emplacements ----------------------------------------------------
+# The Archer, Mage and Frost Witch towers are drawn bigger, with the troop they're
+# named for standing on the battlements: it turns to face its target and goes through
+# its own attack poses. The Cannon has a Cannoneer beside it who touches off the fuse,
+# then swabs and rams the barrel to reload. (See Sprites.mount_frames.)
+const MOUNTS := Sprites.MOUNT_CREW   # see Sprites.draw_mount for the layout
+
+
+## The troop on a tower (or the crew of a cannon), dressed for the tower's upgrades:
+## a Mage or Frost Witch tower's crew wears its path's robes, an Archer tower's
+## carries a crossbow (Range) or a full quiver (Garrison), and arrows colored like its
+## damage.
+func _crew_look() -> Dictionary:
+	var troop: String = MOUNTS[kind]
+	var look_name := troop
+	var recolor := {}
+	var tag := ""
+	if troop != "cannoneer":
+		var high := []
+		for p in tiers.size():
+			if tiers[p] >= 3:
+				var q := p
+				if troop == "archer":
+					q = {1: 1, 2: 2}.get(p, -1)   # the tower's Range and Garrison look like the troop's
+				if q >= 0:
+					high.append(q)
+		if high.size() >= 2:
+			look_name = Sprites.combo(troop, high[0], high[1])
+		elif high.size() == 1 and Sprites.SPRITES.has("%s_p%d" % [troop, high[0]]):
+			look_name = "%s_p%d" % [troop, high[0]]
+		if troop == "archer" and tiers[0] > 0:
+			recolor = {"e": Projectile.ARROW_SHAFTS[tiers[0]], "a": Projectile.ARROW_HEADS[tiers[0]]}
+			tag = "+g%d" % tiers[0]
+	return {"name": look_name, "recolor": recolor, "tag": tag, "layers": [],
+			"frames": Sprites.frames(look_name, recolor, tag), "poses": {}}
+
+
+## The crew's pose this frame: an Archer drawing, a Mage or Frost Witch casting, a
+## Cannoneer touching off the fuse, then ramming the barrel while it reloads.
+func _crew_pose() -> String:
+	match kind:
+		"tower":
+			if swing <= 0.0 and _readying() > 0.0:
+				return "draw"
+		"magetower", "frosttower":
+			if swing > 0.0:
+				return "cast"
+		"cannon":
+			var since := cooldown / _rate() - cd_timer   # time since the last shot
+			if _readying() > 0.45:
+				return "light"
+			if since > 0.2 and since < cooldown / _rate() * 0.6 and target != null:
+				return "ram" if fmod(since, 0.36) < 0.18 else ""
+	return ""
+
+
+func _draw_mounted(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Color) -> void:
+	var crew: Dictionary = look["crew"]
+	var crew_tex: Texture2D = crew["frames"][0]
+	var pose_name := _crew_pose()
+	if pose_name != "":
+		var poses: Dictionary = crew["poses"]
+		if not poses.has(pose_name):
+			poses[pose_name] = Sprites.pose(crew["name"], pose_name, crew["recolor"], crew["tag"])
+		if poses[pose_name] != null:
+			crew_tex = poses[pose_name]
+	var breathe := 1.0 + 0.025 * sin(anim_t * 2.4 + position.x)
+	var base_tex: Texture2D = look["mount"][0]
+	var rect := Sprites.draw_mount(self, kind, foot, base_foot, flip, base_tex, crew_tex, tint, breathe, SCALE)
+	_remember_body(base_tex, Transform2D(0, Vector2(flip, 1), 0, foot), rect)
+	draw_set_transform(Vector2.ZERO)
+
+
+## A construction site: scaffolding, the emplacement rising out of the ground as the
+## Engineer works, and a progress bar.
+func _draw_construction() -> void:
+	var done := clampf(1.0 - build_left / maxf(build_total, 0.01), 0.0, 1.0)
+	var look := _look()
+	var tex: Texture2D = look["mount"][0] if MOUNTS.has(kind) else look["frames"][0]
+	var k := SCALE * (Sprites.TOWER_GROW if kind in ["tower", "magetower", "frosttower"] else (Sprites.CANNON_GROW if kind == "cannon" else 1.0))
+	var left: float = Sprites.mount_layout(kind, SCALE)["left"] if MOUNTS.has(kind) else -Sprites.SIZE / 2.0 * k
+	var foot := Vector2(0, RADIUS)
+	draw_texture_rect(Sprites.shadow(), Rect2(-RADIUS * 1.3, foot.y - 6, RADIUS * 2.6, 12), false, Color(0, 0, 0, 0.3))
+	# The finished shape, faint, and as much of it as is built so far, solid from the ground up.
+	var full := Rect2(left, foot.y - Sprites.SIZE * k, tex.get_width() * k, Sprites.SIZE * k)
+	draw_texture_rect(tex, full, false, Color(1, 1, 1, 0.22))
+	var rows := ceili(Sprites.SIZE * done)
+	if rows > 0:
+		var src_y := Sprites.SIZE - rows
+		var dst := Rect2(full.position.x, foot.y - rows * k, full.size.x, rows * k)
+		draw_texture_rect_region(tex, dst, Rect2(0, src_y, tex.get_width(), rows), Color(1, 1, 1, 1))
+	# Scaffolding round it.
+	var wood := Color(0.6, 0.42, 0.22)
+	var top := foot.y - Sprites.SIZE * k * 0.9
+	for x in [full.position.x + 2.0, full.end.x - 2.0]:
+		draw_line(Vector2(x, foot.y), Vector2(x, top), wood, 2.0)
+	for i in 3:
+		var y := lerpf(foot.y - 6.0, top, i / 2.0)
+		draw_line(Vector2(full.position.x, y), Vector2(full.end.x, y), wood, 2.0)
+	draw_line(Vector2(full.position.x + 2, foot.y - 6), Vector2(full.end.x - 2, top), Color(wood, 0.7), 1.5)
+	# Progress.
+	var bar := Rect2(-RADIUS, top - 10, RADIUS * 2, 4)
+	draw_texture_rect(Sprites.white(), bar, false, Color(0, 0, 0, 0.6))
+	draw_texture_rect(Sprites.white(), Rect2(bar.position, Vector2(bar.size.x * done, 4)), false, Color(1.0, 0.8, 0.3))
+
+
+## How far above its post a unit's health bar sits (above the troop on a tower).
+func _bar_height() -> float:
+	match kind:
+		"tower", "magetower", "frosttower":
+			return (Sprites.SIZE - Sprites.CREW_STAND) * SCALE * Sprites.TOWER_GROW + Sprites.SIZE * SCALE + 4.0 - RADIUS
+		"cannon":
+			return Sprites.SIZE * SCALE * Sprites.CANNON_GROW + 2.0 - RADIUS
+	return Sprites.SIZE * SCALE + 2.0 - RADIUS
 
 
 func _pose_tex(look: Dictionary, pose_name: String):
@@ -2481,6 +2657,9 @@ func _pose_tex(look: Dictionary, pose_name: String):
 
 
 func _draw() -> void:
+	if build_left > 0.0:
+		_draw_construction()
+		return
 	var look := _look()
 	var frames: Array = look["frames"]
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * SCALE
@@ -2488,7 +2667,8 @@ func _draw() -> void:
 	xray_tex = null
 	# The shadow, sprite, pips and health bar all come from the sprite atlas, so the
 	# renderer can batch the whole army together.
-	draw_texture_rect(Sprites.shadow(), Rect2(-RADIUS, feet - RADIUS * 0.35, RADIUS * 2.0, RADIUS * 0.7), false, Color(0, 0, 0, 0.3))
+	var sr := RADIUS * (1.35 if MOUNTS.has(kind) else 1.0)
+	draw_texture_rect(Sprites.shadow(), Rect2(-sr, feet - sr * 0.35, sr * 2.0, sr * 0.7), false, Color(0, 0, 0, 0.3))
 	if not is_active():
 		# Knocked out: lying on the ground (or a wrecked emplacement) with a recovery ring.
 		if is_emplacement():
@@ -2604,9 +2784,12 @@ func _draw() -> void:
 			draw_set_transform(origin + Vector2(0, size.y / 2) - facing * 12.0 * i, 0, Vector2(flip, 1))
 			draw_texture_rect(tex, body, false, Color(1, 1, 1, 0.12 * (4 - i)))
 	# Tilt and squash pivot on the feet, so it leans and squashes without lifting off.
-	draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
-	draw_texture_rect(tex, body, false, tint)
-	_remember_body(tex, Transform2D(motion[1], Vector2(flip * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
+	if MOUNTS.has(kind):
+		_draw_mounted(look, origin + Vector2(0, size.y / 2), Vector2(0, feet), tint)
+	else:
+		draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
+		draw_texture_rect(tex, body, false, tint)
+		_remember_body(tex, Transform2D(motion[1], Vector2(flip * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
 	draw_set_transform(Vector2.ZERO)
 	_draw_idle_props(origin, size)
 	if dazed > 0.0:
@@ -2670,7 +2853,7 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([m + Vector2(0, -5), m + Vector2(4, 0), m + Vector2(0, 5), m + Vector2(-4, 0)]), OUTLINE_COLOR)
 		draw_colored_polygon(PackedVector2Array([m + Vector2(0, -3.5), m + Vector2(2.5, 0), m + Vector2(0, 3.5), m + Vector2(-2.5, 0)]), Color(1.0, 0.85, 0.3))
 	if hp < max_hp:
-		var top := Vector2(-RADIUS, feet - size.y - 2)
+		var top := Vector2(-RADIUS, -_bar_height())
 		draw_texture_rect(Sprites.white(), Rect2(top, Vector2(RADIUS * 2, 4)), false, Color(0, 0, 0, 0.6))
 		draw_texture_rect(Sprites.white(), Rect2(top, Vector2(RADIUS * 2 * hp / max_hp, 4)), false, Color(0.35, 0.75, 1.0))
 

@@ -5,7 +5,8 @@ extends Node2D
 ## there isn't, everyone hacks at the wall in the way, wolves included.
 ## Flyers (bats) pass over walls and warriors alike. Fighters turn on a unit that's
 ## attacking them (one in range of them and not far off, with no wall between) before
-## carrying on to the castle. Sappers ignore your troops: they make for the castle,
+## carrying on to the castle, unless they're already at it or nearly there (then they
+## keep at the castle whatever hits them). Sappers ignore your troops: they make for the castle,
 ## and blow themselves up against a wall only if it blocks their way there.
 
 signal died(enemy)
@@ -18,6 +19,7 @@ const FUSE := 0.6          # seconds a Sapper's bomb fizzes before it goes off
 const ENRAGE_SPEED := 1.35
 const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
+const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
 
 var kind := ""
 var tier := 1      # enemy type rank (data.gd); higher is more dangerous
@@ -223,17 +225,20 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 	aggro_check -= delta
-	if aggro_check <= 0.0:
+	if _set_on_castle():
+		aggro = null   # going for the castle, whatever's hitting it
+	elif aggro_check <= 0.0:
 		aggro_check = 0.3
 		aggro = _attacker()
 	elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
 		aggro = null
-	var blocker = _find_blocker() if fights and bomb.is_empty() else null
-	var wall = _wall_to_break(delta) if blocker == null and not flying else null
 	var at_castle: bool = position.y + radius * 0.5 >= main.CASTLE_Y
 	if at_castle and not sieging:
 		sieging = true
 		reached_castle.emit(self)
+	# Once it's at the castle it keeps hammering the wall, even with a unit hitting it.
+	var blocker = _find_blocker() if fights and bomb.is_empty() and not sieging else null
+	var wall = _wall_to_break(delta) if blocker == null and not flying else null
 	if not bomb.is_empty() and (at_castle or wall != null):
 		fuse = FUSE   # at the castle, or up against a wall in the way: light the bomb
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
@@ -403,6 +408,12 @@ func _attacker():
 		best_d = d
 		best = w
 	return best
+
+
+## At the castle, or close enough to it to be set on it: it doesn't turn aside for
+## units attacking it any more.
+func _set_on_castle() -> bool:
+	return sieging or position.y >= main.CASTLE_Y - CASTLE_COMMIT
 
 
 func _wall_across(a: Vector2, b: Vector2) -> bool:

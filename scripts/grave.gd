@@ -1,5 +1,5 @@
 extends Node2D
-## Hardcore: where a troop fell for good (a wrecked emplacement leaves a ruin instead).
+## Where a troop fell for good (a wrecked emplacement leaves a ruin instead).
 ## Clicking it shows who it was, what it had been upgraded with and when it fell,
 ## but there's nothing left to upgrade or sell.
 
@@ -70,7 +70,7 @@ func _draw() -> void:
 
 
 ## A little tombstone on a mound of earth, with the fallen unit's colour as a ribbon.
-## Shared with the title screen's Hardcore scene. `at` is the foot of the stone.
+## Shared with the title screen's Hard scene. `at` is the foot of the stone.
 static func draw_tombstone(ci: CanvasItem, at: Vector2, s: float, ribbon := Color(0.8, 0.2, 0.2)) -> void:
 	ci.draw_set_transform(at, 0, Vector2(s, s))
 	# Mound.

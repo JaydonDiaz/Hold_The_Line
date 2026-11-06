@@ -2,8 +2,7 @@ extends Node2D
 ## The field's mood, set by the mode (see MOODS): the light on the ground and castle,
 ## and what drifts over the field. Easy and the Tutorial are sunny, with butterflies and
 ## the odd cloud shadow; Normal is overcast, with leaves on the wind; Hard is dusk, with
-## fireflies, fog and torchlight; Hardcore is a red-lit night of ash, embers, crows and
-## lightning; Freeplay is a violet twilight full of magic motes. The enemy camp's fire
+## fireflies, fog, torchlight and the odd crow; Freeplay is a violet twilight full of magic motes. The enemy camp's fire
 ## and torches burn whatever the mood. Pure decoration: nothing here touches play.
 
 const Sprites = preload("res://scripts/sprites.gd")
@@ -13,9 +12,7 @@ const MOODS := {
 	"easy": {"ground": Color(1.04, 1.04, 0.97), "castle": Color(1, 1, 1), "shadows": 3, "butterflies": 7, "glow": 0.0},
 	"tutorial": {"ground": Color(1.04, 1.04, 0.97), "castle": Color(1, 1, 1), "shadows": 2, "butterflies": 5, "glow": 0.0},
 	"normal": {"ground": Color(0.93, 0.95, 0.98), "castle": Color(0.95, 0.96, 0.98), "shadows": 6, "butterflies": 2, "leaves": 6, "glow": 0.0},
-	"hard": {"ground": Color(0.68, 0.72, 0.9), "castle": Color(0.76, 0.78, 0.94), "fireflies": 16, "fog": 5, "glow": 1.0},
-	"hardcore": {"ground": Color(0.66, 0.5, 0.5), "castle": Color(0.74, 0.6, 0.6), "embers": 26, "ash": 30, "crows": 3,
-		"lightning": true, "fog": 3, "glow": 1.0},
+	"hard": {"ground": Color(0.68, 0.72, 0.9), "castle": Color(0.76, 0.78, 0.94), "fireflies": 16, "fog": 5, "crows": 2, "glow": 1.0},
 	"freeplay": {"ground": Color(0.88, 0.84, 0.98), "castle": Color(0.9, 0.88, 1.0), "motes": 18, "shadows": 2, "glow": 0.5},
 }
 
@@ -143,7 +140,7 @@ func _draw() -> void:
 	for b in bits.get("shadows", []):
 		_soft_blob(b["pos"], b["size"], Color(0.05, 0.08, 0.05, 0.07))
 	for b in bits.get("fog", []):
-		var fog := Color(0.85, 0.88, 0.95, 0.06) if mood != "hardcore" else Color(0.6, 0.35, 0.35, 0.07)
+		var fog := Color(0.85, 0.88, 0.95, 0.06)
 		_soft_blob(b["pos"], b["size"] * 1.3, fog)
 	_draw_fires(w)
 	for b in bits.get("leaves", []):

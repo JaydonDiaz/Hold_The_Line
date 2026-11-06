@@ -3,8 +3,9 @@ extends Control
 ## clouds, with a pixel-art "Hold the Line" banner. Hovering a mode card changes the
 ## scene to match it (see LOOKS): a training session for the Tutorial, a clear sky and
 ## weak enemies for Easy, clouds and tougher ones for Normal, a dark sky and downed
-## troops for Hard, a storm over graves for Hardcore, a twilight of conjured enemies
-## for Freeplay. Pure decoration: nothing here touches the game.
+## troops and graves for Hard, a twilight of conjured enemies for Freeplay, and
+## Engineers at work (on emplacement construction sites, mending the castle wall,
+## one tossing his hammer) for Settings. Pure decoration: nothing here touches the game.
 
 const Sprites = preload("res://scripts/sprites.gd")
 const Grave = preload("res://scripts/grave.gd")
@@ -35,20 +36,21 @@ const LOOKS := {
 	"hard": {"top": Color(0.1, 0.11, 0.22), "low": Color(0.3, 0.27, 0.4), "clouds": 10, "cloud": Color(0.3, 0.3, 0.4),
 		"sun": 0.0, "moon": 1.0, "stars": 0.4, "light": Color(0.5, 0.52, 0.66), "windows": 1.0, "storm": 0.0,
 		"guards": ["swordsman", "martial", "archer", "mage"], "foes": ["troll", "orc", "orc", "sapper"], "scene": "battle",
-		"downed": ["swordsman", "archer"]},
-	"hardcore": {"top": Color(0.06, 0.02, 0.05), "low": Color(0.36, 0.07, 0.07), "clouds": 15, "cloud": Color(0.2, 0.11, 0.13),
-		"sun": 0.0, "moon": 1.0, "stars": 0.0, "light": Color(0.5, 0.34, 0.36), "windows": 0.7, "storm": 1.0,
-		"guards": ["swordsman", "martial", "alchemist"], "foes": ["warlord", "troll", "orc"], "scene": "battle",
-		"downed": ["archer"], "graves": 8},
+		"downed": ["swordsman", "archer"], "graves": 4},
 	"freeplay": {"top": Color(0.1, 0.06, 0.28), "low": Color(0.6, 0.32, 0.58), "clouds": 4, "cloud": Color(0.56, 0.44, 0.7),
 		"sun": 0.0, "moon": 0.7, "stars": 1.0, "light": Color(0.72, 0.64, 0.86), "windows": 1.0, "storm": 0.0,
 		"guards": ["mage", "frost", "mage"], "foes": ["goblin", "orc", "wolf", "troll", "bat", "sapper", "warlord"], "scene": "conjure"},
+	"settings": {"top": Color(0.36, 0.6, 0.93), "low": Color(0.82, 0.9, 0.98), "clouds": 5, "cloud": Color(1, 1, 1),
+		"sun": 0.9, "moon": 0.0, "stars": 0.0, "light": Color(1.02, 1.0, 0.96), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": [], "scene": "workshop"},
 }
+const ENGINEER_SWING := 0.36   # seconds per hammer blow in the workshop scene
+const TOSS := 1.5              # seconds per hammer toss in the workshop scene
 const BOLT_COLORS := {"archer": Color(0.95, 0.9, 0.7), "mage": Color(0.75, 0.5, 1.0), "frost": Color(0.6, 0.9, 1.0),
 		"alchemist": Color(0.5, 1.0, 0.4), "bard": Color(1.0, 0.85, 0.4), "healer": Color(1.0, 1.0, 0.6)}
 const RANGED := ["archer", "mage", "frost", "alchemist", "bard", "healer"]
 const GRAVE_SPOTS := [Vector2(392, 542), Vector2(560, 601), Vector2(20, 598), Vector2(505, 545),
-		Vector2(452, 602), Vector2(128, 540), Vector2(612, 550), Vector2(168, 603)]   # Hardcore's graves, in the order they appear
+		Vector2(452, 602), Vector2(128, 540), Vector2(612, 550), Vector2(168, 603)]   # graves (Hard's), in the order they appear
 const BIG := {"troll": 3.0, "warlord": 3.3, "wyvern": 3.0}
 
 # A chunky 5x7 pixel font, just the letters the title needs.
@@ -144,6 +146,16 @@ func _cast() -> void:
 			_add_actor("martial", Vector2(450, ROWS[1]), "guard", "spar")
 			_add_actor("martial", Vector2(500, ROWS[1]), "guard", "spar_r")
 			_add_actor("healer", Vector2(585, ROWS[0]), "guard", "idle")
+		"workshop":
+			# Engineers at work: towers going up out on the field, the wall being mended,
+			# and one carrying planks back and forth.
+			_add_actor("site", Vector2(105, ROWS[1]), "prop", "0.25")
+			_add_actor("engineer", Vector2(150, ROWS[1] + 2), "guard", "build_l")
+			_add_actor("site", Vector2(540, ROWS[0]), "prop", "0.1")
+			_add_actor("engineer", Vector2(494, ROWS[0] + 2), "guard", "build")
+			_add_actor("engineer", Vector2(205, GROUND_Y + 18), "guard", "repair")
+			_add_actor("engineer", Vector2(436, GROUND_Y + 18), "guard", "repair_l")
+			_add_actor("engineer", Vector2(320, ROWS[1] + 6), "guard", "toss")
 		"idle":
 			# Guards on watch either side of the gate.
 			_add_actor(guards[0], Vector2(250, ROWS[1]), "guard", "idle")
@@ -162,7 +174,7 @@ func _cast() -> void:
 	for i in (L.get("downed", []) as Array).size():
 		# Fallen out on the enemies' side of the field, where the fighting was.
 		_add_actor(L["downed"][i], Vector2(430 + i * 110, ROWS[i % 2] + 8), "downed")
-	# Graves come and go with Hardcore.
+	# Graves come and go with the looks that have them (Hard).
 	var want: int = L.get("graves", 0)
 	if graves.is_empty():
 		# Scattered, not in a row: most out where the enemies come from, a few among the troops.
@@ -536,7 +548,7 @@ func _draw_castle(light: Color) -> void:
 		_crenels(tx - 8, tx + 92, 318, stone, light)
 		_cone(tx + 42.0, 318.0, 50.0, 78.0, roof, light)
 		_flag(Vector2(tx + 42, 222), 18.0, Color(0.95, 0.8, 0.25) * light)
-		_hanging_banner(Vector2(tx + 42, 344), light, tx < 300.0)
+		_hanging_banner(Vector2(tx + 42, 344), light, false)   # both towers red; the gate banner is blue
 		_arch_window(Vector2(tx + 42, 430), 10, 18, glow, light)
 		_slit(Vector2(tx + 42, 480), light, glow)
 	_ivy(Vector2(100, 500), 2, light)
@@ -553,7 +565,7 @@ func _draw_castle(light: Color) -> void:
 	# The crest over the gate.
 	var wave := sin(t * 2.0) * 2.0
 	var banner := PackedVector2Array([Vector2(302, 362), Vector2(338, 362), Vector2(338 + wave, 392), Vector2(320, 385), Vector2(302 + wave, 392)])
-	draw_colored_polygon(banner, Color(0.72, 0.16, 0.16) * light)
+	draw_colored_polygon(banner, Color(0.25, 0.38, 0.75) * light)
 	draw_polyline(banner + PackedVector2Array([banner[0]]), OUTLINE, 2.0)
 	draw_rect(Rect2(300, 359, 40, 4), Color(0.45, 0.3, 0.15) * light)
 	_crest(Vector2(320, 374), light)
@@ -840,6 +852,150 @@ func _draw_ground(light: Color) -> void:
 		draw_circle(p, 3.0 + (i % 3), Color(0.28, 0.21, 0.16) * light)
 
 
+## A construction site for an emplacement that isn't built yet: a stone foundation
+## with its first rough courses laid, a timber frame with a crossbeam and a ladder,
+## a stack of planks, a pile of stones and a mortar bucket. `variant` changes the
+## layout a little between the two sites.
+func _draw_site(p: Vector2, variant: float, alpha: float, light: Color) -> void:
+	var lit := Color(light, 1)
+	var ink := Color(0.1, 0.07, 0.1, alpha)
+	var stone := Color(0.66, 0.64, 0.6, alpha) * lit
+	var stone_dk := Color(0.5, 0.48, 0.46, alpha) * lit
+	var wood := Color(0.6, 0.42, 0.22, alpha) * lit
+	var wood_dk := Color(0.42, 0.28, 0.14, alpha) * lit
+	var flip := -1.0 if variant > 0.15 else 1.0   # the second site is laid out the other way round
+	draw_set_transform(p + Vector2(0, 3), 0, Vector2(1, 0.35))
+	draw_circle(Vector2.ZERO, 34.0, Color(0, 0, 0, 0.2 * alpha))
+	draw_set_transform(Vector2.ZERO)
+	# Foundation: a wide footing and two rough courses of stone, the top one half laid.
+	var base := Rect2(p.x - 26, p.y - 10, 52, 12)
+	draw_rect(base.grow(1.5), ink)
+	draw_rect(base, stone_dk)
+	for i in 5:
+		draw_rect(Rect2(base.position.x + 1 + i * 10.4, base.position.y + 1, 9, 4), stone)
+		draw_rect(Rect2(base.position.x + 6 + i * 10.4, base.position.y + 6, 9, 5), stone if i < 4 else stone_dk)
+	var course := Rect2(p.x - 22, p.y - 18, 30 if flip > 0 else 44, 8)
+	if flip < 0:
+		course.position.x = p.x - 22
+	draw_rect(course.grow(1.5), ink)
+	for i in int(course.size.x / 10.0):
+		draw_rect(Rect2(course.position.x + i * 10, course.position.y, 9, 7), stone)
+		draw_rect(Rect2(course.position.x + i * 10, course.position.y, 9, 1), stone.lightened(0.15))
+	# The timber frame: two posts and a crossbeam, braced.
+	var post_l := p.x - 22.0
+	var post_r := p.x + 22.0
+	var top := p.y - 52.0
+	for x in [post_l, post_r]:
+		draw_rect(Rect2(x - 2.5, top - 1.5, 5, p.y - top - 6), ink)
+		draw_rect(Rect2(x - 1.5, top, 3, p.y - top - 8), wood)
+	draw_rect(Rect2(post_l - 4, top - 4, post_r - post_l + 8, 6), ink)
+	draw_rect(Rect2(post_l - 3, top - 3, post_r - post_l + 6, 4), wood)
+	draw_rect(Rect2(post_l - 3, top - 3, post_r - post_l + 6, 1), wood.lightened(0.2))
+	draw_line(Vector2(post_l + 1, top + 4), Vector2(post_r - 1, p.y - 22), wood_dk, 2.0)
+	# A ladder leaning on the frame.
+	var lx := p.x + 6.0 * flip
+	for side in [-3.0, 3.0]:
+		draw_line(Vector2(lx + side, p.y - 6), Vector2(lx + side + 8.0 * flip, top + 6), wood_dk, 2.0)
+	for i in 5:
+		var k := (i + 0.5) / 5.0
+		var y := lerpf(p.y - 6.0, top + 6.0, k)
+		draw_line(Vector2(lx - 3 + 8.0 * flip * k, y), Vector2(lx + 3 + 8.0 * flip * k, y), wood, 1.5)
+	# Materials beside it: a stack of planks, a pile of stones, a mortar bucket.
+	var side_x := p.x + 38.0 * flip
+	for i in 3:
+		var plank := Rect2(side_x - 13, p.y - 2 - i * 4, 26, 4)
+		draw_rect(plank.grow(1.0), ink)
+		draw_rect(plank, wood if i % 2 == 0 else wood.lightened(0.08))
+	var pile := p + Vector2(-38.0 * flip, 0)
+	for o in [Vector2(-6, 0), Vector2(3, 0), Vector2(-2, -5), Vector2(9, -1)]:
+		draw_rect(Rect2(pile + o - Vector2(4, 3), Vector2(8, 6)), ink)
+		draw_rect(Rect2(pile + o - Vector2(3, 2), Vector2(6, 4)), stone)
+	var bucket := p + Vector2(-22.0 * flip, 4)
+	draw_rect(Rect2(bucket - Vector2(5, 7), Vector2(10, 8)), ink)
+	draw_rect(Rect2(bucket - Vector2(4, 6), Vector2(8, 6)), Color(0.55, 0.42, 0.3, alpha) * lit)
+	draw_rect(Rect2(bucket - Vector2(3, 6), Vector2(6, 2)), Color(0.82, 0.8, 0.74, alpha) * lit)   # mortar
+
+
+## An Engineer: hammering at a site or the wall (a wind-up, then the blow, with sparks),
+## or idling with his hammer, tossing it up end over end and catching it.
+func _draw_engineer(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var role: String = a["role"]
+	var s := SPRITE_SCALE
+	var foot := p + Vector2(0, 2)
+	draw_set_transform(foot, 0, Vector2(1, 0.35))
+	draw_circle(Vector2.ZERO, 7.0 * s, Color(0, 0, 0, 0.25 * alpha))
+	draw_set_transform(Vector2.ZERO)
+	var frames: Array = Sprites.frames("engineer")
+	var tex: Texture2D = frames[0]
+	var dir := -1.0 if role in ["build_l", "repair_l"] else 1.0
+	var off := Vector2.ZERO
+	var rot := 0.0
+	var sc := Vector2.ONE
+	var tint := Color(light.r, light.g, light.b, alpha)
+	var working := role != "toss"
+	var flight := -1.0   # the tossed hammer: 0-1 through its flight, or -1 while it's in hand
+	if role == "toss":
+		var c := fmod(t + (a["id"] % 5) * 0.1, TOSS) / TOSS
+		if c < 0.55:
+			flight = c / 0.55
+	if working:
+		var phase := fmod(t + (a["id"] % 7) * 0.05, ENGINEER_SWING) / ENGINEER_SWING
+		if phase < 0.45:
+			tex = Sprites.pose("engineer", "strike")
+			var hit := 1.0 - phase / 0.45
+			sc = Vector2(1.0 + 0.08 * hit, 1.0 - 0.06 * hit)
+			rot = 0.06 * dir * hit
+			if phase < 0.12:
+				# Sparks off the hammer (up against the wall for a repair).
+				var at := p + Vector2(dir * 20.0, -14.0 if role.begins_with("build") else -26.0)
+				for i in 4:
+					var d := Vector2.from_angle(-PI / 2.0 + (i - 1.5) * 0.6) * (5.0 + phase * 60.0)
+					draw_rect(Rect2(at + d, Vector2(2, 2)), Color(1.0, 0.85, 0.4, alpha))
+		else:
+			var wind := (phase - 0.45) / 0.55
+			rot = -0.12 * dir * wind
+			sc = Vector2(1.0 - 0.03 * wind, 1.0 + 0.05 * wind)
+	elif flight >= 0.0:
+		tex = Sprites.pose("engineer", "toss")
+		# A little bounce at the throw and the catch.
+		var edge := 1.0 - minf(flight, 1.0 - flight) * 2.0
+		sc = Vector2(1.0 + 0.05 * edge * edge, 1.0 - 0.04 * edge * edge)
+	else:
+		var b := sin(t * 2.4 + a["id"] % 5)
+		sc = Vector2(1.0 - 0.012 * b, 1.0 + 0.025 * b)   # breathing
+	if role.begins_with("repair"):
+		# The patch he's mending: freshly laid, paler stones in the wall above his hammer.
+		var patch := p + Vector2(dir * 22.0 - 9.0, -46.0)
+		var stone := Color(0.82, 0.8, 0.76, alpha) * Color(light, 1)
+		draw_rect(Rect2(patch, Vector2(18, 14)), Color(0.25, 0.22, 0.24, alpha))
+		draw_rect(Rect2(patch + Vector2(1, 1), Vector2(8, 6)), stone)
+		draw_rect(Rect2(patch + Vector2(10, 1), Vector2(7, 6)), stone)
+		draw_rect(Rect2(patch + Vector2(1, 8), Vector2(5, 5)), stone)
+		draw_rect(Rect2(patch + Vector2(7, 8), Vector2(10, 5)), stone)
+	var sz := tex.get_size() * s
+	draw_set_transform(foot + off, rot, Vector2(dir * sc.x, sc.y))
+	draw_texture_rect(tex, Rect2(Vector2(-8.0 * s, -sz.y + 2), sz), false, tint)
+	draw_set_transform(Vector2.ZERO)
+	if flight >= 0.0:
+		# The hammer flipping end over end above his open hand.
+		var hand := foot + Vector2(dir * 4.5 * s, -8.0 * s)
+		var at := hand + Vector2(0, -sin(flight * PI) * 52.0)
+		# One flip at an even pace over the whole flight, so the handle comes round to
+		# point down just as it drops into his hand.
+		var spin := -flight * TAU * dir
+		draw_set_transform(at, spin, Vector2.ONE)
+		var wood := Color(0.55, 0.35, 0.18, alpha) * Color(light, 1)
+		var steel := Color(0.62, 0.64, 0.7, alpha) * Color(light, 1)
+		var ink := Color(0.1, 0.07, 0.1, alpha)
+		draw_rect(Rect2(-2.5, -6, 5, 16), ink)
+		draw_rect(Rect2(-1.5, -5, 3, 14), wood)
+		draw_rect(Rect2(-6.5, -11, 13, 7), ink)
+		draw_rect(Rect2(-5.5, -10, 11, 5), steel)
+		draw_rect(Rect2(-5.5, -10, 11, 1), steel.lightened(0.3))
+		draw_set_transform(Vector2.ZERO)
+
+
 func _draw_actors(light: Color) -> void:
 	# Graves are sorted in with everyone else, so whoever stands nearer is drawn in front.
 	var order := actors.duplicate()
@@ -854,7 +1010,7 @@ func _draw_actors(light: Color) -> void:
 		var kind: String = a["kind"]
 		var p: Vector2 = a["pos"]
 		if kind == "grave":
-			# Tombstones rise out of the ground as Hardcore comes in.
+			# Tombstones rise out of the ground as Hard comes in.
 			Grave.draw_tombstone(self, p, 1.6 * alpha, Color(0.55, 0.1, 0.1))
 			continue
 		if kind == "dummy":
@@ -862,6 +1018,12 @@ func _draw_actors(light: Color) -> void:
 			continue
 		if kind == "target":
 			_draw_target(p, alpha, light)
+			continue
+		if kind == "site":
+			_draw_site(p, float(a["role"]), alpha, light)
+			continue
+		if kind == "engineer":
+			_draw_engineer(a, alpha, light)
 			continue
 		var s: float = BIG.get(kind, SPRITE_SCALE)
 		var flying: bool = kind == "bat" or kind == "wyvern"
@@ -871,6 +1033,11 @@ func _draw_actors(light: Color) -> void:
 		draw_set_transform(Vector2.ZERO)
 		var frames: Array = Sprites.frames(kind)
 		var tex: Texture2D = frames[int(t * 5.0 + a["id"] % 7) % frames.size()]
+		var slash := 0.0   # the training Swordsman's blow, 1 as it starts down to 0
+		if kind == "swordsman" and a["role"] == "dummy" and a["lunge"] > 0.0:
+			# His in-game attack: the sword swung up, then brought down (see warrior.gd).
+			slash = a["lunge"] / 0.25
+			tex = Sprites.pose("swordsman", "swing" if slash > 0.5 else "strike")
 		var sz := tex.get_size() * s
 		var faces_left: bool = a["side"] == "foe" or a["role"] in ["idle_r", "spar_r"]
 		var dir := -1.0 if faces_left else 1.0
@@ -890,6 +1057,11 @@ func _draw_actors(light: Color) -> void:
 		draw_set_transform(p + off + bob + Vector2(0, -sz.y / 2.0 + 4), 0, Vector2(dir, 1))
 		draw_texture_rect(tex, Rect2(-sz / 2.0, sz), false, tint)
 		draw_set_transform(Vector2.ZERO)
+		if slash > 0.0:
+			# The white arc of the slash in front of him, as in the game.
+			var c := p + off + Vector2(dir * 7.0, -sz.y / 2.0 + 4)
+			var a0 := 0.0 if dir > 0.0 else PI
+			draw_arc(c, 25.0, a0 - 0.9, a0 + 0.9, 12, Color(1, 1, 1, slash * alpha), 3.0, true)
 
 
 ## A straw training dummy on a post; it rocks when it's hit.

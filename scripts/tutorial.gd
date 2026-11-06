@@ -33,12 +33,12 @@ var steps := [
 	["Upgrade it", "These four cards are its upgrade paths. Buy an upgrade by clicking a card (or press Q, W, E or R).", "card", "upgraded"],
 	["Upgrade paths", "Each unit can have 6 upgrades in all, spread over its four paths however you like. Tier 3 in a path changes its look and unlocks strong new powers.", "card", ""],
 	["Targeting", "The Target button picks which enemy it goes after: the closest, the first in line, the strongest or the weakest. Try it (or press T), or press Next.", "target", "retargeted"],
-	["Moving units", "Between waves, drag a unit to move it anywhere. During a wave, select it and right-click where it should go. Hover over any unit to see what it does.", "", ""],
+	["Moving units", "Between waves, drag a unit to move it anywhere. During a wave, select it and right-click where it should go. Drag a box over open ground to select several and move them together. Hover over any unit to see what it does.", "", ""],
 	["Emplacements", "Emplacements are built where you place them and never move. Open the Emplacements tab (or press X) and build an Archer Tower.", "tab:emplacements", "has:tower"],
 	["Barricades", "Barricades are walls: pick Barricade, then click where it starts and where it ends. Enemies walk around walls if they can, and break through if they can't.", "hire:barricade", ""],
 	["Another wave", "Start the next wave when you're ready.", "start", "wave_on"],
 	["Keep it up", "Clear this wave too.", "", "wave_done:2"],
-	["Handy controls", "Speed (or F) makes the game run faster. The Castle (C), Abilities (V) and Repair (B) tabs upgrade, arm and mend your castle. Press Escape to cancel what you're placing.", "speed", ""],
+	["Handy controls", "Speed (or F) makes the game run faster. Click your castle (or press C) to upgrade it; the Abilities (V) and Repair (B) tabs arm and mend it. Auto (A) starts each wave by itself. Press Escape to cancel what you're placing.", "speed", ""],
 	["Tutorial complete!", "You know the basics. Keep playing here (the castle still can't fall), or head back to the menu for a real game.", "", "end"],
 ]
 

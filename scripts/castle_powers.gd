@@ -9,7 +9,17 @@ const Sprites = preload("res://scripts/sprites.gd")
 const Data = preload("res://scripts/data.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 
-const GUARD_MARGIN := 70.0   # guards keep this far in from the field's edges (off the corner towers)
+const Castle = preload("res://scripts/castle.gd")
+const GUARD_MARGIN := 70.0   # the end posts are this far in from the field's edges (off the corner towers)
+const GUARD_REACH := 250.0   # wall guards hit anything this close to the castle wall (25 ft)
+# Where each kind of guard stands along the wall (0 = left end, 1 = right end), by how
+# many of that kind there are. Fully upgraded, left to right: Archer, Mage, Frost
+# Witch, Archer (on the gatehouse), Frost Witch, Mage, Archer.
+const GUARD_POSTS := {
+	"archer": [[0.5], [0.0, 1.0], [0.0, 0.5, 1.0], [0.0, 0.5, 1.0, 0.25]],
+	"mage": [[0.17], [0.17, 0.83]],
+	"frost": [[0.67], [0.67, 0.33]],
+}
 
 var main
 var owned := {}         # ability key -> true
@@ -92,21 +102,22 @@ func _post_guards() -> void:
 			for kind in g:
 				for i in g[kind][0]:
 					spec.append([kind, g[kind][1]])
-	# Spread them out, alternating kinds so each stretch of wall has a mix.
-	spec.sort_custom(func(a, b): return a[0] < b[0])
-	var mixed := []
-	while not spec.is_empty():
-		mixed.append(spec.pop_front())
-		if not spec.is_empty():
-			mixed.append(spec.pop_back())
-	for i in mixed.size():
+	# Each kind fills its own posts along the wall, in order (see GUARD_POSTS).
+	var used := {}
+	for entry in spec:
+		var kind: String = entry[0]
+		var n: int = used.get(kind, 0)
+		used[kind] = n + 1
+		var posts: Array = GUARD_POSTS[kind]
 		var w: Node2D = Warrior.new()
 		w.wall_guard = true
-		w.setup(mixed[i][0], Data.WARRIORS[mixed[i][0]], main, Vector2.ZERO)
-		w.tiers = (mixed[i][1] as Array).duplicate()
+		w.setup(kind, Data.WARRIORS[kind], main, Vector2.ZERO)
+		w.tiers = (entry[1] as Array).duplicate()
 		w._apply_upgrades()
 		w.hp = w.max_hp
 		w.priority = "first"
+		var count: int = spec.filter(func(e): return e[0] == kind).size()
+		w.set_meta("wall_at", posts[mini(count, posts.size()) - 1][mini(n, posts.size() - 1)])
 		add_child(w)
 		guards.append(w)
 	_spread_guards()
@@ -114,11 +125,19 @@ func _post_guards() -> void:
 
 func _spread_guards() -> void:
 	guard_w = main.FIELD_W
-	var n := guards.size()
-	for i in n:
-		var x := lerpf(GUARD_MARGIN, main.FIELD_W - GUARD_MARGIN, (i + 0.5) / n)
-		guards[i].post = Vector2(x, wall_y())
-		guards[i].position = guards[i].post
+	for g in guards:
+		var at: float = g.get_meta("wall_at")
+		var x := lerpf(GUARD_MARGIN, main.FIELD_W - GUARD_MARGIN, at)
+		# The middle post is up on the gatehouse.
+		var y := wall_y() - (Castle.GATE_RISE if is_equal_approx(at, 0.5) else 0.0)
+		g.post = Vector2(x, y)
+		g.position = g.post
+
+
+## Whether a wall guard can reach this enemy: anything within GUARD_REACH of the
+## castle wall, anywhere along it (they shoot from their posts and never move).
+func in_guard_reach(e) -> bool:
+	return main.CASTLE_Y - e.position.y - e.radius <= GUARD_REACH
 
 
 ## Where guards stand: on the walkway along the top of the castle wall.
@@ -144,6 +163,12 @@ func power() -> float:
 	if main.freeplay:
 		level = main.freeplay_level
 	return pow(Data.level_growth(level, Data.HP_GROWTH, Data.LATE_HP_GROWTH), Data.CASTLE_POWER_GROWTH) * fx("power", 1.0)
+
+
+## The Ability Power path's multiplier on its own (for what doesn't grow with the
+## wave: Healing Light's healing and the Rally Horn's boost).
+func boost() -> float:
+	return fx("power", 1.0)
 
 
 func dmg(key: String) -> float:
@@ -223,12 +248,32 @@ func _cast(key: String, p: Vector2) -> void:
 			shows.append({"kind": key + "_fly", "at": p, "from": gate, "t": 0.0, "life": fly})
 		"lightning":
 			_thunder(p, d)
+		"heal":
+			_heal_light(p)
 		"horn":
 			main.sfx("horn")
 			rally_left = d["duration"]
 			main.hud.show_message("Rally! The castle sounds the charge!")
 			for w in main.get_warriors() + guards:
 				main.spawn_burst(w.position, 26.0, d["color"])
+
+
+## Healing Light: heals every troop under it and gets the downed ones back up.
+func _heal_light(p: Vector2) -> void:
+	main.sfx("revive")
+	var r := radius("heal")
+	var raised := 0
+	for w in main.get_warriors():
+		if w.is_queued_for_deletion() or w.position.distance_to(p) > r + w.RADIUS:
+			continue
+		if w.is_active():
+			w.receive_heal(w.max_hp * heal_share(), [])
+		else:
+			w.revived(revive_share())
+			raised += 1
+	if raised > 0:
+		main.hud.show_message("%d troop%s back on their feet!" % [raised, "" if raised == 1 else "s"])
+	shows.append({"kind": "light", "at": p, "t": 0.0, "life": 0.9, "r": r})
 
 
 func _thunder(p: Vector2, d: Dictionary) -> void:
@@ -266,7 +311,16 @@ func _in_area(p: Vector2, r: float) -> Array:
 
 ## Rally Horn's buff on every unit (warrior.gd adds this to its other buffs).
 func rally(key: String) -> float:
-	return info("horn")["buff"].get(key, 0.0) if rally_left > 0.0 else 0.0
+	return info("horn")["buff"].get(key, 0.0) * boost() if rally_left > 0.0 else 0.0
+
+
+## Healing Light: what share of max health it heals, and revives downed troops with.
+func heal_share() -> float:
+	return info("heal")["heal"] * boost()
+
+
+func revive_share() -> float:
+	return minf(info("heal")["revive"] * boost(), 1.0)
 
 
 func _process(delta: float) -> void:
@@ -358,6 +412,20 @@ func _draw() -> void:
 				Sprites.disc(self, Vector2.ZERO, r * 0.6, Color(1.0, 0.85, 0.35, 0.6 * (1.0 - k)))
 				draw_arc(Vector2.ZERO, s["r"], 0, TAU, 40, Color(1.0, 0.6, 0.2, 1.0 - k), 3.0, true)
 				draw_set_transform(Vector2.ZERO)
+			"light":
+				# A column of light pouring down, a bright ring on the ground, motes rising.
+				var r: float = s["r"]
+				var fade := 1.0 - k
+				draw_rect(Rect2(p.x - r * 0.35, p.y - 260.0, r * 0.7, 260.0), Color(1.0, 1.0, 0.75, 0.18 * fade))
+				draw_rect(Rect2(p.x - r * 0.18, p.y - 260.0, r * 0.36, 260.0), Color(1.0, 1.0, 0.9, 0.25 * fade))
+				draw_set_transform(p, 0, Vector2(1, 0.6))
+				Sprites.disc(self, Vector2.ZERO, r, Color(0.6, 1.0, 0.55, 0.22 * fade))
+				draw_arc(Vector2.ZERO, r * (0.6 + 0.4 * k), 0, TAU, 48, Color(1.0, 1.0, 0.7, fade), 3.0, true)
+				draw_set_transform(Vector2.ZERO)
+				for i in 12:
+					var a := i * TAU / 12.0 + k
+					var m := p + Vector2(cos(a) * r * 0.7 * fmod(i * 0.37, 1.0), sin(a) * r * 0.4) - Vector2(0, k * 70.0 + fmod(i * 13.0, 30.0))
+					draw_rect(Rect2(m - Vector2(1.5, 1.5), Vector2(3, 3)), Color(1.0, 1.0, 0.7, fade))
 			"shatter":
 				draw_set_transform(p, 0, Vector2(1, 0.65))
 				Sprites.disc(self, Vector2.ZERO, s["r"], Color(0.7, 0.95, 1.0, 0.3 * (1.0 - k)))

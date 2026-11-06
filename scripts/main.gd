@@ -16,6 +16,7 @@ const FieldArt = preload("res://scripts/field_art.gd")
 const Ambience = preload("res://scripts/ambience.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 const CastlePowers = preload("res://scripts/castle_powers.gd")
+const Engineer = preload("res://scripts/engineer.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -38,11 +39,11 @@ const MAX_ENEMY_RADIUS := 40.0   # at least the biggest enemy's radius (the Ogre
 var _warriors := []          # get_warriors() for this frame
 var _warriors_frame := -1
 var started := false     # set once the player picks a mode
-var selected_grave = null   # Hardcore: a grave clicked to see who fell there
+var selected_grave = null   # a grave clicked to see who fell there
 var grave_layer := Node2D.new()
 var ambience := Ambience.new()   # the mood over the field (light, weather, critters), by mode
 var powers := CastlePowers.new()   # the Castle tab: abilities, Stone Walls, Ballistae
-var permadeath := false   # Hardcore: knocked-out warriors die for good unless a Healer revives them
+var permadeath := false   # downed warriors die for good unless revived (every difficulty; not the Tutorial or Freeplay)
 var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn any wave at will
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
@@ -53,7 +54,7 @@ var price_step := 1          # ...rounded to this many gold (5 on Hard)
 var castle_max: float = Data.CASTLE_HP
 var castle_base: float = Data.CASTLE_HP   # castle_max before the Fortify path's extra health
 var castle_hp: float = Data.CASTLE_HP
-var down_time := 20.0        # seconds a knocked-out warrior stays down (Hardcore: before it dies)
+var down_time := 20.0        # seconds a downed warrior has before it dies (or, without permadeath, gets up)
 var margin := Vector2.ZERO   # spare screen above and below the game on a tall window
 var gates_warned := false   # "at the gates" has been shown this wave
 var wave := 0
@@ -70,9 +71,20 @@ var spawn_timer := 0.0
 var spawn_interval := 0.8
 
 var placing_type := ""
+var castle_selected := false
+var repair_job := {}           # a repair the Engineers are working on: {"left": health still to come, "rate": per second}   # the castle was clicked: the panel shows its upgrades
+var auto_play := false         # start each wave by itself after the last one's cleared
+var auto_timer := 0.0          # seconds until auto-play starts the next wave
+const AUTO_DELAY := 3.0
 var wall_start = null     # first click while placing a barricade (Vector2), or null
 var last_priority := {}   # unit kind -> target priority new hires start with
 var selected: Warrior = null
+var group := []             # several troops selected together (box or Shift+click); `selected` is null then
+var box_start = null        # where a left-drag on open field started (Vector2), while the button's held
+var box_active := false     # it's been dragged far enough to be a selection box
+var box_add := false        # Shift was held: the box adds to the group
+var group_drag := false     # dragging the whole group to new posts (between waves)
+var group_from := {}        # warrior -> its post when the group drag started
 var mouse := Vector2.ZERO
 var dragging: Warrior = null     # unit being repositioned between waves
 var drag_origin := Vector2.ZERO
@@ -99,6 +111,7 @@ var song_on := true   # the player can switch the eight-Bard song off (from any 
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
+	_size_window()
 	audio = Audio.new()
 	add_child(audio)
 	audio.set_track("calm")
@@ -140,6 +153,7 @@ func _ready() -> void:
 	hud.target_pressed.connect(cycle_target_priority)
 	hud.song_pressed.connect(toggle_song)
 	hud.speed_pressed.connect(cycle_speed)
+	hud.auto_pressed.connect(toggle_auto)
 	hud.restart_pressed.connect(_restart)
 	hud.menu_confirmed.connect(_restart)
 	hud.endless_chosen.connect(continue_endless)
@@ -152,9 +166,31 @@ func _ready() -> void:
 	hud.ability_pressed.connect(ability_item)
 	hud.repair_pressed.connect(repair_castle)
 	hud.power_pressed.connect(func(k): powers.trigger(k))
+	hud.group_kind_pressed.connect(func(k): filter_group(k, Input.is_key_pressed(KEY_SHIFT)))
 	hud.show_mode_select()
 	get_viewport().size_changed.connect(_fit_screen)
 	_fit_screen()
+
+
+## Opens the window big and centred: about 90% of the screen's usable height and 70%
+## of its width (never narrower than the game's 640x1040 shape; the extra width
+## becomes more battlefield). Not when run headless, or by a script or test that sets
+## its own size.
+func _size_window() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var args := OS.get_cmdline_args()
+	if args.has("-s") or args.has("--script") or args.has("--resolution"):
+		return
+	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
+		return
+	var screen := DisplayServer.window_get_current_screen()
+	var usable := DisplayServer.screen_get_usable_rect(screen)
+	var h := int(usable.size.y * 0.9)
+	var w := maxi(int(usable.size.x * 0.7), int(h * Hud.WIDTH / Hud.HEIGHT))
+	w = mini(w, int(usable.size.x * 0.95))
+	DisplayServer.window_set_size(Vector2i(w, h))
+	DisplayServer.window_set_position(usable.position + (usable.size - Vector2i(w, h)) / 2)
 
 
 ## Fills the window (the project stretches with "expand"): on a wide screen the
@@ -213,7 +249,7 @@ func _fit_screen() -> void:
 	queue_redraw()
 
 
-## mode: a difficulty ("easy", "normal", "hard", "hardcore"), "freeplay" or "tutorial".
+## mode: a difficulty ("easy", "normal", "hard"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
@@ -223,7 +259,7 @@ func choose_mode(mode: String) -> void:
 	castle.top_part.modulate = castle.modulate
 	queue_redraw()
 	var d: Dictionary = Data.DIFFICULTIES[difficulty]
-	permadeath = d["permadeath"]
+	permadeath = d["permadeath"] and not freeplay and not tutorial   # practice and the sandbox forgive
 	down_time = d["down_time"]
 	cost_mult = d["cost"]
 	price_step = d.get("round", 1)
@@ -247,6 +283,14 @@ func _process(delta: float) -> void:
 	mouse = get_local_mouse_position()
 	if dragging != null:
 		_update_drag()
+	if group_drag:
+		_update_group_drag()
+	if box_start != null and not box_active and mouse.distance_to(box_start) > 6.0:
+		box_active = true
+	group = group.filter(func(w): return is_instance_valid(w) and not w.is_queued_for_deletion())
+	if group.size() == 1:
+		selected = group[0]   # down to one: it's an ordinary selection
+		group.clear()
 	if selected != null and (not is_instance_valid(selected) or selected.is_queued_for_deletion()):
 		selected = null
 	if not game_over:
@@ -263,6 +307,10 @@ func _process(delta: float) -> void:
 			if not wave_active:
 				castle_hp = castle_max   # sandbox: patched up once the field is clear
 				gates_warned = false
+		elif auto_play and started and not wave_active and not choosing:
+			auto_timer -= delta / maxf(Engine.time_scale, 1.0)   # real seconds, whatever the speed
+			if auto_timer <= 0.0:
+				start_wave()
 		elif wave_active and spawn_queue.is_empty() and get_enemies().is_empty():
 			if _boss_due():
 				_spawn_boss()
@@ -286,7 +334,10 @@ func _process(delta: float) -> void:
 	var hovered: Warrior = null
 	if started and not game_over and dragging == null and placing_type == "" and mouse.y <= FIELD_H:
 		hovered = _warrior_at(mouse)
-	hud.show_unit_card(hovered, mouse)
+	if hovered == null and not castle_selected and _castle_hovered():
+		hud.show_castle_card(self, mouse)
+	else:
+		hud.show_unit_card(hovered, mouse)
 	overlay.queue_redraw()
 
 
@@ -355,7 +406,7 @@ func enemies_changed() -> void:
 	_enemies_frame = -1
 
 
-## Hardcore: a unit has died for good, so a grave (or a ruin) marks the spot.
+## A unit has died for good, so a grave (or a ruin) marks the spot.
 func add_grave(w) -> void:
 	if w.summoned or w.clone_of != null or w is Barricade:
 		return
@@ -630,7 +681,7 @@ func repair_cost(amount: float) -> int:
 
 func can_repair(i: int) -> bool:
 	var amount := repair_amount(i)
-	return not wave_active and not game_over and amount >= 1.0 and gold >= repair_cost(amount)
+	return not wave_active and not game_over and repair_job.is_empty() and amount >= 1.0 and gold >= repair_cost(amount)
 
 
 func repair_castle(i: int) -> void:
@@ -645,13 +696,78 @@ func repair_castle(i: int) -> void:
 	if gold < repair_cost(amount):
 		hud.show_message("Not enough gold")
 		return
+	if not repair_job.is_empty():
+		hud.show_message("The Engineers are still at work")
+		return
 	gold -= repair_cost(amount)
-	castle_hp += amount
+	# Engineers come out to three stretches of the wall; the health comes back while
+	# they work (see repair_tick).
+	var share := amount / castle_max
+	var seconds: float = Data.REPAIR_TIME[0] + Data.REPAIR_TIME[1] * share
+	repair_job = {"left": amount, "rate": amount / seconds, "total": amount}
+	for f in [0.25, 0.5, 0.75]:
+		send_engineer("repair", null, Vector2(FIELD_W * f + (0.0 if f != 0.5 else 70.0), CASTLE_Y - 10.0))
 	sfx("place")
-	spawn_text(Vector2(FIELD_W / 2.0, CASTLE_Y - 60), "+%d castle" % roundi(amount), Color(0.5, 1.0, 0.5))
+
+
+## Sends an Engineer out of the gate: to build `site`, or to repair the wall at `spot`.
+func send_engineer(job: String, site, spot: Vector2) -> void:
+	var e := Engineer.new()
+	e.main = self
+	e.job = job
+	e.site = site
+	e.spot = spot
+	e.position = e.gate()
+	fx_layer.add_child(e)
+
+
+## A working repair Engineer's share of the repair coming in (three of them at it).
+func repair_tick(delta: float) -> void:
+	if repair_job.is_empty():
+		return
+	var bit := minf(repair_job["rate"] / 3.0 * delta, repair_job["left"])
+	repair_job["left"] -= bit
+	castle_hp = minf(castle_hp + bit, castle_max)
+	if repair_job["left"] <= 0.01:
+		spawn_text(Vector2(FIELD_W / 2.0, CASTLE_Y - 60), "+%d castle" % roundi(repair_job["total"]), Color(0.5, 1.0, 0.5))
+		repair_job = {}
+
+
+## The mouse is over the castle with nothing else in the way (for its hover card and outline).
+func _castle_hovered() -> bool:
+	return started and not game_over and dragging == null and placing_type == "" and powers.aiming == "" \
+			and on_castle(mouse) and _warrior_at(mouse) == null
+
+
+## Whether p is on the castle (its wall or a tower), for clicking it.
+func on_castle(p: Vector2) -> bool:
+	if p.y >= CASTLE_Y - 4.0 and p.y <= FIELD_H:
+		return true
+	for r in castle._towers():
+		if r.has_point(p):
+			return true
+	return false
+
+
+## Selects the castle: the panel shows its upgrade paths.
+func select_castle() -> void:
+	if game_over or not started:
+		return
+	_cancel()
+	castle_selected = true
+
+
+## Auto-play on or off. Turned on between waves, the next one comes after AUTO_DELAY.
+func toggle_auto() -> void:
+	if freeplay or game_over:
+		return
+	auto_play = not auto_play
+	auto_timer = AUTO_DELAY
+	hud.show_message("Auto-play on" if auto_play else "Auto-play off")
 
 
 func _end_wave() -> void:
+	auto_timer = AUTO_DELAY
 	wave_active = false
 	sfx("fanfare")
 	var bonus := late_gold(20 + wave * 5)
@@ -758,6 +874,8 @@ func _on_hire_pressed(kind: String) -> void:
 	if game_over:
 		return
 	selected = null
+	group.clear()
+	castle_selected = false
 	wall_start = null
 	powers.aiming = ""
 	placing_type = "" if placing_type == kind else kind
@@ -867,6 +985,11 @@ func hire_at(p: Vector2) -> void:
 	# emplacements are built on the spot.
 	w.position = w.post if w.is_emplacement() else _entry_point(w.post)
 	warrior_layer.add_child(w)
+	if w.is_emplacement():
+		# An Engineer comes out of the castle to build it.
+		w.build_left = Data.BUILD_TIME
+		w.build_total = Data.BUILD_TIME
+		send_engineer("build", w, Vector2.ZERO)
 	# Hold Shift to keep hiring the same type.
 	if not Input.is_key_pressed(KEY_SHIFT) or gold < cost:
 		placing_type = ""
@@ -891,6 +1014,157 @@ func _clamp_post(p: Vector2) -> Vector2:
 	return p.clamp(Vector2(r, DEPLOY_TOP), Vector2(FIELD_W - r, CASTLE_Y - r))
 
 
+# --- Group selection ---------------------------------------------------------
+
+## Troops that can be picked up in a group (not emplacements, skeletons or copies).
+func _groupable(w) -> bool:
+	return w is Warrior and not w.is_emplacement() and not w.summoned and w.clone_of == null and not w is Barricade
+
+
+func _set_group(units: Array) -> void:
+	var picked := units.filter(_groupable)
+	castle_selected = false
+	selected_grave = null
+	placing_type = ""
+	if picked.size() == 1:
+		group.clear()
+		selected = picked[0]
+	else:
+		group = picked
+		selected = null
+
+
+## Shift+click: adds a troop to the selection, or takes it out.
+func _toggle_in_group(w) -> void:
+	var now := group.duplicate()
+	if now.is_empty() and selected != null and _groupable(selected):
+		now = [selected]
+	if now.has(w):
+		now.erase(w)
+	else:
+		now.append(w)
+	_set_group(now)
+	if now.is_empty():
+		selected = null
+
+
+func select_all_troops() -> void:
+	if started and not game_over:
+		_set_group(get_warriors())
+
+
+## The selection box, in field coordinates (while one's being dragged).
+func selection_box() -> Rect2:
+	return Rect2(box_start, mouse - box_start).abs() if box_start != null and box_active else Rect2()
+
+
+func _finish_box() -> void:
+	if box_active:
+		var r := selection_box()
+		var inside := get_warriors().filter(func(w): return _groupable(w) and r.grow(Warrior.RADIUS * 0.5).has_point(w.position))
+		var now := group.duplicate() if box_add else []
+		if box_add and now.is_empty() and selected != null and _groupable(selected):
+			now = [selected]
+		for w in inside:
+			if not now.has(w):
+				now.append(w)
+		_set_group(now)
+		if now.is_empty():
+			selected = null
+	else:
+		# Just a click on open field: clear the selection.
+		_cancel()
+	box_start = null
+	box_active = false
+
+
+## Keeps only the group's troops of `kind` (or, with `drop`, all but them).
+func filter_group(kind: String, drop: bool) -> void:
+	_set_group(group.filter(func(w): return (w.kind == kind) != drop))
+
+
+## Sends the whole group to p, keeping their formation: each goes to p plus where it
+## stood relative to the group's middle (nudged to the nearest free spot if that's taken).
+func order_group(p: Vector2) -> void:
+	if group.is_empty():
+		return
+	var mid := Vector2.ZERO
+	for w in group:
+		mid += w.post
+	mid /= group.size()
+	var taken := []
+	for w in group:
+		var spot := _free_spot(_clamp_post(p + (w.post - mid)), taken)
+		if spot != Vector2.INF:
+			taken.append(spot)
+			w.order_to(spot)
+	sfx("place", 1.3)
+
+
+## p if a group member could stand there (other troops' posts, walls and the spots
+## already handed out to the group all count, the group's own old posts don't), else
+## the nearest free spot close by, or INF.
+func _free_spot(p: Vector2, taken: Array) -> Vector2:
+	for r in [0.0, 18.0, 32.0, 46.0]:
+		for i in (1 if r == 0.0 else 8):
+			var q := _clamp_post(p + Vector2.from_angle(i * TAU / 8.0) * r)
+			var ok := q.y >= DEPLOY_TOP and q.y <= CASTLE_Y
+			for w in get_warriors():
+				if not group.has(w) and w.post.distance_to(q) < MIN_POST_GAP:
+					ok = false
+			for t in taken:
+				if t.distance_to(q) < MIN_POST_GAP:
+					ok = false
+			for b in get_barricades():
+				if b.gap_from(q) < Warrior.RADIUS:
+					ok = false
+			if ok:
+				return q
+	return Vector2.INF
+
+
+func _start_group_drag() -> void:
+	group_drag = true
+	group_from.clear()
+	for w in group:
+		group_from[w] = w.post
+	drag_origin = get_local_mouse_position()   # where the press is now (not last frame's mouse)
+
+
+func _update_group_drag() -> void:
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or wave_active:
+		_end_group_drag()
+		return
+	var shift := mouse - drag_origin
+	for w in group_from:
+		if is_instance_valid(w):
+			var p := _clamp_post(group_from[w] + shift)
+			w.post = p
+			w.position = p
+
+
+## Drops the dragged group; any that landed somewhere they can't stand go back.
+func _end_group_drag() -> void:
+	group_drag = false
+	var taken := []
+	for w in group_from:
+		if not is_instance_valid(w):
+			continue
+		var p: Vector2 = w.post
+		var ok := p.y >= DEPLOY_TOP and p.y <= CASTLE_Y
+		for o in get_warriors():
+			if not group_from.has(o) and o.post.distance_to(p) < MIN_POST_GAP:
+				ok = false
+		for b in get_barricades():
+			if b.gap_from(p) < Warrior.RADIUS:
+				ok = false
+		if not ok:
+			p = group_from[w]
+		w.set_post(p)
+		w.position = p
+	group_from.clear()
+
+
 func order_move(p: Vector2) -> void:
 	if selected == null or not can_post_at(p, selected):
 		return
@@ -901,8 +1175,8 @@ func order_move(p: Vector2) -> void:
 
 
 func upgrade_selected(path: int) -> void:
-	if selected == null and placing_type == "" and hud.hire_tab == "castle":
-		castle_upgrade(path)   # Q/W/E/R work on the Castle tab's paths too
+	if castle_selected and selected == null:
+		castle_upgrade(path)   # Q/W/E/R buy the castle's upgrades while it's selected
 		return
 	if selected == null or selected.path_state(path) != "ok":
 		return
@@ -988,6 +1262,7 @@ func switch_tab(tab: String) -> void:
 	if dragging != null:
 		_end_drag()
 	selected = null
+	group.clear()
 	if placing_type != "" and hud.tab_of(placing_type) != tab:
 		placing_type = ""   # the hire being placed isn't on the new tab
 		wall_start = null
@@ -996,6 +1271,9 @@ func switch_tab(tab: String) -> void:
 
 func _cancel() -> void:
 	powers.aiming = ""
+	group.clear()
+	box_start = null
+	castle_selected = false
 	placing_type = ""
 	wall_start = null
 	selected = null
@@ -1039,28 +1317,48 @@ func _unhandled_input(event: InputEvent) -> void:
 				powers.aiming = ""
 			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
-			if selected != null:
+			if not group.is_empty():
+				order_group(p)
+			elif selected != null:
 				order_move(p)
 			else:
 				_cancel()
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if placing_type != "":
 				hire_at(p)
-			else:
-				selected = _warrior_at(p)
-				selected_grave = _grave_at(p) if selected == null else null
-				if selected != null and not wave_active:
-					_start_drag(selected)
+				return
+			var w := _warrior_at(p)
+			if event.shift_pressed and w != null and _groupable(w):
+				_toggle_in_group(w)   # Shift+click: add or remove one troop
+				return
+			if w != null and group.has(w) and not wave_active:
+				_start_group_drag()   # drag the whole group between waves
+				return
+			if w == null and not on_castle(p) and _grave_at(p) == null:
+				# Open field: a click clears the selection, a drag draws a selection box.
+				box_start = p
+				box_active = false
+				box_add = event.shift_pressed
+				return
+			group.clear()
+			selected = w
+			selected_grave = _grave_at(p) if selected == null else null
+			castle_selected = selected == null and selected_grave == null and on_castle(p)
+			if selected != null and not wave_active:
+				_start_drag(selected)
+	elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if box_start != null:
+			_finish_box()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
 			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 				# Number keys pick from whichever hire tab is showing.
 				var i: int = event.keycode - KEY_1
+				if castle_selected and selected == null:
+					if i < Data.CASTLE_PATHS.size():
+						castle_upgrade(i)
+					return
 				match hud.hire_tab:
-					"castle":
-						if i < Data.CASTLE_PATHS.size():
-							castle_upgrade(i)
-						return
 					"abilities":
 						if i < Data.ABILITIES.size():
 							ability_item(Data.ABILITIES.keys()[i])
@@ -1076,7 +1374,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				var order: Array = hud.TABS.map(func(t): return t[0])
 				switch_tab(order[(order.find(hud.hire_tab) + 1) % order.size()])
 			KEY_C:
-				switch_tab("castle")
+				select_castle()
+			KEY_A:
+				if event.ctrl_pressed or event.meta_pressed:
+					select_all_troops()
+				else:
+					toggle_auto()
 			KEY_V:
 				switch_tab("abilities")
 			KEY_B:
@@ -1286,6 +1589,24 @@ func _draw_surroundings() -> void:
 
 
 func _draw_overlay() -> void:
+	# The selection box being dragged, and a ring under every troop in the group.
+	var box := selection_box()
+	if box.size != Vector2.ZERO:
+		overlay.draw_rect(box, Color(0.6, 0.9, 1.0, 0.12))
+		overlay.draw_rect(box, Color(0.7, 0.95, 1.0, 0.85), false, 1.5)
+	for w in group:
+		var feet: Vector2 = w.position + Vector2(0, Warrior.RADIUS)
+		overlay.draw_set_transform(feet, 0, Vector2(1, 0.4))
+		overlay.draw_arc(Vector2.ZERO, Warrior.RADIUS + 4.0, 0, TAU, 24, Color(0.7, 0.95, 1.0, 0.9), 2.5, true)
+		overlay.draw_set_transform(Vector2.ZERO)
+		if w.ordered:
+			overlay.draw_line(w.position, w.post, Color(0.7, 0.95, 1.0, 0.3), 1.5, true)
+	if castle_selected or _castle_hovered():
+		# The castle outlined in gold: solid while selected, faint while hovered.
+		var col := Color(1.0, 0.85, 0.35, 0.95 if castle_selected else 0.45)
+		overlay.draw_rect(Rect2(1, CASTLE_Y, FIELD_W - 2, FIELD_H - CASTLE_Y - 1), col, false, 2.0)
+		for r in castle._towers():
+			overlay.draw_rect(r.grow(1.0), col, false, 2.0)
 	if placing_type == "barricade" and mouse.y <= FIELD_H:
 		_draw_wall_preview()
 	elif placing_type != "" and mouse.y <= FIELD_H:
@@ -1294,7 +1615,13 @@ func _draw_overlay() -> void:
 		var tint := Color(1, 1, 1, 0.6) if ok else Color(1, 0.3, 0.3, 0.6)
 		var size := Vector2(Sprites.SIZE, Sprites.SIZE) * Warrior.SCALE
 		var top_left := mouse + Vector2(-size.x / 2, Warrior.RADIUS - size.y)
-		overlay.draw_texture_rect(Sprites.frames(placing_type)[0], Rect2(top_left, size), false, tint)
+		if Sprites.MOUNT_CREW.has(placing_type):
+			# A tower with its troop on top (or a cannon and its Cannoneer), as it'll stand.
+			var foot := mouse + Vector2(0, Warrior.RADIUS)
+			Sprites.draw_mount(overlay, placing_type, foot, foot, 1.0, Sprites.mount_frames(placing_type, placing_type)[0],
+					Sprites.frames(Sprites.MOUNT_CREW[placing_type])[0], tint, 1.0, Warrior.SCALE)
+		else:
+			overlay.draw_texture_rect(Sprites.frames(placing_type)[0], Rect2(top_left, size), false, tint)
 		var reach: float = d["range"] + Warrior.RADIUS
 		overlay.draw_circle(mouse, reach, Color(1, 1, 1, 0.08), true, -1.0, true)
 		overlay.draw_arc(mouse, reach, 0, TAU, 64, Color(1, 1, 1, 0.5), 2.0, true)

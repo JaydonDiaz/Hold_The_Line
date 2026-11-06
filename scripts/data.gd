@@ -12,8 +12,9 @@ static func ft(px: float) -> String:
 const CASTLE_HP := 450.0     # the castle falls (and the game is lost) when this runs out
 
 # Difficulties: castle health and prices (hiring, upgrading, walls) are multiplied by
-# "castle" and "cost"; "down_time" is how long a knocked-out warrior stays down (with
-# "permadeath", how long it has before it dies unless a Healer revives it).
+# "castle" and "cost". With "permadeath" a downed troop dies for good after "down_time"
+# seconds unless it's revived first (by a Healer or a Medic Bay); without it (only in
+# the Tutorial and Freeplay) it gets back up then.
 # The castle. Three tabs of its own:
 #   Castle     four upgrade paths of four tiers (CASTLE_PATHS). Unlike a unit's, every
 #              tier of every path can be bought; they just cost more.
@@ -25,17 +26,20 @@ const CASTLE_HP := 450.0     # the castle falls (and the game is lost) when this
 const CASTLE_POWER_GROWTH := 0.9   # ability damage x (enemy health multiplier ^ this)
 const REPAIR_CHUNKS := [0.1, 0.25, 0.5, 1.0]   # share of max health each Repair button mends (1.0 = all the way,
                                                # or as far as your gold goes when that's not enough)
+const BUILD_TIME := 4.0           # seconds an Engineer takes to build an emplacement (not barricades)
+const REPAIR_TIME := [2.0, 4.0]   # a repair takes [base] + [per share of max health] seconds of Engineers' work
 const REPAIR_FULL_COST := 750     # gold to mend the castle from nothing to full; smaller repairs cost their share of it
 
 # Castle path tier effects (each tier's numbers are the totals so far, not added on):
 #   armor      the castle takes this much less damage
 #   hp         castle max health x this (the castle gets the extra health at once)
 #   guards     units posted on the castle wall: kind -> [how many, tiers per path]. They
-#              walk along the wall to get in range of an enemy, then shoot; enemies can't
-#              reach them. Each tier replaces the last one's guards. Priced a little under
-#              hiring and upgrading the same troops; maxing Wall Archers costs about two
-#              3-0-3-0 Archers, maxing Wall Mages about a 2-2-2-0 Mage plus a 2-2-2-0 Frost Witch.
-#   power      ability damage x this
+#              hold fixed posts on the wall (see GUARD_POSTS in castle_powers.gd) and hit
+#              anything within 25 ft of the castle; enemies can't reach them. Each tier
+#              replaces the last one's guards. Priced a little under hiring and upgrading
+#              the same troops; maxing Wall Archers costs about two 3-0-3-0 Archers,
+#              maxing Wall Mages about a 2-2-2-0 Mage plus a 2-2-2-0 Frost Witch.
+#   power      ability damage, Healing Light's healing and the Rally Horn's boost x this
 #   recharge   ability recharge times x this
 #   area       ability areas x this
 const CASTLE_PATHS := [
@@ -46,22 +50,22 @@ const CASTLE_PATHS := [
 		{"name": "Citadel", "cost": 500, "desc": "+60% castle health, takes 35% less damage", "effect": {"armor": 0.35, "hp": 1.6}},
 	]},
 	{"name": "Wall Archers", "tiers": [
-		{"name": "Archer Post", "cost": 125, "desc": "2 Archers patrol the wall and shoot what comes near", "effect": {"guards": {"archer": [2, [0, 0, 0, 0]]}}},
-		{"name": "Bowmen", "cost": 205, "desc": "A third Archer joins; all 3 upgraded 1-0-1-0", "effect": {"guards": {"archer": [3, [1, 0, 1, 0]]}}},
+		{"name": "Archer Post", "cost": 125, "desc": "2 Archers at the ends of the wall shoot anything within 25\u00a0ft of the castle", "effect": {"guards": {"archer": [2, [0, 0, 0, 0]]}}},
+		{"name": "Bowmen", "cost": 205, "desc": "A third Archer on the gatehouse; all 3 upgraded 1-0-1-0", "effect": {"guards": {"archer": [3, [1, 0, 1, 0]]}}},
 		{"name": "Veteran Bowmen", "cost": 270, "desc": "The 3 wall Archers are upgraded 2-0-2-0", "effect": {"guards": {"archer": [3, [2, 0, 2, 0]]}}},
 		{"name": "Royal Longbows", "cost": 210, "desc": "The 3 wall Archers are upgraded 3-0-3-0", "effect": {"guards": {"archer": [3, [3, 0, 3, 0]]}}},
 	]},
 	{"name": "Wall Mages", "tiers": [
-		{"name": "Arcane Watch", "cost": 195, "desc": "A Mage and a Frost Witch patrol the wall", "effect": {"guards": {"mage": [1, [0, 0, 0, 0]], "frost": [1, [0, 0, 0, 0]]}}},
+		{"name": "Arcane Watch", "cost": 195, "desc": "A Mage and a Frost Witch on the wall hit anything within 25\u00a0ft of the castle", "effect": {"guards": {"mage": [1, [0, 0, 0, 0]], "frost": [1, [0, 0, 0, 0]]}}},
 		{"name": "Apprentices", "cost": 105, "desc": "A second Mage joins the wall", "effect": {"guards": {"mage": [2, [0, 0, 0, 0]], "frost": [1, [0, 0, 0, 0]]}}},
 		{"name": "Circle of Magi", "cost": 300, "desc": "The 2 Mages and the Frost Witch are upgraded 1-1-1-0", "effect": {"guards": {"mage": [2, [1, 1, 1, 0]], "frost": [1, [1, 1, 1, 0]]}}},
 		{"name": "Archmage Tower", "cost": 215, "desc": "2 Mages and 2 Frost Witches, upgraded 2-2-2-0", "effect": {"guards": {"mage": [2, [2, 2, 2, 0]], "frost": [2, [2, 2, 2, 0]]}}},
 	]},
 	{"name": "Ability Power", "tiers": [
-		{"name": "Focus Stones", "cost": 120, "desc": "Abilities hit 20% harder", "effect": {"power": 1.2}},
-		{"name": "War Council", "cost": 200, "desc": "Abilities hit 35% harder and recharge 15% faster", "effect": {"power": 1.35, "recharge": 0.85}},
-		{"name": "Ley Lines", "cost": 320, "desc": "Abilities hit 55% harder, recharge 20% faster, 20% wider", "effect": {"power": 1.55, "recharge": 0.8, "area": 1.2}},
-		{"name": "Crown of Storms", "cost": 500, "desc": "Abilities hit 90% harder, recharge 30% faster, 30% wider", "effect": {"power": 1.9, "recharge": 0.7, "area": 1.3}},
+		{"name": "Focus Stones", "cost": 120, "desc": "Abilities 20% stronger (damage, healing and the Rally Horn boost)", "effect": {"power": 1.2}},
+		{"name": "War Council", "cost": 200, "desc": "Abilities 35% stronger, recharge 15% faster", "effect": {"power": 1.35, "recharge": 0.85}},
+		{"name": "Ley Lines", "cost": 320, "desc": "Abilities 55% stronger, recharge 20% faster, 20% wider", "effect": {"power": 1.55, "recharge": 0.8, "area": 1.2}},
+		{"name": "Crown of Storms", "cost": 500, "desc": "Abilities 90% stronger, recharge 30% faster, 30% wider", "effect": {"power": 1.9, "recharge": 0.7, "area": 1.3}},
 	]},
 ]
 
@@ -81,13 +85,15 @@ const ABILITIES := {
 	"horn": {"name": "Rally Horn", "cost": 180, "cast": "instant", "cooldown": 45.0, "color": Color(1.0, 0.85, 0.35),
 		"duration": 8.0, "buff": {"damage": 0.3, "rate": 0.25, "speed": 0.2},
 		"desc": "The castle sounds the charge: for 8 seconds every unit deals 30% more damage, attacks 25% faster and moves 20% faster."},
+	"heal": {"name": "Healing Light", "cost": 190, "cast": "target", "cooldown": 35.0, "color": Color(0.6, 1.0, 0.55),
+		"radius": 90.0, "heal": 0.45, "revive": 0.35,
+		"desc": "A column of holy light falls where you click: every troop in it heals 45% of its health, and downed troops there get back up with 35%."},
 }
 
 const DIFFICULTIES := {
-	"easy": {"name": "Easy", "castle": 1.5, "cost": 0.8, "down_time": 15.0, "permadeath": false, "color": Color(0.55, 0.9, 0.55), "icon": "healer"},
-	"normal": {"name": "Normal", "castle": 1.0, "cost": 1.0, "down_time": 20.0, "permadeath": false, "color": Color(0.95, 0.85, 0.45), "icon": "swordsman"},
-	"hard": {"name": "Hard", "castle": 0.8, "cost": 1.15, "round": 5, "down_time": 30.0, "permadeath": false, "color": Color(1.0, 0.55, 0.3), "icon": "troll"},
-	"hardcore": {"name": "Hardcore", "castle": 1.0, "cost": 1.0, "down_time": 10.0, "permadeath": true, "color": Color(1.0, 0.3, 0.3), "icon": "warlord"},
+	"easy": {"name": "Easy", "castle": 1.5, "cost": 0.8, "down_time": 30.0, "permadeath": true, "color": Color(0.55, 0.9, 0.55), "icon": "healer"},
+	"normal": {"name": "Normal", "castle": 1.0, "cost": 1.0, "down_time": 20.0, "permadeath": true, "color": Color(0.95, 0.85, 0.45), "icon": "swordsman"},
+	"hard": {"name": "Hard", "castle": 0.8, "cost": 1.15, "round": 5, "down_time": 15.0, "permadeath": true, "color": Color(1.0, 0.55, 0.3), "icon": "troll"},
 }
 const FINAL_WAVE := 20
 const HP_GROWTH := 1.12      # enemy health multiplier per wave
@@ -163,7 +169,7 @@ static func level_growth(level: int, growth: float, late: float) -> float:
 #                          martial Power path: rage {below, damage, rate} when hurt; crimson aura and
 #                          golden form {cooldown, duration, damage, rate, speed, drain (HP share/s)}
 #   heal_aura              healer: allies near it regenerate and are guarded: radius, regen
-#                          (max HP share/s), defense, recover (downed allies get up this much faster)
+#                          (max HP share/s), defense, recover (downed allies hold on this much longer)
 #   thorns_dps             bard Spellsong 4: plants and vines hurt what they catch (dmg/s)
 #   befuddle               bard: [chance per note, seconds] a note confuses its target
 #   confuse_vuln           bard: confused enemies take this much more damage
@@ -180,12 +186,12 @@ static func level_growth(level: int, growth: float, late: float) -> float:
 #   heal_area              healer: [radius, fraction] other allies near the target are healed too
 #   regen                  healer: [fraction of max HP per second, seconds] granted with each heal
 #   revive                 healer: rez_speed (revive channel speed mult), aura (how much faster
-#                          downed allies in range recover on their own), full (revive at full HP)
+#                          longer downed allies in range hold on), full (revive at full HP)
 #
 #   aura_damage / aura_rate / aura_defense / aura_speed / aura_regen / aura_recover
-#                          statue: allies posted in range deal more damage, attack faster, take less
-#                          damage, move faster, regenerate (max HP share/s), get up sooner when
-#                          knocked out (fractions; the strongest statue covering them counts).
+#                          statue / medic bay: allies posted in range deal more damage, attack
+#                          faster, take less damage, move faster, regenerate (max HP share/s), hold
+#                          on longer when downed (fractions; the strongest of each kind counts).
 #                          A Bard's songs work the same way but on whoever is in earshot right now.
 #   song_radius            bard: adds to how far its songs (buffs and debuffs) carry
 #   discord                bard: enemies in earshot take more damage (vuln), deal less (weaken), move slower (slow)
@@ -458,8 +464,8 @@ const WARRIORS := {
 			{"name": "Renewal", "tiers": [
 				{"name": "Rejuvenate", "cost": 35, "desc": "Healed allies regenerate 2% HP/s for 5s", "effect": {"regen": [0.02, 5.0]}},
 				{"name": "Lifebloom", "cost": 55, "desc": "Regeneration: 3.5% HP/s for 6s", "effect": {"regen": [0.035, 6.0]}},
-				{"name": "Second Wind", "cost": 100, "desc": "Revives 40% faster; downed allies in range get up 50% sooner", "effect": {"revive": {"rez_speed": 1.67, "aura": 1.5, "full": false}}},
-				{"name": "Lifebinder", "cost": 180, "desc": "Revives 3x faster at full HP; downed allies in range get up 2.5x sooner", "effect": {"revive": {"rez_speed": 3.0, "aura": 2.5, "full": true}}},
+				{"name": "Second Wind", "cost": 100, "desc": "Revives 40% faster; downed allies in range hold on 50% longer before they die", "effect": {"revive": {"rez_speed": 1.67, "aura": 1.5, "full": false}}},
+				{"name": "Lifebinder", "cost": 180, "desc": "Revives 3x faster at full HP; downed allies in range hold on 2.5x longer", "effect": {"revive": {"rez_speed": 3.0, "aura": 2.5, "full": true}}},
 			]},
 			{"name": "Halo", "tiers": [
 				{"name": "Gentle Presence", "cost": 40, "desc": "Allies within 6\u00a0ft regain 1% HP/s",
@@ -468,7 +474,7 @@ const WARRIORS := {
 					"effect": {"heal_aura": {"radius": 80.0, "regen": 0.015, "defense": 0.0, "recover": 0.0}}},
 				{"name": "Holy Ground", "cost": 110, "desc": "Aura: 10\u00a0ft, 2.5% HP/s; allies in it take 10% less damage",
 					"effect": {"heal_aura": {"radius": 100.0, "regen": 0.025, "defense": 0.1, "recover": 0.0}}},
-				{"name": "Seraph's Halo", "cost": 190, "desc": "Aura: 12\u00a0ft, 4% HP/s, 20% less damage; downed allies in it get up 2x sooner",
+				{"name": "Seraph's Halo", "cost": 190, "desc": "Aura: 12\u00a0ft, 4% HP/s, 20% less damage; downed allies in it hold on 2x longer",
 					"effect": {"heal_aura": {"radius": 120.0, "regen": 0.04, "defense": 0.2, "recover": 1.0}}},
 			]},
 		],
@@ -644,13 +650,13 @@ const WARRIORS := {
 		"hp": 200.0, "speed": 0.0, "emplacement": true,
 		"damage": 8.0, "range": 110.0, "cooldown": 2.0, "attack": "pulse",
 		"revive_time": 6.0, "revive_hp": 0.4,
-		"desc": "Emplacement. Every few seconds, heals every ally whose post is in its radius, wherever they are.",
+		"desc": "Emplacement. Every few seconds, heals every ally whose post is in its radius, wherever they are. All your healing upgrades (regeneration, keeping downed allies alive longer, revives) come from here.",
 		"paths": [
 			{"name": "Supplies", "tiers": [
 				{"name": "Bandages", "cost": 40, "desc": "Heals 30% more", "effect": {"damage": 1.3}},
 				{"name": "Poultices", "cost": 60, "desc": "Heals 30% more", "effect": {"damage": 1.3}},
-				{"name": "Apothecary", "cost": 110, "desc": "Heals 40% more", "effect": {"damage": 1.4}},
-				{"name": "Elixir Stores", "cost": 190, "desc": "Heals 70% more", "effect": {"damage": 1.7}},
+				{"name": "Apothecary", "cost": 110, "desc": "Heals 40% more; allies in its radius regenerate 1.5% HP/s", "effect": {"damage": 1.4, "aura_regen": 0.015}},
+				{"name": "Elixir Stores", "cost": 190, "desc": "Heals 70% more; allies in its radius regenerate 3% HP/s", "effect": {"damage": 1.7, "aura_regen": 0.03}},
 			]},
 			{"name": "Wards", "tiers": [
 				{"name": "More Cots", "cost": 40, "desc": "+2.5\u00a0ft radius", "effect": {"range": 25.0}},
@@ -659,8 +665,8 @@ const WARRIORS := {
 				{"name": "Grand Hospital", "cost": 170, "desc": "+4\u00a0ft radius, pulses 15% faster", "effect": {"range": 40.0, "rate": 0.85}},
 			]},
 			{"name": "Field Hospital", "tiers": [
-				{"name": "Orderlies", "cost": 40, "desc": "Pulses 15% faster", "effect": {"rate": 0.85}},
-				{"name": "Tonics", "cost": 60, "desc": "Healed allies regenerate 2% HP/s for 4s", "effect": {"regen": [0.02, 4.0]}},
+				{"name": "Orderlies", "cost": 40, "desc": "Pulses 15% faster; downed allies in its radius hold on 30% longer before they die", "effect": {"rate": 0.85, "aura_recover": 0.3}},
+				{"name": "Tonics", "cost": 60, "desc": "Healed allies regenerate 2% HP/s for 4s; downed allies hold on 60% longer", "effect": {"regen": [0.02, 4.0], "aura_recover": 0.6}},
 				{"name": "Stretcher Bearers", "cost": 120, "desc": "Revives downed allies in its radius (6s each)",
 					"effect": {"revive": {"rez_speed": 1.0, "aura": 1.5, "full": false}}},
 				{"name": "Surgeons", "cost": 200, "desc": "Revives in 2s at full HP",
@@ -693,8 +699,8 @@ const WARRIORS := {
 			{"name": "Haste", "tiers": [
 				{"name": "War Drums", "cost": 45, "desc": "Allies attack 8% faster", "effect": {"aura_rate": 0.08}},
 				{"name": "Battle Hymn", "cost": 70, "desc": "Allies attack 12% faster", "effect": {"aura_rate": 0.12}},
-				{"name": "Winged Victory", "cost": 120, "desc": "Allies attack 18% faster, move 12% faster", "effect": {"aura_rate": 0.18, "aura_speed": 0.12}},
-				{"name": "Swift Glory", "cost": 210, "desc": "Allies attack 26% faster, move 20% faster", "effect": {"aura_rate": 0.26, "aura_speed": 0.2}},
+				{"name": "Winged Victory", "cost": 120, "desc": "Allies attack 18% faster, +2.5\u00a0ft radius", "effect": {"aura_rate": 0.18, "range": 25.0}},
+				{"name": "Swift Glory", "cost": 210, "desc": "Allies attack 26% faster, +2.5\u00a0ft radius", "effect": {"aura_rate": 0.26, "range": 25.0}},
 			]},
 			{"name": "Bulwark", "tiers": [
 				{"name": "Stone Skin", "cost": 45, "desc": "Allies take 8% less damage", "effect": {"aura_defense": 0.08}},
@@ -702,11 +708,11 @@ const WARRIORS := {
 				{"name": "Aegis", "cost": 120, "desc": "Allies take 18% less damage, +2.5\u00a0ft radius", "effect": {"aura_defense": 0.18, "range": 25.0}},
 				{"name": "Unbreakable", "cost": 210, "desc": "Allies take 24% less damage, +2.5\u00a0ft radius", "effect": {"aura_defense": 0.24, "range": 25.0}},
 			]},
-			{"name": "Vigor", "tiers": [
-				{"name": "Healing Spring", "cost": 45, "desc": "Allies regenerate 1% HP/s", "effect": {"aura_regen": 0.01}},
-				{"name": "Sacred Waters", "cost": 70, "desc": "Allies regenerate 2% HP/s", "effect": {"aura_regen": 0.02}},
-				{"name": "Fountain of Life", "cost": 120, "desc": "3% HP/s; knocked-out allies get up 50% sooner", "effect": {"aura_regen": 0.03, "aura_recover": 0.5}},
-				{"name": "Eternal Spring", "cost": 210, "desc": "4.5% HP/s; knocked-out allies get up twice as fast", "effect": {"aura_regen": 0.045, "aura_recover": 1.0}},
+			{"name": "March", "tiers": [
+				{"name": "Marching Orders", "cost": 45, "desc": "Allies move 8% faster", "effect": {"aura_speed": 0.08}},
+				{"name": "Forced March", "cost": 70, "desc": "Allies move 14% faster", "effect": {"aura_speed": 0.14}},
+				{"name": "Swift Banners", "cost": 120, "desc": "Allies move 22% faster, +2.5\u00a0ft radius", "effect": {"aura_speed": 0.22, "range": 25.0}},
+				{"name": "Lightning March", "cost": 210, "desc": "Allies move 32% faster, +2.5\u00a0ft radius", "effect": {"aura_speed": 0.32, "range": 25.0}},
 			]},
 		],
 	},
