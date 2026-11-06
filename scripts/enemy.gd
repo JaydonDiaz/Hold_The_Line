@@ -9,7 +9,10 @@ extends Node2D
 ## keep at the castle whatever hits them). Sappers ignore your troops: they make for the castle,
 ## and blow themselves up against a wall only if it blocks their way there.
 ## Skeleton Archers hang back: they stop once a troop (or the castle) is in bow range and
-## shoot from there. Slimes go for your troops before the castle; blades, arrows and
+## shoot from there, but only once they're out of their camp (where your troops can't
+## go) and, on a battlefield with terrain, only where melee troops can get at them.
+## On terrain (campaign maps), every step slides along rock rather than into it; going
+## after a unit, an enemy takes a route round anything in the way. Slimes go for your troops before the castle; blades, arrows and
 ## shells sink into them harmlessly ("physical" damage) unless they're iced over, while
 ## magic, ki and ice hurt them (ice twice over, and it ices them over). Their blows slow.
 
@@ -62,6 +65,11 @@ var gooey := false          # Slime: physical hits sink in harmlessly unless it'
 var goo := {}               # Slime: slow, time its blows slow troops by
 var ice_crust := 0.0        # Slime: seconds left iced over
 var absorb_note := 0.0      # Slime: keeps "Absorbed!" from popping up every frame
+var on_ground := false      # walks on a battlefield with terrain (set at spawn; never for flyers)
+var chase_route := PackedVector2Array()   # waypoints round the terrain to whatever it's going after
+var chase_check := 0.0
+var shots := 0               # Skeleton Archer: arrows loosed (the tests look at where from)
+var last_shot_from := Vector2.ZERO
 static var slimes_out := 0  # Slimes on the field, so troops only look out for them when there are any
 var breath_timer := 1.0
 var horn_timer := 15.0
@@ -158,6 +166,7 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 	sprite_scale = d["scale"]
 	color = d["color"]
 	position = start
+	on_ground = not flying and main.paths.has_terrain()
 	bob = randf() * TAU
 	drift = randf() * TAU
 
@@ -235,7 +244,7 @@ func _process(delta: float) -> void:
 	if knock_timer > 0.0:
 		# Being knocked back: slides away, can't act.
 		knock_timer -= delta
-		position += knock_velocity * delta
+		_step_to(position + knock_velocity * delta)
 		position.y = maxf(position.y, radius)
 		_push_out()
 		queue_redraw()
@@ -329,12 +338,12 @@ func _process(delta: float) -> void:
 			# A Wyvern hangs in the air within breath range of whoever's shooting it.
 			dir = Vector2.ZERO
 		elif aggro != null:
-			# Going after the unit that's attacking it.
-			dir = position.direction_to(aggro.position)
+			# Going after the unit that's attacking it (round any terrain in the way).
+			dir = _chase_dir(aggro.position, delta)
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
-		position += dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * delta
+		_step_to(position + dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * delta)
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
 		bob += delta * (20.0 if flying else 10.0)   # bats flap fast
@@ -461,6 +470,8 @@ func _attacker():
 ## it stands and shoots. Returns whether it did (or is waiting to draw again).
 func _shoot_from_range() -> bool:
 	var r: float = ranged["range"]
+	if position.y - radius < main.DEPLOY_TOP or (on_ground and not main.paths.melee_can_reach(position)):
+		return false   # nowhere your troops could get at it: keep walking
 	var mark = null
 	var best := INF
 	for w in main.warriors_near(position, r + 40.0):
@@ -481,6 +492,8 @@ func _shoot_from_range() -> bool:
 	if cd_timer <= 0.0:
 		cd_timer = attack_cd
 		lunge = 0.15
+		shots += 1
+		last_shot_from = position
 		var shot := EnemyShot.new()
 		shot.main = main
 		shot.target = mark
@@ -491,6 +504,31 @@ func _shoot_from_range() -> bool:
 		main.add_projectile(shot)
 		main.sfx("bow", 0.8)
 	return true
+
+
+## A step to `to`: straight there on open ground; on terrain, slid along any rock it
+## would have walked into.
+func _step_to(to: Vector2) -> void:
+	position = main.paths.slide(position, to, radius) if on_ground else to
+
+
+## Which way to head to reach `to`: straight at it, unless terrain is in the way; then
+## along a route round it, worked out again every so often.
+func _chase_dir(to: Vector2, delta: float) -> Vector2:
+	if not on_ground:
+		return position.direction_to(to)
+	chase_check -= delta
+	if chase_check <= 0.0:
+		chase_check = 0.4
+		if main.paths.segment_blocked(position, to, radius):
+			chase_route = main.paths.enemy_route(position, to, radius)
+		else:
+			chase_route = PackedVector2Array()
+	while not chase_route.is_empty() and position.distance_to(chase_route[0]) < 10.0:
+		chase_route.remove_at(0)
+	if chase_route.is_empty():
+		return position.direction_to(to)
+	return position.direction_to(chase_route[0])
 
 
 ## Slime: the nearest of your troops (not emplacements or walls) it can get at.
@@ -575,7 +613,7 @@ func _confused(delta: float) -> void:
 		flip = signf(lunge_dir.x)
 	if best - radius - foe.radius > REACH:
 		if root_timer <= 0.0:
-			position += lunge_dir * speed * slow_factor * delta
+			_step_to(position + lunge_dir * speed * slow_factor * delta)
 			bob += delta * 10.0
 	elif cd_timer <= 0.0:
 		cd_timer = attack_cd
@@ -635,10 +673,14 @@ func _push_out() -> void:
 	if not boss:
 		for e in main.enemies_near(position, radius + main.MAX_ENEMY_RADIUS):
 			if e != self and e.flying == flying:
+				if on_ground and e.position.y < position.y - 2.0 and not e.boss and main.paths.tight(position, radius):
+					continue   # in a gap, whoever's ahead goes first: the ones behind don't shove it into the rock
 				_push_from(e.position, radius + e.radius, 1.0 if e.boss else 0.5)
 	position.x = clampf(position.x, radius, main.FIELD_W - radius)
 	if flying:
 		return
+	if on_ground:
+		position = main.paths.push_out(position, radius)   # the safety net: never left inside rock
 	# Walls are solid: step straight back out of them, last so nothing pushes it back in.
 	for b in main.get_barricades():
 		if not b.is_active():

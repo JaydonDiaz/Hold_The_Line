@@ -42,7 +42,7 @@ var troop_grid: AStarGrid2D = null
 var troop_sig := []     # the emplacements troop_grid was built around (it's rebuilt when they change)
 const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to troops (a little under two radii)
 const HALF_DIAG := 11.32   # from a cell's centre to its corner: how far `clear` can be off anywhere in the cell
-const MELEE_REACH := 30.0  # a cell is in melee reach if a troop can stand this close to its centre
+const MELEE_REACH := 36.0  # a cell is in melee reach if a troop can stand this close to its centre (radius 18 + an archer's 11 + a blow's 8, less a little)
 
 var terrain := []          # {"kind", "poly": PackedVector2Array, "box": Rect2}
 var lanes := []            # Vector2(x from, x to) along the top edge where enemies come in
@@ -194,6 +194,12 @@ func troop_can_stand(p: Vector2) -> bool:
 	if terrain.is_empty():
 		return true
 	return troop_open[_index(_cell(p))] == 1 and not blocked(p, TROOP_RADIUS)
+
+
+## Whether p is close in by terrain (a gap, a cliff foot) for something of radius r:
+## there a crowd moves through in order rather than shoving sideways.
+func tight(p: Vector2, r: float) -> bool:
+	return not terrain.is_empty() and clear[_index(_cell(p))] < r + 28.0
 
 
 ## Whether melee troops can get close enough to strike something standing at p.

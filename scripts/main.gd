@@ -574,7 +574,11 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 	var d: Dictionary = Data.ENEMIES[kind]
 	var r: float = d["radius"]
 	if at == null:
-		at = Vector2(FIELD_W / 2.0 if d.get("boss", false) else randf_range(r + 10, FIELD_W - r - 10), -r)
+		var lane := paths.lane_spawn(r + 4.0)
+		if lane != Vector2.INF and not d.get("boss", false):
+			at = lane   # a battlefield's own ways in
+		else:
+			at = Vector2(FIELD_W / 2.0 if d.get("boss", false) else randf_range(r + 10, FIELD_W - r - 10), -r)
 	var e := Enemy.new()
 	e.setup(kind, d, self, at,
 			Data.level_growth(level, Data.HP_GROWTH, Data.LATE_HP_GROWTH),

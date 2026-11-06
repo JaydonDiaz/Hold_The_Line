@@ -5,6 +5,10 @@ extends SceneTree
 ##   G  grid        shapes become the right cells; Classic has none; every lane reaches the
 ##                  castle for every enemy size; gaps fit a Warlord; the gate, the mission's
 ##                  allies and the bot's posts are open ground troops can reach
+##   E  enemies     spawn in lanes; full mixed waves (and knockback into rock) never leave a
+##                  walking enemy inside terrain; chasers (Slimes too) route round rock to
+##                  reach troops and still slow them; Skeleton Archers never shoot from where
+##                  melee troops can't reach them (a tight channel, cliffs, the enemy camp)
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const Maps = preload("res://scripts/maps.gd")
@@ -42,6 +46,8 @@ func _wants(g: String) -> bool:
 func _run() -> void:
 	if _wants("G"):
 		await _grid()
+	if _wants("E"):
+		await _enemies()
 	print("%d checks, %d failed" % [checks, fails])
 	if main != null:
 		main.free()
@@ -174,3 +180,206 @@ func _grid() -> void:
 		check(above == 0, "G  %s: troops can't stand in the enemy camp" % map_id)
 		for z in m["no_build"]:
 			check(paths.in_no_build(z.get_center()) and not paths.in_no_build(z.position - Vector2(10, 10)), "G  %s: the no-build zone %s is kept" % [map_id, z])
+
+
+# --- E: enemies on terrain ---------------------------------------------------------------
+
+func _spawn(kind: String, at: Vector2, level := 3):
+	main._spawn_enemy(kind, level, at)
+	var all: Array = main.get_enemies().filter(func(e): return e.kind == kind)
+	return all[all.size() - 1]
+
+
+func _hire(kind: String, at: Vector2, place := true):
+	main.placing_type = kind
+	main.hire_at(at)
+	main.placing_type = ""
+	main.selected = null
+	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var w = all[all.size() - 1]
+	if place:
+		w.position = w.post
+	return w
+
+
+## Enemies standing in terrain right now (walking ones; a little slack for rounding).
+func _inside_terrain() -> Array:
+	var out := []
+	for e in main.get_enemies():
+		if not e.flying and main.paths.blocked(e.position, e.radius - 1.5):
+			out.append("%s at %s" % [e.kind, e.position.round()])
+	return out
+
+
+func _enemies() -> void:
+	for mid in ["ashwatch", "stonehollow"]:
+		await _mission(mid)
+		var m: Dictionary = Maps.MAPS[CD.MISSIONS[mid]["map"]]
+		# Spawns.
+		var outside := 0
+		for i in 200:
+			var p: Vector2 = main.paths.lane_spawn(14.0)
+			var ok := false
+			for l in m["lanes"]:
+				ok = ok or (p.x >= l[0] + 14.0 and p.x <= l[1] - 14.0)
+			if not ok:
+				outside += 1
+		check(outside == 0, "E  %s: 200 spawns all inside the lanes" % mid)
+		# A big mixed wave, straight to the castle, checked every frame (no one to stop them).
+		for w in main.get_warriors():
+			w.free()
+		main.warriors_changed()
+		main.wave_active = true
+		main.castle_hp = 1e9
+		main.castle_max = 1e9
+		var kinds := ["goblin", "orc", "wolf", "troll", "warlord", "skeleton_archer", "slime", "sapper"]
+		for i in 64:
+			main.spawn_queue.append([kinds[i % kinds.size()], 3])
+		main.spawn_interval = 0.15
+		var worst := []
+		var seen := 0
+		var sieged := {}   # reached the castle, or (archers) shooting it from bow range
+		var spawned := {}
+		for f in 60 * 80:
+			await process_frame
+			var bad := _inside_terrain()
+			if not bad.is_empty():
+				seen += 1
+				if worst.size() < 4:
+					worst.append_array(bad.slice(0, 1))
+			for e in main.get_enemies():
+				spawned[e.get_instance_id()] = true
+				if e.sieging or e.position.y > main.CASTLE_Y - 175.0:
+					sieged[e.get_instance_id()] = true
+			if main.spawn_queue.is_empty() and sieged.size() >= spawned.size():
+				break
+		check(seen == 0, "E  %s: 64 mixed enemies (Skeleton Archers and Slimes too) walk the map without ever standing in terrain%s" % [mid, "" if seen == 0 else " (%d frames, e.g. %s)" % [seen, ", ".join(worst)]])
+		var late: Array = main.get_enemies().filter(func(e): return not sieged.has(e.get_instance_id())).map(func(e): return "%s at %s" % [e.kind, e.position.round()])
+		check(spawned.size() == 64 and sieged.size() == 64, "E  %s: all %d reach the castle (archers: within bow range of it)%s" % [mid, sieged.size(), "" if late.is_empty() else " (not: %s; %d spawned)" % [", ".join(late), spawned.size()]])
+		for e in main.get_enemies():
+			e.queue_free()
+		await process_frame
+
+	# Knockback straight into rock, over and over.
+	await _mission("ashwatch")
+	main.wave_active = true
+	var victims := []
+	for i in 12:
+		var e = _spawn(["orc", "troll", "goblin", "warlord"][i % 4], Vector2(150 + (i % 4) * 110, 290 - (i / 4) * 30))
+		e.max_hp = 1e6
+		e.hp = 1e6
+		e.speed = 0.0
+		victims.append(e)
+	var inside := 0
+	for k in 40:
+		for e in victims:
+			e.apply_knockback(Vector2(randf_range(-30, 30), 90.0))   # down into the ridge
+		for f in 6:
+			await process_frame
+			inside += _inside_terrain().size()
+	check(inside == 0, "E  enemies knocked back into the ridge 40 times each slide along it, never into it")
+	for e in victims:
+		e.queue_free()
+
+	# A Slime going after a troop on the far side of the centre rock: round it, not into it.
+	await _mission("ashwatch")
+	main.wave_active = true
+	var sw = _hire("swordsman", Vector2(322, 440))
+	sw.max_hp = 1e6
+	sw.hp = 1e6
+	sw.set_process(false)
+	var sl = _spawn("slime", Vector2(322, 270))
+	sl.max_hp = 1e6
+	sl.hp = 1e6
+	var touched := 0
+	var reached := false
+	for f in 60 * 20:
+		await process_frame
+		if main.paths.blocked(sl.position, sl.radius - 1.5):
+			touched += 1
+		if sl.position.distance_to(sw.position) - sl.radius - sw.RADIUS < 8.0:
+			reached = true
+		if sw.goo_timer > 0.0:
+			break
+	check(reached and touched == 0, "E  a Slime goes round the rock to the Swordsman behind it (in it: %d frames)" % touched)
+	check(sw.goo_timer > 0.0 and sw._goo_factor() < 1.0, "E  ...and its blows slow him there")
+
+	# Skeleton Archers in a tight channel: one wide enough for a goblin, too tight for a troop.
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	main.paths.set_map({"lanes": [[288, 352]], "terrain": [
+		{"kind": "rock", "poly": [Vector2(0, 0), Vector2(296, 0), Vector2(296, 380), Vector2(0, 380)]},
+		{"kind": "rock", "poly": [Vector2(344, 0), Vector2(640, 0), Vector2(640, 380), Vector2(344, 380)]}]})
+	main.wave_active = true
+	var target = _hire("swordsman", Vector2(320, 520))
+	target.max_hp = 1e6
+	target.hp = 1e6
+	target.set_process(false)
+	check(not main.paths.melee_can_reach(Vector2(320, 300)) and main.paths.melee_can_reach(Vector2(320, 420)),
+			"E  the test channel: melee can't reach inside it, can just below it")
+	var archers := []
+	for i in 4:
+		var a = _spawn("skeleton_archer", Vector2(320, -11 - i * 40))
+		a.max_hp = 1e6
+		a.hp = 1e6
+		a.on_ground = true
+		archers.append(a)
+	var shots_from := []
+	var fired := {}
+	for f in 60 * 25:
+		await process_frame
+		for a in archers:
+			if a.shots > fired.get(a, 0):
+				shots_from.append(a.last_shot_from)
+			fired[a] = a.shots
+	var unreachable := shots_from.filter(func(p): return not main.paths.melee_can_reach(p) or p.y < main.DEPLOY_TOP)
+	check(not shots_from.is_empty() and unreachable.is_empty(),
+			"E  Skeleton Archers walk out of the channel before shooting (%d shots, %d from out of reach)" % [shots_from.size(), unreachable.size()])
+	var out_front: Array = archers.filter(func(a): return a.shots > 0)
+	check(out_front.size() >= 1 and out_front.all(func(a): return main.paths.melee_can_reach(a.position)),
+			"E  ...and the %d that got out and shot stand where melee troops can get at them (the rest wait in line, not shooting)" % out_front.size())
+
+	# The enemy camp, in Classic: a troop posted at the top line can't be shot from the camp.
+	await _fresh()
+	main.wave_active = true
+	var front = _hire("swordsman", Vector2(320, main.DEPLOY_TOP + 70))
+	front.max_hp = 1e6
+	front.hp = 1e6
+	front.set_process(false)
+	var a2 = _spawn("skeleton_archer", Vector2(320, -11))
+	a2.max_hp = 1e6
+	a2.hp = 1e6
+	var first_shot := INF
+	for f in 60 * 8:
+		await process_frame
+		if a2.shots > 0 and first_shot == INF:
+			first_shot = a2.last_shot_from.y
+	check(first_shot != INF and first_shot - a2.radius >= main.DEPLOY_TOP,
+			"E  (all modes) a Skeleton Archer only starts shooting once it's out of its camp (first shot at y %.0f, camp ends at %d)" % [first_shot, main.DEPLOY_TOP])
+
+	# Around Stonehollow's cliffs, against a line at the bot's posts: every shot from reach.
+	await _mission("stonehollow")
+	main.wave_active = true
+	for q in Maps.MAPS["stonehollow_quarry"]["bot_posts"].slice(0, 5):
+		var w = _hire("swordsman", q)
+		w.max_hp = 1e6
+		w.hp = 1e6
+	var skels := []
+	for i in 10:
+		var s2 = _spawn("skeleton_archer", main.paths.lane_spawn(15.0))
+		s2.max_hp = 1e6
+		s2.hp = 1e6
+		skels.append(s2)
+	var shots := []
+	var fired2 := {}
+	for f in 60 * 15:
+		await process_frame
+		for a in skels:
+			if is_instance_valid(a) and a.shots > fired2.get(a, 0):
+				shots.append(a.last_shot_from)
+			if is_instance_valid(a):
+				fired2[a] = a.shots
+	var out_of_reach := shots.filter(func(p): return not main.paths.melee_can_reach(p))
+	check(not shots.is_empty() and out_of_reach.is_empty(), "E  Stonehollow: %d Skeleton Archer shots, none from a spot melee can't reach%s" % [shots.size(), "" if out_of_reach.is_empty() else " (%s)" % str(out_of_reach.slice(0, 3))])

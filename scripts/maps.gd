@@ -12,6 +12,8 @@ extends RefCounted
 ##   no_build   rectangles nothing may be posted or built in (barricades aside)
 ##   castle     the castle's style (castle.gd STYLES)
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
+## Terrain along the top edge reaches well above it (y -120), since enemies come in
+## from just above the field.
 ## Any gap meant to be walked through is at least 64px wide, so a Warlord (radius 24)
 ## gets through with room; tests/terrain_test.gd checks every lane reaches the castle.
 
@@ -45,9 +47,9 @@ const MAPS := {
 		"biome": "mountain",
 		"lanes": [[214, 426]],
 		"terrain": [
-			{"kind": "cliff", "poly": [Vector2(0, 0), Vector2(204, 0), Vector2(204, 96), Vector2(188, 200), Vector2(172, 330),
+			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(204, -120), Vector2(204, 96), Vector2(188, 200), Vector2(172, 330),
 				Vector2(160, 470), Vector2(150, 600), Vector2(96, 636), Vector2(0, 648)]},
-			{"kind": "cliff", "poly": [Vector2(436, 0), Vector2(640, 0), Vector2(640, 648), Vector2(544, 636), Vector2(490, 600),
+			{"kind": "cliff", "poly": [Vector2(436, -120), Vector2(640, -120), Vector2(640, 648), Vector2(544, 636), Vector2(490, 600),
 				Vector2(480, 470), Vector2(468, 330), Vector2(452, 200), Vector2(436, 96)]},
 			{"kind": "pit", "poly": [Vector2(296, 378), Vector2(344, 378), Vector2(356, 392), Vector2(358, 512), Vector2(344, 530),
 				Vector2(296, 530), Vector2(282, 512), Vector2(284, 392)]},
