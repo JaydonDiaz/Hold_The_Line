@@ -348,7 +348,7 @@ func _process(delta: float) -> void:
 	if hud.scene_music != "":
 		audio.set_track(hud.scene_music)   # a cutscene's own music
 	elif not started:
-		audio.set_track("title")   # the title screen and the campaign map
+		audio.set_track("map" if hud.world_map != null else "title")   # the campaign map's own, or the title screen's
 	elif not game_over:
 		layer_timer -= delta
 		if layer_timer <= 0.0:

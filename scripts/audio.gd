@@ -91,7 +91,7 @@ var _stop := false     # the scene is going: the composer thread stops after its
 var _picked := 0       # how many cached pieces this player has taken up so far
 static var _cache := {}             # piece -> AudioStreamWAV: "fx:<effect>", a track, "<track>:<instrument>", "ensemble"
 const STAGE_TRACKS := ["calm", "mountain", "battle"]   # the music Bards play along with
-const SCENE_TRACKS := ["title", "story", "villain"]    # the rest (menus and cutscenes)
+const SCENE_TRACKS := ["title", "map", "story", "villain"]    # the rest (menus, the campaign map, cutscenes)
 static var _cache_lock := Mutex.new()
 const INSTRUMENTS := ["note", "pluck", "reed", "flute", "drum", "violin", "cello", "harp"]   # lute, pipa, mouth instrument, flute, hand drum, and the special three
 const LAYER_OFF := -60.0
@@ -326,7 +326,7 @@ static func _pieces() -> Array:
 	for sound_name in SOUNDS:
 		out.append("fx:" + sound_name)
 	# The title music first (it's what plays as the game opens), then the prologue's.
-	out.append_array(["title", "story", "calm", "battle", "villain", "mountain"])
+	out.append_array(["title", "story", "calm", "battle", "villain", "mountain", "map"])
 	for track in STAGE_TRACKS:
 		for instrument in INSTRUMENTS:
 			out.append(track + ":" + instrument)
@@ -363,6 +363,8 @@ func _compose_all() -> void:
 			made = _compose_villain()
 		elif piece == "mountain":
 			made = _compose_mountain()
+		elif piece == "map":
+			made = _compose_map()
 		elif piece == "ensemble":
 			made = _compose_ensemble()
 		else:
@@ -458,6 +460,9 @@ static func _track_info(track: String) -> Dictionary:
 					[41, maj], [43, maj], [40, mn], [45, mn], [38, mn], [41, maj], [40, maj], [45, mn]]}
 		"villain":
 			return {"step": 60.0 / 66.0 / 4.0, "chords": [[38, mn], [39, maj], [38, mn], [36, maj], [34, maj], [39, maj], [33, maj], [33, maj]]}
+		"map":
+			return {"step": 60.0 / 96.0 / 4.0, "chords": [[41, maj], [46, maj], [43, mn], [48, maj], [41, maj], [45, mn], [46, maj], [48, maj],
+					[38, mn], [46, maj], [41, maj], [48, maj], [38, mn], [43, mn], [48, maj], [41, maj]]}
 		"mountain":
 			return {"step": 60.0 / 92.0 / 4.0, "chords": [[43, maj], [41, maj], [48, maj], [43, maj], [43, maj], [41, maj], [45, mn], [50, maj]]}
 	if track == "calm":
@@ -751,6 +756,44 @@ static func _compose_villain() -> AudioStreamWAV:
 	var turn := 6 * 16 * step + 8 * step
 	for midi in [57, 63, 69]:
 		_voice(buf, int(turn * RATE), step * 6.0, _hz(midi), _hz(midi), "saw", 0.06, 1.2)
+	return _to_stream(buf, true)
+
+
+## The campaign map: a travelling song in F major, the road ahead. A flute-like lead
+## that wanders up and settles, harp arpeggios rolling in eighths, a plucked bass on
+## the beats, and a soft shaker keeping the walking pace.
+static func _compose_map() -> AudioStreamWAV:
+	var info := _track_info("map")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[72, 4], [77, 4], [76, 2], [74, 2], [72, 4]], [[74, 6], [77, 2], [81, 8]], [[79, 4], [77, 2], [74, 2], [70, 8]], [[72, 12], [69, 2], [70, 2]],
+		[[72, 4], [77, 4], [81, 4], [84, 4]], [[81, 6], [79, 2], [76, 8]], [[74, 4], [77, 4], [82, 4], [81, 2], [79, 2]], [[79, 12], [76, 4]],
+		[[74, 4], [77, 4], [81, 8]], [[82, 4], [81, 2], [79, 2], [77, 8]], [[77, 4], [81, 4], [84, 6], [81, 2]], [[79, 12], [76, 4]],
+		[[74, 6], [72, 2], [69, 4], [74, 4]], [[70, 4], [74, 4], [79, 4], [77, 4]], [[76, 4], [79, 4], [76, 4], [72, 4]], [[77, 16]],
+	]
+	_melody(buf, step, tune, "sine", 0.1, 0.9, 0.5, 0.9)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		# Harp: the chord rolling up and back in eighths.
+		var order := [0, 1, 2, 3, 2, 1, 2, 1]
+		for i in 8:
+			var k: int = order[i]
+			var midi: int = root + 12 + (tones[k] if k < tones.size() else 12)
+			_voice(buf, int((t0 + i * 2 * step) * RATE), step * 3.0, _hz(midi), _hz(midi), "tri", 0.065, 1.8)
+		# A soft pad under it.
+		for tone in tones:
+			_voice(buf, int(t0 * RATE), step * 15.5, _hz(root + tone), _hz(root + tone), "square", 0.012, 0.4, 0.5)
+		# Plucked bass: root and fifth on the beats.
+		for q in 4:
+			var midi: int = root - 12 + [0, 7, 0, 7][q]
+			_voice(buf, int((t0 + q * 4 * step) * RATE), step * 2.5, _hz(midi), _hz(midi), "tri", 0.18, 2.0)
+		# The shaker, on the off-beats.
+		for i in [2, 6, 10, 14]:
+			_voice(buf, int((t0 + i * step) * RATE), 0.05, 7000.0, 5000.0, "noise", 0.04, 3.0, 0.5, [], 700 + b * 16 + i)
 	return _to_stream(buf, true)
 
 

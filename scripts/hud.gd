@@ -1584,6 +1584,7 @@ func show_world_map(campaign) -> Control:
 	var m := WorldMap.new()
 	m.campaign = campaign
 	m.ability_icon = func(key): return _power_icon(key, 3)
+	m.story_player = play_story
 	world_map = m
 	add_child(m)
 	_center(m)

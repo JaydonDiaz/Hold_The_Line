@@ -44,6 +44,7 @@ var info: Dictionary = {}   # the panel's controls
 var reward_box: HBoxContainer
 var threat_box: HBoxContainer
 var overlay: Control = null   # the Ledger, a story scene or an announcement, while one is up
+var story_player := Callable()   # the HUD's play_story(lines, then): villains' lines get their own cutscenes
 var training_kind := ""      # the unit picked in the Training Grounds
 
 
@@ -333,6 +334,16 @@ func play_story(key: String, then: Callable = Callable()) -> void:
 	if lines.is_empty():
 		if then.is_valid():
 			then.call()
+		return
+	if story_player.is_valid():
+		# The HUD plays it over the map, splitting off the villains' lines as cutscenes.
+		overlay = Control.new()   # (a stand-in: keeps the map's clicks off while it plays)
+		var hold := overlay
+		story_player.call(lines, func():
+			hold.free()
+			overlay = null
+			if then.is_valid():
+				then.call())
 		return
 	var s := Story.new()
 	s.setup(lines)

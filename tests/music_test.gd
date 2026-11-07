@@ -37,7 +37,7 @@ func _frames(n: int) -> void:
 func _all_composed() -> bool:
 	var t0 := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t0 < 180000:   # real seconds: composing runs on its own thread
-		if main.audio._picked >= main.audio._piece_count() and main.audio._music.size() >= 7:
+		if main.audio._picked >= main.audio._piece_count() and main.audio._music.size() >= 8:
 			await _frames(2)
 			return true
 		await create_timer(0.2).timeout
@@ -83,7 +83,7 @@ func _run() -> void:
 	main._on_mode_chosen("campaign:new:normal")
 	check(await _playing() == "story", "the prologue plays the story music")
 	main.hud.story.skip()
-	check(await _playing() == "title", "the campaign map plays the title music")
+	check(await _playing() == "map", "the campaign map plays its own music")
 	var lines: Array = campaign.story_lines("ashwatch_outro")
 	main.hud.play_story(lines)
 	check(main.hud.story.get_script().resource_path.ends_with("story.gd"), "Ashwatch's ending opens in the dialogue box")
@@ -100,6 +100,22 @@ func _run() -> void:
 	var kinds: Array = seen.map(func(x): return x[0])
 	check(kinds == ["story.gd", "cutscene.gd", "story.gd"], "the Ogre King's line plays as its own cutscene between the dialogue (%s)" % str(kinds))
 	check(seen.size() == 3 and seen[1][1] == "villain", "...with the villain music (%s)" % str(seen.map(func(x): return x[1])))
+	# Back on the map after a win: the story it plays splits the villain off the same way.
+	main.hud.hide_world_map()
+	campaign.pending_story = "ashwatch_outro"
+	main.hud.show_world_map(campaign)
+	var kinds2 := []
+	for i in 30:
+		if main.hud.story == null:
+			break
+		var kind: String = main.hud.story.get_script().resource_path.get_file()
+		if kinds2.is_empty() or kinds2[-1] != kind:
+			kinds2.append(kind)
+		main.hud.story.advance()
+		main.hud.story.advance()
+		await _frames(30)
+	check(kinds2 == ["story.gd", "cutscene.gd", "story.gd"], "after a win, the map's story gives the Ogre King his own cutscene (%s)" % str(kinds2))
+	check(main.hud.world_map.overlay == null, "...and the map takes clicks again once it's over")
 	# Esc skips the whole thing, cutscene and all.
 	main.hud.play_story(lines)
 	main.hud.story.skip()
