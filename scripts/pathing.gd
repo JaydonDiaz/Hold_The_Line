@@ -193,7 +193,18 @@ func slide(from: Vector2, to: Vector2, r: float) -> Vector2:
 func troop_can_stand(p: Vector2) -> bool:
 	if terrain.is_empty():
 		return true
-	return troop_open[_index(_cell(p))] == 1 and not blocked(p, TROOP_RADIUS)
+	if blocked(p, TROOP_RADIUS):
+		return false
+	# Room right here, and joined to the reachable ground: its cell is open, or (hard
+	# against rock, where the cell's centre is too tight) a neighbouring cell is.
+	var c := _cell(p)
+	if troop_open[_index(c)] == 1:
+		return true
+	for d in NEIGHBORS:
+		var n: Vector2i = c + d
+		if _inside(n) and troop_open[_index(n)] == 1 and not segment_blocked(p, _center(n), TROOP_RADIUS - 2.0):
+			return true
+	return false
 
 
 ## Whether p is close in by terrain (a gap, a cliff foot) for something of radius r:

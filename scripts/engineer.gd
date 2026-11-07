@@ -20,6 +20,10 @@ var state := "out"     # "out" (walking to the job), "work", "home" (walking bac
 var walk := 0.0
 var swing_t := 0.0
 var flip := 1.0
+var route := PackedVector2Array()   # on terrain: waypoints round it to where he's going
+var route_goal := Vector2.INF
+var route_timer := 0.0
+const RADIUS := 12.0
 
 
 func gate() -> Vector2:
@@ -30,8 +34,11 @@ func _target() -> Vector2:
 	if state == "home":
 		return gate()
 	if job == "build":
-		# Beside the site, on the side nearer the castle.
-		return site.position + Vector2(-26.0 if site.position.x > main.FIELD_W / 2.0 else 26.0, 10.0)
+		# Beside the site, on the side nearer the castle (on open ground, on terrain).
+		var beside: Vector2 = site.position + Vector2(-26.0 if site.position.x > main.FIELD_W / 2.0 else 26.0, 10.0)
+		if main.paths.has_terrain() and main.paths.blocked(beside, RADIUS):
+			beside = site.position + Vector2(26.0 if site.position.x > main.FIELD_W / 2.0 else -26.0, 10.0)
+		return beside
 	return spot
 
 
@@ -58,8 +65,9 @@ func _process(delta: float) -> void:
 			main.repair_tick(delta)
 	elif d > 2.0:
 		var step := minf(SPEED * delta, d)
-		var dir := position.direction_to(to)
-		position += dir * step
+		var dir := position.direction_to(_waypoint(to, delta))
+		var next := position + dir * step
+		position = next if main.paths.terrain.is_empty() else main.paths.slide(position, next, RADIUS)
 		walk += step / 12.0
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
@@ -70,6 +78,24 @@ func _process(delta: float) -> void:
 		state = "work"
 		swing_t = 0.0
 	queue_redraw()
+
+
+## Where to head for next on the way to `to`: straight there, or on terrain, along a
+## troop route round it (worked out again when the goal moves or every second).
+func _waypoint(to: Vector2, delta: float) -> Vector2:
+	var paths = main.paths
+	if paths.terrain.is_empty():
+		return to
+	route_timer -= delta
+	if route_goal.distance_to(to) > 16.0 or route_timer <= 0.0:
+		route_goal = to
+		route_timer = 1.0
+		route = paths.troop_route(position, to) if paths.segment_blocked(position, to, RADIUS) else PackedVector2Array()
+	while not route.is_empty() and position.distance_to(route[0]) < 8.0:
+		route.remove_at(0)
+	if route.is_empty() or not paths.segment_blocked(position, to, RADIUS):
+		return to
+	return route[0]
 
 
 func _draw() -> void:

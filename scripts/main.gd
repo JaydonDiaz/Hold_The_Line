@@ -1206,9 +1206,12 @@ func hire_at(p: Vector2) -> void:
 
 
 ## Where a new troop walks on: the nearer side edge, level with its post, nudged up
-## or down the edge if a wall runs into it there.
+## or down the edge if a wall runs into it there. On a campaign battlefield (whose edges
+## may be cliffs) troops come out of the castle gate instead.
 func _entry_point(post: Vector2) -> Vector2:
 	var r := Warrior.RADIUS
+	if paths.has_terrain():
+		return Vector2(FIELD_W / 2.0, CASTLE_Y - r)
 	var x := r if post.x < FIELD_W / 2.0 else FIELD_W - r
 	for step in 40:
 		for sign in [1, -1]:

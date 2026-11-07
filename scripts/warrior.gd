@@ -963,7 +963,7 @@ func _process(delta: float) -> void:
 		dazed = maxf(dazed - delta, 0.0)
 		if shove_left > 0.0:
 			shove_left -= delta
-			position += shove_velocity * delta
+			_step_to(position + shove_velocity * delta)
 		_separate()
 		return
 	if dash_left > 0.0:
@@ -1313,7 +1313,8 @@ func _clear_of_walls(spot: Vector2, toward: Vector2) -> Vector2:
 		if n.dot(toward - c) < 0.0:
 			n = -n
 		spot = c + n * min_d
-	return spot.clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
+	spot = spot.clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
+	return main.paths.open_spot(spot)   # never onto terrain or somewhere troops can't get to
 
 
 # Techniques tier 3: a blinding flash that stuns everything close by.
@@ -1403,11 +1404,18 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	# Only go the long way round if a wall or an emplacement is in the way of where it
 	# means to stop.
 	var stop := position + position.direction_to(p) * minf(max_dist, position.distance_to(p))
-	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements()) and main.paths.path_blocked(position, stop, RADIUS + 6.0, true):
+	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements() or main.paths.has_terrain()) \
+			and main.paths.path_blocked(position, stop, RADIUS + 6.0, true):
 		aim = _route_step(p, delta)
-	position += position.direction_to(aim) * step
+	_step_to(position + position.direction_to(aim) * step)
 	walk += step / 12.0   # swap walk frames every 12px
 	moving = step > 0.01
+
+
+## A step to `to`: straight there on open ground; on terrain, slid along any rock it
+## would have walked into (so it never walks into a cliff, only along it).
+func _step_to(to: Vector2) -> void:
+	position = to if main.paths.terrain.is_empty() else main.paths.slide(position, to, RADIUS)
 
 
 ## Next waypoint on the way around the walls to p. The route is worked out again
@@ -1461,6 +1469,10 @@ func _separate() -> void:
 			var min_d: float = RADIUS + e.radius
 			if off.length() < min_d:
 				position = e.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * min_d
+	# Terrain: put back anything a push left overlapping rock (the safety net; steps
+	# themselves slide along it).
+	if not main.paths.terrain.is_empty():
+		position = main.paths.push_out(position, RADIUS)
 	# Troops never go up into the enemy's spawn area.
 	position = position.clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
 
@@ -1588,6 +1600,8 @@ func _kite(delta: float) -> bool:
 	var home := position.direction_to(post) if position.distance_to(post) > 4.0 else Vector2.ZERO
 	var dir := (away + home * 0.35).normalized()
 	var dest: Vector2 = (position + dir * 60.0).clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
+	if not main.paths.terrain.is_empty():
+		dest = _retreat_spot(dir, threat)
 	if position.distance_to(dest) < 10.0:
 		kiting = false   # cornered: stand and fight
 		return false
@@ -1596,6 +1610,23 @@ func _kite(delta: float) -> bool:
 		facing = position.direction_to(target.position)
 	_move_toward(dest, position.distance_to(dest), delta)
 	return true
+
+
+## On terrain: somewhere to back off to, away from `threat`, that's open ground troops can
+## reach with a clear straight walk there (so it never cuts across rock or backs into a
+## pocket it can't get out of). Tries straight away first, then turning further and
+## further aside; if nothing works it's cornered and stays put.
+func _retreat_spot(dir: Vector2, threat) -> Vector2:
+	var paths = main.paths
+	var now := position.distance_to(threat.position)
+	for turn in [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]:
+		for reach in [60.0, 36.0]:
+			var q: Vector2 = (position + dir.rotated(turn) * reach).clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
+			if q.distance_to(threat.position) <= now + 4.0:
+				continue   # not actually getting away
+			if paths.troop_can_stand(q) and not paths.segment_blocked(position, q, RADIUS):
+				return q
+	return position
 
 
 ## Where projectiles leave from: the hands, or an emplacement's archer or muzzle.
@@ -2350,7 +2381,7 @@ func _start_dash(e) -> void:
 func _dash_step(delta: float) -> void:
 	var left := dash_left
 	dash_left = maxf(dash_left - delta, 0.0)
-	position = position.lerp(dash_to, minf(delta / left, 1.0))
+	_step_to(position.lerp(dash_to, minf(delta / left, 1.0)))
 	walk += 0.5
 	moving = true
 	if dash["through"]:

@@ -9,6 +9,12 @@ extends SceneTree
 ##                  walking enemy inside terrain; chasers (Slimes too) route round rock to
 ##                  reach troops and still slow them; Skeleton Archers never shoot from where
 ##                  melee troops can't reach them (a tight channel, cliffs, the enemy camp)
+##   T  troops      new hires come out of the gate and route to posts round the ridge; move
+##                  orders cross the map through the gaps; Engineers reach and finish build
+##                  sites on both sides of it; troops and Healers backing away from enemies
+##                  never cross or enter terrain or back into a dead end; shoves into rock
+##                  slide; a full battle (every troop kind, trained upgrades, Slimes, Skeleton
+##                  Archers, knockback) never leaves a unit or Engineer inside terrain
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const Maps = preload("res://scripts/maps.gd")
@@ -48,6 +54,8 @@ func _run() -> void:
 		await _grid()
 	if _wants("E"):
 		await _enemies()
+	if _wants("T"):
+		await _troops()
 	print("%d checks, %d failed" % [checks, fails])
 	if main != null:
 		main.free()
@@ -95,6 +103,7 @@ func _mission(mid: String, diff := "normal") -> void:
 		main.hud.story.skip()
 	await process_frame
 	main.gold = 99999
+	campaign.allies = CD.FACTIONS.keys()   # every troop and emplacement open, for the tests
 
 
 # --- G: the grid ------------------------------------------------------------------------
@@ -383,3 +392,206 @@ func _enemies() -> void:
 				fired2[a] = a.shots
 	var out_of_reach := shots.filter(func(p): return not main.paths.melee_can_reach(p))
 	check(not shots.is_empty() and out_of_reach.is_empty(), "E  Stonehollow: %d Skeleton Archer shots, none from a spot melee can't reach%s" % [shots.size(), "" if out_of_reach.is_empty() else " (%s)" % str(out_of_reach.slice(0, 3))])
+
+
+# --- T: troops and Engineers on terrain ----------------------------------------------------
+
+## Your units (and Engineers) standing in terrain right now.
+func _troops_inside() -> Array:
+	var out := []
+	for w in main.get_warriors():
+		if not w.wall_guard and not w.is_emplacement() and main.paths.blocked(w.position, w.RADIUS - 1.5):
+			out.append("%s at %s" % [w.kind, w.position.round()])
+	for g in main.fx_layer.get_children():
+		if g.get_script() == preload("res://scripts/engineer.gd") and main.paths.blocked(g.position, g.RADIUS - 1.5):
+			out.append("engineer at %s" % g.position.round())
+	return out
+
+
+## Watches `w` for `frames` frames: how often it was inside terrain, and how often a
+## frame's step crossed terrain.
+func _watch(units: Array, frames: int, until := Callable()) -> Dictionary:
+	var inside := 0
+	var crossed := 0
+	var last := {}
+	for f in frames:
+		await process_frame
+		for w in units:
+			if not is_instance_valid(w):
+				continue
+			if main.paths.blocked(w.position, w.RADIUS - 1.5):
+				inside += 1
+			if last.has(w) and main.paths.segment_blocked(last[w], w.position, 1.0):
+				crossed += 1
+			last[w] = w.position
+		if until.is_valid() and until.call():
+			break
+	return {"inside": inside, "crossed": crossed}
+
+
+func _troops() -> void:
+	# New hires: out of the gate, round the ridge to posts on either side of it.
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	main.wave_active = false
+	var hires := []
+	for q in [Vector2(100, 460), Vector2(560, 470), Vector2(240, 250), Vector2(420, 230)]:
+		main.placing_type = "swordsman"
+		main.hire_at(q)
+		main.placing_type = ""
+		var all: Array = main.get_warriors()
+		hires.append(all[all.size() - 1])
+	var gate_ok: bool = hires.all(func(w): return w.position.distance_to(Vector2(320, main.CASTLE_Y - w.RADIUS)) < 2.0)
+	check(gate_ok, "T  new hires on a campaign map come out of the castle gate")
+	var seen: Dictionary = await _watch(hires, 60 * 20, func(): return hires.all(func(w): return w.position.distance_to(w.post) < 4.0))
+	check(hires.all(func(w): return w.position.distance_to(w.post) < 4.0), "T  ...and reach posts on both sides of the ridge (%s)" % ", ".join(hires.map(func(w): return str(w.position.round()))))
+	check(seen["inside"] == 0 and seen["crossed"] == 0, "T  ...never stepping into or across rock (inside %d, crossed %d)" % [seen["inside"], seen["crossed"]])
+	# Move orders straight across the ridge.
+	hires[0].order_to(Vector2(560, 230))
+	hires[2].order_to(Vector2(100, 470))
+	seen = await _watch(hires, 60 * 20, func(): return hires[0].position.distance_to(hires[0].post) < 4.0 and hires[2].position.distance_to(hires[2].post) < 4.0)
+	check(hires[0].position.distance_to(hires[0].post) < 4.0 and hires[2].position.distance_to(hires[2].post) < 4.0 and seen["inside"] == 0 and seen["crossed"] == 0,
+			"T  move orders across the ridge go through the gaps (inside %d, crossed %d)" % [seen["inside"], seen["crossed"]])
+	# Engineers: build sites below and above the ridge.
+	var sites := []
+	for q in [Vector2(150, 520), Vector2(510, 250), Vector2(330, 250)]:
+		main.placing_type = "tower"
+		main.hire_at(q)
+		main.placing_type = ""
+		var all: Array = main.get_warriors().filter(func(w): return w.kind == "tower")
+		sites.append(all[all.size() - 1])
+	var eng_inside := 0
+	for f in 60 * 30:
+		await process_frame
+		eng_inside += _troops_inside().filter(func(x): return x.begins_with("engineer")).size()
+		if sites.all(func(t): return not t.under_construction()):
+			break
+	check(sites.all(func(t): return not t.under_construction()), "T  Engineers reach and finish towers on both sides of the ridge")
+	check(eng_inside == 0, "T  ...without ever walking into rock (%d)" % eng_inside)
+
+	# Backing away near rock: an Archer and a Healer with the ridge behind them, a troll coming.
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	main.wave_active = true
+	var archer = _hire("archer", Vector2(110, 430))
+	var healer = _hire("healer", Vector2(330, 430))
+	var hurt = _hire("swordsman", Vector2(250, 600))
+	hurt.max_hp = 1e6
+	hurt.hp = 5e5
+	for w in [archer, healer]:
+		w.max_hp = 1e6
+		w.hp = 1e6
+	var trolls := []
+	for x in [110, 330]:
+		var t = _spawn("troll", Vector2(x, 560))
+		t.max_hp = 1e6
+		t.hp = 1e6
+		t.damage = 0.0
+		trolls.append(t)
+	var kited := false
+	var stand_bad := 0
+	var watch_units := [archer, healer]
+	var inside2 := 0
+	var crossed2 := 0
+	var last2 := {}
+	for f in 60 * 12:
+		await process_frame
+		kited = kited or archer.kiting or healer.kiting
+		for w in watch_units:
+			if main.paths.blocked(w.position, w.RADIUS - 1.5):
+				inside2 += 1
+			if last2.has(w) and main.paths.segment_blocked(last2[w], w.position, 1.0):
+				crossed2 += 1
+			if not main.paths.troop_can_stand(main.paths.push_out(w.position, w.RADIUS)):
+				stand_bad += 1
+			last2[w] = w.position
+	check(kited, "T  an Archer and a Healer with the ridge at their backs back away from the trolls")
+	check(inside2 == 0 and crossed2 == 0, "T  ...without stepping into or across the rock (inside %d, crossed %d)" % [inside2, crossed2])
+	check(stand_bad == 0, "T  ...or into anywhere troops can't get to (%d)" % stand_bad)
+	# A Healer in the corner between the trees and the field edge: she stays put.
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	main.wave_active = true
+	var cornered = _hire("healer", Vector2(108, 690))
+	cornered.max_hp = 1e6
+	cornered.hp = 1e6
+	var t2 = _spawn("orc", Vector2(200, 640))
+	t2.max_hp = 1e6
+	t2.hp = 1e6
+	t2.damage = 0.0
+	var seen3: Dictionary = await _watch([cornered], 60 * 8)
+	check(seen3["inside"] == 0 and seen3["crossed"] == 0 and main.paths.troop_can_stand(cornered.position),
+			"T  a Healer backed into the corner by the trees holds there, on open ground (at %s)" % cornered.position.round())
+
+	# Shoves into rock slide along it.
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	var pushed := []
+	for x in [90, 240, 330, 520]:
+		var w = _hire("swordsman", Vector2(x, 450))
+		pushed.append(w)
+	var shove_in := 0
+	for k in 12:
+		for w in pushed:
+			w.shove(Vector2(randf_range(-40, 40), -140.0), 0.1)
+		var r: Dictionary = await _watch(pushed, 20)
+		shove_in += r["inside"] + r["crossed"]
+	check(shove_in == 0, "T  troops shoved hard into the ridge slide along it (%d frames in it)" % shove_in)
+
+	# A full battle on each map: every troop kind (trained, upgraded), Slimes and Skeleton
+	# Archers, knockback, Engineers building; nobody ever inside terrain.
+	for mid in ["ashwatch", "stonehollow"]:
+		await _mission(mid)
+		for w in main.get_warriors():
+			w.free()
+		main.warriors_changed()
+		for k in ["swordsman", "archer", "mage", "frost", "martial", "healer", "bard", "alchemist"]:
+			campaign.trained[k] = 3
+		var posts: Array = Maps.MAPS[CD.MISSIONS[mid]["map"]]["bot_posts"]
+		var kinds := ["swordsman", "martial", "archer", "healer", "mage", "frost", "bard", "alchemist", "swordsman"]
+		var army := []
+		for i in posts.size():
+			var w = _hire(kinds[i % kinds.size()], posts[i])
+			w.max_hp *= 20.0
+			w.hp = w.max_hp
+			main.selected = w
+			for path in [0, 1, 0, 2, 0]:
+				main.upgrade_selected(path)
+			main.selected = null
+			army.append(w)
+		var trained_ok: bool = army.all(func(w): return w.tiers.max() >= 2)
+		check(trained_ok and army.all(func(w): return w.tiers.max() <= 3), "T  %s: trained troops take their tier II-III upgrades, and no further" % mid)
+		main.placing_type = "cannon"
+		main.hire_at(Vector2(320, 680) if mid == "ashwatch" else Vector2(320, 660))
+		main.placing_type = ""
+		main.wave_active = true
+		main.castle_hp = 1e9
+		main.castle_max = 1e9
+		var kinds2 := ["slime", "skeleton_archer", "orc", "troll", "goblin", "wolf", "slime", "skeleton_archer", "warlord", "sapper"]
+		for i in 60:
+			main.spawn_queue.append([kinds2[i % kinds2.size()], 4])
+		main.spawn_interval = 0.2
+		var bad_frames := 0
+		var example := ""
+		for f in 60 * 45:
+			await process_frame
+			if f % 300 == 0:
+				for e in main.get_enemies():
+					e.apply_knockback(Vector2(randf_range(-60, 60), randf_range(-60, 60)))
+			var bad := _troops_inside() + _inside_terrain()
+			if not bad.is_empty():
+				bad_frames += 1
+				if example == "":
+					example = bad[0]
+		check(bad_frames == 0, "T  %s: a 45s battle (Slimes, Skeleton Archers, knockback every 5s) never leaves anyone inside terrain%s" % [mid, "" if bad_frames == 0 else " (%d frames, e.g. %s)" % [bad_frames, example]])
+		for e in main.get_enemies():
+			e.free()
+		main.enemies_changed()

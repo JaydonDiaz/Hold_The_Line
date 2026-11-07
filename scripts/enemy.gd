@@ -673,8 +673,8 @@ func _push_out() -> void:
 	if not boss:
 		for e in main.enemies_near(position, radius + main.MAX_ENEMY_RADIUS):
 			if e != self and e.flying == flying:
-				if on_ground and e.position.y < position.y - 2.0 and not e.boss and main.paths.tight(position, radius):
-					continue   # in a gap, whoever's ahead goes first: the ones behind don't shove it into the rock
+				if on_ground and e.walking and e.position.y < position.y - 2.0 and not e.boss and main.paths.tight(position, radius):
+					continue   # in a gap, whoever's ahead goes first: the ones behind don't shove it into the rock (one that's stopped still makes way)
 				_push_from(e.position, radius + e.radius, 1.0 if e.boss else 0.5)
 	position.x = clampf(position.x, radius, main.FIELD_W - radius)
 	if flying:
