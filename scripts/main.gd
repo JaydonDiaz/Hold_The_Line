@@ -268,8 +268,9 @@ func choose_mode(mode: String) -> void:
 	# one the campaign has opened, or the open meadow.
 	var classic := not campaign and Data.DIFFICULTIES.has(mode)
 	map_id = mission.get("map", "") if campaign else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
-	if campaign or map_id != "":
-		_lock_portrait(true)   # maps are laid out on the fixed 640px field
+	# Battles fill the window: a map stretches across the field like the meadow does (the
+	# campaign map and the cutscenes, drawn as one picture, keep their frame).
+	_lock_portrait(false)
 	paths.set_map(Maps.get_map(map_id))
 	if paths.has_terrain():
 		_repaint_ground()
@@ -923,7 +924,8 @@ func _begin_mission() -> void:
 	for a in mission.get("allies", []):
 		var kind: String = a["kind"]
 		var w := Warrior.new()
-		w.setup(kind, Data.WARRIORS[kind], self, a["at"])
+		var at: Vector2 = a["at"]
+		w.setup(kind, Data.WARRIORS[kind], self, Vector2(at.x * FIELD_W / Maps.BASE_W, at.y))   # placed on the map as stretched
 		w.spent = 0   # on loan: selling it brings nothing
 		w.position = w.post
 		warrior_layer.add_child(w)

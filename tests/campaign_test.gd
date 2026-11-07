@@ -114,6 +114,10 @@ func _play(mission_id: String) -> void:
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame
+	# Battles stretch to the window; these tests (and the balance bot) play on the width
+	# the maps are drawn up for. terrain_test.gd checks the maps stretched wide.
+	main._lock_portrait(true)
+	await process_frame
 
 
 func _key(code: Key) -> void:
@@ -800,7 +804,7 @@ func _bot_spend() -> void:
 	var spots := []
 	var map: Dictionary = Maps.get_map(main.mission.get("map", ""))
 	if map.has("bot_posts"):
-		spots = map["bot_posts"].slice(0, 7)
+		spots = Maps.fitted(map, main.FIELD_W)["bot_posts"].slice(0, 7)
 	else:
 		for i in 7:
 			spots.append(Vector2(60.0 + i * (520.0 / 6.0), 420.0 + (i % 2) * 40.0))

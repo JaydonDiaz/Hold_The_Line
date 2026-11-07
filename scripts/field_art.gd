@@ -148,7 +148,8 @@ static func _worn_trail(ci: CanvasItem, trail: PackedVector2Array, tint: Color, 
 ## A campaign map's ground: its biome, the trails worn through its gaps, then its terrain
 ## (rock, cliffs, trees, the quarry), all painted once into the field. Tall parts (rock
 ## tops, canopies) stay inside each shape, which is exactly where nothing can stand.
-static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, m: Dictionary) -> void:
+static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Dictionary) -> void:
+	var m: Dictionary = preload("res://scripts/maps.gd").fitted(raw, w)   # stretched across the field
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9090
 	var clear := []

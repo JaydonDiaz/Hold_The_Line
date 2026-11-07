@@ -69,9 +69,11 @@ func setup(m) -> void:
 
 # --- Terrain ---------------------------------------------------------------------------
 
-## Lays out a battlefield (a maps.gd entry), or clears it with {}.
-func set_map(m: Dictionary) -> void:
-	_map = m
+## Lays out a battlefield (a maps.gd entry), or clears it with {}: stretched across the
+## field's width as it is now (set again whenever the field changes width).
+func set_map(raw: Dictionary) -> void:
+	_map = raw
+	var m: Dictionary = preload("res://scripts/maps.gd").fitted(raw, main.FIELD_W)
 	terrain.clear()
 	lanes.clear()
 	no_build = m.get("no_build", []).duplicate()

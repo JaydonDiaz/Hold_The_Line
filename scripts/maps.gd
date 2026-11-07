@@ -3,8 +3,9 @@ extends RefCounted
 ## with "map" (campaign_data.gd); Classic, Freeplay and the Tutorial have none and keep
 ## the open meadow.
 ##
-## Coordinates are on the campaign field: 640 wide, the enemy camp above y 96, the
-## castle wall at y 736. Each map has:
+## Maps are drawn up on a field 640 wide (BASE_W), the enemy camp above y 96, the castle
+## wall at y 736. In play a map stretches across the whole field, however wide the
+## window makes it (like the open meadow): every x is a share of the width (fitted()). Each map has:
 ##   name       what Classic's battlefield cards call it
 ##   blurb      a few words for its card
 ##   biome      which ground painter and palette (field_art.gd): "meadow" or "mountain"
@@ -21,6 +22,8 @@ extends RefCounted
 ## from just above the field.
 ## Any gap meant to be walked through is at least 64px wide, so a Warlord (radius 24)
 ## gets through with room; tests/terrain_test.gd checks every lane reaches the castle.
+
+const BASE_W := 640.0
 
 const MAPS := {
 	# Ashwatch Keep: an open meadow with a rocky ridge across the middle, broken by two
@@ -77,3 +80,20 @@ const MAPS := {
 
 static func get_map(id: String) -> Dictionary:
 	return MAPS.get(id, {})
+
+
+## Map `m` stretched across a field `w` wide: every x (terrain, lanes, trails, no-build
+## zones, the bot's posts) scaled by w / BASE_W; heights stay as they are.
+static func fitted(m: Dictionary, w: float) -> Dictionary:
+	if m.is_empty() or is_equal_approx(w, BASE_W):
+		return m
+	var k := w / BASE_W
+	var out := m.duplicate(true)
+	var sx := func(p: Vector2) -> Vector2: return Vector2(p.x * k, p.y)
+	for t in out.get("terrain", []):
+		t["poly"] = (t["poly"] as Array).map(sx)
+	out["lanes"] = out.get("lanes", []).map(func(l): return [l[0] * k, l[1] * k])
+	out["trails"] = out.get("trails", []).map(func(tr): return (tr as Array).map(sx))
+	out["no_build"] = out.get("no_build", []).map(func(r: Rect2): return Rect2(r.position.x * k, r.position.y, r.size.x * k, r.size.y))
+	out["bot_posts"] = out.get("bot_posts", []).map(sx)
+	return out

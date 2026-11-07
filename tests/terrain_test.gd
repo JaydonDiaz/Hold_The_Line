@@ -113,6 +113,10 @@ func _mission(mid: String, diff := "normal") -> void:
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame
+	# Battles stretch to the window; these tests hold the field at the width the maps are
+	# drawn up for (as wide windows are checked in G).
+	main._lock_portrait(true)
+	await process_frame
 	main.gold = 99999
 	campaign.allies = CD.FACTIONS.keys()   # every troop and emplacement open, for the tests
 
@@ -127,7 +131,10 @@ func _grid() -> void:
 	check(main.castle.pal == main.castle.STYLES["keep"], "G  Classic's castle is the usual keep")
 	check(paths.open_spot(Vector2(320, 400)) == Vector2(320, 400) and paths.troop_can_stand(Vector2(5, 120)) and paths.melee_can_reach(Vector2(320, 50)),
 			"G  ...and every terrain check passes everything through")
-	# A known shape: a 64px square at (96..160, 192..256).
+	# A known shape: a 64px square at (96..160, 192..256), on a field held at the width
+	# maps are drawn up for (so it isn't stretched).
+	main._lock_portrait(true)
+	await process_frame
 	paths.set_map({"terrain": [{"kind": "rock", "poly": [Vector2(96, 192), Vector2(160, 192), Vector2(160, 256), Vector2(96, 256)]}]})
 	var wrong := []
 	for c in [Vector2i(7, 13), Vector2i(3, 13), Vector2i(7, 9), Vector2i(12, 18), Vector2i(20, 30)]:
@@ -202,6 +209,44 @@ func _grid() -> void:
 		check(above == 0, "G  %s: troops can't stand in the enemy camp" % map_id)
 		for z in m["no_build"]:
 			check(paths.in_no_build(z.get_center()) and not paths.in_no_build(z.position - Vector2(10, 10)), "G  %s: the no-build zone %s is kept" % [map_id, z])
+		# The same map stretched across a wide window's field.
+		main._lock_portrait(false)
+		await _frames(2)
+		paths = main.paths
+		var k: float = main.FIELD_W / Maps.BASE_W
+		var wide: Dictionary = Maps.fitted(m, main.FIELD_W)
+		var first_rock: Vector2 = Vector2(wide["terrain"][0]["poly"][0])
+		check(main.FIELD_W > 700 and paths.has_terrain() and is_equal_approx(first_rock.x, float(m["terrain"][0]["poly"][0].x) * k),
+				"G  %s on a %dpx field: the map stretches across it (x %.2f times)" % [map_id, main.FIELD_W, k])
+		var stuck_w := []
+		for r in [11.0, 24.0]:
+			for l in wide["lanes"]:
+				for x in range(int(l[0]) + int(r) + 2, int(l[1]) - int(r) - 1, 12):
+					if paths._field(r)["dist"][paths._index(paths._cell(Vector2(x, 4)))] > 1e9:
+						stuck_w.append([r, x])
+		check(stuck_w.is_empty(), "G  %s, wide: every lane still reaches the castle for every size%s" % [map_id, "" if stuck_w.is_empty() else " (%s)" % str(stuck_w.slice(0, 3))])
+		var arrived_w := 0
+		var touched_w := 0
+		for l in wide["lanes"]:
+			for x in range(int(l[0]) + 30, int(l[1]) - 29, 60):
+				var p := Vector2(x, 10)
+				for step in 700:
+					p += paths.direction(p, 24.0) * 4.0
+					if paths.blocked(p, 22.0):
+						touched_w += 1
+						break
+					if p.y >= main.CASTLE_Y - 30:
+						arrived_w += 1
+						break
+		check(touched_w == 0 and arrived_w > 0, "G  %s, wide: Warlords walk it to the castle (%d arrived, %d touched rock)" % [map_id, arrived_w, touched_w])
+		var bad_w := []
+		for w in main.get_warriors():
+			if not paths.troop_can_stand(w.post):
+				bad_w.append("%s %s" % [w.kind, w.post.round()])
+		for q in wide["bot_posts"]:
+			if not paths.troop_can_stand(q):
+				bad_w.append(str(q.round()))
+		check(bad_w.is_empty(), "G  %s, wide: the mission's allies and the bot's posts stand on open ground%s" % [map_id, "" if bad_w.is_empty() else " (%s)" % ", ".join(bad_w)])
 
 
 # --- E: enemies on terrain ---------------------------------------------------------------
@@ -744,14 +789,14 @@ func _classic_maps() -> void:
 	await _frames(3)
 	main._on_mode_chosen("normal|stonehollow_quarry")
 	await _frames(3)
-	check(not main.campaign and main.map_id == "stonehollow_quarry" and main.paths.has_terrain() and main.FIELD_W == 640,
-			"K  Classic on Stonehollow Quarry: its terrain, on the 640px field")
+	check(not main.campaign and main.map_id == "stonehollow_quarry" and main.paths.has_terrain() and main.FIELD_W == main.get_viewport().get_visible_rect().size.x,
+			"K  Classic on Stonehollow Quarry: its terrain, across the whole %dpx field (no letterbox)" % main.FIELD_W)
 	check(main.castle.pal == main.castle.STYLES["guildhall"] and main.stage_music == "mountain", "K  ...its guildhall and its mountain music")
 	check(main.allowed("mage") and main.allowed("ability:fireball") and main.max_tier("swordsman", 0) == 4 and main.last_wave() == 20,
 			"K  ...and Classic's rules: every unit, every tier, 20 waves")
 	main.gold = 99999
 	main._on_hire_pressed("mage")
-	main.hire_at(Vector2(226, 560))
+	main.hire_at(Maps.fitted(Maps.MAPS["stonehollow_quarry"], main.FIELD_W)["bot_posts"][0])   # open ground on the stretched map
 	check(main.get_warriors().any(func(w): return w.kind == "mage"), "K  a Mage can be posted (no campaign locks)")
 	check(main.battle_xp.is_empty(), "K  ...and Classic earns no campaign XP")
 	# Its own best record, apart from the meadow's.
