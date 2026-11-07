@@ -1825,23 +1825,7 @@ func _repaint_ground() -> void:
 ## Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
 ## lit for the mode's mood; then the scenery on it (see field_art.gd).
 func _paint_ground(ci: CanvasItem) -> void:
-	var tint: Color = ambience.ground_tint()
-	for x in ceili(float(FIELD_W) / TILE):
-		for y in FIELD_H / TILE:
-			var variant := 4
-			if (y + 1) * TILE > DEPLOY_TOP:
-				var h := (x * 73856093) ^ (y * 19349663)
-				variant = 3 if h % 11 == 0 else absi(h) % 3
-			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
-	ci.draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
-	var map: Dictionary = Maps.get_map(map_id)
-	if map.is_empty():
-		FieldArt.draw_meadow(ci, FIELD_W, tint)
-	FieldArt.draw_spawn(ci, FIELD_W, tint)
-	for x in range(0, FIELD_W, 16):
-		ci.draw_rect(Rect2(x, DEPLOY_TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
-	if not map.is_empty():
-		FieldArt.draw_battlefield(ci, FIELD_W, tint, map)   # its own ground, trails and terrain
+	FieldArt.paint_field(ci, FIELD_W, FIELD_H, ambience.ground_tint(), Maps.get_map(map_id))
 
 
 ## The panel's colour carried on under the field across the whole width (the

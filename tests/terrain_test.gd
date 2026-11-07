@@ -685,7 +685,10 @@ func _classic_maps() -> void:
 	campaign.completed = ["ashwatch"]
 	campaign.save_game()
 	check(campaign.open_maps() == ["ashwatch_ridge", "stonehollow_quarry"], "K  ...and Stonehollow Quarry once that mission opens (%s)" % str(campaign.open_maps()))
-	# The picker on the Classic cards.
+	# Classic: the difficulties first, then the battlefield viewer (every map shows,
+	# locked till the campaign reaches it).
+	campaign.completed = []
+	campaign.save_game()
 	if main != null:
 		main.free()
 	main = load("res://main.tscn").instantiate()
@@ -693,17 +696,47 @@ func _classic_maps() -> void:
 	await _frames(3)
 	main.hud._show_cards("classic")
 	await _frames(2)
-	var picker = null
+	var names := {}
 	for c in main.hud.mode_cards:
-		if c is Button and c.text.begins_with("Battlefield"):
-			picker = c
-	check(picker != null and "The Meadow" in picker.text, "K  the Classic cards show a battlefield picker, on the meadow to start")
-	if picker != null:
-		picker.pressed.emit()
-		check(main.hud.classic_map == "ashwatch_ridge" and "Ashwatch Ridge" in picker.text, "K  a click picks the next battlefield (%s)" % picker.text)
-		picker.pressed.emit()
-		picker.pressed.emit()
-		check(main.hud.classic_map == "", "K  ...and comes back round to the meadow")
+		names[(c.get_child(0) as Label).text] = c
+	check(names.has("Easy") and names.has("Normal") and names.has("Hard") and "difficulty" in main.hud.mode_sub.text, "K  Classic opens on the difficulties (%s)" % ", ".join(names.keys()))
+	names["Normal"].pressed.emit()
+	await _frames(3)
+	var v = main.hud.battlefields
+	check(v != null and v.name_label.text == "The Meadow" and not v.start_button.disabled, "K  ...then the battlefield viewer, on the meadow")
+	check(v.maps == ["", "ashwatch_ridge", "stonehollow_quarry"], "K  ...with every battlefield to go through (%s)" % str(v.maps))
+	var key := InputEventKey.new()
+	key.keycode = KEY_RIGHT
+	key.pressed = true
+	v._input(key)
+	check(v.name_label.text == "Ashwatch Ridge" and not v.start_button.disabled and not v.lock_band.visible, "K  Right shows Ashwatch Ridge in full, open")
+	v.show_map(v.at + 1)
+	check(v.name_label.text == "Stonehollow Quarry" and v.start_button.disabled and v.lock_band.visible and "Stonehollow" in v.lock_label.text,
+			"K  ...then Stonehollow Quarry, shown but locked (\"%s\")" % v.lock_label.text.replace("\n", " "))
+	var picked := []
+	main.hud.mode_chosen.connect(func(k): picked.append(k))
+	v._start()
+	await _frames(10)
+	check(picked.is_empty(), "K  ...and a locked battlefield can't be started")
+	v.show_map(v.at + 1)
+	check(v.name_label.text == "The Meadow", "K  ...and it goes round to the meadow again")
+	v.back.emit()
+	await process_frame
+	check(main.hud.battlefields == null and "difficulty" in main.hud.mode_sub.text, "K  Back returns to the difficulties")
+	for c in main.hud.mode_cards:
+		if (c.get_child(0) as Label).text == "Hard":
+			c.pressed.emit()
+	await _frames(3)
+	v = main.hud.battlefields
+	v.show_map(1)
+	v.start_button.pressed.emit()
+	for f in 120:
+		await process_frame
+		if not picked.is_empty():
+			break
+	check(picked == ["hard|ashwatch_ridge"], "K  Start begins on the battlefield showing (%s)" % str(picked))
+	campaign.completed = ["ashwatch"]
+	campaign.save_game()
 	# A Classic game on Stonehollow Quarry.
 	main.free()
 	main = load("res://main.tscn").instantiate()

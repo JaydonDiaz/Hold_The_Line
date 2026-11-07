@@ -7,9 +7,33 @@ extends RefCounted
 ## line your troops can't be posted past. Seeded, so it's the same every game.
 ## The animated parts (fire, torches, weather) are in ambience.gd.
 
+const Sprites = preload("res://scripts/sprites.gd")
 const OUTLINE := Color(0.1, 0.07, 0.1)
 const TOP := 96.0          # main.DEPLOY_TOP: where the enemy entry zone ends
 const BOTTOM := 690.0      # above here the castle's towers start
+
+
+## The whole field's ground, w by h: grass tiles (dirt where the enemy camps), the
+## camp, the line troops can't be posted past, then the meadow's scenery or, for a
+## campaign map (maps.gd), its own ground, trails and terrain. Painted once (main.gd
+## bakes it into a texture), and by the Classic battlefield viewer.
+static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Dictionary) -> void:
+	var tile := 64
+	for x in ceili(w / tile):
+		for y in int(h) / tile:
+			var variant := 4
+			if (y + 1) * tile > TOP:
+				var hh := (x * 73856093) ^ (y * 19349663)
+				variant = 3 if hh % 11 == 0 else absi(hh) % 3
+			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * tile, y * tile, tile, tile), false, tint)
+	ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
+	if map.is_empty():
+		draw_meadow(ci, w, tint)
+	draw_spawn(ci, w, tint)
+	for x in range(0, int(w), 16):
+		ci.draw_rect(Rect2(x, TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
+	if not map.is_empty():
+		draw_battlefield(ci, w, tint, map)   # its own ground, trails and terrain
 
 
 ## Where the animated bits sit, for ambience.gd: the campfire and the camp torches.
@@ -28,7 +52,9 @@ static func _trail(w: float) -> PackedVector2Array:
 	return pts
 
 
-static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true) -> void:
+## `clear` (a campaign map's terrain shapes and trails) keeps the bushes, rocks and the
+## like off them and out of the way, so nothing that's only scenery looks like terrain.
+static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true, clear: Array = []) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
 	# Light and shade across the meadow, in 32px patches.
@@ -65,7 +91,7 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true) ->
 			ci.draw_rect(Rect2(f + Vector2(-0.5, -0.5), Vector2(1, 1)), Color(1, 0.8, 0.25) * tint)
 	# Rocks, some mossy.
 	for i in int(11 * count):
-		var p := _spot(rng, w)
+		var p := _spot(rng, w, clear)
 		var s := rng.randf_range(4, 9)
 		var rock := PackedVector2Array([p + Vector2(-s, 2), p + Vector2(-s * 0.7, -s * 0.6), p + Vector2(s * 0.1, -s * 0.9),
 				p + Vector2(s, -s * 0.3), p + Vector2(s * 0.9, 2)])
@@ -80,9 +106,10 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true) ->
 		ci.draw_colored_polygon(PackedVector2Array([rock[1], rock[2], p + Vector2(0, -s * 0.3)]), Color(0.72, 0.71, 0.68) * tint)
 		if rng.randf() < 0.4:
 			ci.draw_rect(Rect2(p + Vector2(-s * 0.6, -s * 0.5), Vector2(s * 0.7, 2)), Color(0.35, 0.55, 0.25) * tint)
-	# Bushes, a few with berries.
-	for i in int(7 * count):
-		var p := _spot(rng, w)
+	# Bushes, a few with berries (not on a campaign battlefield, where green clumps would
+	# pass for its trees, which block the way: these don't).
+	for i in (int(7 * count) if clear.is_empty() else 0):
+		var p := _spot(rng, w, clear)
 		ci.draw_set_transform(p + Vector2(0, 6), 0, Vector2(1, 0.4))
 		ci.draw_circle(Vector2.ZERO, 16.0, Color(0, 0, 0, 0.22))
 		ci.draw_set_transform(Vector2.ZERO)
@@ -98,7 +125,7 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true) ->
 				ci.draw_rect(Rect2(p + Vector2(rng.randf_range(-12, 10), rng.randf_range(-8, 4)), Vector2(2, 2)), Color(0.85, 0.15, 0.2) * tint)
 	# Little red mushrooms.
 	for i in int(6 * count):
-		var p := _spot(rng, w)
+		var p := _spot(rng, w, clear)
 		for k in rng.randi_range(1, 3):
 			var m := p + Vector2(k * 6.0, (k % 2) * 3.0)
 			ci.draw_rect(Rect2(m + Vector2(-1, -3), Vector2(2, 4)), Color(0.92, 0.88, 0.8) * tint)
@@ -124,10 +151,15 @@ static func _worn_trail(ci: CanvasItem, trail: PackedVector2Array, tint: Color, 
 static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, m: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 9090
+	var clear := []
+	for t in m.get("terrain", []):
+		clear.append({"pts": t["poly"], "poly": true})
+	for tr in m.get("trails", []):
+		clear.append({"pts": tr, "poly": false})
 	if m.get("biome", "meadow") == "mountain":
 		draw_mountain(ci, w, tint)
 	else:
-		draw_meadow(ci, w, tint, false)
+		draw_meadow(ci, w, tint, false, clear)
 	for tr in m.get("trails", []):
 		var pts := PackedVector2Array()
 		var src := PackedVector2Array(tr)
@@ -269,19 +301,42 @@ static func _crag(ci: CanvasItem, poly: PackedVector2Array, tint: Color, cliff: 
 
 
 ## A stand of trees: a dark floor of undergrowth, then crowns overlapping back to front.
+## A copse: trees whose crowns overlap to make its edge (no hard outline), shaded
+## undergrowth between them, and trunks showing under the trees along the front.
+## Everything stays inside the shape (where nothing can stand).
 static func _grove(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
-	ci.draw_colored_polygon(_shifted(poly, Vector2(3, 6)), Color(0, 0, 0, 0.25))
-	ci.draw_colored_polygon(poly, OUTLINE)
-	for p in Geometry2D.offset_polygon(poly, -2.0):
-		ci.draw_colored_polygon(p, Color(0.1, 0.22, 0.1) * tint)
-	var crowns := _inside(poly, 12.0, 26, rng)
-	crowns.sort_custom(func(a, b): return a.y < b.y)
-	for c in crowns:
-		var r := rng.randf_range(9.0, 12.0)
+	ci.draw_colored_polygon(_shifted(poly, Vector2(4, 7)), Color(0, 0, 0, 0.2))
+	for p in Geometry2D.offset_polygon(poly, -7.0):
+		ci.draw_colored_polygon(p, Color(0.08, 0.18, 0.09) * tint)
+	# Trees round the edge (their crowns are the edge), then more filling the middle.
+	var trees := []
+	for ring in Geometry2D.offset_polygon(poly, -11.0):
+		for i in ring.size():
+			var a: Vector2 = ring[i]
+			var b: Vector2 = ring[(i + 1) % ring.size()]
+			var n := maxi(1, int(a.distance_to(b) / 15.0))
+			for k in n:
+				trees.append([a.lerp(b, float(k) / n) + Vector2(rng.randf_range(-2, 2), rng.randf_range(-2, 2)), rng.randf_range(10.5, 12.5)])
+	for c in _inside(poly, 18.0, 14, rng):
+		trees.append([c, rng.randf_range(12.0, 15.0)])
+	trees.sort_custom(func(x, y): return x[0].y < y[0].y)
+	var trunk := Color(0.36, 0.24, 0.13) * tint
+	for tr in trees:
+		var c: Vector2 = tr[0]
+		var r: float = tr[1]
+		# A trunk under the crown, where there's room for it inside the copse.
+		var foot := c + Vector2(0, r * 0.75)
+		if Geometry2D.is_point_in_polygon(foot + Vector2(0, 4), poly):
+			ci.draw_rect(Rect2(foot + Vector2(-2.5, -3), Vector2(5, 7)), OUTLINE)
+			ci.draw_rect(Rect2(foot + Vector2(-1.5, -3), Vector2(3, 6)), trunk)
 		ci.draw_circle(c, r + 1.5, OUTLINE)
-		ci.draw_circle(c, r, Color(0.16, 0.36, 0.15) * tint)
-		ci.draw_circle(c + Vector2(-r * 0.3, -r * 0.35), r * 0.55, Color(0.25, 0.5, 0.22) * tint)
-		ci.draw_circle(c + Vector2(-r * 0.4, -r * 0.45), r * 0.22, Color(0.38, 0.62, 0.3) * tint)
+		ci.draw_circle(c, r, Color(0.13, 0.32, 0.14) * tint)
+		ci.draw_circle(c + Vector2(r * 0.2, r * 0.25), r * 0.7, Color(0.1, 0.26, 0.11) * tint)   # shade low and right
+		ci.draw_circle(c + Vector2(-r * 0.25, -r * 0.3), r * 0.62, Color(0.2, 0.44, 0.2) * tint)
+		ci.draw_circle(c + Vector2(-r * 0.4, -r * 0.45), r * 0.3, Color(0.32, 0.58, 0.28) * tint)
+		for k in 3:
+			var leaf := c + Vector2.from_angle(rng.randf_range(0, TAU)) * r * rng.randf_range(0.2, 0.75)
+			ci.draw_rect(Rect2(leaf, Vector2(2, 2)), Color(0.26, 0.5, 0.24) * tint)
 
 
 ## The old quarry: a cut stone rim, terraces stepping down, and a dark floor with rubble
@@ -305,8 +360,28 @@ static func _pit(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: Ran
 
 
 ## A spot on the meadow (not in the enemy entry zone or under the castle).
-static func _spot(rng: RandomNumberGenerator, w: float) -> Vector2:
-	return Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 24, BOTTOM))
+static func _spot(rng: RandomNumberGenerator, w: float, clear: Array = []) -> Vector2:
+	var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 24, BOTTOM))
+	for tries in 30:
+		if not _crowded(p, clear):
+			return p
+		p = Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 24, BOTTOM))
+	return Vector2(-100, -100)   # nowhere free: left off the field
+
+
+## Whether p is on or near any of `clear` (terrain polygons, or trails as polylines).
+static func _crowded(p: Vector2, clear: Array) -> bool:
+	for c in clear:
+		var pts := PackedVector2Array(c["pts"])
+		if c["poly"]:
+			for g in Geometry2D.offset_polygon(pts, 34.0):
+				if Geometry2D.is_point_in_polygon(p, g):
+					return true
+		else:
+			for i in pts.size() - 1:
+				if Geometry2D.get_closest_point_to_segment(p, pts[i], pts[i + 1]).distance_to(p) < 30.0:
+					return true
+	return false
 
 
 static func draw_spawn(ci: CanvasItem, w: float, tint: Color) -> void:
