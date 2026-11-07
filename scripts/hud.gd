@@ -1157,16 +1157,23 @@ func show_battlefields(diff: String) -> void:
 	v.setup(diff, Campaign.open_maps(), classic_map)
 	battlefields = v
 	v.start.connect(func(map: String):
+		if picking:
+			return
 		classic_map = map
 		picking = true
-		var out := create_tween()
-		out.tween_property(mode_screen, "modulate:a", 0.0, 0.4)
-		out.tween_callback(func(): mode_chosen.emit(diff + ("|" + map if map != "" else ""))))
+		fade_through_black(func():
+			battlefields = null
+			v.queue_free()
+			mode_chosen.emit(diff + ("|" + map if map != "" else ""))))
 	v.back.connect(func():
 		classic_map = v.maps[v.at] if v.open_maps.has(v.maps[v.at]) else classic_map
 		battlefields = null
 		v.queue_free())
-	mode_screen.add_child(v)
+	# It covers the whole screen (not just the 640-wide middle), above the title screen.
+	var view := get_viewport().get_visible_rect().size
+	v.position = Vector2(-offset.x, -offset.y)
+	v.size = view
+	add_child(v)
 
 
 func _battlefield_name(map: String) -> String:
@@ -1272,8 +1279,36 @@ func _pick_mode(key: String, card: Button, cards: Array, title: Label, sub: Labe
 	out.tween_property(title, "modulate:a", 0.0, 0.2)
 	out.parallel().tween_property(sub, "modulate:a", 0.0, 0.2)
 	out.parallel().tween_property(card, "modulate:a", 0.0, 0.3)
-	out.tween_property(mode_screen, "modulate:a", 0.0, 0.4)   # the whole title scene fades into the game
-	out.tween_callback(func(): mode_chosen.emit(key))
+	# Through black into whatever's next, set up out of sight (the field behind the title
+	# screen is the meadow, which isn't where every mode is played).
+	out.tween_callback(func(): fade_through_black(func(): mode_chosen.emit(key)))
+
+
+## Fades the whole screen to black, runs `then` (which sets up the next screen out of
+## sight), lets the field be painted, and fades back in.
+func fade_through_black(then: Callable) -> void:
+	var black := ColorRect.new()
+	black.color = Color.BLACK
+	black.modulate.a = 0.0
+	black.mouse_filter = Control.MOUSE_FILTER_STOP
+	var view := get_viewport().get_visible_rect().size
+	black.position = Vector2(-offset.x, -offset.y) - Vector2(8, 8)
+	black.size = view + Vector2(16, 16)
+	black.z_index = 100
+	add_child(black)
+	var t := create_tween()
+	t.tween_property(black, "modulate:a", 1.0, 0.3)
+	t.tween_callback(then)
+	t.tween_callback(func():
+		# Still over whatever `then` put up (the map, a cutscene...), and still the whole
+		# screen if the field's fitting changed.
+		if is_instance_valid(black):
+			move_child(black, get_child_count() - 1)
+			black.position = Vector2(-offset.x, -offset.y) - Vector2(8, 8)
+			black.size = get_viewport().get_visible_rect().size + Vector2(16, 16))
+	t.tween_interval(0.12)   # a few frames for the battlefield to be painted
+	t.tween_property(black, "modulate:a", 0.0, 0.35)
+	t.tween_callback(black.queue_free)
 
 
 ## Sandbox bar along the top of the field: wave level, single-enemy spawns, clear.

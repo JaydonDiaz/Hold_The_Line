@@ -1,6 +1,7 @@
 extends Control
-## Classic's battlefield viewer, after the difficulty: the whole battlefield as it will be
-## played (its ground, trails and terrain, the enemy camp, the castle wall) shown large,
+## Classic's battlefield viewer, after the difficulty, covering the whole screen: the whole
+## battlefield as it will be played (its ground, trails and terrain, the enemy camp, the
+## castle wall) shown as large as fits, over a darkened copy of it filling the rest,
 ## with its name and a few words. The arrows (or Left and Right) go through them; Start
 ## (or Enter) begins on the one showing; Back (or Esc) returns to the difficulties.
 ## Maps the campaign hasn't reached yet show too, greyed, locked, and can't be started.
@@ -11,10 +12,7 @@ signal back
 const FieldArt = preload("res://scripts/field_art.gd")
 const Maps = preload("res://scripts/maps.gd")
 const CD = preload("res://scripts/campaign_data.gd")
-const W := 640.0
-const H := 1040.0
 const FIELD := Vector2(640, 768)
-const SHOW := Rect2(80, 92, 480, 576)   # where the field is shown (three quarters size)
 const STONE := {"keep": [Color(0.6, 0.58, 0.56), Color(0.44, 0.42, 0.42), Color(0.75, 0.15, 0.15)],
 	"guildhall": [Color(0.47, 0.45, 0.47), Color(0.32, 0.3, 0.33), Color(0.62, 0.36, 0.16)]}
 
@@ -25,6 +23,12 @@ var difficulty := ""
 var vp: SubViewport
 var painter: Node2D
 var picture: TextureRect
+var backdrop: TextureRect
+var top_bar: ColorRect
+var panel: ColorRect
+var head: Label
+var arrows := []
+var back_button: Button
 var name_label: Label
 var blurb: Label
 var lock_band: ColorRect
@@ -41,15 +45,12 @@ func setup(diff: String, opened: Array, first := "") -> void:
 
 
 func _ready() -> void:
-	size = Vector2(W, H)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var bg := ColorRect.new()
 	bg.color = Color(0.09, 0.08, 0.07)
-	bg.size = size
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
-	var head := _label(Vector2(0, 22), Vector2(W, 30), 18, Color(0.85, 0.82, 0.75))
-	head.text = "Classic Survival · %s · choose your battlefield" % CD_name(difficulty)
-	# The field, painted at full size into a viewport and shown scaled down.
+	# The field, painted at full size into a viewport.
 	vp = SubViewport.new()
 	vp.size = Vector2i(FIELD)
 	vp.disable_3d = true
@@ -59,41 +60,84 @@ func _ready() -> void:
 	painter.draw.connect(_paint)
 	vp.add_child(painter)
 	add_child(vp)
-	var frame := ColorRect.new()
-	frame.color = Color(0.45, 0.35, 0.2)
-	frame.position = SHOW.position - Vector2(4, 4)
-	frame.size = SHOW.size + Vector2(8, 8)
-	add_child(frame)
+	# Behind everything, the same battlefield, darkened, filling the whole screen; in
+	# front, the battlefield itself as large as fits between the top bar and the panel.
+	backdrop = TextureRect.new()
+	backdrop.texture = vp.get_texture()
+	backdrop.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	backdrop.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	backdrop.modulate = Color(0.2, 0.2, 0.2)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(backdrop)
 	picture = TextureRect.new()
 	picture.texture = vp.get_texture()
 	picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	picture.stretch_mode = TextureRect.STRETCH_SCALE
-	picture.position = SHOW.position
-	picture.size = SHOW.size
+	picture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(picture)
+	top_bar = ColorRect.new()
+	top_bar.color = Color(0.06, 0.05, 0.04, 0.85)
+	add_child(top_bar)
+	head = _label(Vector2.ZERO, Vector2.ZERO, 18, Color(0.88, 0.85, 0.78))
+	head.text = "Classic Survival · %s · choose your battlefield" % CD_name(difficulty)
+	panel = ColorRect.new()
+	panel.color = Color(0.06, 0.05, 0.04, 0.88)
+	add_child(panel)
 	lock_band = ColorRect.new()
 	lock_band.color = Color(0, 0, 0, 0.6)
-	lock_band.position = Vector2(SHOW.position.x, SHOW.position.y + SHOW.size.y / 2.0 - 50)
-	lock_band.size = Vector2(SHOW.size.x, 100)
 	lock_band.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(lock_band)
-	lock_label = _label(Vector2(SHOW.position.x, SHOW.position.y + SHOW.size.y / 2.0 - 40), Vector2(SHOW.size.x, 80), 22, Color(1, 0.85, 0.5))
+	lock_label = _label(Vector2.ZERO, Vector2.ZERO, 24, Color(1, 0.85, 0.5))
 	lock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	for side in [-1, 1]:
-		var arrow := _button(Vector2(14 if side < 0 else W - 62, SHOW.position.y + SHOW.size.y / 2.0 - 40), Vector2(48, 80), "◀" if side < 0 else "▶")
-		arrow.add_theme_font_size_override("font_size", 26)
+		var arrow := _button(Vector2.ZERO, Vector2(52, 90), "◀" if side < 0 else "▶")
+		arrow.add_theme_font_size_override("font_size", 28)
 		arrow.tooltip_text = "Previous battlefield (Left)" if side < 0 else "Next battlefield (Right)"
 		arrow.pressed.connect(func(): show_map(at + side))
-	name_label = _label(Vector2(0, 690), Vector2(W, 40), 30, Color(1, 0.85, 0.35))
-	count_label = _label(Vector2(0, 728), Vector2(W, 22), 14, Color(0.6, 0.56, 0.5))
-	blurb = _label(Vector2(60, 754), Vector2(W - 120, 70), 17, Color(0.88, 0.85, 0.8))
+		arrows.append(arrow)
+	name_label = _label(Vector2.ZERO, Vector2.ZERO, 30, Color(1, 0.85, 0.35))
+	count_label = _label(Vector2.ZERO, Vector2.ZERO, 14, Color(0.6, 0.56, 0.5))
+	blurb = _label(Vector2.ZERO, Vector2.ZERO, 17, Color(0.88, 0.85, 0.8))
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var back_button := _button(Vector2(110, 900), Vector2(190, 60), "Back")
+	back_button = _button(Vector2.ZERO, Vector2(190, 56), "Back")
 	back_button.pressed.connect(func(): back.emit())
-	start_button = _button(Vector2(340, 900), Vector2(190, 60), "Start")
+	start_button = _button(Vector2.ZERO, Vector2(190, 56), "Start")
 	start_button.pressed.connect(_start)
+	resized.connect(_lay_out)
+	_lay_out()
 	show_map(at)
+
+
+## Places everything for the screen's size: the whole screen is covered, the panel's
+## text and buttons stay in a 640-wide column in the middle.
+func _lay_out() -> void:
+	var s := size
+	var mid := s.x / 2.0
+	backdrop.size = s
+	top_bar.size = Vector2(s.x, 48)
+	head.position = Vector2(0, 12)
+	head.size = Vector2(s.x, 26)
+	var panel_h := 230.0
+	panel.position = Vector2(0, s.y - panel_h)
+	panel.size = Vector2(s.x, panel_h)
+	var area := Rect2(0, 48, s.x, s.y - panel_h - 48)
+	picture.position = area.position
+	picture.size = area.size
+	lock_band.position = Vector2(0, area.get_center().y - 60)
+	lock_band.size = Vector2(s.x, 120)
+	lock_label.position = lock_band.position
+	lock_label.size = lock_band.size
+	arrows[0].position = Vector2(12, area.get_center().y - 45)
+	arrows[1].position = Vector2(s.x - 64, area.get_center().y - 45)
+	name_label.position = Vector2(0, s.y - panel_h + 16)
+	name_label.size = Vector2(s.x, 40)
+	count_label.position = Vector2(0, s.y - panel_h + 54)
+	count_label.size = Vector2(s.x, 22)
+	blurb.position = Vector2(mid - 280, s.y - panel_h + 80)
+	blurb.size = Vector2(560, 50)
+	back_button.position = Vector2(mid - 210, s.y - 84)
+	start_button.position = Vector2(mid + 20, s.y - 84)
 
 
 func CD_name(diff: String) -> String:
@@ -112,6 +156,7 @@ func show_map(i: int) -> void:
 	lock_label.visible = not opened
 	lock_label.text = "Locked\nReach %s in the campaign" % _territory(id)
 	picture.modulate = Color.WHITE if opened else Color(0.45, 0.45, 0.45)
+	backdrop.modulate = Color(0.2, 0.2, 0.2) if opened else Color(0.12, 0.12, 0.12)
 	start_button.disabled = not opened
 	painter.queue_redraw()
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
