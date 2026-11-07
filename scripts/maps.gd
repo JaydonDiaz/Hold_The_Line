@@ -5,6 +5,7 @@ extends RefCounted
 ##
 ## Coordinates are on the campaign field: 640 wide, the enemy camp above y 96, the
 ## castle wall at y 736. Each map has:
+##   name       what Classic's battlefield picker calls it
 ##   biome      which ground painter and palette (field_art.gd): "meadow" or "mountain"
 ##   lanes      [x from, x to] stretches of the top edge where enemies come in
 ##   terrain    shapes that block walking (not flying, not shots): {"kind", "poly"} with
@@ -24,6 +25,7 @@ const MAPS := {
 	# Ashwatch Keep: an open meadow with a rocky ridge across the middle, broken by two
 	# gaps (about 70 and 78px). Two short lines of Swordsmen can hold them.
 	"ashwatch_ridge": {
+		"name": "Ashwatch Ridge",
 		"biome": "meadow",
 		"lanes": [[40, 600]],
 		"terrain": [
@@ -49,6 +51,7 @@ const MAPS := {
 	# lanes about 120px wide that meet again before the gate. Barricades across the
 	# lanes make Sappers blow through them.
 	"stonehollow_quarry": {
+		"name": "Stonehollow Quarry",
 		"biome": "mountain",
 		"lanes": [[214, 426]],
 		"terrain": [

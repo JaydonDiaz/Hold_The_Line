@@ -28,6 +28,7 @@ signal campaign_map
 const Data = preload("res://scripts/data.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 const Sprites = preload("res://scripts/sprites.gd")
+const Maps = preload("res://scripts/maps.gd")
 const TitleScene = preload("res://scripts/title_scene.gd")
 const WorldMap = preload("res://scripts/world_map.gd")
 const Story = preload("res://scripts/story.gd")
@@ -74,6 +75,7 @@ var title_scene: Control   # the castle scene behind the mode cards (changes as 
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
 var world_map: Control = null   # the campaign map, while it's up
 var story: Control = null       # a story scene, while one is playing
+var classic_map := ""      # the battlefield picked for Classic ("" = the open meadow)
 var scene_music := ""       # while a cutscene is up, the music it wants (main plays it)
 const VILLAINS := ["ogre", "marshal"]   # speakers whose lines play as cutscenes of their own
 var mode_title: Label
@@ -1082,6 +1084,7 @@ func _show_cards(set_name: String) -> void:
 	var top := [Vector2(20, 636), Vector2(225, 636), Vector2(430, 636)]
 	var spots := []
 	var back := ["goto:top", "Back", "Back to the\nmain menu", Color(0.8, 0.8, 0.8), "goblin", ""]
+	var extra = null   # anything else on this set's screen (Classic's battlefield picker)
 	match set_name:
 		"top":
 			mode_sub.text = "Choose a mode"
@@ -1098,6 +1101,7 @@ func _show_cards(set_name: String) -> void:
 				modes.append(_difficulty_card(key, key))
 			modes.append(back)
 			spots = top + [Vector2(225, 834)]
+			extra = _battlefield_picker()
 		"campaign":
 			mode_sub.text = "Campaign: The Line"
 			if Campaign.has_save():
@@ -1119,7 +1123,9 @@ func _show_cards(set_name: String) -> void:
 	var cards := []
 	for i in modes.size():
 		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07))
-	mode_cards = cards
+	mode_cards = cards.duplicate()
+	if extra != null:
+		mode_cards.append(extra)   # goes with the cards when the set changes
 	for i in cards.size():
 		var key: String = modes[i][0]
 		var card: Button = cards[i]
@@ -1133,7 +1139,39 @@ func _show_cards(set_name: String) -> void:
 					title_scene.set_look("")
 					_show_cards(key.substr(5)))
 		else:
-			card.pressed.connect(func(): _pick_mode(key, card, cards, mode_title, mode_sub))
+			card.pressed.connect(func():
+				# Classic on a campaign battlefield: "<difficulty>|<map>".
+				var pick := key + ("|" + classic_map if set_name == "classic" and classic_map != "" and Data.DIFFICULTIES.has(key) else "")
+				_pick_mode(pick, card, cards, mode_title, mode_sub))
+
+
+## Classic's battlefield: the open meadow, or one of the maps the campaign has opened
+## (only shown once there's one). A click moves on to the next.
+func _battlefield_picker() -> Button:
+	var maps: Array = [""] + Campaign.open_maps()
+	if maps.size() < 2:
+		classic_map = ""
+		return null
+	if not maps.has(classic_map):
+		classic_map = ""
+	var b := _button(mode_screen, Vector2(120, 572), Vector2(400, 48), "")
+	b.add_theme_font_size_override("font_size", 18)
+	b.tooltip_text = "Fight Classic on the open meadow, or on a battlefield from the campaign"
+	var show := func():
+		b.text = "Battlefield:  %s   (%d/%d)  ▸" % [_battlefield_name(classic_map), maps.find(classic_map) + 1, maps.size()]
+	show.call()
+	b.pressed.connect(func():
+		if picking:
+			return
+		classic_map = maps[(maps.find(classic_map) + 1) % maps.size()]
+		show.call())
+	b.modulate.a = 0.0
+	create_tween().tween_property(b, "modulate:a", 1.0, 0.3).set_delay(0.3)
+	return b
+
+
+func _battlefield_name(map: String) -> String:
+	return "The Meadow" if map == "" else Maps.MAPS[map].get("name", map)
 
 
 ## A difficulty's card (Classic, or a new campaign's), keyed `key`.

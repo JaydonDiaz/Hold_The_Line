@@ -313,6 +313,22 @@ func bank_xp(gains: Dictionary, won: bool) -> void:
 		last_battle[kind] = [gains[kind] * share, level_of(kind) - before]
 
 
+# --- Classic on the campaign's battlefields ----------------------------------------
+
+## The battlefields this campaign has opened, for Classic: each mission's map once the
+## mission can be played (in the order the missions come). None without a campaign.
+func open_maps() -> Array:
+	var out := []
+	if not has_save():
+		return out
+	for m in CD.MISSIONS:
+		var d: Dictionary = CD.MISSIONS[m]
+		var map: String = d.get("map", "")
+		if map != "" and not out.has(map) and (completed.has(m) or requirements_met(d["territory"])):
+			out.append(map)
+	return out
+
+
 # --- The map --------------------------------------------------------------------
 
 func territory_done(t: String) -> bool:

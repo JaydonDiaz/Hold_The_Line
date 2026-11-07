@@ -49,6 +49,8 @@ var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
 var campaign := false
+var classic_map := ""      # Classic on one of the campaign's battlefields ("" = the open meadow)
+var map_id := ""           # the battlefield this game is on (a maps.gd id, "" for the meadow)
 var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
 var credit := ""             # campaign XP: the unit kind whose doing the damage dealt right now is
 var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
@@ -262,16 +264,18 @@ func _fit_screen() -> void:
 func choose_mode(mode: String) -> void:
 	campaign = mode == "campaign"
 	mission = Campaign.mission() if campaign else {}
-	if campaign:
-		_lock_portrait(true)
-	# The battlefield: a campaign mission's own map (terrain, lanes, castle), or the
-	# open meadow everywhere else.
-	paths.set_map(Maps.get_map(mission.get("map", "")) if campaign else {})
+	# The battlefield: a campaign mission's own map (terrain, lanes, castle), Classic on
+	# one the campaign has opened, or the open meadow.
+	var classic := not campaign and Data.DIFFICULTIES.has(mode)
+	map_id = mission.get("map", "") if campaign else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
+	if campaign or map_id != "":
+		_lock_portrait(true)   # maps are laid out on the fixed 640px field
+	paths.set_map(Maps.get_map(map_id))
 	if paths.has_terrain():
 		_repaint_ground()
-	var map: Dictionary = Maps.get_map(mission.get("map", "")) if campaign else {}
+	var map: Dictionary = Maps.get_map(map_id)
 	stage_music = map.get("music", "mountain" if map.get("biome", "") == "mountain" else "calm")
-	castle.set_style(Maps.get_map(mission.get("map", "")).get("castle", "keep") if campaign else "keep")
+	castle.set_style(map.get("castle", "keep"))
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
 	difficulty = Campaign.difficulty if campaign else ("normal" if freeplay or tutorial else mode)
@@ -871,7 +875,9 @@ func _on_mode_chosen(key: String) -> void:
 		Campaign.new_campaign(key.get_slice(":", 2))
 		play_prologue()
 	else:
-		choose_mode(key)
+		# Classic on a campaign battlefield comes as "<difficulty>|<map>".
+		classic_map = key.get_slice("|", 1) if "|" in key else ""
+		choose_mode(key.get_slice("|", 0))
 
 
 func open_world_map() -> void:
@@ -1078,7 +1084,7 @@ func _save_record(survived: int) -> int:
 		return 0
 	var cfg := ConfigFile.new()
 	cfg.load(records_path)
-	var key := difficulty
+	var key := difficulty + ("@" + map_id if map_id != "" else "")   # each battlefield keeps its own best
 	var previous: int = cfg.get_value("best", key, 0)
 	if survived > previous:
 		cfg.set_value("best", key, survived)
@@ -1828,7 +1834,7 @@ func _paint_ground(ci: CanvasItem) -> void:
 				variant = 3 if h % 11 == 0 else absi(h) % 3
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
 	ci.draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
-	var map: Dictionary = Maps.get_map(mission.get("map", "")) if campaign else {}
+	var map: Dictionary = Maps.get_map(map_id)
 	if map.is_empty():
 		FieldArt.draw_meadow(ci, FIELD_W, tint)
 	FieldArt.draw_spawn(ci, FIELD_W, tint)

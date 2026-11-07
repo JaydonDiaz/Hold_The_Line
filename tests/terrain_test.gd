@@ -18,6 +18,10 @@ extends SceneTree
 ##   L  placement   hires, emplacements, move orders, drags and group moves are refused on
 ##                  terrain, in no-build zones and out of reach (with a message), by click,
 ##                  hotkey or drag; barricades may rest their ends on rock to seal a gap
+##   K  classic     Classic can be played on each battlefield the campaign has opened (none
+##                  without a campaign): the map's terrain, castle and music, Classic's
+##                  rules (every unit, every tier, 20 waves), its own best record, and the
+##                  Ogre King, the biggest enemy, walking it to the castle
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const Maps = preload("res://scripts/maps.gd")
@@ -61,6 +65,8 @@ func _run() -> void:
 		await _troops()
 	if _wants("L"):
 		await _placement()
+	if _wants("K"):
+		await _classic_maps()
 	print("%d checks, %d failed" % [checks, fails])
 	if main != null:
 		main.free()
@@ -664,3 +670,92 @@ func _placement() -> void:
 	main._on_hire_pressed("swordsman")
 	main.hire_at(Vector2(330, 350))
 	check(main.get_warriors().size() == n + 1 and main.ground_problem(Vector2(330, 350)) == "", "L  Classic: the same spot is open meadow")
+
+
+# --- K: Classic on the campaign's battlefields --------------------------------------------
+
+func _classic_maps() -> void:
+	for f in [TEST_SAVE, TEST_SAVE + ".tmp"]:
+		if FileAccess.file_exists(f):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
+	campaign.reset()
+	check(campaign.open_maps().is_empty(), "K  no campaign: Classic is on the meadow only")
+	campaign.new_campaign("normal")
+	check(campaign.open_maps() == ["ashwatch_ridge"], "K  a new campaign opens Ashwatch Ridge for Classic (%s)" % str(campaign.open_maps()))
+	campaign.completed = ["ashwatch"]
+	campaign.save_game()
+	check(campaign.open_maps() == ["ashwatch_ridge", "stonehollow_quarry"], "K  ...and Stonehollow Quarry once that mission opens (%s)" % str(campaign.open_maps()))
+	# The picker on the Classic cards.
+	if main != null:
+		main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main.hud._show_cards("classic")
+	await _frames(2)
+	var picker = null
+	for c in main.hud.mode_cards:
+		if c is Button and c.text.begins_with("Battlefield"):
+			picker = c
+	check(picker != null and "The Meadow" in picker.text, "K  the Classic cards show a battlefield picker, on the meadow to start")
+	if picker != null:
+		picker.pressed.emit()
+		check(main.hud.classic_map == "ashwatch_ridge" and "Ashwatch Ridge" in picker.text, "K  a click picks the next battlefield (%s)" % picker.text)
+		picker.pressed.emit()
+		picker.pressed.emit()
+		check(main.hud.classic_map == "", "K  ...and comes back round to the meadow")
+	# A Classic game on Stonehollow Quarry.
+	main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main._on_mode_chosen("normal|stonehollow_quarry")
+	await _frames(3)
+	check(not main.campaign and main.map_id == "stonehollow_quarry" and main.paths.has_terrain() and main.FIELD_W == 640,
+			"K  Classic on Stonehollow Quarry: its terrain, on the 640px field")
+	check(main.castle.pal == main.castle.STYLES["guildhall"] and main.stage_music == "mountain", "K  ...its guildhall and its mountain music")
+	check(main.allowed("mage") and main.allowed("ability:fireball") and main.max_tier("swordsman", 0) == 4 and main.last_wave() == 20,
+			"K  ...and Classic's rules: every unit, every tier, 20 waves")
+	main.gold = 99999
+	main._on_hire_pressed("mage")
+	main.hire_at(Vector2(226, 560))
+	check(main.get_warriors().any(func(w): return w.kind == "mage"), "K  a Mage can be posted (no campaign locks)")
+	check(main.battle_xp.is_empty(), "K  ...and Classic earns no campaign XP")
+	# Its own best record, apart from the meadow's.
+	main.records_path = "user://terrain_test_records.cfg"
+	main._save_record(7)
+	var cfg := ConfigFile.new()
+	cfg.load(main.records_path)
+	check(cfg.get_value("best", "normal@stonehollow_quarry", 0) == 7 and cfg.get_value("best", "normal", 0) == 0, "K  its best is kept apart from the meadow's")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(main.records_path))
+	# The Ogre King, Classic's last enemy, walks each map to the castle.
+	for map_id in Maps.MAPS:
+		main.free()
+		main = load("res://main.tscn").instantiate()
+		root.add_child(main)
+		await _frames(3)
+		main._on_mode_chosen("normal|" + map_id)
+		await _frames(2)
+		var r: float = Data.ENEMIES["ogre_king"]["radius"]
+		var p := Vector2(main.FIELD_W / 2.0, -r)
+		var arrived := false
+		var grazed := 0
+		for step in 900:
+			p += main.paths.direction(p, r) * 3.0
+			p = main.paths.slide(p, p, r)
+			if main.paths.blocked(p, r - 2.0):
+				grazed += 1
+			if p.y >= main.CASTLE_Y - r:
+				arrived = true
+				break
+		check(arrived and grazed == 0, "K  %s: the Ogre King can walk it to the castle (grazed rock %d times)" % [map_id, grazed])
+	# Classic on the meadow is just as it was.
+	main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main._on_mode_chosen("normal")
+	await _frames(2)
+	check(main.map_id == "" and not main.paths.has_terrain() and main.castle.pal == main.castle.STYLES["keep"] and main.stage_music == "calm",
+			"K  Classic picked without a battlefield is the open meadow, as before")
+	campaign.reset()
