@@ -14,6 +14,17 @@ const WOOD := Color(0.42, 0.26, 0.14)
 const IRON := Color(0.3, 0.3, 0.34)
 const BANNER := Color(0.75, 0.15, 0.15)
 const BANNER_TRIM := Color(1.0, 0.82, 0.3)
+# Castle styles (a campaign map picks one; everywhere else it's the keep). Same walls,
+# towers, gate and wall-guard posts; only the look changes.
+#   keep       Ashwatch: pale frontier stone, red and blue banners, ivy
+#   guildhall  Stonehollow: dark basalt, bronze-banded gate, its banners with a hammer
+const STYLES := {
+	"keep": {"stone": STONE, "stone_dark": STONE_DARK, "stone_light": STONE_LIGHT, "wood": WOOD, "iron": IRON,
+		"banner": BANNER, "banner_trim": BANNER_TRIM, "left_banner": Color(0.25, 0.38, 0.75), "ivy": true, "emblem": false},
+	"guildhall": {"stone": Color(0.47, 0.45, 0.47), "stone_dark": Color(0.32, 0.3, 0.33), "stone_light": Color(0.58, 0.56, 0.58),
+		"wood": Color(0.3, 0.19, 0.11), "iron": Color(0.66, 0.47, 0.2), "banner": Color(0.62, 0.36, 0.16),
+		"banner_trim": Color(0.95, 0.72, 0.3), "left_banner": Color(0.62, 0.36, 0.16), "ivy": false, "emblem": true},
+}
 const TOWER_W := 60.0
 const TOWER_RISE := 48.0     # how far the corner towers stand above the wall
 const GATE_W := 96.0
@@ -25,6 +36,14 @@ var hit := 0.0        # > 0 just after a hit: the castle shakes and flashes (har
 var cracks := []      # crack lines, revealed one by one as it takes damage
 var top_part := Top.new()   # the moving parts, drawn over everything else of the castle
 var _drawn_state := Vector3(-1, -1, -1)   # cracks shown, field width and lamplight the stonework was drawn with
+var pal: Dictionary = STYLES["keep"]
+
+
+## Dresses the castle in one of STYLES.
+func set_style(style: String) -> void:
+	pal = STYLES.get(style, STYLES["keep"])
+	_drawn_state = Vector3(-1, -1, -1)
+	queue_redraw()
 
 
 func _ready() -> void:
@@ -139,7 +158,7 @@ func _draw() -> void:
 	for i in range(1, towers.size()):
 		_tower(towers[i], tint)
 	# Ivy creeping up the wall here and there.
-	for i in int(w / 160.0):
+	for i in (int(w / 160.0) if pal["ivy"] else 0):
 		var ix: float = fposmod(i * 157.0 + 60.0, w)
 		if absf(ix - w / 2.0) > GATE_W * 0.7 and ix > TOWER_W + 6.0 and ix < w - TOWER_W - 6.0:
 			_ivy(Vector2(ix, bottom - 4))
@@ -198,7 +217,7 @@ func _draw_top(ci: CanvasItem) -> void:
 func _stones(r: Rect2, tint: Color) -> void:
 	draw_rect(r, OUTLINE)
 	var inner := r.grow(-2)
-	draw_rect(inner, STONE_DARK * tint)
+	draw_rect(inner, pal["stone_dark"] * tint)
 	var row := 0
 	var y := inner.position.y
 	while y < inner.end.y:
@@ -209,25 +228,25 @@ func _stones(r: Rect2, tint: Color) -> void:
 			var x1 := minf(x + 16.0, inner.end.x)
 			if x1 - x0 > 1.0:
 				var k := fposmod(sin(x * 12.9898 + y * 78.233) * 43758.5453, 1.0)
-				var c := STONE.lerp(STONE_LIGHT if k > 0.5 else STONE_DARK, absf(k - 0.5) * 1.1) * tint
+				var c: Color = pal["stone"].lerp(pal["stone_light"] if k > 0.5 else pal["stone_dark"], absf(k - 0.5) * 1.1) * tint
 				var b := Rect2(x0 + (0.0 if x0 == inner.position.x else 1.0), y + 1.0, x1 - x0 - 1.0, h - 1.0)
 				draw_rect(b, c)
 				draw_rect(Rect2(b.position, Vector2(b.size.x, 1)), c.lightened(0.15))
 				if k > 0.93:
-					draw_line(b.position + Vector2(4, 1), b.position + Vector2(8, h - 2), STONE_DARK * tint, 1.0)
+					draw_line(b.position + Vector2(4, 1), b.position + Vector2(8, h - 2), pal["stone_dark"] * tint, 1.0)
 			x += 16.0
 		y += 8.0
 		row += 1
 	# The wall's foot sits in a band of darker, larger stones.
 	if r.end.y >= main.FIELD_H - 1.0:
-		draw_rect(Rect2(inner.position.x, inner.end.y - 5, inner.size.x, 5), (STONE_DARK * tint).darkened(0.25))
+		draw_rect(Rect2(inner.position.x, inner.end.y - 5, inner.size.x, 5), (pal["stone_dark"] * tint).darkened(0.25))
 
 
 func _merlon(p: Vector2, tint: Color) -> void:
 	draw_rect(Rect2(p + Vector2(0, -9), Vector2(14, 11)), OUTLINE)
-	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 8)), STONE_LIGHT * tint)
-	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 2)), (STONE_LIGHT * tint).lightened(0.2))
-	draw_rect(Rect2(p + Vector2(10, -5), Vector2(2, 6)), STONE * tint)
+	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 8)), pal["stone_light"] * tint)
+	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 2)), (pal["stone_light"] * tint).lightened(0.2))
+	draw_rect(Rect2(p + Vector2(10, -5), Vector2(2, 6)), pal["stone"] * tint)
 
 
 func _tower(r: Rect2, tint: Color) -> void:
@@ -239,7 +258,7 @@ func _tower(r: Rect2, tint: Color) -> void:
 	# A shadow under the battlements, and an arched window that's lamplit after dark.
 	draw_rect(Rect2(r.position.x + 2, r.position.y + 2, r.size.x - 4, 3), Color(0, 0, 0, 0.25))
 	var mid := r.position.x + r.size.x / 2
-	draw_rect(Rect2(mid - 5, r.position.y + 11, 10, 15), STONE_LIGHT * tint)   # the window's frame (its pane is in _draw_top)
+	draw_rect(Rect2(mid - 5, r.position.y + 11, 10, 15), pal["stone_light"] * tint)   # the window's frame (its pane is in _draw_top)
 
 
 ## The gate: an arched wooden door behind an iron portcullis, in a ring of carved stones.
@@ -253,17 +272,17 @@ func _gate(base: Vector2, tint: Color) -> void:
 		var a1 := PI + PI * (i + 1) / 9.0
 		var ring := PackedVector2Array([c + Vector2.from_angle(a0) * (half + 2), c + Vector2.from_angle(a0) * (half + 8),
 				c + Vector2.from_angle(a1) * (half + 8), c + Vector2.from_angle(a1) * (half + 2)])
-		draw_colored_polygon(ring, (STONE_LIGHT if i % 2 == 0 or i == 4 else STONE) * tint)
+		draw_colored_polygon(ring, (pal["stone_light"] if i % 2 == 0 or i == 4 else pal["stone"]) * tint)
 		draw_polyline(ring + PackedVector2Array([ring[0]]), OUTLINE, 1.0)
 	Sprites.disc(self, Vector2(base.x, top + half), half + 2, OUTLINE)
 	draw_rect(Rect2(base.x - half - 2, top + half, half * 2 + 4, h - half), OUTLINE)
-	Sprites.disc(self, Vector2(base.x, top + half), half, WOOD * tint)
-	draw_rect(Rect2(base.x - half, top + half, half * 2, h - half), WOOD * tint)
+	Sprites.disc(self, Vector2(base.x, top + half), half, pal["wood"] * tint)
+	draw_rect(Rect2(base.x - half, top + half, half * 2, h - half), pal["wood"] * tint)
 	for i in 5:
 		var x := base.x - half + 4 + i * 8.0
-		draw_line(Vector2(x, top + 4), Vector2(x, base.y), IRON, 2.0)
+		draw_line(Vector2(x, top + 4), Vector2(x, base.y), pal["iron"], 2.0)
 	for y in [top + 14, top + 24]:
-		draw_line(Vector2(base.x - half, y), Vector2(base.x + half, y), IRON, 2.0)
+		draw_line(Vector2(base.x - half, y), Vector2(base.x + half, y), pal["iron"], 2.0)
 
 
 ## A torch in a bracket on the gatehouse (its glow after dark is in ambience.gd).
@@ -277,14 +296,19 @@ func _torch(ci: CanvasItem, at: Vector2) -> void:
 
 ## A long banner hanging down a corner tower, its tail swaying.
 func _banner(ci: CanvasItem, top: Vector2, blue: bool) -> void:
-	var cloth := Color(0.25, 0.38, 0.75) if blue else BANNER
+	var cloth: Color = pal["left_banner"] if blue else pal["banner"]
 	var sway := sin(t * 1.6 + top.x) * 1.0
 	var pts := PackedVector2Array([top + Vector2(-8, 0), top + Vector2(8, 0), top + Vector2(8 + sway, 30), top + Vector2(sway, 25), top + Vector2(-8 + sway, 30)])
 	ci.draw_colored_polygon(pts, cloth)
 	ci.draw_polyline(pts + PackedVector2Array([pts[0]]), OUTLINE, 1.5)
 	ci.draw_line(top + Vector2(-10, 0), top + Vector2(10, 0), Color(0.4, 0.26, 0.13), 2.0)
-	ci.draw_line(top + Vector2(0, 6), top + Vector2(sway * 0.5, 20), BANNER_TRIM, 1.5)
-	ci.draw_line(top + Vector2(-4, 9), top + Vector2(4, 9), BANNER_TRIM, 1.5)
+	if pal["emblem"]:
+		# The guild's hammer.
+		ci.draw_line(top + Vector2(sway * 0.3, 8), top + Vector2(sway * 0.5, 22), pal["banner_trim"], 2.0)
+		ci.draw_rect(Rect2(top + Vector2(-4 + sway * 0.3, 6), Vector2(8, 4)), pal["banner_trim"])
+	else:
+		ci.draw_line(top + Vector2(0, 6), top + Vector2(sway * 0.5, 20), pal["banner_trim"], 1.5)
+		ci.draw_line(top + Vector2(-4, 9), top + Vector2(4, 9), pal["banner_trim"], 1.5)
 
 
 ## A clump of ivy climbing the wall from its foot.
@@ -309,8 +333,8 @@ func _flag(ci: CanvasItem, base: Vector2, phase: float) -> void:
 		bottom_edge.append(top + Vector2(x + 1, 11 + wave))
 	bottom_edge.reverse()
 	var flag := pts + bottom_edge
-	ci.draw_colored_polygon(flag, BANNER)
-	ci.draw_polyline(pts, BANNER_TRIM, 2.0)
+	ci.draw_colored_polygon(flag, pal["banner"])
+	ci.draw_polyline(pts, pal["banner_trim"], 2.0)
 
 
 func _smoke(ci: CanvasItem, at: Vector2, dmg: float) -> void:

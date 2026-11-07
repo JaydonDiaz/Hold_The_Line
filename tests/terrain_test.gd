@@ -118,6 +118,7 @@ func _grid() -> void:
 	var paths = main.paths
 	check(not paths.has_terrain() and not paths.blocked(Vector2(320, 400), 30.0) and paths.direction(Vector2(320, 400), 12.0) == Vector2.ZERO,
 			"G  Classic has no terrain: nothing is blocked and enemies march straight down as before")
+	check(main.castle.pal == main.castle.STYLES["keep"], "G  Classic's castle is the usual keep")
 	check(paths.open_spot(Vector2(320, 400)) == Vector2(320, 400) and paths.troop_can_stand(Vector2(5, 120)) and paths.melee_can_reach(Vector2(320, 50)),
 			"G  ...and every terrain check passes everything through")
 	# A known shape: a 64px square at (96..160, 192..256).
@@ -151,6 +152,7 @@ func _grid() -> void:
 		await _mission(mid)
 		paths = main.paths
 		check(main.FIELD_W == 640 and paths.has_terrain(), "G  %s: laid on the 640px field" % map_id)
+		check(main.castle.pal == main.castle.STYLES[m["castle"]], "G  %s: the castle is dressed as its %s" % [map_id, m["castle"]])
 		var gate: Vector2 = Vector2(320, main.CASTLE_Y - 20)
 		check(paths.troop_can_stand(gate), "G  %s: troops can stand at the gate" % map_id)
 		# Every lane reaches the castle, for every enemy size.

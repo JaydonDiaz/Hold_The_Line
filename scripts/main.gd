@@ -269,6 +269,7 @@ func choose_mode(mode: String) -> void:
 	paths.set_map(Maps.get_map(mission.get("map", "")) if campaign else {})
 	if paths.has_terrain():
 		_repaint_ground()
+	castle.set_style(Maps.get_map(mission.get("map", "")).get("castle", "keep") if campaign else "keep")
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
 	difficulty = Campaign.difficulty if campaign else ("normal" if freeplay or tutorial else mode)
