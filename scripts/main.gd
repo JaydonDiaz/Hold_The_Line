@@ -1822,10 +1822,14 @@ func _paint_ground(ci: CanvasItem) -> void:
 				variant = 3 if h % 11 == 0 else absi(h) % 3
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * TILE, y * TILE, TILE, TILE), false, tint)
 	ci.draw_rect(Rect2(0, TILE, FIELD_W, DEPLOY_TOP - TILE), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
-	FieldArt.draw_meadow(ci, FIELD_W, tint)
+	var map: Dictionary = Maps.get_map(mission.get("map", "")) if campaign else {}
+	if map.is_empty():
+		FieldArt.draw_meadow(ci, FIELD_W, tint)
 	FieldArt.draw_spawn(ci, FIELD_W, tint)
 	for x in range(0, FIELD_W, 16):
 		ci.draw_rect(Rect2(x, DEPLOY_TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
+	if not map.is_empty():
+		FieldArt.draw_battlefield(ci, FIELD_W, tint, map)   # its own ground, trails and terrain
 
 
 ## The panel's colour carried on under the field across the whole width (the

@@ -28,7 +28,7 @@ static func _trail(w: float) -> PackedVector2Array:
 	return pts
 
 
-static func draw_meadow(ci: CanvasItem, w: float, tint: Color) -> void:
+static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
 	# Light and shade across the meadow, in 32px patches.
@@ -43,12 +43,8 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color) -> void:
 			x += 32.0
 		y += 32.0
 	# A trail worn down to the gate by everything that's marched along it.
-	var trail := _trail(w)
-	ci.draw_polyline(trail, Color(Color(0.42, 0.33, 0.2) * tint, 0.35), 30.0)
-	ci.draw_polyline(trail, Color(Color(0.55, 0.44, 0.28) * tint, 0.35), 16.0)
-	for i in 40:
-		var p := trail[rng.randi() % trail.size()] + Vector2(rng.randf_range(-12, 12), rng.randf_range(-12, 12))
-		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(0.62, 0.56, 0.48) * tint)
+	if trail:
+		_worn_trail(ci, _trail(w), tint, rng)
 	var count := w / 640.0
 	# Tufts of taller grass.
 	for i in int(70 * count):
@@ -110,6 +106,202 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color) -> void:
 			ci.draw_rect(Rect2(m + Vector2(-3.5, -6), Vector2(7, 3.5)), Color(0.85, 0.2, 0.18) * tint)
 			ci.draw_rect(Rect2(m + Vector2(-2, -5.5), Vector2(1, 1)), Color.WHITE * tint)
 			ci.draw_rect(Rect2(m + Vector2(1, -5), Vector2(1, 1)), Color.WHITE * tint)
+
+
+static func _worn_trail(ci: CanvasItem, trail: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_polyline(trail, Color(Color(0.42, 0.33, 0.2) * tint, 0.35), 30.0)
+	ci.draw_polyline(trail, Color(Color(0.55, 0.44, 0.28) * tint, 0.35), 16.0)
+	for i in 40:
+		var p := trail[rng.randi() % trail.size()] + Vector2(rng.randf_range(-12, 12), rng.randf_range(-12, 12))
+		ci.draw_rect(Rect2(p, Vector2(2, 2)), Color(0.62, 0.56, 0.48) * tint)
+
+
+# --- Campaign battlefields (maps.gd) ---------------------------------------------------------
+
+## A campaign map's ground: its biome, the trails worn through its gaps, then its terrain
+## (rock, cliffs, trees, the quarry), all painted once into the field. Tall parts (rock
+## tops, canopies) stay inside each shape, which is exactly where nothing can stand.
+static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, m: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9090
+	if m.get("biome", "meadow") == "mountain":
+		draw_mountain(ci, w, tint)
+	else:
+		draw_meadow(ci, w, tint, false)
+	for tr in m.get("trails", []):
+		var pts := PackedVector2Array()
+		var src := PackedVector2Array(tr)
+		for i in src.size() - 1:
+			for k in 6:
+				var a := src[i].lerp(src[i + 1], k / 6.0)
+				pts.append(a + Vector2(sin(a.y * 0.05) * 4.0, 0))
+		pts.append(src[src.size() - 1])
+		_worn_trail(ci, pts, tint, rng)
+	var shapes: Array = m.get("terrain", [])
+	# Back to front, so lower shapes overlap the ones behind them.
+	shapes = shapes.duplicate()
+	shapes.sort_custom(func(a, b): return _bottom(a["poly"]) < _bottom(b["poly"]))
+	for t in shapes:
+		var poly := PackedVector2Array(t["poly"])
+		match t["kind"]:
+			"rock":
+				_crag(ci, poly, tint, false, rng)
+			"cliff":
+				_crag(ci, poly, tint, true, rng)
+			"trees":
+				_grove(ci, poly, tint, rng)
+			"pit":
+				_pit(ci, poly, tint, rng)
+
+
+static func _bottom(poly: Array) -> float:
+	var y := -INF
+	for p in poly:
+		y = maxf(y, p.y)
+	return y
+
+
+## Rocky mountain ground: grey-brown scree in light and dark patches, stones and the odd
+## tough tuft of grass.
+static func draw_mountain(ci: CanvasItem, w: float, tint: Color) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5151
+	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.47, 0.43, 0.38) * tint)
+	var y := TOP
+	while y < 736.0:
+		var x := 0.0
+		while x < w:
+			var v := sin(x * 0.013 + 0.7) * sin(y * 0.017 + 1.1) + sin(x * 0.029 - y * 0.021) * 0.5
+			if absf(v) > 0.2:
+				var c := Color(0.6, 0.55, 0.48) if v > 0.0 else Color(0.32, 0.29, 0.26)
+				ci.draw_rect(Rect2(x, y, 32, 32), Color(c * tint, minf(absf(v) * 0.14, 0.16)))
+			x += 32.0
+		y += 32.0
+	for i in int(260 * w / 640.0):
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 4, 730))
+		var s := rng.randf_range(1.5, 3.5)
+		ci.draw_rect(Rect2(p, Vector2(s, s * 0.7)), (Color(0.62, 0.58, 0.52) if rng.randf() < 0.6 else Color(0.3, 0.27, 0.24)) * tint)
+	for i in int(36 * w / 640.0):
+		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 24, BOTTOM))
+		var g := Color(0.32, 0.4, 0.2) * tint
+		ci.draw_line(p, p + Vector2(-2, -5), g, 1.5)
+		ci.draw_line(p, p + Vector2(1, -6), g, 1.5)
+
+
+## Points inside `poly` at least `inset` from its edges, scattered (for detail on a shape).
+static func _inside(poly: PackedVector2Array, inset: float, n: int, rng: RandomNumberGenerator) -> Array:
+	var shrunk := Geometry2D.offset_polygon(poly, -inset)
+	if shrunk.is_empty():
+		return []
+	var lo := poly[0]
+	var hi := poly[0]
+	for q in poly:
+		lo = Vector2(minf(lo.x, q.x), minf(lo.y, q.y))
+		hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
+	var out := []
+	var tries := 0
+	while out.size() < n and tries < n * 30:
+		tries += 1
+		var p := Vector2(rng.randf_range(lo.x, hi.x), rng.randf_range(lo.y, hi.y))
+		for s in shrunk:
+			if Geometry2D.is_point_in_polygon(p, s):
+				out.append(p)
+				break
+	return out
+
+
+static func _shifted(poly: PackedVector2Array, by: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for q in poly:
+		out.append(q + by)
+	return out
+
+
+## Rock (a ridge outcrop) or cliff: outlined, a shaded skirt round its foot, a lit top
+## stepped up inside it, cracks, and moss on rock or rock strata on a cliff.
+static func _crag(ci: CanvasItem, poly: PackedVector2Array, tint: Color, cliff: bool, rng: RandomNumberGenerator) -> void:
+	var base := (Color(0.46, 0.43, 0.41) if not cliff else Color(0.42, 0.37, 0.33)) * tint
+	# A soft shadow cast down onto the ground below.
+	ci.draw_colored_polygon(_shifted(poly, Vector2(4, 6)), Color(0, 0, 0, 0.22))
+	ci.draw_colored_polygon(poly, OUTLINE)
+	for p in Geometry2D.offset_polygon(poly, -2.0):
+		ci.draw_colored_polygon(p, base.darkened(0.3))
+	if cliff:
+		for p in Geometry2D.offset_polygon(poly, -6.0):
+			ci.draw_colored_polygon(p, base.darkened(0.42))
+	for p in Geometry2D.offset_polygon(poly, -8.0 if not cliff else -12.0):
+		ci.draw_colored_polygon(_shifted(p, Vector2(0, -5)), base)
+	for p in Geometry2D.offset_polygon(poly, -16.0):
+		ci.draw_colored_polygon(_shifted(p, Vector2(-2, -9)), base.lightened(0.1))
+	var area := 1.0
+	for q in poly:
+		area += 1.0
+	if cliff:
+		# Strata: short level ledges across the face.
+		for p in _inside(poly, 10.0, int(40 + area * 4), rng):
+			var len := rng.randf_range(10, 28)
+			ci.draw_line(p, p + Vector2(len, 0), base.darkened(0.22), 2.0)
+			ci.draw_line(p + Vector2(0, -2), p + Vector2(len * 0.8, -2), base.lightened(0.14), 1.0)
+	# Cracks.
+	for p in _inside(poly, 12.0, 6 + int(area), rng):
+		var a := rng.randf_range(0.4, 2.6)
+		var q: Vector2 = p + Vector2.from_angle(a) * rng.randf_range(6, 14)
+		ci.draw_line(p, q, base.darkened(0.45), 1.5)
+		ci.draw_line(q, q + Vector2.from_angle(a + rng.randf_range(-0.8, 0.8)) * rng.randf_range(4, 8), base.darkened(0.45), 1.5)
+	if cliff:
+		# Hardy mountain pines up on top, kept well inside the cliff.
+		var pines := _inside(poly, 20.0, 10 + int(area * 1.5), rng)
+		pines.sort_custom(func(a, b): return a.y < b.y)
+		for p in pines:
+			var h := rng.randf_range(20, 30)
+			ci.draw_set_transform(p + Vector2(0, 2), 0, Vector2(1, 0.4))
+			ci.draw_circle(Vector2.ZERO, h * 0.35, Color(0, 0, 0, 0.25))
+			ci.draw_set_transform(Vector2.ZERO)
+			_pine(ci, p, h, Color(0.16, 0.3, 0.2) * tint)
+	# Moss (rock) or loose stones (cliff) on top.
+	for p in _inside(poly, 14.0, 5 + int(area * 0.6), rng):
+		if cliff:
+			ci.draw_rect(Rect2(p, Vector2(4, 3)), base.lightened(0.2))
+			ci.draw_rect(Rect2(p + Vector2(0, 3), Vector2(4, 1)), base.darkened(0.4))
+		else:
+			ci.draw_circle(p, rng.randf_range(3, 6), Color(0.3, 0.48, 0.22) * tint)
+			ci.draw_circle(p + Vector2(-1, -1), 2.0, Color(0.42, 0.6, 0.28) * tint)
+
+
+## A stand of trees: a dark floor of undergrowth, then crowns overlapping back to front.
+static func _grove(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(_shifted(poly, Vector2(3, 6)), Color(0, 0, 0, 0.25))
+	ci.draw_colored_polygon(poly, OUTLINE)
+	for p in Geometry2D.offset_polygon(poly, -2.0):
+		ci.draw_colored_polygon(p, Color(0.1, 0.22, 0.1) * tint)
+	var crowns := _inside(poly, 12.0, 26, rng)
+	crowns.sort_custom(func(a, b): return a.y < b.y)
+	for c in crowns:
+		var r := rng.randf_range(9.0, 12.0)
+		ci.draw_circle(c, r + 1.5, OUTLINE)
+		ci.draw_circle(c, r, Color(0.16, 0.36, 0.15) * tint)
+		ci.draw_circle(c + Vector2(-r * 0.3, -r * 0.35), r * 0.55, Color(0.25, 0.5, 0.22) * tint)
+		ci.draw_circle(c + Vector2(-r * 0.4, -r * 0.45), r * 0.22, Color(0.38, 0.62, 0.3) * tint)
+
+
+## The old quarry: a cut stone rim, terraces stepping down, and a dark floor with rubble
+## and a wooden ladder.
+static func _pit(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(poly, OUTLINE)
+	var steps := [Color(0.55, 0.5, 0.44), Color(0.42, 0.38, 0.33), Color(0.32, 0.28, 0.25), Color(0.2, 0.17, 0.15)]
+	for i in steps.size():
+		for p in Geometry2D.offset_polygon(poly, -2.0 - i * 7.0):
+			ci.draw_colored_polygon(_shifted(p, Vector2(0, i * 1.5)), steps[i] * tint)
+	for p in _inside(poly, 26.0, 18, rng):
+		var s := rng.randf_range(2.0, 4.5)
+		ci.draw_rect(Rect2(p, Vector2(s, s * 0.8)), Color(0.45, 0.4, 0.35) * tint)
+	var top := _inside(poly, 4.0, 1, rng)
+	if not top.is_empty():
+		var lad: Vector2 = Vector2(poly[0].x + 10.0, poly[0].y + 4.0)
+		ci.draw_line(lad, lad + Vector2(0, 26), Color(0.45, 0.3, 0.16) * tint, 2.0)
+		ci.draw_line(lad + Vector2(6, 0), lad + Vector2(6, 26), Color(0.45, 0.3, 0.16) * tint, 2.0)
+		for k in 5:
+			ci.draw_line(lad + Vector2(0, 3 + k * 5), lad + Vector2(6, 3 + k * 5), Color(0.55, 0.38, 0.2) * tint, 1.5)
 
 
 ## A spot on the meadow (not in the enemy entry zone or under the castle).

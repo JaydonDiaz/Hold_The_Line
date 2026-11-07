@@ -213,6 +213,8 @@ func _ready() -> void:
 	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	message_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	message_label.add_theme_constant_override("outline_size", 6)
+	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # long warnings take two lines
+	message_label.size.y = 80
 	message_label.modulate.a = 0.0
 
 	boss_bar = Control.new()

@@ -10,6 +10,7 @@ extends RefCounted
 ##   terrain    shapes that block walking (not flying, not shots): {"kind", "poly"} with
 ##              kind "rock", "cliff", "trees" or "pit" (it only changes the art)
 ##   no_build   rectangles nothing may be posted or built in (barricades aside)
+##   trails     paths worn into the ground through the gaps (just paint)
 ##   castle     the castle's style (castle.gd STYLES)
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ## Terrain along the top edge reaches well above it (y -120), since enemies come in
@@ -36,6 +37,8 @@ const MAPS := {
 				Vector2(616, 660), Vector2(640, 656)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(150, 96), Vector2(205, 230), Vector2(240, 352), Vector2(262, 480), Vector2(300, 620), Vector2(320, 736)],
+			[Vector2(500, 96), Vector2(450, 230), Vector2(412, 352), Vector2(398, 480), Vector2(342, 620), Vector2(320, 736)]],
 		"castle": "keep",
 		"bot_posts": [Vector2(240, 440), Vector2(205, 470), Vector2(275, 470), Vector2(412, 440), Vector2(377, 470),
 			Vector2(447, 470), Vector2(320, 520), Vector2(240, 520), Vector2(412, 520)],
@@ -55,6 +58,8 @@ const MAPS := {
 				Vector2(296, 530), Vector2(282, 512), Vector2(284, 392)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(320, 96), Vector2(296, 260), Vector2(236, 370), Vector2(222, 470), Vector2(252, 590), Vector2(320, 736)],
+			[Vector2(320, 96), Vector2(344, 260), Vector2(404, 370), Vector2(418, 470), Vector2(388, 590), Vector2(320, 736)]],
 		"castle": "guildhall",
 		"bot_posts": [Vector2(226, 560), Vector2(266, 590), Vector2(414, 560), Vector2(374, 590), Vector2(320, 610),
 			Vector2(226, 470), Vector2(414, 470), Vector2(280, 640), Vector2(360, 640)],
