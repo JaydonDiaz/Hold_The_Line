@@ -671,19 +671,12 @@ func _draw_nation(f: String) -> void:
 			_b(25, 105, 6, 6, Color(0.55, 0.38, 0.22))
 			_b(0, 124, GW, 26, Color(0.28, 0.22, 0.18))
 			_speckle(0, 124, GW, 26, Color(0.34, 0.27, 0.22), 0.15)
-			# Rails on sleepers, and a cart of ore rolling along them.
+			# Rails on sleepers.
 			for x in range(0, GW, 6):
 				_b(x, 127, 3, 7, Color(0.38, 0.27, 0.18))
 			_b(0, 128, GW, 1, Color(0.6, 0.6, 0.66))
 			_b(0, 132, GW, 1, Color(0.6, 0.6, 0.66))
-			var cx := fmod(t * 14.0, GW + 30.0) - 20.0
-			_b(cx - 1, 119, 18, 10, OUTLINE)
-			_b(cx, 120, 16, 8, Color(0.35, 0.3, 0.3))
-			_b(cx, 122, 16, 1, Color(0.45, 0.4, 0.4))
-			_b(cx + 2, 117, 12, 4, Color(0.95, 0.75, 0.25))
-			_b(cx + 4, 116, 3, 2, Color(1.0, 0.9, 0.5))
-			_b(cx + 2, 128, 3, 3, OUTLINE)
-			_b(cx + 11, 128, 3, 3, OUTLINE)
+			# (The cart itself rolls by among the miners: see _minecart.)
 		"mercyvale":
 			_sky(Color(0.95, 0.72, 0.52), Color(1.0, 0.93, 0.8))
 			# The low sun, its rays turning slowly.
@@ -936,6 +929,20 @@ func _draw_nation(f: String) -> void:
 	var prop: String = {"stonehollow": "stone", "deepdelve": "ore", "monastery": "dummy"}.get(f, "")
 	for i in folk.size():
 		_figure(folk[i], 40 + i * 40, 128 + (i % 2) * 6, i * 0.53, i == 2, 4.0, true, prop)
+		if f == "deepdelve" and i == 0:
+			_minecart()   # in front of the miner on the rails, behind the one nearer us
+
+
+## Deepdelve's cart of ore, rolling along the rails.
+func _minecart() -> void:
+	var cx := fmod(t * 14.0, GW + 30.0) - 20.0
+	_b(cx - 1, 119, 18, 10, OUTLINE)
+	_b(cx, 120, 16, 8, Color(0.35, 0.3, 0.3))
+	_b(cx, 122, 16, 1, Color(0.45, 0.4, 0.4))
+	_b(cx + 2, 117, 12, 4, Color(0.95, 0.75, 0.25))
+	_b(cx + 4, 116, 3, 2, Color(1.0, 0.9, 0.5))
+	_b(cx + 2, 128, 3, 3, OUTLINE)
+	_b(cx + 11, 128, 3, 3, OUTLINE)
 
 
 ## Greenwood's archers at the butts: the two at the sides shoot at targets by the forest
