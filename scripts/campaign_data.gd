@@ -48,7 +48,7 @@ const FACTIONS := {
 	"deepdelve": {"name": "The Mining Guild", "home": "Deepdelve", "color": Color(1.0, 0.8, 0.3),
 		"unlocks": ["mine", "cannon"],
 		"gives": "Gold Mines and Cannoneers",
-		"leader": "dagna", "folk": ["engineer", "engineer"],   # and a gun crew test-firing a cannon (cutscene.gd)
+		"leader": "dagna", "folk": ["miner", "miner"],   # and a gun crew test-firing a cannon (cutscene.gd)
 		"people": "Under the eastern peaks, the miners of Deepdelve dig gold and iron and cast cannon in roaring forges. Loud, generous and quick to bargain, their gold once paid for half the Line."},
 	"mercyvale": {"name": "The Sanctuary", "home": "Mercy Vale", "color": Color(0.95, 0.95, 0.7),
 		"unlocks": ["healer", "medbay", "ability:heal"],

@@ -23,7 +23,7 @@ const READ_SPEED := 40.0  # characters a second while typing
 const LINGER := 2.6       # seconds a scene stays once its text is out
 const OUTLINE := Color(0.1, 0.07, 0.1)
 # What each people's folk do in their scene (a pose to swap to now and then).
-const ACTIONS := {"engineer": "strike", "archer": "draw", "bard": "strum", "alchemist": "brew", "martial": "punch"}
+const ACTIONS := {"engineer": "strike", "miner": "strike", "archer": "draw", "bard": "strum", "alchemist": "brew", "martial": "punch"}
 # Spellcasters keep their staff upright and the magic plays out at its tip instead.
 const SPELLS := ["frost", "mage", "healer"]
 const STAFF_TIP := Vector2(6.5, -14.0)   # the staff's orb or crystal, in sprite pixels from the feet (all three casters)
@@ -929,10 +929,113 @@ func _draw_nation(f: String) -> void:
 		_draw_gun_crew()
 	# The folk, at work (on something: hammers ring on stone, picks bite ore, fists land
 	# on a training dummy).
+	if f == "greenwood":
+		_draw_archery()
+		return
 	var folk: Array = CD.FACTIONS[f]["folk"]
 	var prop: String = {"stonehollow": "stone", "deepdelve": "ore", "monastery": "dummy"}.get(f, "")
 	for i in folk.size():
 		_figure(folk[i], 40 + i * 40, 128 + (i % 2) * 6, i * 0.53, i == 2, 4.0, true, prop)
+
+
+## Greenwood's archers at the butts: the two at the sides shoot at targets by the forest
+## edge (each loose sinks an arrow in its target), the one in the middle stands easy,
+## twirling an arrow as she does between waves.
+func _draw_archery() -> void:
+	var shooters := [[40.0, 12.0, 0.0], [120.0, 148.0, 0.8]]   # x, target x, phase
+	for sh in shooters:
+		_target(sh[1], 128.0)
+	for sh in shooters:
+		var x: float = sh[0]
+		var tx: float = sh[1]
+		var dir := signf(tx - x)
+		var cycle := fmod(t + sh[2], ACT_CYCLE)
+		_figure("archer", x, 128, sh[2], dir < 0.0)
+		# The arrow: in flight just after the loose, then stuck in the target.
+		var from := Vector2(x + dir * 7.0, 119.0)
+		var to := Vector2(tx - dir * 1.0, 117.0)
+		if cycle < 0.22 and t > 0.3:
+			var k := cycle / 0.22
+			_arrow_at(from.lerp(to, k) + Vector2(0, -sin(k * PI) * 2.0), dir)
+		elif t > 0.3:
+			_arrow_at(to, dir, true)
+	# The middle archer at ease: a slow sway, an arrow drawn, twirled, flipped and put away.
+	var sway := 1.0 if fmod(t * 0.6, 2.0) < 1.0 else 0.0
+	_figure("archer", 80 + sway * 0.25, 134, 0.0, false, 4.0, false)
+	_idle_arrow(Vector2((80 + sway * 0.25) * PX, 134 * PX))
+
+
+## An archery target on a stand, its foot at art pixel (x, y).
+func _target(x: float, y: float) -> void:
+	for k in 9:
+		_b(x - 3 + k * 0.3, y - k, 1, 1, Color(0.42, 0.28, 0.15))
+		_b(x + 3 - k * 0.3, y - k, 1, 1, Color(0.42, 0.28, 0.15))
+	var rings := [[6.4, OUTLINE], [5.4, Color(0.95, 0.93, 0.86)], [4.2, Color(0.85, 0.2, 0.2)], [2.9, Color(0.95, 0.93, 0.86)], [1.5, Color(0.85, 0.2, 0.2)]]
+	var cx := int(x)
+	for ring in rings:
+		var r: float = ring[0]
+		for row in range(-int(r), int(r) + 1):
+			var hw := int(round(sqrt(maxf(r * r - row * row, 0.0))))
+			_b(cx - hw, y - 12 + row, hw * 2 + 1, 1, ring[1])
+
+
+## An arrow (art pixels), flying along `dir` or (stuck) with its fletching sticking out.
+func _arrow_at(p: Vector2, dir: float, stuck := false) -> void:
+	var back := 3.0 if stuck else 4.0
+	for k in int(back):
+		_b(p.x - dir * k, p.y, 1, 1, Color(0.6, 0.42, 0.22))
+	_b(p.x - dir * back, p.y - 1, 1, 1, Color(0.95, 0.95, 0.95))
+	_b(p.x - dir * back, p.y + 1, 1, 1, Color(0.95, 0.95, 0.95))
+	if not stuck:
+		_b(p.x + dir, p.y, 1, 1, Color(0.75, 0.78, 0.82))
+
+
+## The idle archer's arrow, as in battle: out of the quiver, twirled three times, flipped
+## end over end and caught, one lazy turn, and back. `foot` in screen pixels.
+func _idle_arrow(foot: Vector2) -> void:
+	var loop := 5.6
+	var c := fmod(t + 0.4, loop)
+	var hand := foot + Vector2(10, -26)
+	var quiver := foot + Vector2(-10, -44)
+	var lifted := quiver + Vector2(0, -16)
+	var up := -PI / 2.0
+	var pos: Vector2
+	var ang: float
+	if c < 0.5:
+		var k := smoothstep(0.0, 1.0, c / 0.5)
+		pos = quiver.lerp(lifted, k)
+		ang = up
+	elif c < 0.9:
+		var k := smoothstep(0.0, 1.0, (c - 0.5) / 0.4)
+		pos = lifted.lerp(hand, k)
+		ang = lerp_angle(up, 0.0, k)
+	elif c < 2.4:
+		pos = hand
+		ang = smoothstep(0.0, 1.0, (c - 0.9) / 1.5) * TAU * 3.0
+	elif c < 3.2:
+		var k := (c - 2.4) / 0.8
+		pos = hand + Vector2(0, -sin(PI * k) * 40.0)
+		ang = smoothstep(0.0, 1.0, k) * TAU * 2.0
+	elif c < 4.2:
+		pos = hand
+		ang = smoothstep(0.0, 1.0, (c - 3.2) / 1.0) * TAU
+	elif c < 4.6:
+		var k := smoothstep(0.0, 1.0, (c - 4.2) / 0.4)
+		pos = hand.lerp(lifted, k)
+		ang = lerp_angle(0.0, up, k)
+	elif c < 4.9:
+		var k := smoothstep(0.0, 1.0, (c - 4.6) / 0.3)
+		pos = lifted.lerp(quiver, k)
+		ang = up
+	else:
+		return   # hands empty, resting
+	var d := Vector2.from_angle(ang)
+	draw_line(pos - d * 14.0, pos + d * 12.0, OUTLINE, 5.0)
+	draw_line(pos - d * 13.0, pos + d * 11.0, Color(0.62, 0.44, 0.24), 3.0)
+	draw_line(pos + d * 10.0, pos + d * 15.0, Color(0.78, 0.8, 0.85), 4.0)
+	var n := d.orthogonal()
+	draw_line(pos - d * 14.0, pos - d * 9.0 + n * 4.0, Color(0.95, 0.95, 0.95), 2.0)
+	draw_line(pos - d * 14.0, pos - d * 9.0 - n * 4.0, Color(0.95, 0.95, 0.95), 2.0)
 
 
 ## Deepdelve's gun crew test-firing a cannon: the Cannoneer fetches a ball, loads it,

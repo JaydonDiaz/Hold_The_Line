@@ -1656,6 +1656,37 @@ const SPRITES := {
 			},
 		},
 	},
+	"miner": {  # A Deepdelve miner: a leather helmet with a lamp, a beard, a work vest, a pick on his shoulder
+		"palette": {"D": Color(0.42, 0.28, 0.16), "Y": Color(1.0, 0.85, 0.35), "H": Color(0.32, 0.2, 0.12),
+			"G": Color(0.55, 0.55, 0.58), "V": Color(0.5, 0.36, 0.22), "c": Color(0.3, 0.2, 0.12),
+			"p": Color(0.32, 0.3, 0.34), "f": Color(0.2, 0.14, 0.1), "W": Color(0.55, 0.36, 0.18), "M": Color(0.62, 0.64, 0.7)},
+		"rows": [
+			"...........kkk..",
+			".....kkkkkkMMMk.",
+			"....kDDDDDkkkWkk",
+			"...kDDkYkDDk.kWk",
+			"..kkkkkkkkkkkkWk",
+			"....kskssksk.kWk",
+			"....kHssssHk.kWk",
+			"...kkHHHHHHkkkWk",
+			"..kGGkHHHHkGGksk",
+			"..kGkVVVVVVkGkWk",
+			"..kskVVVVVVksk.k",
+			"...kcccYccck....",
+			"...kppppppk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+		"poses": {
+			"strike": {0: "..........._____", 1: "..........._____", 2: "..........._____", 3: "..........._____", 4: "..........._____", 5: "..........._____", 6: "..........._____", 7: "..........._____", 8: "..kGGkHHHHkGGk..", 9: "..kGkVVVVVVkGkkk", 10: "..kskVVVVVVksWWWkk", 11: "...kcccYccck..kWWWk", 12: "...kppppppk.....kMMk", 13: "...kppkkppk.....kMMk", 14: "...kffk.kffk.....kMk", 15: "...kkkk.kkkk......kk"},   # the pick swung down into the rock
+		},
+	},
 	"cannoneer": {  # A Deepdelve powder-gunner: red bandana with brass goggles pushed up, a short
 		# beard, a leather coat with a bandolier of powder, and a smouldering linstock in hand
 		"palette": {"R": Color(0.78, 0.2, 0.16), "G": Color(0.92, 0.72, 0.3), "g": Color(0.55, 0.82, 0.92),
