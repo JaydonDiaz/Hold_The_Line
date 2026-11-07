@@ -61,6 +61,11 @@ var splash := 0.0
 var slow := 0.0
 var slow_time := 0.0
 var slow_radius := 0.0
+var way_check := 0.0       # on terrain: when to look again whether the straight way is blocked
+var way_goal := Vector2.INF
+var way_blocked := false
+var retreat_to := Vector2.INF   # on terrain: where it's backing off to
+var retreat_check := 0.0
 var aura_tick := 1.0     # War Statue: next count of the allies it's boosting (campaign XP)
 var goo_timer := 0.0     # hit by a Slime: slowed (moving, and attacking at half that) until this runs out
 var goo_slow := 0.0
@@ -1421,11 +1426,25 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	# means to stop.
 	var stop := position + position.direction_to(p) * minf(max_dist, position.distance_to(p))
 	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements() or main.paths.has_terrain()) \
-			and main.paths.path_blocked(position, stop, RADIUS + 6.0, true):
+			and _way_blocked(stop, delta):
 		aim = _route_step(p, delta)
 	_step_to(position + position.direction_to(aim) * step)
 	walk += step / 12.0   # swap walk frames every 12px
 	moving = step > 0.01
+
+
+## Whether walls, emplacements or terrain are in the way of walking straight to `stop`.
+## On terrain the answer is kept for a moment (it's the costly check, and a few frames'
+## walk changes little); everywhere else it's asked fresh each frame, as before.
+func _way_blocked(stop: Vector2, delta: float) -> bool:
+	if main.paths.terrain.is_empty():
+		return main.paths.path_blocked(position, stop, RADIUS + 6.0, true)
+	way_check -= delta
+	if way_check <= 0.0 or stop.distance_to(way_goal) > 12.0:
+		way_check = 0.2
+		way_goal = stop
+		way_blocked = main.paths.path_blocked(position, stop, RADIUS + 6.0, true)
+	return way_blocked
 
 
 ## A step to `to`: straight there on open ground; on terrain, slid along any rock it
@@ -1617,7 +1636,12 @@ func _kite(delta: float) -> bool:
 	var dir := (away + home * 0.35).normalized()
 	var dest: Vector2 = (position + dir * 60.0).clamp(Vector2(RADIUS, main.DEPLOY_TOP + RADIUS), Vector2(main.FIELD_W - RADIUS, main.CASTLE_Y - RADIUS))
 	if not main.paths.terrain.is_empty():
-		dest = _retreat_spot(dir, threat)
+		# Worked out a few times a second (it tries several spots), and kept between.
+		retreat_check -= get_process_delta_time()
+		if retreat_check <= 0.0 or retreat_to == Vector2.INF or position.distance_to(retreat_to) < 8.0:
+			retreat_check = 0.25
+			retreat_to = _retreat_spot(dir, threat)
+		dest = retreat_to
 	if position.distance_to(dest) < 10.0:
 		kiting = false   # cornered: stand and fight
 		return false

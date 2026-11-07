@@ -22,6 +22,7 @@ extends SceneTree
 ## R  regression      Classic, Freeplay and the title menu behave as before
 
 const CD = preload("res://scripts/campaign_data.gd")
+const Maps = preload("res://scripts/maps.gd")
 const Data = preload("res://scripts/data.gd")
 const TEST_SAVE := "user://campaign_test.cfg"
 const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note"]   # Data "attack"s that can hit fliers
@@ -316,7 +317,8 @@ func _missions() -> void:
 	var w1: Array = main._build_wave(1)
 	check(w1.size() == m["count"][0] + m["count"][1] and w1.all(func(k): return k == "goblin"), "M  wave 1: %d goblins" % w1.size())
 	var w4: Array = main._build_wave(4)
-	check(w4.count("orc") >= 2 and not w4.has("bat") and not w4.has("warlord") and not w4.has("troll"), "M  wave 4 adds its orcs; no bats, trolls or warlords")
+	check(w4.count("orc") >= 2 and w4.count("troll") == m["extra"][4].count("troll") and not w4.has("bat") and not w4.has("warlord"),
+			"M  wave 4 adds its orcs and its trolls; no bats or warlords")
 	check(main.wave_level(1) == m["level"], "M  enemies start at level %d" % m["level"])
 	main.hud.refresh(main)
 	check(main.hud.wave_label.text == "Wave 0/%d" % m["waves"], "M  the HUD counts waves out of %d" % m["waves"])
@@ -755,8 +757,8 @@ func _cutscene() -> void:
 
 # --- B: balance bot ----------------------------------------------------------------------
 
-## A plain bot: hires Swordsmen in a line across the field, upgrades them as far as their
-## training allows between waves, repairs if it can, and starts the next wave. It's no
+## A plain bot: hires Swordsmen in a line across the field (on a map with terrain, at its
+## chokepoints), upgrades them as far as their training allows between waves, repairs if it can, and starts the next wave. It's no
 ## good at the game, so a mission it wins with Swordsmen alone is one a player can win.
 ## Each mission is tried untrained (the worst case: the player spent nothing on it), and
 ## Stonehollow also with two points in the Swordsmen (tier II of Damage and Health: about
@@ -793,12 +795,18 @@ func _bot_spend() -> void:
 			if main.can_repair(i):
 				main.repair_castle(i)
 				break
-	# Fill any empty spot in the line (a Swordsman lost for good leaves a gap).
-	var slots := 7
-	for i in slots:
+	# Fill any empty spot in the line (a Swordsman lost for good leaves a gap). On a
+	# battlefield with terrain the line holds the map's chokepoints (its bot_posts).
+	var spots := []
+	var map: Dictionary = Maps.get_map(main.mission.get("map", ""))
+	if map.has("bot_posts"):
+		spots = map["bot_posts"].slice(0, 7)
+	else:
+		for i in 7:
+			spots.append(Vector2(60.0 + i * (520.0 / 6.0), 420.0 + (i % 2) * 40.0))
+	for spot in spots:
 		if main.gold < main.hire_cost("swordsman"):
 			break
-		var spot := Vector2(60.0 + i * (520.0 / (slots - 1)), 420.0 + (i % 2) * 40.0)
 		if main.can_post_at(spot):
 			main._on_hire_pressed("swordsman")
 			main.hire_at(spot)

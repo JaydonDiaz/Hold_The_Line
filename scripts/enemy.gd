@@ -68,6 +68,7 @@ var absorb_note := 0.0      # Slime: keeps "Absorbed!" from popping up every fra
 var on_ground := false      # walks on a battlefield with terrain (set at spawn; never for flyers)
 var chase_route := PackedVector2Array()   # waypoints round the terrain to whatever it's going after
 var chase_check := 0.0
+var chase_goal := Vector2.INF
 var shots := 0               # Skeleton Archer: arrows loosed (the tests look at where from)
 var last_shot_from := Vector2.ZERO
 static var slimes_out := 0  # Slimes on the field, so troops only look out for them when there are any
@@ -530,8 +531,9 @@ func _chase_dir(to: Vector2, delta: float) -> Vector2:
 	if not on_ground:
 		return position.direction_to(to)
 	chase_check -= delta
-	if chase_check <= 0.0:
-		chase_check = 0.4
+	if chase_check <= 0.0 or to.distance_to(chase_goal) > 32.0:
+		chase_check = 0.6
+		chase_goal = to
 		if main.paths.segment_blocked(position, to, radius):
 			chase_route = main.paths.enemy_route(position, to, radius)
 		else:
@@ -683,10 +685,11 @@ func _push_out() -> void:
 			if w.is_active():
 				_push_from(w.position, radius + w.RADIUS, 1.0)
 	if not boss:
+		var in_gap: bool = on_ground and main.paths.tight(position, radius)   # once, not once per neighbour
 		for e in main.enemies_near(position, radius + main.MAX_ENEMY_RADIUS):
 			if e != self and e.flying == flying:
-				if on_ground and e.walking and e.position.y < position.y - 2.0 and not e.boss and main.paths.tight(position, radius):
-					continue   # in a gap, whoever's ahead goes first: the ones behind don't shove it into the rock (one that's stopped still makes way)
+				if in_gap and walking and e.walking and e.position.y < position.y - 2.0 and not e.boss:
+					continue   # in a gap, whoever's ahead and still walking goes first: the ones behind don't shove it into the rock (one that's stopped makes way)
 				_push_from(e.position, radius + e.radius, 1.0 if e.boss else 0.5)
 	position.x = clampf(position.x, radius, main.FIELD_W - radius)
 	if flying:

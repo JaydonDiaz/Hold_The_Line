@@ -29,8 +29,8 @@ const ENDING_ALLIES := 8               # every regional alliance: the fully unit
 #   gold      per gold a Gold Mine digs;  soak  per point of damage a Barricade takes
 #   aura      per second a War Statue spends boosting an ally during a wave
 const XP_RATES := {"damage": 1.0, "heal": 1.5, "revive": 150.0, "gold": 12.0, "soak": 0.6, "aura": 4.0}
-const XP_FIRST := 1500.0        # XP to a kind's first level (a Swordsmen-only Ashwatch earns about 4000)
-const XP_GROWTH := 1.2          # each level after that needs this much more than the one before (59k XP in all)
+const XP_FIRST := 2000.0        # XP to a kind's first level (a Swordsmen-only Ashwatch earns about 6000: 2 points)
+const XP_GROWTH := 1.2          # each level after that needs this much more than the one before (79k XP in all)
 const XP_LOSS_SHARE := 0.5      # a battle lost (or left) counts for this share of its XP
 const MAX_TRAINING := 12        # points that train a kind fully: tiers II-IV on all four paths
 
@@ -137,19 +137,20 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #   map          the battlefield it's fought on (maps.gd)
 #   intro / outro   STORY keys: before the first wave, and on the map after a win
 const MISSIONS := {
-	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 220,
-		"count": [7, 3], "mood": "normal", "map": "ashwatch_ridge",
+	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 240,
+		"count": [10, 4], "mood": "normal", "map": "ashwatch_ridge",
 		"pool": {1: ["goblin", "goblin"], 2: ["wolf"], 3: ["orc"]},
-		"extra": {3: ["orc"], 4: ["orc", "orc", "orc", "wolf", "wolf"]},
+		"extra": {3: ["orc", "orc", "skeleton_archer"], 4: ["orc", "orc", "orc", "wolf", "wolf", "troll", "troll", "skeleton_archer", "skeleton_archer"]},
 		"notes": {2: "Wolves! They run straight for the walls.", 4: "Their vanguard is coming in force!"},
 		"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true},
 			{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
 		"lend": [], "reward": "", "track": {"watchtower_stood": "tower"},
 		"intro": "ashwatch_intro", "outro": "ashwatch_outro"},
-	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 3, "gold": 320,
-		"count": [5, 2], "mood": "normal", "map": "stonehollow_quarry",
+	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 4, "gold": 340,
+		"count": [6, 2], "mood": "normal", "map": "stonehollow_quarry",
 		"pool": {1: ["goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
-		"extra": {2: ["skeleton_archer"], 3: ["troll"], 4: ["skeleton_archer", "skeleton_archer"], 5: ["troll", "sapper"]},
+		"extra": {2: ["skeleton_archer"], 3: ["troll", "skeleton_archer"], 4: ["skeleton_archer", "skeleton_archer", "troll"],
+			5: ["troll", "skeleton_archer", "skeleton_archer", "orc"]},
 		"notes": {3: "Sappers! They'll blow holes in any wall in their way.", 5: "Trolls at the quarry gate!"},
 		"allies": [{"kind": "swordsman", "at": Vector2(220, 520)}, {"kind": "swordsman", "at": Vector2(420, 520)}],
 		"lend": ["barricade", "repair", "engineers"], "reward": "stonehollow", "track": {},

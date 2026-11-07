@@ -89,12 +89,12 @@ func _waypoint(to: Vector2, delta: float) -> Vector2:
 	route_timer -= delta
 	if route_goal.distance_to(to) > 16.0 or route_timer <= 0.0:
 		route_goal = to
-		route_timer = 1.0
+		route_timer = 0.5
 		route = paths.troop_route(position, to) if paths.segment_blocked(position, to, RADIUS) else PackedVector2Array()
 	while not route.is_empty() and position.distance_to(route[0]) < 8.0:
 		route.remove_at(0)
-	if route.is_empty() or not paths.segment_blocked(position, to, RADIUS):
-		return to
+	if route.is_empty():
+		return to   # a clear walk straight there (checked when the route was worked out)
 	return route[0]
 
 

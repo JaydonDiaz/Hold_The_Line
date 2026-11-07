@@ -51,6 +51,11 @@ var clear := PackedFloat32Array()
 var troop_open := PackedByteArray()
 var melee_reach := PackedByteArray()   # cells a melee troop can get within striking distance of
 var enemy_grids := {}      # size key -> AStarGrid2D for enemies chasing a unit around terrain
+# Per cell, the terrain edges that could be the nearest to any point in it (flat: a, b,
+# a, b, ...) and the shapes they belong to, so a distance check looks at a couple of
+# edges rather than every edge on the map. Built with `clear`.
+var cell_edges: Array = []
+var cell_shapes: Array = []
 var _map := {}
 
 
@@ -94,7 +99,46 @@ func has_terrain() -> bool:
 
 
 ## Exact distance from p to the nearest terrain (0 if it's inside some), or INF with none.
+## Looks only at the edges near p's cell (see cell_edges).
 func terrain_gap(p: Vector2) -> float:
+	if terrain.is_empty():
+		return INF
+	if cell_edges.is_empty():
+		return _terrain_gap_full(p)
+	var i := _index(_cell(p))
+	for k in cell_shapes[i]:
+		if Geometry2D.is_point_in_polygon(p, terrain[k]["poly"]):
+			return 0.0
+	var e: PackedVector2Array = cell_edges[i]
+	var best := INF
+	for j in range(0, e.size(), 2):
+		best = minf(best, Geometry2D.get_closest_point_to_segment(p, e[j], e[j + 1]).distance_to(p))
+	return best
+
+
+## The nearest point on any terrain edge to p (for pushing a unit back out of it).
+func _nearest_edge_point(p: Vector2) -> Vector2:
+	var i := _index(_cell(p))
+	var e: PackedVector2Array = cell_edges[i] if not cell_edges.is_empty() else PackedVector2Array()
+	var best := p
+	var best_d := INF
+	for j in range(0, e.size(), 2):
+		var c := Geometry2D.get_closest_point_to_segment(p, e[j], e[j + 1])
+		var d := c.distance_squared_to(p)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
+func _inside_terrain(p: Vector2) -> bool:
+	for k in cell_shapes[_index(_cell(p))]:
+		if Geometry2D.is_point_in_polygon(p, terrain[k]["poly"]):
+			return true
+	return false
+
+
+func _terrain_gap_full(p: Vector2) -> float:
 	var best := INF
 	for t in terrain:
 		var poly: PackedVector2Array = t["poly"]
@@ -122,10 +166,21 @@ func blocked(p: Vector2, r: float) -> bool:
 	return terrain_gap(p) < r
 
 
-## Whether something of radius r walking straight from a to b would touch terrain.
+## Whether something of radius r walking straight from a to b would touch terrain:
+## checked every 6px along the way (far finer than any terrain is thin).
 func segment_blocked(a: Vector2, b: Vector2, r: float) -> bool:
 	if terrain.is_empty():
 		return false
+	if not cell_edges.is_empty():
+		var steps := maxi(1, ceili(a.distance_to(b) / 6.0))
+		for k in steps + 1:
+			if blocked(a.lerp(b, float(k) / steps), r):
+				return true
+		return false
+	return _segment_blocked_full(a, b, r)
+
+
+func _segment_blocked_full(a: Vector2, b: Vector2, r: float) -> bool:
 	var span := Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (b - a).abs()).grow(r)
 	for t in terrain:
 		if not span.intersects(t["box"]):
@@ -144,6 +199,21 @@ func segment_blocked(a: Vector2, b: Vector2, r: float) -> bool:
 ## terrain (out of a shape it's inside, or off an edge it overlaps).
 func push_out(p: Vector2, r: float) -> Vector2:
 	if terrain.is_empty() or not blocked(p, r):
+		return p
+	if not cell_edges.is_empty():
+		# Out along the nearest edge's normal, a couple of times for corners.
+		for pass_ in 3:
+			var c := _nearest_edge_point(p)
+			var inside := _inside_terrain(p)
+			var d := c.distance_to(p)
+			if not inside and d >= r:
+				break
+			var out := (c - p) if inside else (p - c)
+			if out.length() < 0.001:
+				out = Vector2.DOWN
+			p = c + out.normalized() * (r + 0.5)
+			if not blocked(p, r):
+				break
 		return p
 	for pass_ in 3:
 		var moved := false
@@ -311,9 +381,36 @@ func _build_clearance() -> void:
 		clear.fill(INF)
 		troop_open.fill(1)
 		melee_reach.fill(1)
+		cell_edges = []
+		cell_shapes = []
 		return
 	for i in n:
-		clear[i] = terrain_gap(_center(Vector2i(i % cols, i / cols)))
+		clear[i] = _terrain_gap_full(_center(Vector2i(i % cols, i / cols)))
+	# Each cell's nearby edges: any edge that could be nearest to some point in the cell.
+	var edges := []   # [a, b, shape]
+	for k in terrain.size():
+		var poly: PackedVector2Array = terrain[k]["poly"]
+		for j in poly.size():
+			edges.append([poly[j], poly[(j + 1) % poly.size()], k])
+	cell_edges = []
+	cell_shapes = []
+	cell_edges.resize(n)
+	cell_shapes.resize(n)
+	for i in n:
+		var c := _center(Vector2i(i % cols, i / cols))
+		var nearest := INF
+		for e in edges:
+			nearest = minf(nearest, Geometry2D.get_closest_point_to_segment(c, e[0], e[1]).distance_to(c))
+		var list := PackedVector2Array()
+		var shapes := []
+		for e in edges:
+			if Geometry2D.get_closest_point_to_segment(c, e[0], e[1]).distance_to(c) <= nearest + 2.0 * HALF_DIAG + 0.5:
+				list.append(e[0])
+				list.append(e[1])
+				if not shapes.has(e[2]):
+					shapes.append(e[2])
+		cell_edges[i] = list
+		cell_shapes[i] = shapes
 	# Troops: open ground below the enemy camp, flooded out from the castle gate.
 	var top := int(ceilf((main.DEPLOY_TOP + TROOP_RADIUS) / float(CELL)))
 	var gate := _cell(Vector2(main.FIELD_W / 2.0, main.CASTLE_Y - TROOP_RADIUS))
@@ -469,20 +566,9 @@ func direction(pos: Vector2, radius: float) -> Vector2:
 	if walls.is_empty() and terrain.is_empty():
 		return Vector2.ZERO
 	var f := _field(radius)
-	var dist: PackedFloat64Array = f["dist"]
 	var wall: PackedInt32Array = f["wall"]
 	var c := _cell(pos)
-	var best := c
-	# A step costs what it says, so a neighbor on the best route ties with standing still.
-	var best_cost: float = dist[_index(c)] + 0.001
-	for d in NEIGHBORS:
-		var n: Vector2i = c + d
-		if not _inside(n) or not _can_step(c, d, wall) or wall[_index(n)] == SOLID:
-			continue
-		var cost: float = dist[_index(n)] + (DIAG if d.x != 0 and d.y != 0 else 1.0)
-		if cost < best_cost:
-			best_cost = cost
-			best = n
+	var best := _best_step(f, c)
 	if best == c:
 		if not terrain.is_empty() and wall[_index(c)] == SOLID:
 			# Squeezed into a cell too tight for it: back out away from the terrain.
@@ -496,6 +582,30 @@ func direction(pos: Vector2, radius: float) -> Vector2:
 		var aim := _center(best) + (pos - _center(c)) * 0.5
 		return pos.direction_to(aim)
 	return pos.direction_to(_center(best))
+
+
+## The neighbouring cell to step to from c on field f (c itself if none is better),
+## worked out once per cell and kept with the field.
+func _best_step(f: Dictionary, c: Vector2i) -> Vector2i:
+	var i := _index(c)
+	var nxt: PackedInt32Array = f["next"]
+	if nxt[i] != -2:
+		return Vector2i(nxt[i] % cols, nxt[i] / cols)
+	var dist: PackedFloat64Array = f["dist"]
+	var wall: PackedInt32Array = f["wall"]
+	var best := c
+	# A step costs what it says, so a neighbor on the best route ties with standing still.
+	var best_cost: float = dist[i] + 0.001
+	for d in NEIGHBORS:
+		var n: Vector2i = c + d
+		if not _inside(n) or not _can_step(c, d, wall) or wall[_index(n)] == SOLID:
+			continue
+		var cost: float = dist[_index(n)] + (DIAG if d.x != 0 and d.y != 0 else 1.0)
+		if cost < best_cost:
+			best_cost = cost
+			best = n
+	nxt[i] = _index(best)
+	return best
 
 
 ## The barricade an enemy at `pos` has to break through to reach the bottom line
@@ -631,7 +741,10 @@ func _build(radius: float) -> Dictionary:
 	dist.resize(n)
 	for i in n:
 		dist[i] = d10[i] / 10.0
-	return {"dist": dist, "breach": breach, "wall": wall, "walls": walls.duplicate(), "cols": cols}
+	var nxt := PackedInt32Array()
+	nxt.resize(n)
+	nxt.fill(-2)   # each cell's best next step, filled in as enemies ask (see _best_step)
+	return {"dist": dist, "breach": breach, "wall": wall, "walls": walls.duplicate(), "cols": cols, "next": nxt}
 
 
 ## Diagonal steps can't cut the corner between two wall cells (that would slip
