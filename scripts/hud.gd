@@ -74,6 +74,8 @@ var title_scene: Control   # the castle scene behind the mode cards (changes as 
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
 var world_map: Control = null   # the campaign map, while it's up
 var story: Control = null       # a story scene, while one is playing
+var scene_music := ""       # while a cutscene is up, the music it wants (main plays it)
+const VILLAINS := ["ogre", "marshal"]   # speakers whose lines play as cutscenes of their own
 var mode_title: Label
 var mode_sub: Label
 var mode_cards := []            # the title screen's cards now showing
@@ -1445,18 +1447,43 @@ func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
 # --- Campaign ----------------------------------------------------------------
 
 ## A story scene over everything; `then` runs once it's over (or skipped).
+## A story: the allies' lines in the dialogue box, and the enemy's (the Ogre King's and
+## his heralds') each as a cutscene of their own, in order. Esc skips the rest of it.
 func play_story(lines: Array, then: Callable = Callable()) -> void:
 	if lines.is_empty():
 		if then.is_valid():
 			then.call()
 		return
+	# The next run of lines with the same kind of speaker.
+	var villain: bool = VILLAINS.has(lines[0]["who"])
+	var n := 0
+	while n < lines.size() and VILLAINS.has(lines[n]["who"]) == villain:
+		n += 1
+	var rest := lines.slice(n)
+	var next := func(skipped: bool):
+		story = null
+		if skipped or rest.is_empty():
+			if then.is_valid():
+				then.call()
+		else:
+			play_story(rest, then)
+	if villain:
+		var c := Cutscene.new()
+		c.scenes = lines.slice(0, n).map(func(l): return {"scene": l["who"], "who": l["who"], "text": l["text"]})
+		story = c
+		scene_music = "villain"
+		c.finished.connect(func():
+			scene_music = ""
+			centered.erase(c)
+			next.call(c.skipped))
+		add_child(c)
+		_center(c)
+		return
 	var s := Story.new()
-	s.setup(lines)
+	s.setup(lines.slice(0, n))
 	story = s
 	s.finished.connect(func():
-		story = null
-		if then.is_valid():
-			then.call())
+		next.call(s.skipped))
 	add_child(s)
 	_center(s)
 
@@ -1465,8 +1492,10 @@ func play_story(lines: Array, then: Callable = Callable()) -> void:
 func play_prologue(then: Callable) -> void:
 	var c := Cutscene.new()
 	story = c   # the game takes no input underneath it
+	scene_music = "story"
 	c.finished.connect(func():
 		story = null
+		scene_music = ""
 		centered.erase(c)
 		then.call())
 	add_child(c)

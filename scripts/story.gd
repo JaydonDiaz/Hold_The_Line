@@ -23,6 +23,7 @@ var role_label: Label
 var text_label: Label
 var hint: Label
 var typing: Tween
+var skipped := false   # Esc: the rest of the story is skipped too
 
 
 ## lines: STORY entries ({"who", "text"}), already filtered for the campaign's state.
@@ -117,6 +118,7 @@ func advance() -> void:
 
 
 func skip() -> void:
+	skipped = true
 	at = lines.size()
 	_close()
 

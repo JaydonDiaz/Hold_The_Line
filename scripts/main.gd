@@ -49,6 +49,7 @@ var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
 var campaign := false
+var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
 var credit := ""             # campaign XP: the unit kind whose doing the damage dealt right now is
 var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
 const CD_XP_RATES = preload("res://scripts/campaign_data.gd").XP_RATES    # a story campaign battle (the Campaign autoload says which mission)
@@ -121,7 +122,6 @@ func _ready() -> void:
 	_size_window()
 	audio = Audio.new()
 	add_child(audio)
-	audio.set_track("calm")
 	paths.setup(self)
 	castle.main = self
 	# The castle goes over the warriors (it hides any standing behind it, showing their
@@ -269,6 +269,8 @@ func choose_mode(mode: String) -> void:
 	paths.set_map(Maps.get_map(mission.get("map", "")) if campaign else {})
 	if paths.has_terrain():
 		_repaint_ground()
+	var map: Dictionary = Maps.get_map(mission.get("map", "")) if campaign else {}
+	stage_music = map.get("music", "mountain" if map.get("biome", "") == "mountain" else "calm")
 	castle.set_style(Maps.get_map(mission.get("map", "")).get("castle", "keep") if campaign else "keep")
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
@@ -338,7 +340,11 @@ func _process(delta: float) -> void:
 			else:
 				_end_wave()
 	hud.refresh(self)
-	if not game_over:
+	if hud.scene_music != "":
+		audio.set_track(hud.scene_music)   # a cutscene's own music
+	elif not started:
+		audio.set_track("title")   # the title screen and the campaign map
+	elif not game_over:
 		layer_timer -= delta
 		if layer_timer <= 0.0:
 			layer_timer = 0.5
@@ -346,7 +352,7 @@ func _process(delta: float) -> void:
 			audio.set_layers(bard_instruments)
 		# Between waves, a Bard on every instrument strikes up a song together.
 		var ensemble: bool = song_on and audio._music.has("ensemble") and all_bards_present()
-		audio.set_track("battle" if wave_active else ("ensemble" if ensemble else "calm"))
+		audio.set_track("battle" if wave_active else ("ensemble" if ensemble else stage_music))
 		if audio._playing_track != last_track:
 			if audio._playing_track == "ensemble":
 				hud.show_message("The Bards strike up a song together!")
@@ -871,7 +877,6 @@ func _on_mode_chosen(key: String) -> void:
 func open_world_map() -> void:
 	_lock_portrait(true)
 	hud.hide_mode_select()
-	audio.set_track("calm")
 	var m = hud.show_world_map(Campaign)
 	m.defend.connect(start_mission)
 	m.menu.connect(func():

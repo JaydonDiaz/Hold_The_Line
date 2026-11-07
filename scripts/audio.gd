@@ -1,10 +1,17 @@
 extends Node
 ## Sound effects and music, all made in code when the game starts: a tiny
 ## synthesizer (square, triangle, saw, sine and noise voices with pitch sweeps and
-## decaying envelopes) renders each effect once, and two chiptune loops (a calm one
-## between waves and a battle one during them) are composed note by note on a
-## background thread. Each loop also gets a part for every Bard instrument, played in
-## sync and faded in while a Bard with that instrument is on the field. Music and effects have their own volume (saved between games).
+## decaying envelopes) renders each effect once, and chiptune loops are composed note
+## by note on a background thread:
+##   title     the title screen and the campaign map: a heroic march
+##   story     the prologue and other cutscenes: a slow, wistful air
+##   villain   the Ogre King's and his heralds' cutscenes: drums and dread
+##   calm      the meadow's peaceful music, between waves (Classic, Ashwatch...)
+##   mountain  the mountains' peaceful music, between waves (Stonehollow)
+##   battle    during waves, everywhere
+## Every stage track (STAGE_TRACKS: the peaceful ones and the battle) also gets a part
+## for each Bard instrument, played in sync and faded in while a Bard with that
+## instrument is on the field, so Bards play along with any stage's music. Music and effects have their own volume (saved between games).
 ## Each finished piece is kept for as long as the game runs (see _cache), so the scene
 ## reloads between campaign battles don't compose everything again; a scene that's
 ## leaving stops its composer after the piece in hand instead of waiting for the rest.
@@ -82,7 +89,9 @@ var _music_players: Array[AudioStreamPlayer] = []
 var _layers := []      # Bard instruments playing along with the music right now
 var _stop := false     # the scene is going: the composer thread stops after its current piece
 var _picked := 0       # how many cached pieces this player has taken up so far
-static var _cache := {}             # piece -> AudioStreamWAV: "fx:<effect>", "calm", "battle", "<track>:<instrument>", "ensemble"
+static var _cache := {}             # piece -> AudioStreamWAV: "fx:<effect>", a track, "<track>:<instrument>", "ensemble"
+const STAGE_TRACKS := ["calm", "mountain", "battle"]   # the music Bards play along with
+const SCENE_TRACKS := ["title", "story", "villain"]    # the rest (menus and cutscenes)
 static var _cache_lock := Mutex.new()
 const INSTRUMENTS := ["note", "pluck", "reed", "flute", "drum", "violin", "cello", "harp"]   # lute, pipa, mouth instrument, flute, hand drum, and the special three
 const LAYER_OFF := -60.0
@@ -161,7 +170,8 @@ func play_note(sound_name: String, base := 1.0) -> void:
 	play(sound_name, base * pow(2.0, PENTATONIC.pick_random() / 12.0))
 
 
-## Which music should be playing: "calm", "battle" or "" for none. Fades between them.
+## Which music should be playing: a track name (see the top), "ensemble", or "" for
+## none. Fades between them.
 func set_track(track: String) -> void:
 	_wanted_track = track
 
@@ -315,8 +325,9 @@ static func _pieces() -> Array:
 	var out := []
 	for sound_name in SOUNDS:
 		out.append("fx:" + sound_name)
-	out.append_array(["calm", "battle"])
-	for track in ["calm", "battle"]:
+	# The title music first (it's what plays as the game opens), then the prologue's.
+	out.append_array(["title", "story", "calm", "battle", "villain", "mountain"])
+	for track in STAGE_TRACKS:
 		for instrument in INSTRUMENTS:
 			out.append(track + ":" + instrument)
 	out.append("ensemble")
@@ -324,7 +335,7 @@ static func _pieces() -> Array:
 
 
 static func _piece_count() -> int:
-	return SOUNDS.size() + 2 + 2 * INSTRUMENTS.size() + 1
+	return SOUNDS.size() + STAGE_TRACKS.size() + SCENE_TRACKS.size() + STAGE_TRACKS.size() * INSTRUMENTS.size() + 1
 
 
 ## The composer thread: makes each piece not already cached, and caches it.
@@ -344,6 +355,14 @@ func _compose_all() -> void:
 			made = _compose_calm()
 		elif piece == "battle":
 			made = _compose_battle()
+		elif piece == "title":
+			made = _compose_title()
+		elif piece == "story":
+			made = _compose_story()
+		elif piece == "villain":
+			made = _compose_villain()
+		elif piece == "mountain":
+			made = _compose_mountain()
 		elif piece == "ensemble":
 			made = _compose_ensemble()
 		else:
@@ -368,14 +387,15 @@ func _pick_up() -> void:
 			effects[sound_name] = cache["fx:" + sound_name]
 	if not effects.is_empty():
 		_effects_ready(effects)
-	for track in ["calm", "battle"]:
+	for track in STAGE_TRACKS + SCENE_TRACKS:
 		if not cache.has(track):
 			continue
 		var parts := [cache[track]]
-		for instrument in INSTRUMENTS:
-			if cache.has(track + ":" + instrument):
-				parts.append(cache[track + ":" + instrument])
-		var full := parts.size() == INSTRUMENTS.size() + 1
+		if track in STAGE_TRACKS:
+			for instrument in INSTRUMENTS:
+				if cache.has(track + ":" + instrument):
+					parts.append(cache[track + ":" + instrument])
+		var full := parts.size() == (INSTRUMENTS.size() + 1 if track in STAGE_TRACKS else 1)
 		var shown: int = (_music[track] as AudioStreamSynchronized).stream_count if _music.has(track) else 0
 		if shown == 0 or (full and shown < parts.size()):
 			_music_ready({track: parts if full else [parts[0]]})
@@ -427,11 +447,23 @@ func set_layers(instruments: Array) -> void:
 
 ## Tempo (a sixteenth's length) and chords (root MIDI note, chord tones) of a track.
 static func _track_info(track: String) -> Dictionary:
+	var maj := [0, 4, 7]
+	var mn := [0, 3, 7]
+	match track:
+		"title":
+			return {"step": 60.0 / 104.0 / 4.0, "chords": [[50, maj], [45, maj], [47, mn], [43, maj], [50, maj], [45, maj], [43, maj], [45, maj],
+					[47, mn], [43, maj], [50, maj], [45, maj], [43, maj], [45, maj], [50, maj], [50, maj]]}
+		"story":
+			return {"step": 60.0 / 72.0 / 4.0, "chords": [[45, mn], [41, maj], [48, maj], [43, maj], [45, mn], [41, maj], [48, maj], [40, maj],
+					[41, maj], [43, maj], [40, mn], [45, mn], [38, mn], [41, maj], [40, maj], [45, mn]]}
+		"villain":
+			return {"step": 60.0 / 66.0 / 4.0, "chords": [[38, mn], [39, maj], [38, mn], [36, maj], [34, maj], [39, maj], [33, maj], [33, maj]]}
+		"mountain":
+			return {"step": 60.0 / 92.0 / 4.0, "chords": [[43, maj], [41, maj], [48, maj], [43, maj], [43, maj], [41, maj], [45, mn], [50, maj]]}
 	if track == "calm":
 		return {"step": 60.0 / 84.0 / 4.0, "chords": [[48, [0, 4, 7]], [45, [0, 3, 7]], [41, [0, 4, 7]], [43, [0, 4, 7]],
 				[48, [0, 4, 7]], [45, [0, 3, 7]], [41, [0, 4, 7]], [43, [0, 4, 7, 10]]]}
-	var am := [0, 3, 7]
-	var maj := [0, 4, 7]
+	var am := mn
 	return {"step": 60.0 / 138.0 / 4.0, "chords": [[57, am], [53, maj], [55, maj], [52, maj], [57, am], [53, maj], [55, maj], [52, maj],
 			[53, maj], [55, maj], [57, am], [57, am], [50, am], [55, maj], [48, maj], [52, maj]]}
 
@@ -600,6 +632,156 @@ static func _compose_calm() -> AudioStreamWAV:
 	for note in melody:
 		_voice(buf, int(at * RATE), step * note[1] * 1.1, _hz(note[0]), _hz(note[0]), "sine", 0.12, 0.7)
 		at += step * note[1]
+	return _to_stream(buf, true)
+
+
+## A melody as [[midi, sixteenths], ...] per bar, played from bar 0 with this voice.
+static func _melody(buf: PackedFloat32Array, step: float, bars: Array, wave: String, vol: float, curve: float, duty := 0.5, legato := 1.0) -> void:
+	var at := 0.0
+	for bar in bars:
+		for note in bar:
+			var len: float = step * note[1]
+			_voice(buf, int(at * RATE), len * legato, _hz(note[0]), _hz(note[0]), wave, vol, curve, duty)
+			at += len
+
+
+## The title screen and the campaign map: a heroic march in D major. A fanfare theme on
+## a bright pulse lead (doubled softly an octave down), brassy held chords, a walking
+## triangle bass, timpani on the downbeats and a snare that rolls into each half.
+static func _compose_title() -> AudioStreamWAV:
+	var info := _track_info("title")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var theme := [
+		[[74, 4], [74, 2], [78, 2], [81, 8]], [[81, 6], [79, 2], [76, 8]], [[78, 4], [74, 4], [78, 4], [83, 4]], [[81, 8], [79, 8]],
+		[[74, 4], [74, 2], [78, 2], [81, 4], [86, 4]], [[85, 6], [83, 2], [81, 8]], [[83, 4], [81, 4], [79, 4], [78, 4]], [[76, 12], [69, 4]],
+		[[78, 4], [81, 4], [83, 8]], [[86, 6], [83, 2], [79, 8]], [[81, 4], [78, 4], [74, 4], [78, 4]], [[76, 8], [73, 8]],
+		[[79, 4], [83, 4], [86, 4], [83, 4]], [[85, 6], [81, 2], [76, 8]], [[86, 8], [81, 4], [78, 4]], [[74, 16]],
+	]
+	_melody(buf, step, theme, "square", 0.075, 0.7, 0.25, 0.95)
+	var low := []
+	for bar in theme:
+		var b := []
+		for n in bar:
+			b.append([n[0] - 12, n[1]])
+		low.append(b)
+	_melody(buf, step, low, "tri", 0.04, 0.8)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		# Brass: the chord held through the bar.
+		for tone in tones:
+			_voice(buf, int(t0 * RATE), step * 15.5, _hz(root + 12 + tone), _hz(root + 12 + tone), "square", 0.022, 0.5, 0.5)
+		# Walking bass in quarters.
+		for q in 4:
+			var midi: int = root - 12 + [0, 7, 12, 7][q]
+			_voice(buf, int((t0 + q * 4 * step) * RATE), step * 3.6, _hz(midi), _hz(midi), "tri", 0.2, 1.0)
+		# Timpani on one, kick on three, march snare on two and four (a roll at each half's end).
+		_voice(buf, int(t0 * RATE), 0.35, _hz(root - 12), _hz(root - 14), "sine", 0.32, 1.6)
+		_voice(buf, int((t0 + 8 * step) * RATE), 0.14, 120.0, 45.0, "sine", 0.3, 2.0)
+		var snare := [4, 12] if b % 8 != 7 else [4, 10, 12, 13, 14, 15]
+		for i in snare:
+			_voice(buf, int((t0 + i * step) * RATE), 0.1, 3500.0, 1500.0, "noise", 0.13, 2.5, 0.5, [], 300 + b * 16 + i)
+	return _to_stream(buf, true)
+
+
+## The prologue and cutscenes: a slow, wistful air in A minor. A breathy sine melody
+## over a slow triangle arpeggio and a low bowed pad, with a harp ripple opening each phrase.
+static func _compose_story() -> AudioStreamWAV:
+	var info := _track_info("story")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var air := [
+		[[76, 8], [72, 4], [74, 4]], [[72, 8], [69, 8]], [[67, 4], [72, 4], [76, 8]], [[74, 12], [71, 4]],
+		[[76, 8], [79, 4], [76, 4]], [[77, 8], [72, 8]], [[79, 6], [77, 2], [76, 8]], [[71, 8], [68, 8]],
+		[[72, 8], [69, 8]], [[71, 4], [74, 4], [79, 8]], [[76, 12], [74, 4]], [[72, 8], [69, 8]],
+		[[74, 8], [77, 8]], [[76, 4], [72, 4], [69, 8]], [[71, 8], [68, 4], [71, 4]], [[69, 16]],
+	]
+	_melody(buf, step, air, "sine", 0.11, 0.5, 0.5, 1.05)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		_voice(buf, int(t0 * RATE), step * 15.8, _hz(root - 12), _hz(root - 12), "saw", 0.035, 0.3)
+		_voice(buf, int(t0 * RATE), step * 15.8, _hz(root - 5), _hz(root - 5), "saw", 0.02, 0.3)
+		var order := [0, 1, 2, 3, 2, 1, 0, 2]
+		for i in 8:
+			var k: int = order[i]
+			var midi: int = root + 12 + (tones[k] if k < tones.size() else 12)
+			_voice(buf, int((t0 + i * 2 * step) * RATE), step * 4.0, _hz(midi), _hz(midi), "tri", 0.06, 1.2)
+		if b % 4 == 0:
+			for i in 6:
+				var midi: int = root + 24 + tones[i % 3] + 12 * (i / 3)
+				_voice(buf, int((t0 + i * 0.5 * step) * RATE), step * 6.0, _hz(midi), _hz(midi), "tri", 0.03, 2.2)
+	return _to_stream(buf, true)
+
+
+## The Ogre King and his heralds: dread in D Phrygian. Low saw drones, a slow war drum,
+## a creeping D, E-flat, D, A motif on a hollow pulse, chain clanks, and a dissonant stab
+## (the tritone) before the loop comes round.
+static func _compose_villain() -> AudioStreamWAV:
+	var info := _track_info("villain")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 12), _hz(root - 12), "saw", 0.07, 0.15)
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 5), _hz(root - 5), "saw", 0.035, 0.15)
+		# A low choir: the chord's third and fifth, hummed.
+		_voice(buf, int(t0 * RATE), step * 15.5, _hz(root + 12 + tones[1]), _hz(root + 12 + tones[1]), "sine", 0.05, 0.3)
+		# War drum: boom, boom ... boom-boom.
+		for i in [0, 6, 8, 14]:
+			_voice(buf, int((t0 + i * step) * RATE), 0.45, 75.0, 32.0, "sine", 0.55 if i == 0 else 0.4, 1.5)
+		for i in [4, 12]:
+			_voice(buf, int((t0 + i * step) * RATE), 0.07, 5200.0, 2600.0, "noise", 0.07, 3.0, 0.5, [], 500 + b * 16 + i)
+	# The motif, twice: in the first bar, and again an octave down in the third.
+	var motif := [[74, 4], [75, 4], [74, 4], [69, 4]]
+	for start in [[0, 0], [2, -12], [4, 0]]:
+		var at: float = start[0] * 16 * step
+		for n in motif:
+			_voice(buf, int(at * RATE), step * n[1] * 0.9, _hz(n[0] + start[1]), _hz(n[0] + start[1]), "square", 0.05, 0.8, 0.125)
+			at += step * n[1]
+	# The stab: A and E-flat together, hard, at the turn.
+	var turn := 6 * 16 * step + 8 * step
+	for midi in [57, 63, 69]:
+		_voice(buf, int(turn * RATE), step * 6.0, _hz(midi), _hz(midi), "saw", 0.06, 1.2)
+	return _to_stream(buf, true)
+
+
+## The mountains' peaceful music, between waves: a folk air in G Mixolydian. A whistled
+## tune over a drone, a dulcimer plucking the chords, and a soft frame drum.
+static func _compose_mountain() -> AudioStreamWAV:
+	var info := _track_info("mountain")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[79, 4], [81, 2], [83, 2], [86, 8]], [[84, 4], [81, 4], [77, 8]], [[79, 4], [76, 4], [72, 8]], [[74, 6], [76, 2], [79, 8]],
+		[[83, 4], [86, 4], [88, 4], [86, 4]], [[84, 8], [81, 8]], [[81, 4], [79, 4], [76, 4], [72, 4]], [[74, 12], [78, 4]],
+	]
+	_melody(buf, step, tune, "sine", 0.1, 0.7, 0.5, 0.95)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		# The drone: G and D under everything.
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(31), _hz(31), "tri", 0.12, 0.2)
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(38), _hz(38), "tri", 0.07, 0.2)
+		# Dulcimer: plucked chord tones in eighths.
+		var order := [0, 2, 1, 2, 0, 2, 1, 3]
+		for i in 8:
+			var k: int = order[i]
+			var midi: int = root + 12 + (tones[k] if k < tones.size() else 12)
+			_voice(buf, int((t0 + i * 2 * step) * RATE), step * 2.5, _hz(midi), _hz(midi), "square", 0.045, 3.0, 0.125)
+		# Frame drum.
+		for i in [0, 6, 8]:
+			_voice(buf, int((t0 + i * step) * RATE), 0.14, 160.0, 70.0, "sine", 0.2, 2.0)
 	return _to_stream(buf, true)
 
 

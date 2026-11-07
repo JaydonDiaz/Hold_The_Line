@@ -12,6 +12,8 @@ extends RefCounted
 ##   no_build   rectangles nothing may be posted or built in (barricades aside)
 ##   trails     paths worn into the ground through the gaps (just paint)
 ##   castle     the castle's style (castle.gd STYLES)
+##   music      its peaceful music between waves (audio.gd STAGE_TRACKS; by default the
+##              biome's: "calm" for the meadow, "mountain" for the mountains)
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ## Terrain along the top edge reaches well above it (y -120), since enemies come in
 ## from just above the field.

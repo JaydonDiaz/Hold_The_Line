@@ -52,6 +52,7 @@ var typing: Tween
 var rng := RandomNumberGenerator.new()
 var stars := []
 var snow := []
+var skipped := false   # Esc: whatever follows is skipped too
 
 
 func _ready() -> void:
@@ -130,6 +131,11 @@ func _next() -> void:
 			name_label.text = f["name"]
 			name_label.add_theme_color_override("font_color", f["color"])
 			sub_label.text = "%s  ·  led by %s" % [f["home"], CD.SPEAKERS[who]["name"]]
+		"ogre", "marshal":
+			who = s["who"]
+			name_label.text = CD.SPEAKERS[who]["name"]
+			name_label.add_theme_color_override("font_color", CD.SPEAKERS[who]["color"])
+			sub_label.text = CD.SPEAKERS[who]["role"]
 		"horde", "ashwatch":
 			who = s.get("who", "")
 			name_label.text = CD.SPEAKERS[who]["name"] if s["scene"] == "horde" else "Ashwatch Keep"
@@ -153,7 +159,7 @@ func _next() -> void:
 		typing.kill()
 	typing = create_tween()
 	typing.tween_property(text_label, "visible_ratio", 1.0, maxf(0.3, text.length() / READ_SPEED)).set_delay(0.5)
-	hint.text = ("Click to begin" if s["scene"] == "title" else "Click or Space to continue  ·  Esc to skip") + "   %d/%d" % [at + 1, scenes.size()]
+	hint.text = ("Click to begin" if s["scene"] == "title" else "Click or Space to continue  ·  Esc to skip") + ("   %d/%d" % [at + 1, scenes.size()] if scenes.size() > 1 else "")
 
 
 ## How long the current scene plays before moving on by itself.
@@ -197,6 +203,7 @@ func advance() -> void:
 
 
 func skip() -> void:
+	skipped = true
 	_close()
 
 
@@ -239,6 +246,10 @@ func _draw() -> void:
 				_draw_nation(s["faction"])
 			"horde":
 				_draw_horde()
+			"ogre":
+				_draw_ogre_court()
+			"marshal":
+				_draw_marshal_road()
 			"ashwatch":
 				_draw_ashwatch()
 			"title":
@@ -1074,6 +1085,113 @@ func _draw_horde() -> void:
 	for i in kinds.size():
 		var x := fmod(i * 24.0 + t * 9.0, GW + 40.0) - 20.0
 		_walker(kinds[i], x, 140 + (i % 3) * 3, i * 0.37)
+
+
+## The Ogre King in his war camp: a blood-red sky, his host filing along the ridge behind,
+## war banners and braziers, and the King himself on a throne of bones.
+func _draw_ogre_court() -> void:
+	_sky(Color(0.18, 0.03, 0.04), Color(0.62, 0.18, 0.08))
+	# A swollen red moon behind the smoke.
+	_b(112, 16, 22, 22, Color(0.9, 0.35, 0.2, 0.25))
+	_b(115, 19, 16, 16, Color(0.95, 0.45, 0.25))
+	_b(118, 22, 4, 3, Color(0.8, 0.3, 0.18))
+	for k in 3:
+		_b(fmod(t * 3.0 + k * 60.0, GW + 40.0) - 30.0, 26 + k * 5, 36, 3, Color(0.12, 0.03, 0.03, 0.7))
+	# His host, a column of torches and spears along the ridge.
+	_ridge(78, 4, 2.0, Color(0.1, 0.03, 0.03))
+	for i in 20:
+		var x := fmod(i * 9.0 + t * 6.0, GW + 20.0) - 10.0
+		var y := 74.0 - 4.0 * sin(x * 0.05 + 2.0)
+		_b(x, y - 4, 2, 4, Color(0.06, 0.02, 0.02))
+		_b(x + 1, y - 8, 1, 4, Color(0.25, 0.2, 0.2))
+		if i % 4 == 0:
+			_b(x + 1, y - 10, 1, 2, Color(1.0, 0.55 + 0.3 * sin(t * 9.0 + i), 0.2))
+	_b(0, 88, GW, 62, Color(0.16, 0.06, 0.05))
+	_speckle(0, 88, GW, 62, Color(0.22, 0.09, 0.07), 0.12)
+	# Bones scattered on the ground.
+	for i in 9:
+		var bx := 8.0 + i * 17.0 + (i * 7) % 5
+		_b(bx, 132 + (i % 3) * 4, 5, 1, Color(0.82, 0.78, 0.68))
+		_b(bx - 1, 131 + (i % 3) * 4, 1, 3, Color(0.82, 0.78, 0.68))
+	# War banners and braziers either side of the throne.
+	for side in [-1, 1]:
+		var bx: float = 80 + side * 50
+		_b(bx, 64, 1, 50, Color(0.25, 0.15, 0.1))
+		var wave := int(t * 3.0 + side) % 2
+		_b(bx + 1, 66 + wave, 10, 14, Color(0.45, 0.06, 0.06))
+		_b(bx + 1, 80 + wave, 5, 3, Color(0.45, 0.06, 0.06))
+		_b(bx + 4, 70 + wave, 4, 4, Color(0.85, 0.82, 0.72))
+		_b(bx + 5, 74 + wave, 2, 2, Color(0.85, 0.82, 0.72))
+		var px: float = 80 + side * 30
+		_b(px - 4, 112, 8, 3, Color(0.3, 0.26, 0.24))
+		_b(px - 1, 115, 2, 10, Color(0.3, 0.26, 0.24))
+		_flame(px, 112, 1.8, side * 2.0)
+	# The throne of bones and, on it, the King.
+	_b(60, 84, 40, 44, Color(0.05, 0.02, 0.02))
+	_b(62, 86, 36, 40, Color(0.78, 0.74, 0.64))
+	for i in 6:
+		_b(62 + i * 6, 80 - (i % 2) * 3, 4, 6, Color(0.85, 0.82, 0.72))
+		_b(63 + i * 6, 82 - (i % 2) * 3, 2, 2, Color(0.1, 0.05, 0.05))
+	_b(64, 98, 32, 30, Color(0.55, 0.12, 0.1))
+	var breathe := 1.0 if int(t * 1.2) % 2 == 0 else 0.0
+	_figure_at("ogre_king", 80, 128 - breathe * 0.25, 7.0)
+	# Embers rising.
+	for k in 16:
+		var age := fmod(t * 0.35 + k * 0.0625, 1.0)
+		_b(10 + k * 9 + sin(t * 2.0 + k) * 4.0, 140 - age * 120.0, 1, 1, Color(1.0, 0.6, 0.25, 1.0 - age))
+
+
+## The Ash Marshal on the road he's burning: farmsteads alight either side, his host
+## marching behind him through falling ash, his ember banner raised.
+func _draw_marshal_road() -> void:
+	_sky(Color(0.12, 0.06, 0.06), Color(0.75, 0.32, 0.12))
+	_ridge(70, 5, 4.0, Color(0.14, 0.07, 0.06))
+	# Burning farmsteads, and their smoke leaning on the wind.
+	for i in 5:
+		var hx := 6.0 + i * 34.0
+		if absf(hx + 8.0 - 80.0) < 22.0:
+			continue
+		_b(hx, 78, 18, 14, Color(0.1, 0.05, 0.04))
+		_b(hx + 2, 72, 14, 6, Color(0.1, 0.05, 0.04))
+		_b(hx + 5, 83, 3, 4, Color(1.0, 0.6, 0.2, 0.8))
+		_flame(hx + 9, 74, 1.4, i * 1.7)
+		for k in 8:
+			var age := fmod(t * 0.3 + k / 8.0 + i * 0.2, 1.0)
+			var r := 2.0 + age * 6.0
+			_b(hx + 9 + age * 14.0 - r / 2.0, 68 - age * 50.0, r, r, Color(0.15, 0.08, 0.07, 0.5 * (1.0 - age)))
+	# The road running back toward the horizon.
+	_b(0, 92, GW, 58, Color(0.2, 0.11, 0.08))
+	for row in range(92, 150):
+		var half := 6.0 + (row - 92) * 0.7
+		_b(80 - half, row, half * 2.0, 1, Color(0.32, 0.22, 0.16))
+	_speckle(0, 92, GW, 58, Color(0.12, 0.06, 0.05), 0.08)
+	# His host, coming up the road behind him.
+	for i in 6:
+		var depth := fmod(t * 0.12 + i / 6.0, 1.0)
+		var sx := 80.0 + (i % 2 * 2 - 1) * (4.0 + depth * 22.0)
+		var sy := 94.0 + depth * 22.0
+		var sc := 1.0 + depth * 1.5
+		_b(sx - sc, sy - 4.0 * sc, 2.0 * sc, 4.0 * sc, Color(0.06, 0.03, 0.03, 0.4 + 0.6 * depth))
+	# The Marshal, his banner of embers beside him.
+	_b(102, 72, 1, 54, Color(0.2, 0.12, 0.08))
+	var wave := int(t * 4.0) % 2
+	_b(103, 74 + wave, 14, 10, Color(0.6, 0.18, 0.08))
+	_b(103, 84 + wave, 7, 3, Color(0.6, 0.18, 0.08))
+	_b(108, 77 + wave, 4, 4, Color(1.0, 0.6, 0.2, 0.7 + 0.3 * sin(t * 6.0)))
+	_figure_at("warlord", 80, 134, 6.0, Color(0.8, 0.62, 0.55))
+	# Ash and embers falling.
+	for k in 22:
+		var fall := fmod(t * (6.0 + k % 4) + k * 13.0, 150.0)
+		_b(fmod(k * 23.0 + sin(t + k) * 5.0, GW), fall, 1, 1, Color(0.6, 0.55, 0.5, 0.7) if k % 3 else Color(1.0, 0.55, 0.2, 0.9))
+
+
+## A large sprite standing with its feet at art pixel (x, y), scaled, tinted.
+func _figure_at(kind: String, x: float, y: float, scale: float, tint := Color.WHITE) -> void:
+	var tex: Texture2D = Sprites.frames(kind)[0]
+	var sz := Vector2(tex.get_width(), tex.get_height()) * scale
+	var foot := Vector2(x * PX, y * PX)
+	draw_rect(Rect2(foot.x - sz.x * 0.35, foot.y - 6, sz.x * 0.7, 8), Color(0, 0, 0, 0.35))
+	draw_texture_rect(tex, Rect2(foot.x - sz.x / 2.0, foot.y - sz.y, sz.x, sz.y), false, tint)
 
 
 func _draw_ashwatch() -> void:
