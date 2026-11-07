@@ -300,7 +300,7 @@ func _flame(x: float, y: float, s: float, phase: float) -> void:
 ## acts: a pose swap with a one-pixel hop into it, or, for the spellcasters, their magic
 ## gathering at the staff and going off. Sprites are only ever moved by whole art pixels,
 ## never stretched or turned, so the pixel art stays crisp.
-func _figure(kind: String, x: float, y: float, phase: float, flip := false, scale := 4.0, act := true) -> void:
+func _figure(kind: String, x: float, y: float, phase: float, flip := false, scale := 4.0, act := true, prop := "") -> void:
 	var tex: Texture2D = Sprites.frames(kind)[0]
 	var cycle := fmod(t + phase, ACT_CYCLE)
 	var acting := act and cycle > ACT_AT
@@ -316,6 +316,8 @@ func _figure(kind: String, x: float, y: float, phase: float, flip := false, scal
 	var dir := -1.0 if flip else 1.0
 	if act and kind in SPELLS:
 		_spell_ground(kind, foot, cycle)
+	if prop != "" and act and ACTIONS.has(kind):
+		_prop(prop, x + dir * 10.0, y, acting and cycle - ACT_AT < 0.2, dir)
 	draw_rect(Rect2(foot.x - sz.x * 0.3, foot.y - 4, sz.x * 0.6, 6), Color(0, 0, 0, 0.25))
 	draw_set_transform(foot - Vector2(0, hop), 0.0, Vector2(dir, 1.0))
 	draw_texture_rect(tex, Rect2(-sz.x / 2.0, -sz.y, sz.x, sz.y), false)
@@ -343,6 +345,47 @@ func _spell_ground(kind: String, foot: Vector2, cycle: float) -> void:
 				for i in 16:
 					var a := i * TAU / 16.0
 					_px_at(foot + Vector2(cos(a) * r, sin(a) * r * 0.35), PX, Color(1.0, 0.95, 0.55, 0.9 * (1.0 - after)))
+
+
+## What a worker strikes, standing at art pixel (x, y) on the striker's `dir` side; `hit`
+## while the blow lands (chips, sparks, a jolt).
+func _prop(kind: String, x: float, y: float, hit: bool, dir: float) -> void:
+	match kind:
+		"stone":
+			# A cut block on a low trestle, a mason's chisel marks on its face.
+			_b(x - 4, y - 3, 1, 3, Color(0.35, 0.24, 0.14))
+			_b(x + 3, y - 3, 1, 3, Color(0.35, 0.24, 0.14))
+			_b(x - 5, y - 4, 10, 1, Color(0.45, 0.3, 0.18))
+			_b(x - 4, y - 10, 8, 6, OUTLINE)
+			_b(x - 3, y - 9, 6, 5, Color(0.62, 0.58, 0.52))
+			_b(x - 3, y - 9, 6, 1, Color(0.72, 0.68, 0.62))
+			_b(x - 1, y - 7, 2, 1, Color(0.48, 0.44, 0.4))
+			if hit:
+				for k in 4:
+					_b(x - dir * 3 + dir * k * 0.5, y - 10 - k, 1, 1, Color(1.0, 0.85, 0.4))
+					_b(x - dir * (2 + k), y - 8 - k * 0.5, 1, 1, Color(0.75, 0.72, 0.66))
+		"ore":
+			# An outcrop of rock with a seam of gold.
+			_b(x - 5, y - 9, 10, 9, OUTLINE)
+			_b(x - 4, y - 8, 8, 8, Color(0.36, 0.3, 0.26))
+			_b(x - 4, y - 8, 8, 2, Color(0.46, 0.4, 0.34))
+			_b(x - 2, y - 5, 2, 1, Color(1.0, 0.8, 0.3))
+			_b(x + 1, y - 3, 2, 1, Color(1.0, 0.8, 0.3))
+			if hit:
+				for k in 4:
+					_b(x - dir * (4 + k), y - 7 - k, 1, 1, Color(1.0, 0.85, 0.35) if k % 2 == 0 else Color(0.55, 0.48, 0.4))
+		"dummy":
+			# A wooden training dummy, rocking back when it's struck.
+			var lean := dir * (1.0 if hit else 0.0)
+			_b(x - 0.5, y - 3, 1, 3, Color(0.35, 0.24, 0.14))
+			_b(x - 3, y - 1, 6, 1, Color(0.35, 0.24, 0.14))
+			_b(x - 2 + lean, y - 12, 4, 9, OUTLINE)
+			_b(x - 1 + lean, y - 11, 2, 8, Color(0.62, 0.45, 0.26))
+			_b(x - 4 + lean, y - 10, 8, 1, Color(0.5, 0.36, 0.2))
+			_b(x - 1 + lean, y - 14, 2, 2, Color(0.62, 0.45, 0.26))
+			if hit:
+				_b(x - dir * 3, y - 9, 1, 1, Color(1, 1, 0.85))
+				_b(x - dir * 4, y - 10, 1, 1, Color(1, 1, 0.85))
 
 
 ## A spellcaster's magic at its staff tip (screen pixels): it gathers through the loop
@@ -443,6 +486,12 @@ func _draw_beacons(going_dark: bool) -> void:
 		var top := 92.0 - 10.0 * (0.6 * sin(px * 0.07 + 1.0) + 0.4 * sin(px * 0.19 + 2.0))
 		_b(px, top - 3, 1, 3, Color(0.1, 0.1, 0.2))
 		_b(px - 1, top - 1, 3, 1, Color(0.1, 0.1, 0.2))
+	# The towers, each on a hill rising out of the ridge.
+	for i in BEACONS.size():
+		var p: Vector2 = BEACONS[i]
+		for r in range(0, 30):
+			var half := 3.0 + sqrt(float(r)) * 5.5
+			_b(p.x - half, p.y + 2 + r, half * 2.0, 1, Color(0.13, 0.13, 0.25))
 	# A band of mist in the valley.
 	for x in range(0, GW, 2):
 		_b(x, 100 + 2 * sin(x * 0.1 + t * 0.3), 2, 4, Color(0.5, 0.5, 0.7, 0.12))
@@ -451,10 +500,6 @@ func _draw_beacons(going_dark: bool) -> void:
 	for i in BEACONS.size():
 		var p: Vector2 = BEACONS[i]
 		var lit: bool = (t > 0.6 + i * LIGHT_STEP) if not going_dark else (t < 1.0 + i * DARK_STEP)
-		# A mound under each tower, so it stands on its hill.
-		for r in 14:
-			var half := 4.0 + sqrt(float(r)) * 5.0
-			_b(p.x - half, p.y + 2 + r, half * 2.0, 1, Color(0.08, 0.08, 0.15))
 		# The tower: outlined stone with mortar lines, a slit window and a brazier.
 		_b(p.x - 4, p.y - 13, 8, 16, OUTLINE)
 		_b(p.x - 3, p.y - 12, 6, 15, Color(0.42, 0.4, 0.45))
@@ -467,7 +512,6 @@ func _draw_beacons(going_dark: bool) -> void:
 		if lit:
 			# Firelight on the stone and the ground around it.
 			_b(p.x - 3, p.y - 12, 2, 15, Color(1.0, 0.6, 0.25, 0.25))
-			_b(p.x - 10, p.y + 2, 20, 4, Color(1.0, 0.55, 0.2, 0.1))
 			_flame(p.x, p.y - 15, 1.0, i * 1.3)
 		elif going_dark:
 			# Smoke rising from the dead brazier.
@@ -531,20 +575,22 @@ func _draw_nation(f: String) -> void:
 			_b(0, 120, GW, 30, Color(0.42, 0.37, 0.33))
 			_speckle(0, 120, GW, 30, Color(0.5, 0.45, 0.4), 0.18)
 			_speckle(0, 120, GW, 30, Color(0.33, 0.29, 0.26), 0.12, 7.0)
-			# An anvil glowing at the forge, sparks flying off the hammers.
-			_b(136, 116, 10, 3, Color(0.25, 0.25, 0.28))
-			_b(139, 119, 4, 5, Color(0.25, 0.25, 0.28))
-			_b(137, 115, 5, 1, Color(1.0, 0.55, 0.2, 0.7 + 0.3 * sin(t * 6.0)))
-			for k in 6:
-				var sp := fmod(t * 2.0 + k * 0.37, 1.0)
-				_b(48 + k * 13 + sp * 6.0, 108 - sp * 10.0 + sp * sp * 14.0, 1, 1, Color(1, 0.85, 0.3, 1.0 - sp))
+			# The forge: an anvil glowing, a brazier beside it.
+			_b(140, 117, 10, 3, Color(0.25, 0.25, 0.28))
+			_b(143, 120, 4, 4, Color(0.25, 0.25, 0.28))
+			_b(141, 116, 5, 1, Color(1.0, 0.55, 0.2, 0.7 + 0.3 * sin(t * 6.0)))
+			_b(151, 117, 5, 6, Color(0.2, 0.18, 0.18))
+			_flame(153.5, 117, 0.8, 0.5)
 		"greenwood":
 			_sky(Color(0.42, 0.66, 0.74), Color(0.82, 0.92, 0.78))
 			_ridge(70, 6, 1.0, Color(0.5, 0.66, 0.6))
+			# Shaded undergrowth under the trees, so every row stands on the forest floor.
+			_b(0, 74, GW, 50, Color(0.16, 0.3, 0.18))
 			for layer in 3:
 				var col := Color(0.22, 0.44, 0.27).darkened(0.22 * (2 - layer))
+				_b(0, 74 + layer * 18, GW, 50, Color(0.16, 0.3, 0.18).lightened(0.06 * layer))
 				for i in 12:
-					_pine(6 + i * 14 + layer * 5, 72 + layer * 18, 16 + layer * 4 + (i * 3 + layer) % 5, col)
+					_pine(6 + i * 14 + layer * 5, 76 + layer * 22, 16 + layer * 4 + (i * 3 + layer) % 5, col)
 			# Sunbeams slanting down through the canopy.
 			for i in 4:
 				var bx := 18.0 + i * 38.0
@@ -715,11 +761,6 @@ func _draw_nation(f: String) -> void:
 			_smoke(121, 87, 0.0, Color(0.85, 0.88, 0.92))
 			# Snowfields, a frozen lake glinting, and the trodden path the witches stand on.
 			_b(0, 114, GW, 36, Color(0.93, 0.95, 1.0))
-			_b(4, 113, 150, 3, Color(0.62, 0.78, 0.92))
-			_b(6, 113, 146, 1, Color(0.8, 0.9, 1.0))
-			for k in 5:
-				var gx := fmod(k * 31.0 + t * 6.0, 146.0)
-				_b(6 + gx, 114, 2, 1, Color(1, 1, 1, 0.8))
 			_b(0, 124, GW, 18, Color(0.76, 0.84, 0.94))
 			_speckle(0, 124, GW, 18, Color(0.68, 0.76, 0.88), 0.18)
 			_speckle(0, 114, GW, 36, Color(1, 1, 1), 0.05, 5.0)
@@ -825,9 +866,14 @@ func _draw_nation(f: String) -> void:
 			_speckle(0, 116, GW, 34, Color(0.6, 0.52, 0.5), 0.12)
 			_b(138, 84, 4, 34, Color(0.35, 0.22, 0.18))
 			_b(130, 92, 8, 2, Color(0.35, 0.22, 0.18))
-			_b(122, 70, 34, 18, Color(0.98, 0.72, 0.8))
-			_b(126, 66, 24, 6, Color(1.0, 0.8, 0.87))
-			_speckle(122, 66, 34, 22, Color(0.92, 0.55, 0.68), 0.25)
+			for c in [[132, 76, 9], [144, 74, 10], [138, 68, 9], [126, 80, 6], [150, 80, 6]]:
+				for row in range(-c[2], c[2] + 1):
+					var hw := sqrt(float(c[2] * c[2] - row * row))
+					_b(c[0] - hw, c[1] + row, hw * 2.0, 1, Color(0.98, 0.72, 0.8))
+			for c in [[136, 66, 5], [146, 70, 4]]:
+				for row in range(-c[2], c[2] + 1):
+					var hw := sqrt(float(c[2] * c[2] - row * row))
+					_b(c[0] - hw, c[1] + row, hw * 2.0, 1, Color(1.0, 0.84, 0.9))
 			for lx in [14, 54, 104]:
 				_b(lx, 108, 6, 2, Color(0.6, 0.58, 0.55))
 				_b(lx + 1, 110, 4, 3, Color(0.7, 0.68, 0.62))
@@ -881,10 +927,12 @@ func _draw_nation(f: String) -> void:
 				_b(fmod(k * 41.0, GW), fmod(110.0 - t * (4.0 + k % 4) - k * 9.0, 110.0), 1, 1, Color(0.85, 0.7, 1.0, 0.7))
 	if f == "deepdelve":
 		_draw_gun_crew()
-	# The folk, at work.
+	# The folk, at work (on something: hammers ring on stone, picks bite ore, fists land
+	# on a training dummy).
 	var folk: Array = CD.FACTIONS[f]["folk"]
+	var prop: String = {"stonehollow": "stone", "deepdelve": "ore", "monastery": "dummy"}.get(f, "")
 	for i in folk.size():
-		_figure(folk[i], 40 + i * 40, 128 + (i % 2) * 6, i * 0.53, i == 2)
+		_figure(folk[i], 40 + i * 40, 128 + (i % 2) * 6, i * 0.53, i == 2, 4.0, true, prop)
 
 
 ## Deepdelve's gun crew test-firing a cannon: the Cannoneer fetches a ball, loads it,
@@ -964,10 +1012,6 @@ func _peaks(list: Array, col: Color, snowy: bool, base := 120) -> void:
 			if snowy and row < top + (base - top) * 0.22:
 				_b(x - w, row, w + 2.0, 1, Color(0.97, 0.98, 1.0))
 				_b(x + 1.0, row, w, 1, Color(0.8, 0.86, 0.96))
-			# Seams: short dark strokes running down the face.
-			if row % 5 == 2 and w > 6.0 and _h(x, row) < 0.6:
-				var sx := x - w + 2.0 + _h(row, x) * (w * 2.0 - 4.0)
-				_b(sx, row, 2, 1, lit.darkened(0.25) if sx < x else lit.darkened(0.35))
 
 
 ## A pine: tiers of boughs, lit on the left; snowy ones carry snow on each tier.
@@ -1016,10 +1060,14 @@ func _bricks(x0: int, y0: int, w: int, h: int, col: Color) -> void:
 
 ## Smoke curling up from (x, y).
 func _smoke(x: float, y: float, phase: float, col := Color(0.62, 0.6, 0.62)) -> void:
-	for k in 5:
-		var age := fmod(t * 0.45 + k * 0.2 + phase, 1.0)
-		var r := 1.0 + age * 3.0
-		_b(x + sin(age * 5.0 + phase) * 2.0 + age * 4.0 - r / 2.0, y - age * 22.0, r, r, Color(col, 0.6 * (1.0 - age)))
+	# Overlapping puffs that swell and thin out as they drift up and away, so it reads
+	# as a plume rather than a dotted line.
+	for k in 10:
+		var age := fmod(t * 0.35 + k * 0.1 + phase, 1.0)
+		var r := 2.0 + age * 5.0
+		var c := Vector2(x + sin(age * 4.0 + phase) * 1.5 + age * 6.0, y - age * 18.0)
+		_b(c.x - r / 2.0, c.y - r / 2.0, r, r, Color(col, 0.32 * (1.0 - age)))
+		_b(c.x - r / 4.0, c.y - r / 4.0, r / 2.0, r / 2.0, Color(col.lightened(0.1), 0.25 * (1.0 - age)))
 
 
 func _cloud(x: float, y: float, w: float, col: Color) -> void:
@@ -1064,9 +1112,9 @@ func _draw_horde() -> void:
 		if i % 2 == 0:
 			_flame(hx + 7, 80, 1.6, i)
 			# A column of smoke leaning off on the wind.
-			for k in 12:
-				var age := fmod(t * 0.3 + k / 12.0 + i * 0.13, 1.0)
-				var r := 2.0 + age * 7.0
+			for k in 20:
+				var age := fmod(t * 0.3 + k / 20.0 + i * 0.13, 1.0)
+				var r := 4.0 + age * 10.0
 				_b(hx + 7 + age * 18.0 - r / 2.0, 74 - age * 60.0, r, r, Color(0.18, 0.1, 0.1, 0.55 * (1.0 - age)))
 	_ridge(102, 3, 9.0, Color(0.16, 0.08, 0.07))
 	# Embers swirling up from the fires.
@@ -1128,11 +1176,21 @@ func _draw_ogre_court() -> void:
 		_flame(px, 112, 1.8, side * 2.0)
 	# The throne of bones and, on it, the King.
 	_b(60, 84, 40, 44, Color(0.05, 0.02, 0.02))
-	_b(62, 86, 36, 40, Color(0.78, 0.74, 0.64))
+	_b(62, 86, 36, 40, Color(0.24, 0.13, 0.1))
+	# Ribs and long bones lashed up the back, tusks at the corners, skulls along the top.
+	for i in 5:
+		_b(64 + i * 8, 87, 2, 38, Color(0.74, 0.7, 0.6))
+		_b(64 + i * 8, 87, 1, 38, Color(0.86, 0.83, 0.74))
+	for side in [-1, 1]:
+		var tx: float = 80 + side * 20
+		for k in 6:
+			_b(tx - (k * 0.6 if side < 0 else -k * 0.6) - 1, 84 - k * 2, 2, 2, Color(0.9, 0.86, 0.76))
 	for i in 6:
-		_b(62 + i * 6, 80 - (i % 2) * 3, 4, 6, Color(0.85, 0.82, 0.72))
-		_b(63 + i * 6, 82 - (i % 2) * 3, 2, 2, Color(0.1, 0.05, 0.05))
-	_b(64, 98, 32, 30, Color(0.55, 0.12, 0.1))
+		_b(62 + i * 6, 80 - (i % 2) * 3, 4, 5, Color(0.85, 0.82, 0.72))
+		_b(63 + i * 6, 81 - (i % 2) * 3, 1, 1, Color(0.1, 0.05, 0.05))
+		_b(65 + i * 6, 81 - (i % 2) * 3, 1, 1, Color(0.1, 0.05, 0.05))
+	_b(64, 98, 32, 30, Color(0.5, 0.1, 0.08))
+	_b(64, 98, 32, 2, Color(0.62, 0.14, 0.1))
 	var breathe := 1.0 if int(t * 1.2) % 2 == 0 else 0.0
 	_figure_at("ogre_king", 80, 128 - breathe * 0.25, 7.0)
 	# Embers rising.
@@ -1240,6 +1298,12 @@ func _draw_ashwatch() -> void:
 	_figure("swordsman", 56, 92, 0.0, false, 3.0, false)
 	_figure("swordsman", 104, 92, 0.7, true, 3.0, false)
 	_b(0, 130, GW, 20, Color(0.18, 0.22, 0.16))
+	# The road up to the gate, across the foreground.
+	for row in range(130, 150):
+		var half := 8.0 + (row - 130) * 0.6
+		_b(80 - half, row, half * 2.0, 1, Color(0.42, 0.36, 0.28))
+		if row % 3 == 0:
+			_b(80 - half + _h(row, 1.0) * half * 2.0, row, 2, 1, Color(0.34, 0.29, 0.22))
 
 
 func _draw_title() -> void:
