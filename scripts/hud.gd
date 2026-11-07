@@ -976,17 +976,21 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 		"untrained":
 			var t: Dictionary = w.next_tier(p)
 			card["tier"].text = t["name"]
-			card["desc"].text = "Train %s to tier %s at the Training Grounds" % [_trainee_name(w.kind), ["I", "II", "III", "IV"][w.tiers[p]]]
+			card["desc"].text = "Open tier %s of %s for %s at the Training Grounds" % [["I", "II", "III", "IV"][w.tiers[p]], t_path_name(w, p), _trainee_name(w.kind)]
 			card["cost"].text = "TRAINING"
 			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	b.disabled = state != "ok" or not affordable
 	b.modulate.a = 0.45 if state == "full" or state == "untrained" else 1.0
 
 
-## Whose training a unit uses, in words ("Archers" for an Archer Tower's crew).
+## A unit kind's name in the plural ("Archers", "Archer Towers").
 func _trainee_name(kind: String) -> String:
-	var name: String = Data.WARRIORS[Campaign.train_key(kind)]["name"]
+	var name: String = Data.WARRIORS[kind]["name"]
 	return name + ("es" if name.ends_with("ch") else "s")
+
+
+func t_path_name(w, p: int) -> String:
+	return w.data["paths"][p]["name"]
 
 
 ## A fallen unit's path, as it was when it fell: no price, nothing to buy.
@@ -1505,11 +1509,26 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int) -> void:
 		var go := _button(dim, Vector2(200, 460), Vector2(240, 56), "Continue to the map")
 		go.pressed.connect(func(): campaign_map.emit())
 	else:
-		sub.text = "%s: you held %d of %d waves. Nothing is lost; try again with what you've learned." % [mission["name"], survived, mission["waves"]]
+		sub.text = "%s: you held %d of %d waves. Half of what your troops learned still counts; try again." % [mission["name"], survived, mission["waves"]]
 		var again := _button(dim, Vector2(110, 460), Vector2(200, 56), "Try again")
 		again.pressed.connect(func(): campaign_retry.emit())
 		var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
 		map_btn.pressed.connect(func(): campaign_map.emit())
+	# What each unit learned: XP earned, and any training points it reached.
+	var earned: Array = Campaign.last_battle.keys()
+	earned.sort_custom(func(a, b): return Campaign.last_battle[a][0] > Campaign.last_battle[b][0])
+	if not earned.is_empty():
+		var head := _label(dim, Vector2(0, 540), Vector2(WIDTH, 24), Color(1, 0.85, 0.3), 17)
+		head.text = "Experience"
+		head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		for i in mini(earned.size(), 8):
+			var kind: String = earned[i]
+			var got: Array = Campaign.last_battle[kind]
+			var line := _label(dim, Vector2(WIDTH / 2.0 - 190, 570 + i * 24), Vector2(380, 22), Color(0.92, 0.9, 0.85), 15)
+			line.text = "%s  +%d XP%s" % [Data.WARRIORS[kind]["name"], roundi(got[0]), "  ·  +%d training point%s!" % [got[1], "" if got[1] == 1 else "s"] if got[1] > 0 else ""]
+			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			if got[1] > 0:
+				line.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 
 
 func _label(parent: Node, pos: Vector2, size: Vector2, color: Color, font_size: int) -> Label:

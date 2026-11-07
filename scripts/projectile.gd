@@ -26,6 +26,7 @@ var traveled := 0.0   # shells arc up and back down over the flight
 var left := 0.0
 var poison := {}     # flasks: dps, duration, stacks
 var source := 0      # instance id of the unit that fired it (flask poison and mage rot are tracked by it)
+var credit := ""     # campaign XP: the unit kind whose shot it is
 var cloud := {}      # flasks: radius, duration of the toxic cloud left behind
 var corrode := {}    # flasks: amount, duration
 var melt := 0.0      # flasks: share of the direct target's max HP burned away
@@ -54,6 +55,8 @@ var flown := 0.0
 
 
 func _process(delta: float) -> void:
+	if main.campaign:
+		main.credit = credit
 	if straight:
 		_fly_on(delta)
 		return
@@ -148,6 +151,7 @@ func _hit() -> void:
 		if not cloud.is_empty():
 			var z := Zone.new()
 			z.main = main
+			z.credit = credit
 			z.style = "toxic"
 			z.radius = cloud["radius"]
 			z.slow = 0.0
@@ -217,6 +221,7 @@ func _after_hit(struck: Array) -> void:
 	if not napalm.is_empty():
 		var z := Zone.new()
 		z.main = main
+		z.credit = credit
 		z.style = "fire"
 		z.radius = splash * 0.85
 		z.slow = 0.0

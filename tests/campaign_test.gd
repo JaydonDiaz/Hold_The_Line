@@ -12,8 +12,9 @@ extends SceneTree
 ## D  data            every mission, faction and story entry is well-formed; no Slime
 ##                    without magic, ki or ice in every alliance set it could meet; no flying enemy
 ##                    where some valid alliance set would have nothing to hit it with
-## T  training       tiers II-IV need troop training: enforced by card, hotkey and call; points
-##                    are earned by first wins, spent in order, shared by tower crews, saved
+## T  training       tiers II-IV need training, path by path: enforced by card, hotkey and call;
+##                    units earn XP by what they do (losses and early exits count half), each
+##                    level is a point, a point opens one path's next tier, 12 max a unit; saved
 ## C  cutscene        a new campaign opens with the prologue; every scene plays; every named
 ##                    character's portrait builds
 ## B  balance         a simple swordsmen-first bot, held to its training, wins each playable
@@ -182,13 +183,23 @@ func _persistence() -> void:
 	check(not campaign.save_game(), "P  ...and is never overwritten")
 	cfg = ConfigFile.new()
 	check(cfg.load(TEST_SAVE) == OK and cfg.get_value("meta", "version", 0) == 99, "P  ...it's still there, untouched")
-	# A save from version 1 (before troop training) gets the points its wins earned.
+	# A save from version 1 (before troop training) loads, nothing trained.
 	cfg = ConfigFile.new()
 	cfg.set_value("meta", "version", 1)
 	cfg.set_value("state", "completed", ["ashwatch"])
 	cfg.save(TEST_SAVE)
-	check(campaign.load_game() and campaign.training_points == CD.MISSIONS["ashwatch"]["training"] and campaign.trained.is_empty(),
-			"P  a version 1 save loads, credited %d training points for its won mission" % campaign.training_points)
+	check(campaign.load_game() and campaign.completed == ["ashwatch"] and campaign.unlocked.is_empty() and campaign.xp.is_empty(),
+			"P  a version 1 save loads, with nothing trained")
+	# A version 2 save (a tier for all four paths; towers shared their crew's) keeps its tiers.
+	cfg = ConfigFile.new()
+	cfg.set_value("meta", "version", 2)
+	cfg.set_value("state", "completed", ["ashwatch"])
+	cfg.set_value("state", "training_points", 3)
+	cfg.set_value("state", "trained", {"swordsman": 3, "archer": 2})
+	cfg.save(TEST_SAVE)
+	check(campaign.load_game() and campaign.unlocked.get("swordsman") == [3, 3, 3, 3] and campaign.unlocked.get("archer") == [2, 2, 2, 2]
+			and campaign.unlocked.get("tower") == [2, 2, 2, 2] and campaign.points("swordsman") == 0,
+			"P  a version 2 save keeps every tier it trained, on all four paths (Archer Towers' too)")
 	campaign.save_game()
 	cfg = ConfigFile.new()
 	cfg.load(TEST_SAVE)
@@ -533,13 +544,14 @@ func _has_cover(allies: Array, m: Dictionary, cover_keys: Array, attacks: Array)
 
 func _training() -> void:
 	campaign.new_campaign("normal")
-	check(campaign.trained_tier("swordsman") == 1 and campaign.training_points == 0, "T  a new campaign: tier I only, no training points")
+	check(campaign.level_of("swordsman") == 0 and campaign.points("swordsman") == 0 and campaign.path_tier("swordsman", 0) == 1,
+			"T  a new campaign: level 0, no points, tier I only")
 	check(campaign.trainable() == ["swordsman"], "T  only the Swordsmen can be trained at the start")
-	check(not campaign.can_train("swordsman") and not campaign.train("swordsman"), "T  no points, no training")
+	check(not campaign.can_unlock("swordsman", 0) and not campaign.unlock("swordsman", 0), "T  no points, no training")
 	await _play("ashwatch")
 	main.gold = 99999
 	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(300, 400))
+	main.hire_at(Vector2(300, 470))
 	var w = main.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
 	main.selected = w
 	_key(KEY_Q)
@@ -551,42 +563,138 @@ func _training() -> void:
 	check(w.path_state(0) == "untrained" and w.path_state(1) == "ok", "T  the path shows as needing training; untouched paths are still open")
 	main.hud.refresh(main)
 	check(main.hud.path_cards[0]["cost"].text == "TRAINING" and main.hud.path_cards[0]["button"].disabled
-			and "Training Grounds" in main.hud.path_cards[0]["desc"].text, "T  the upgrade card says to train at the Training Grounds")
-	# Winning earns points, once.
+			and "Training Grounds" in main.hud.path_cards[0]["desc"].text, "T  the upgrade card says to open it at the Training Grounds")
+	# Fighting earns the Swordsmen XP; winning banks all of it.
 	main.selected = null
+	w.position = w.post
+	main.wave_active = true
+	main._spawn_enemy("orc", 3, w.position + Vector2(0, -40))
+	for f in 60 * 4:
+		await process_frame
+	main.wave_active = false
 	await _win_mission()
-	var earned: int = CD.MISSIONS["ashwatch"]["training"]
-	check(campaign.training_points == earned and campaign.points_won == earned, "T  winning Ashwatch earns %d training points" % earned)
-	campaign.mission_id = "ashwatch"
-	campaign.finish_mission(true)
-	check(campaign.training_points == earned, "T  ...only the first time")
-	# Spending them.
-	check(campaign.train_cost("swordsman") == CD.TRAINING_COSTS[2] and campaign.train("swordsman"), "T  Swordsmen trained to tier II for %d point" % CD.TRAINING_COSTS[2])
-	check(campaign.trained_tier("swordsman") == 2 and campaign.training_points == earned - CD.TRAINING_COSTS[2], "T  ...and the points are spent")
-	check(not campaign.can_train("swordsman"), "T  tier III (%d points) is out of reach with %d left" % [CD.TRAINING_COSTS[3], campaign.training_points])
-	check(not campaign.can_train("archer") and not campaign.train("archer"), "T  Archers can't be trained before Greenwood joins")
+	var fought: float = main.battle_xp.get("swordsman", 0.0)
+	check(fought > 0.0 and is_equal_approx(campaign.xp.get("swordsman", 0.0), fought), "T  the Swordsmen's fighting earned them %d XP, all banked on a win" % roundi(fought))
+	check(campaign.last_battle.has("swordsman") and not main.battle_xp.has("castle") and not main.battle_xp.has(""), "T  ...and the map is told what they earned")
+	print("   (Ashwatch XP by unit: %s)" % str(main.battle_xp))
+	# Points from levels, spent a path at a tier.
+	campaign.xp["swordsman"] = campaign.level_cost(1) + campaign.level_cost(2) + 1.0
+	check(campaign.level_of("swordsman") == 2 and campaign.points("swordsman") == 2, "T  two levels: two points")
+	check(campaign.unlock("swordsman", 0) and campaign.path_tier("swordsman", 0) == 2 and campaign.points("swordsman") == 1, "T  a point opens tier II of one path")
+	check(campaign.unlock("swordsman", 0) and campaign.path_tier("swordsman", 0) == 3, "T  ...and the next point tier III of the same path")
+	check(campaign.points("swordsman") == 0 and not campaign.unlock("swordsman", 1) and campaign.path_tier("swordsman", 1) == 1, "T  out of points, the other paths stay at tier I")
+	check(not campaign.can_unlock("archer", 0), "T  Archers can't be trained before Greenwood joins")
 	var cfg := ConfigFile.new()
 	cfg.load(TEST_SAVE)
-	check(cfg.get_value("state", "trained", {}).get("swordsman", 0) == 2, "T  training is saved")
+	check(cfg.get_value("state", "unlocked", {}).get("swordsman", []) == [3, 1, 1, 1] and cfg.get_value("state", "spent", {}).get("swordsman", 0) == 2,
+			"T  training is saved")
 	await _play("stonehollow")
 	main.gold = 99999
 	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(300, 400))
+	main.hire_at(Vector2(300, 470))
 	w = main.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
 	main.selected = w
-	for i in 3:
+	for i in 4:
 		main.upgrade_selected(0)
-	check(w.tiers[0] == 2, "T  in the next battle, trained Swordsmen go to tier II, not III")
+	main.upgrade_selected(1)
+	main.upgrade_selected(1)
+	check(w.tiers[0] == 3 and w.tiers[1] == 1, "T  in the next battle: path 1 goes to tier III (not IV), path 2 stops at tier I")
 	main.selected = null
-	# Towers train with their crews.
-	campaign.allies = ["stonehollow", "greenwood"]
-	campaign.training_points = 20
-	check(campaign.trainable().has("archer") and not campaign.trainable().has("tower"), "T  Archer Towers aren't listed apart from Archers")
-	campaign.train("archer")
-	campaign.train("archer")
-	check(campaign.trained_tier("tower") == 3 and main.max_tier("tower") == 3, "T  training Archers to tier III trains Archer Tower crews too")
-	check(campaign.train("archer") and not campaign.train("archer") and campaign.trained_tier("archer") == 4, "T  tier IV is the top")
+	# Twelve points train a unit fully, and no more.
+	campaign.xp["swordsman"] = 1e9
+	check(campaign.level_of("swordsman") == CD.MAX_TRAINING and campaign.points("swordsman") == 10, "T  at the top level: 12 points, 2 of them spent")
+	var opened := 0
+	for p in 4:
+		while campaign.unlock("swordsman", p):
+			opened += 1
+	check(opened == 10 and campaign.untrained_tiers("swordsman") == 0 and campaign.points("swordsman") == 0 and not campaign.can_unlock("swordsman", 2),
+			"T  ...which open every tier of every path, and that's all")
+	# Losing (or leaving) banks half.
+	campaign.xp["archer"] = 0.0
+	campaign.mission_id = "stonehollow"
+	campaign.finish_mission(false, [], {"archer": 1000.0})
+	check(is_equal_approx(campaign.xp["archer"], 1000.0 * CD.XP_LOSS_SHARE), "T  a lost battle banks %d%% of its XP" % roundi(CD.XP_LOSS_SHARE * 100))
+	main.battle_xp = {"archer": 400.0}
+	main.back_to_map()
+	check(is_equal_approx(campaign.xp["archer"], 1000.0 * CD.XP_LOSS_SHARE + 400.0 * CD.XP_LOSS_SHARE), "T  leaving a battle early banks half of it too")
+	# Who gets the credit: an Archer's arrows, a Healer's mending, a Mine's gold, a burn
+	# for whoever lit it; the castle's own abilities train no one.
+	campaign.new_campaign("normal")
+	campaign.completed = ["ashwatch"]
+	await _play("stonehollow")
+	campaign.allies = CD.FACTIONS.keys()
+	main.gold = 99999
+	for x in main.get_warriors():
+		x.free()
+	main.warriors_changed()
+	var archer = _hire_at("archer", Vector2(320, 560))
+	var healer = _hire_at("healer", Vector2(260, 600))
+	var hurt = _hire_at("swordsman", Vector2(380, 600))
+	var mine = _hire_at("mine", Vector2(220, 660))
+	mine.finish_build()
+	hurt.max_hp = 1e5
+	hurt.hp = 1e4
+	main.wave_active = true
+	main._spawn_enemy("orc", 3, Vector2(320, 430))
+	var orc = main.get_enemies()[0]
+	orc.max_hp = 1e5
+	orc.hp = 1e5
+	orc.speed = 0.0
+	for f in 60 * 8:
+		await process_frame
+	check(main.battle_xp.get("archer", 0.0) > 0.0, "T  an Archer's arrows train Archers (%d XP)" % roundi(main.battle_xp.get("archer", 0.0)))
+	check(main.battle_xp.get("healer", 0.0) > 0.0, "T  a Healer's mending trains Healers (%d XP)" % roundi(main.battle_xp.get("healer", 0.0)))
+	check(main.battle_xp.get("mine", 0.0) > 0.0, "T  a Gold Mine's gold trains Gold Mines (%d XP)" % roundi(main.battle_xp.get("mine", 0.0)))
+	var before: Dictionary = main.battle_xp.duplicate()
+	main.credit = "alchemist"
+	orc.apply_burn(50.0, 1.0)
+	main.credit = "archer"
+	for f in 30:
+		await process_frame
+	check(main.battle_xp.get("alchemist", 0.0) > before.get("alchemist", 0.0), "T  a burn counts for whoever set it, as it burns")
+	before = main.battle_xp.duplicate()
+	var total_before := 0.0
+	for k in before:
+		total_before += before[k]
+	archer.free()
+	healer.free()
+	main.warriors_changed()
+	main.powers.owned["fireball"] = true
+	main.powers.cooldown["fireball"] = 0.0
+	main.powers.trigger("fireball")
+	main.powers.aim_click(orc.position)
+	for f in 90:
+		await process_frame
+	var total_after := 0.0
+	for k in main.battle_xp:
+		total_after += main.battle_xp[k]
+	check(orc.hp < 1e5 and absf(total_after - total_before) < 200.0 * CD.XP_RATES["gold"] + 1.0 and not main.battle_xp.has(""), "T  the castle's Fireball trains no one")
+	# Classic earns nothing.
+	await _fresh_main()
+	main.hud.picking = true
+	main.choose_mode("normal")
+	main.gold = 9999
+	main._on_hire_pressed("swordsman")
+	main.hire_at(Vector2(320, 600))
+	main.wave_active = true
+	main._spawn_enemy("goblin", 1, Vector2(320, 560))
+	for f in 120:
+		await process_frame
+	check(main.battle_xp.is_empty(), "T  Classic earns no XP")
+	main.free()
+	main = null
 	campaign.reset()
+
+
+func _hire_at(kind: String, at: Vector2):
+	main.placing_type = kind
+	main.hire_at(at)
+	main.placing_type = ""
+	main.selected = null
+	var all: Array = main.get_warriors().filter(func(x): return x.kind == kind)
+	var w = all[all.size() - 1]
+	w.position = w.post
+	return w
 
 
 # --- C: the prologue and portraits ---------------------------------------------------------
@@ -651,7 +759,8 @@ func _cutscene() -> void:
 ## training allows between waves, repairs if it can, and starts the next wave. It's no
 ## good at the game, so a mission it wins with Swordsmen alone is one a player can win.
 ## Each mission is tried untrained (the worst case: the player spent nothing on it), and
-## Stonehollow also with the Swordsmen trained to tier II (what Ashwatch's points buy).
+## Stonehollow also with two points in the Swordsmen (tier II of Damage and Health: about
+## what a Swordsmen-heavy Ashwatch earns).
 func _balance() -> void:
 	for diff in ["easy", "normal", "hard"]:
 		for run in [["ashwatch", 1], ["stonehollow", 1], ["stonehollow", 2]]:
@@ -659,7 +768,7 @@ func _balance() -> void:
 			campaign.new_campaign(diff)
 			if mid == "stonehollow":
 				campaign.completed = ["ashwatch"]
-			campaign.trained = {"swordsman": run[1]}
+			campaign.unlocked = {"swordsman": [run[1], 1, run[1], 1]}
 			await _play(mid)
 			Engine.time_scale = 4.0
 			var guard := 0
@@ -670,6 +779,7 @@ func _balance() -> void:
 				await process_frame
 				guard += 1
 			Engine.time_scale = 1.0
+			print("   %s %s: XP earned %s" % [mid, diff, str(main.battle_xp)])
 			check(main.victory, "B  %s on %s, Swordsmen tier %s: the bot %s (castle %d/%d, %d troops left)" % [CD.MISSIONS[mid]["name"], diff, ["I", "II"][run[1] - 1],
 					"wins" if main.victory else "LOSES on wave %d" % main.wave, ceili(main.castle_hp), roundi(main.castle_max),
 					main.get_warriors().filter(func(w): return w.kind == "swordsman" and w.is_active()).size()])

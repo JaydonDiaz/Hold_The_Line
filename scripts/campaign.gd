@@ -9,8 +9,9 @@ extends Node
 
 const CD = preload("res://scripts/campaign_data.gd")
 const Data = preload("res://scripts/data.gd")
-const VERSION := 2   # bump when the save's shape changes, and migrate older saves in _read
+const VERSION := 3   # bump when the save's shape changes, and migrate older saves in _read
 # 1: the first campaign save.  2: adds troop training (points and trained tiers).
+# 3: training is earned per unit by use (XP, points spent per path).
 
 var save_path := "user://campaign.cfg"
 var difficulty := "normal"
@@ -18,9 +19,10 @@ var completed: Array = []   # mission ids won
 var allies: Array = []      # FACTIONS keys that have joined the Line
 var flags := {}             # story flags (name -> true)
 var seen: Array = []        # STORY keys already shown (intros aren't repeated on a retry)
-var training_points := 0    # earned by winning missions, not yet spent
-var trained := {}           # unit kind -> highest upgrade tier it's trained for (1 when missing)
-var points_won := 0         # training the mission just won earned (the map shows it)
+var xp := {}                # unit kind -> experience earned in battles
+var unlocked := {}          # unit kind -> [highest tier open on each of its four paths] (1s when missing)
+var spent := {}             # unit kind -> training points spent on it
+var last_battle := {}       # unit kind -> [XP, points] the last battle earned (the map shows it)
 var load_error := ""        # why the save couldn't be read ("" if it could, or there's none)
 
 # Where the next main-scene load goes ("" = the title screen, "map", "battle"), and what
@@ -43,9 +45,10 @@ func reset() -> void:
 	allies = []
 	flags = {}
 	seen = []
-	training_points = 0
-	trained = {}
-	points_won = 0
+	xp = {}
+	unlocked = {}
+	spent = {}
+	last_battle = {}
 	mission_id = ""
 	pending_story = ""
 	just_joined = ""
@@ -102,18 +105,35 @@ func _read(cfg: ConfigFile) -> bool:
 		for k in f:
 			if k is String and f[k]:
 				flags[k] = true
-	if cfg.get_value("meta", "version", 1) < 2:
-		# Saved before troop training: credit the points its won missions would have earned.
-		for m in completed:
-			training_points += int(CD.MISSIONS[m].get("training", 0))
-	else:
-		var p = cfg.get_value("state", "training_points", 0)
-		training_points = maxi(0, p) if p is int else 0
+	var v: int = cfg.get_value("meta", "version", 1)
+	if v == 2:
+		# Training was a tier for all four paths at once (towers shared their crew's):
+		# keep every tier already trained, on every path. Unspent points don't carry over.
 		var t = cfg.get_value("state", "trained", {})
+		var share := {"tower": "archer", "magetower": "mage", "frosttower": "frost"}
 		if t is Dictionary:
-			for kind in t:
-				if kind is String and Data.WARRIORS.has(kind) and not CD.TRAINING_SHARE.has(kind) and t[kind] is int:
-					trained[kind] = clampi(t[kind], 1, 4)
+			for kind in Data.WARRIORS:
+				var from: String = share.get(kind, kind)
+				if t.get(from, 1) is int and int(t.get(from, 1)) > 1:
+					var tier := clampi(int(t[from]), 1, 4)
+					unlocked[kind] = [tier, tier, tier, tier]
+	elif v >= 3:
+		var x = cfg.get_value("state", "xp", {})
+		var u = cfg.get_value("state", "unlocked", {})
+		var sp = cfg.get_value("state", "spent", {})
+		for kind in Data.WARRIORS:
+			if x is Dictionary and (x.get(kind, 0.0) is float or x.get(kind, 0.0) is int):
+				xp[kind] = maxf(0.0, float(x.get(kind, 0.0)))
+			if u is Dictionary and u.get(kind) is Array and u[kind].size() == 4:
+				var tiers := []
+				for tv in u[kind]:
+					tiers.append(clampi(int(tv) if (tv is int or tv is float) else 1, 1, 4))
+				unlocked[kind] = tiers
+			if sp is Dictionary and sp.get(kind, 0) is int and int(sp.get(kind, 0)) > 0:
+				spent[kind] = clampi(int(sp.get(kind, 0)), 0, CD.MAX_TRAINING)
+		for kind in xp.keys():
+			if xp[kind] <= 0.0:
+				xp.erase(kind)
 	return true
 
 
@@ -139,8 +159,9 @@ func save_game() -> bool:
 	cfg.set_value("state", "allies", allies)
 	cfg.set_value("state", "flags", flags)
 	cfg.set_value("state", "seen", seen)
-	cfg.set_value("state", "training_points", training_points)
-	cfg.set_value("state", "trained", trained)
+	cfg.set_value("state", "xp", xp)
+	cfg.set_value("state", "unlocked", unlocked)
+	cfg.set_value("state", "spent", spent)
 	var tmp := save_path + ".tmp"
 	if cfg.save(tmp) != OK:
 		return false
@@ -200,52 +221,96 @@ func lock_reason(key: String, lend: Array = []) -> String:
 	return "Locked"
 
 
-# --- Troop training -------------------------------------------------------------
+# --- Unit training ---------------------------------------------------------------
 
-## The kind whose training `kind` uses (a tower uses its crew's).
-func train_key(kind: String) -> String:
-	return CD.TRAINING_SHARE.get(kind, kind)
+## XP needed to go from level n-1 to level n.
+static func level_cost(n: int) -> float:
+	return CD.XP_FIRST * pow(CD.XP_GROWTH, n - 1)
 
 
-## The highest upgrade tier `kind` may take in the campaign (1 until it's trained).
+## The level `kind` has reached with its XP (0 to MAX_TRAINING).
+func level_of(kind: String) -> int:
+	var left: float = xp.get(kind, 0.0)
+	var n := 0
+	while n < CD.MAX_TRAINING and left >= level_cost(n + 1):
+		left -= level_cost(n + 1)
+		n += 1
+	return n
+
+
+## [XP into the current level, XP that level needs] (need is 0 at the top level).
+func level_progress(kind: String) -> Array:
+	var left: float = xp.get(kind, 0.0)
+	var n := 0
+	while n < CD.MAX_TRAINING and left >= level_cost(n + 1):
+		left -= level_cost(n + 1)
+		n += 1
+	return [left, level_cost(n + 1) if n < CD.MAX_TRAINING else 0.0]
+
+
+## Training points `kind` has to spend (earned by its levels, not yet spent; never more
+## than its untrained tiers).
+func points(kind: String) -> int:
+	return clampi(level_of(kind) - int(spent.get(kind, 0)), 0, untrained_tiers(kind))
+
+
+## Tiers still shut on `kind`'s paths (12 for a kind never trained).
+func untrained_tiers(kind: String) -> int:
+	var n := 0
+	for p in 4:
+		n += 4 - path_tier(kind, p)
+	return n
+
+
+## The highest tier `kind` may take on upgrade path `p` (1 until it's trained there).
+func path_tier(kind: String, p: int) -> int:
+	return int(unlocked.get(kind, [1, 1, 1, 1])[p])
+
+
+## The highest tier open on any of `kind`'s paths.
 func trained_tier(kind: String) -> int:
-	return int(trained.get(train_key(kind), 1))
+	var best := 1
+	for p in 4:
+		best = maxi(best, path_tier(kind, p))
+	return best
 
 
-## Points the next tier of training costs for `kind` (0 once it's fully trained).
-func train_cost(kind: String) -> int:
-	var next := trained_tier(kind) + 1
-	return int(CD.TRAINING_COSTS.get(next, 0))
-
-
-## The kinds that can be trained now: every unit the Line has unlocked (towers are
-## trained through their crews), in the game's usual order.
+## Every kind the Line can field now, in the game's usual order (all can be trained).
 func trainable() -> Array:
 	var out := []
 	for kind in Data.WARRIORS:
-		if CD.TRAINING_SHARE.has(kind):
-			continue
-		var open := allows(kind)
-		for tower in CD.TRAINING_SHARE:
-			open = open or (CD.TRAINING_SHARE[tower] == kind and allows(tower))
-		if open:
+		if allows(kind):
 			out.append(kind)
 	return out
 
 
-func can_train(kind: String) -> bool:
-	var cost := train_cost(kind)
-	return cost > 0 and training_points >= cost and trainable().has(train_key(kind))
+func can_unlock(kind: String, p: int) -> bool:
+	return points(kind) > 0 and path_tier(kind, p) < 4 and trainable().has(kind)
 
 
-## Trains `kind` to its next tier, spending the points. Returns whether it did.
-func train(kind: String) -> bool:
-	if not can_train(kind):
+## Spends one of `kind`'s points on the next tier of path `p`. Returns whether it did.
+func unlock(kind: String, p: int) -> bool:
+	if not can_unlock(kind, p):
 		return false
-	training_points -= train_cost(kind)
-	trained[train_key(kind)] = trained_tier(kind) + 1
+	var tiers: Array = unlocked.get(kind, [1, 1, 1, 1]).duplicate()
+	tiers[p] += 1
+	unlocked[kind] = tiers
+	spent[kind] = int(spent.get(kind, 0)) + 1
 	save_game()
 	return true
+
+
+## Banks a battle's XP (unit kind -> XP): all of it for a win, a share for a loss or a
+## battle left early. Remembers what each kind earned (and any points) for the map.
+func bank_xp(gains: Dictionary, won: bool) -> void:
+	last_battle = {}
+	var share := 1.0 if won else CD.XP_LOSS_SHARE
+	for kind in gains:
+		if not Data.WARRIORS.has(kind) or gains[kind] <= 0.0:
+			continue
+		var before := level_of(kind)
+		xp[kind] = float(xp.get(kind, 0.0)) + gains[kind] * share
+		last_battle[kind] = [gains[kind] * share, level_of(kind) - before]
 
 
 # --- The map --------------------------------------------------------------------
@@ -325,9 +390,13 @@ func mission() -> Dictionary:
 
 ## A mission was won or lost. A win records it, brings its faction into the Line, sets
 ## its story flags and saves; a loss changes nothing (the mission can just be retried).
-func finish_mission(won: bool, new_flags: Array = []) -> void:
+func finish_mission(won: bool, new_flags: Array = [], gains: Dictionary = {}) -> void:
 	var m := mission()
-	if not won or m.is_empty():
+	if m.is_empty():
+		return
+	bank_xp(gains, won)
+	if not won:
+		save_game()
 		return
 	var first_win := not completed.has(mission_id)
 	if first_win:
@@ -339,8 +408,6 @@ func finish_mission(won: bool, new_flags: Array = []) -> void:
 		just_joined = f
 	for flag in new_flags:
 		flags[flag] = true
-	points_won = int(m.get("training", 0)) if first_win else 0
-	training_points += points_won
 	pending_story = m.get("outro", "")
 	save_game()
 

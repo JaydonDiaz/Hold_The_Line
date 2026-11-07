@@ -9,6 +9,7 @@ var radius := 70.0
 var slow := 0.5
 var poison := {}         # dps, duration, stacks: a stack every POISON_TICK while inside
 var source := 0          # instance id of the Alchemist whose cloud it is
+var credit := ""         # campaign XP: the unit kind whose ground this is
 var style := "plants"    # "plants", "toxic" or "fire"
 var dps := 0.0           # damage per second to everything inside (thorns, napalm)
 var poison_tick := 0.0
@@ -25,6 +26,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if main.campaign:
+		main.credit = credit
 	t += delta
 	if t >= life:
 		queue_free()

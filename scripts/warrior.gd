@@ -61,6 +61,7 @@ var splash := 0.0
 var slow := 0.0
 var slow_time := 0.0
 var slow_radius := 0.0
+var aura_tick := 1.0     # War Statue: next count of the allies it's boosting (campaign XP)
 var goo_timer := 0.0     # hit by a Slime: slowed (moving, and attacking at half that) until this runs out
 var goo_slow := 0.0
 var freeze_chance := 0.0
@@ -478,6 +479,18 @@ func sprite_name() -> String:
 	return look if p >= 0 and Sprites.SPRITES.has(look) else kind
 
 
+## The unit kind this unit's deeds train (campaign XP): its own, its summoner's for a
+## raised skeleton, the real one's for a Multiform copy; none for the castle's wall guards.
+func xp_kind() -> String:
+	if wall_guard:
+		return ""
+	if clone_of != null:
+		return clone_of.kind if is_instance_valid(clone_of) else ""
+	if summoned:
+		return summoner.xp_kind() if is_instance_valid(summoner) else ""
+	return kind
+
+
 func is_melee() -> bool:
 	return data["attack"] == "melee" or data["attack"] == "combo"
 
@@ -642,7 +655,7 @@ func path_state(p: int) -> String:
 		return "max"
 	if total_upgrades() >= MAX_UPGRADES:
 		return "full"
-	if tiers[p] >= main.max_tier(kind):
+	if tiers[p] >= main.max_tier(kind, p):
 		return "untrained"   # campaign: the next tier needs troop training first
 	return "ok"
 
@@ -929,6 +942,8 @@ func take_damage(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if main.campaign:
+		main.credit = xp_kind()   # whatever this unit hurts this frame counts toward its training
 	if build_left > 0.0 and down_timer <= 0.0:
 		queue_redraw()   # a construction site: nothing works until the Engineer's done
 		return
@@ -1210,6 +1225,7 @@ func _continue_volley(delta: float) -> void:
 	p.knockback_chance = knockback_chance if volley_left == 0 else 0.0
 	p.knockback_force = knockback_force
 	p.speed = 520.0
+	p.credit = xp_kind()
 	p.style = "ki"
 	p.school = "ki"
 	p.color = KI_COLOR
@@ -1664,6 +1680,7 @@ func _shoot(e, index: int) -> void:
 	p.freeze_chance = freeze_chance
 	p.freeze_time = freeze_time
 	p.speed = data["projectile_speed"]
+	p.credit = xp_kind()
 	p.style = data["attack"]
 	p.school = school()
 	p.color = data["color"]
@@ -1846,6 +1863,7 @@ func _rez_step(downed, delta: float) -> void:
 	rez_progress += delta
 	if rez_progress >= _revive_time():
 		downed.revived(1.0 if revive.get("full", false) else data["revive_hp"])
+		main.earn_xp(xp_kind(), 1.0, "revive")
 		main.spawn_beam(position + Vector2(0, -24), downed.position, Color(1, 1, 0.7), 14.0)
 		main.sfx("revive")
 		rez_target = null
@@ -1906,6 +1924,7 @@ func _cast_spell(spell: String, sp: Dictionary, at: Vector2) -> void:
 		"overgrowth":
 			var z := Zone.new()
 			z.main = main
+			z.credit = xp_kind()
 			z.radius = r
 			z.slow = sp["slow"]
 			z.life = sp["duration"]
@@ -1952,6 +1971,7 @@ func _support_update(delta: float) -> void:
 				if gem:
 					amount = roundi(amount * gems[1])
 				main.gold += amount
+				main.earn_xp(xp_kind(), amount, "gold")
 				swing = 0.15
 				main.sfx("gem" if gem else "coin")
 				if gem:
@@ -1980,7 +2000,7 @@ func _support_update(delta: float) -> void:
 					for w in patients:
 						if w.hp < w.max_hp:
 							main.spawn_burst(w.position, 16.0, Color(0.55, 1.0, 0.55))   # reaches them wherever they are
-						w.receive_heal(damage * _power(), regen_grant)
+						main.earn_xp(xp_kind(), w.receive_heal(damage * _power(), regen_grant), "heal")
 					main.spawn_burst(position, attack_range + RADIUS, Color(0.55, 1.0, 0.55))
 					main.sfx("heal", 0.8)
 			# Consecration: the pulse sears enemies in its radius too.
@@ -2001,7 +2021,13 @@ func _support_update(delta: float) -> void:
 					main.spawn_burst(position, attack_range + RADIUS, Color(1.0, 0.95, 0.55))
 					main.sfx("flash", 0.7)
 		"aura":
-			pass   # buffs are read by the units around it (see _update_buffs)
+			# Buffs are read by the units around it (see _update_buffs). In a campaign
+			# wave, each ally it covers trains it a little, counted once a second.
+			if main.campaign and main.wave_active:
+				aura_tick -= delta
+				if aura_tick <= 0.0:
+					aura_tick = 1.0
+					main.earn_xp(xp_kind(), main.get_warriors().filter(func(w): return w != self and w.is_active() and not w.is_emplacement() and covers(w)).size(), "aura")
 	if target == null:
 		_mend(max_hp * REGEN * delta)
 
@@ -2086,18 +2112,20 @@ func _heal(w) -> void:
 	var from := position + Vector2(0, -24)
 	main.spawn_beam(from, w.position, Color(0.55, 1.0, 0.55), 8.0)
 	main.sfx("heal")
-	w.receive_heal(damage * _power(), regen_grant)
+	var healed: float = w.receive_heal(damage * _power(), regen_grant)
 	if not heal_area.is_empty():
 		var r: float = heal_area[0]
 		for x in main.get_warriors():
 			if x != w and x.is_active() and x.position.distance_to(w.position) <= r:
-				x.receive_heal(damage * _power() * heal_area[1], regen_grant)
+				healed += x.receive_heal(damage * _power() * heal_area[1], regen_grant)
 		main.spawn_burst(w.position, r, Color(0.55, 1.0, 0.55))
+	main.earn_xp(xp_kind(), healed, "heal")
 
 
-func receive_heal(amount: float, regen: Array) -> void:
+## Healed by `amount`; returns how much it actually mended (for the healer's training).
+func receive_heal(amount: float, regen: Array) -> float:
 	if not is_active():
-		return
+		return 0.0
 	var before := hp
 	_mend(amount)
 	if hp - before >= 1.0:
@@ -2105,6 +2133,7 @@ func receive_heal(amount: float, regen: Array) -> void:
 	if not regen.is_empty():
 		regen_rate = maxf(regen_rate if regen_left > 0.0 else 0.0, regen[0])
 		regen_left = maxf(regen_left, regen[1])
+	return hp - before
 
 
 ## Healing that tops up to full but never cuts back overheal.
@@ -2339,6 +2368,7 @@ func _trap_step(delta: float) -> void:
 	t.radius = traps["radius"]
 	t.stun = traps["stun"]
 	t.source = get_instance_id()
+	t.credit = xp_kind()
 	if traps["brew"]:
 		t.poison = poison
 		t.corrode = corrode

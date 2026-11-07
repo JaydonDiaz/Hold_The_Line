@@ -21,8 +21,18 @@ const ENDING_ALLIES := 8               # every regional alliance: the fully unit
 # trained for. Tier I is always open; II, III and IV are bought with training points
 # (earned by winning missions) at the Training Grounds on the map, for all four of the
 # kind's paths at once, in order. Towers share their crew's training.
-const TRAINING_COSTS := {2: 1, 3: 2, 4: 3}   # tier -> points
-const TRAINING_SHARE := {"tower": "archer", "magetower": "mage", "frosttower": "frost"}
+# Unit experience: in a campaign battle every kind of unit (emplacements too) earns XP by
+# being used. Each level it reaches gives that kind a training point; a point opens the
+# next tier (II, III, IV) of one of its four upgrade paths, so 12 points train it fully.
+#   damage    XP per point of damage dealt (summons and copies count for their maker)
+#   heal      per HP healed;  revive  per ally brought back
+#   gold      per gold a Gold Mine digs;  soak  per point of damage a Barricade takes
+#   aura      per second a War Statue spends boosting an ally during a wave
+const XP_RATES := {"damage": 1.0, "heal": 1.5, "revive": 150.0, "gold": 12.0, "soak": 0.6, "aura": 4.0}
+const XP_FIRST := 1500.0        # XP to a kind's first level (a Swordsmen-only Ashwatch earns about 4000)
+const XP_GROWTH := 1.2          # each level after that needs this much more than the one before (59k XP in all)
+const XP_LOSS_SHARE := 0.5      # a battle lost (or left) counts for this share of its XP
+const MAX_TRAINING := 12        # points that train a kind fully: tiers II-IV on all four paths
 
 const FACTIONS := {
 	"stonehollow": {"name": "The Engineers' Guild", "home": "Stonehollow", "color": Color(0.85, 0.62, 0.32),
@@ -122,7 +132,6 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #   allies       units on the field from the start, free: {"kind", "at", "built"}
 #   lend         unlock keys usable in this mission only (the locals' help)
 #   reward       the faction that joins the Line on victory ("" = none)
-#   training     training points the first win earns (see TRAINING_COSTS)
 #   track        story flag -> kind: set if one of the starting allies of that kind is still standing at the end
 #   mood         the field's light (an ambience.gd mood)
 #   map          the battlefield it's fought on (maps.gd)
@@ -135,7 +144,7 @@ const MISSIONS := {
 		"notes": {2: "Wolves! They run straight for the walls.", 4: "Their vanguard is coming in force!"},
 		"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true},
 			{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
-		"lend": [], "reward": "", "training": 2, "track": {"watchtower_stood": "tower"},
+		"lend": [], "reward": "", "track": {"watchtower_stood": "tower"},
 		"intro": "ashwatch_intro", "outro": "ashwatch_outro"},
 	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 3, "gold": 320,
 		"count": [5, 2], "mood": "normal", "map": "stonehollow_quarry",
@@ -143,7 +152,7 @@ const MISSIONS := {
 		"extra": {2: ["skeleton_archer"], 3: ["troll"], 4: ["skeleton_archer", "skeleton_archer"], 5: ["troll", "sapper"]},
 		"notes": {3: "Sappers! They'll blow holes in any wall in their way.", 5: "Trolls at the quarry gate!"},
 		"allies": [{"kind": "swordsman", "at": Vector2(220, 520)}, {"kind": "swordsman", "at": Vector2(420, 520)}],
-		"lend": ["barricade", "repair", "engineers"], "reward": "stonehollow", "training": 3, "track": {},
+		"lend": ["barricade", "repair", "engineers"], "reward": "stonehollow", "track": {},
 		"intro": "stonehollow_intro", "outro": "stonehollow_outro"},
 }
 

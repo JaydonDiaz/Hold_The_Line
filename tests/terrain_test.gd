@@ -554,7 +554,7 @@ func _troops() -> void:
 			w.free()
 		main.warriors_changed()
 		for k in ["swordsman", "archer", "mage", "frost", "martial", "healer", "bard", "alchemist"]:
-			campaign.trained[k] = 3
+			campaign.unlocked[k] = [3, 3, 3, 3]
 		var posts: Array = Maps.MAPS[CD.MISSIONS[mid]["map"]]["bot_posts"]
 		var kinds := ["swordsman", "martial", "archer", "healer", "mage", "frost", "bard", "alchemist", "swordsman"]
 		var army := []

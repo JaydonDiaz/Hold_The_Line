@@ -14,10 +14,13 @@ var stun := 0.0
 var poison := {}    # with Alchemical Mines: the flasks' poison and acid come along
 var corrode := {}
 var source := 0     # instance id of the Alchemist that laid it (its poison doesn't stack with others')
+var credit := ""    # campaign XP: the unit kind that laid it
 var t := 0.0
 
 
 func _process(delta: float) -> void:
+	if main.campaign:
+		main.credit = credit
 	t += delta
 	queue_redraw()
 	if t < ARM_TIME:

@@ -44,6 +44,7 @@ var info: Dictionary = {}   # the panel's controls
 var reward_box: HBoxContainer
 var threat_box: HBoxContainer
 var overlay: Control = null   # the Ledger, a story scene or an announcement, while one is up
+var training_kind := ""      # the unit picked in the Training Grounds
 
 
 func _ready() -> void:
@@ -73,7 +74,7 @@ func _ready() -> void:
 		var key: String = campaign.pending_story
 		campaign.pending_story = ""
 		play_story(key, _announce_join)
-	elif campaign.just_joined != "" or campaign.points_won > 0:
+	elif campaign.just_joined != "" or not _new_points().is_empty():
 		_announce_join()
 
 
@@ -159,7 +160,9 @@ func _build_panel() -> void:
 
 func refresh() -> void:
 	info["header"].text = "%s  ·  Alliances %d/%d" % [Data.DIFFICULTIES[campaign.difficulty]["name"], campaign.alliance_count(), CD.FACTIONS.size()]
-	var pts: int = campaign.training_points
+	var pts := 0
+	for kind in campaign.trainable():
+		pts += campaign.points(kind)
 	info["training"].text = "Training (%d)" % pts if pts > 0 else "Training"
 	info["training"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if pts > 0 else Color(0.9, 0.9, 0.9))
 	for k in labels:
@@ -341,11 +344,23 @@ func play_story(key: String, then: Callable = Callable()) -> void:
 	add_child(s)
 
 
+## Unit kinds the last battle levelled up: kind -> training points it earned.
+func _new_points() -> Dictionary:
+	var out := {}
+	for kind in campaign.last_battle:
+		if int(campaign.last_battle[kind][1]) > 0:
+			out[kind] = int(campaign.last_battle[kind][1])
+	return out
+
+
 func _announce_join() -> void:
 	var f: String = campaign.just_joined
-	var pts: int = campaign.points_won
+	var gained := _new_points()
+	var pts := 0
+	for kind in gained:
+		pts += gained[kind]
 	campaign.just_joined = ""
-	campaign.points_won = 0
+	campaign.last_battle = {}
 	refresh()
 	if f == "" and pts <= 0:
 		return
@@ -372,8 +387,11 @@ func _announce_join() -> void:
 			row.add_child(_reward(key))
 		y = 236.0
 	if pts > 0:
-		var tp := _label(panel, Vector2(30, y), Vector2(480, 44), Color(1, 0.85, 0.3), 16)
-		tp.text = "+%d training points. Spend them at the Training Grounds to unlock stronger upgrades." % pts
+		var names := []
+		for kind in gained:
+			names.append("%s +%d" % [Data.WARRIORS[kind]["name"], gained[kind]])
+		var tp := _label(panel, Vector2(30, y), Vector2(480, 64), Color(1, 0.85, 0.3), 16)
+		tp.text = "Training points earned in battle: %s. Spend them at the Training Grounds." % ", ".join(names)
 		tp.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var ok := _button(panel, Vector2(170, panel.size.y - 70), Vector2(200, 50), "Onward")
@@ -429,8 +447,8 @@ func show_ledger() -> void:
 		prologue.emit())
 
 
-## The Training Grounds: spend training points to open higher upgrade tiers, a kind at a
-## time (all four of its paths, in every battle from now on).
+## The Training Grounds: every unit the Line can field, with the level its battles have
+## earned it. Pick one to spend its training points, a tier of one upgrade path at a time.
 func show_training() -> void:
 	if overlay != null:
 		return
@@ -441,57 +459,109 @@ func show_training() -> void:
 func _fill_training(dim: Control) -> void:
 	for c in dim.get_children():
 		c.queue_free()
+	var kinds: Array = campaign.trainable()
+	if not kinds.has(training_kind):
+		training_kind = kinds[0] if not kinds.is_empty() else ""
+		for kind in kinds:
+			if campaign.points(kind) > 0:
+				training_kind = kind
+				break
 	var panel := _panel(dim, Rect2(16, 40, 608, 960), Color(1, 0.85, 0.3))
 	var title := _label(panel, Vector2(0, 12), Vector2(608, 34), Color(1, 0.85, 0.3), 26)
 	title.text = "Training Grounds"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var pts := _label(panel, Vector2(0, 48), Vector2(608, 24), Color(1, 0.95, 0.75), 17)
-	pts.text = "Training points: %d" % campaign.training_points
-	pts.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var help := _label(panel, Vector2(24, 76), Vector2(560, 44), Color(0.75, 0.7, 0.62), 13)
-	help.text = "Every unit can take tier I upgrades. Training opens the next tier of all four of a unit's upgrade paths, in every battle from now on. Win missions to earn more points."
+	var help := _label(panel, Vector2(24, 48), Vector2(560, 60), Color(0.75, 0.7, 0.62), 13)
+	help.text = "Units learn by doing: damage dealt, wounds healed, gold dug, blows taken. Each level a unit reaches gives it a training point, and a point opens the next tier of one of its upgrade paths. Twelve points train a unit fully."
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var y := 130.0
-	for kind in campaign.trainable():
+	# The units, four to a row.
+	for i in kinds.size():
+		var kind: String = kinds[i]
+		var tile := Button.new()
+		tile.position = Vector2(16 + (i % 4) * 146, 116 + (i / 4) * 80)
+		tile.size = Vector2(140, 74)
+		tile.focus_mode = Control.FOCUS_NONE
+		tile.toggle_mode = true
+		tile.button_pressed = kind == training_kind
+		tile.tooltip_text = Data.WARRIORS[kind]["name"]
+		tile.pressed.connect(func():
+			training_kind = kind
+			_fill_training(dim))
+		panel.add_child(tile)
+		var icon := _icon(unlock_icon(kind), Data.WARRIORS[kind]["name"], 36)
+		icon.position = Vector2(6, 6)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tile.add_child(icon)
+		var nm := _label(tile, Vector2(46, 4), Vector2(92, 20), Data.WARRIORS[kind]["color"], 13)
+		nm.text = Data.WARRIORS[kind]["name"]
+		nm.clip_text = true
+		var lv := _label(tile, Vector2(46, 24), Vector2(92, 20), Color(0.9, 0.88, 0.84), 13)
+		lv.text = "Level %d" % campaign.level_of(kind)
+		var pts: int = campaign.points(kind)
+		if pts > 0:
+			var badge := _label(tile, Vector2(46, 42), Vector2(92, 18), Color(1, 0.85, 0.3), 12)
+			badge.text = "%d point%s" % [pts, "" if pts == 1 else "s"]
+		var prog: Array = campaign.level_progress(kind)
+		var bar_bg := ColorRect.new()
+		bar_bg.color = Color(0.1, 0.09, 0.08)
+		bar_bg.position = Vector2(6, 64)
+		bar_bg.size = Vector2(128, 5)
+		bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tile.add_child(bar_bg)
+		var bar := ColorRect.new()
+		bar.color = Color(0.55, 0.85, 0.4)
+		bar.position = bar_bg.position
+		bar.size = Vector2(128.0 * (1.0 if prog[1] <= 0.0 else prog[0] / prog[1]), 5)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tile.add_child(bar)
+		for c in [nm, lv]:
+			c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The picked unit: its level, its points, and its four paths.
+	if training_kind != "":
+		var kind := training_kind
 		var d: Dictionary = Data.WARRIORS[kind]
-		var row := Panel.new()
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.18, 0.15, 0.13)
-		style.set_corner_radius_all(4)
-		row.add_theme_stylebox_override("panel", style)
-		row.position = Vector2(16, y)
-		row.size = Vector2(576, 52)
-		panel.add_child(row)
-		var icon := _icon(unlock_icon(kind), d["name"], 40)
-		icon.position = Vector2(8, 6)
-		row.add_child(icon)
-		var crew := []
-		for tower in CD.TRAINING_SHARE:
-			if CD.TRAINING_SHARE[tower] == kind:
-				crew.append(Data.WARRIORS[tower]["name"])
-		var name := _label(row, Vector2(60, 3), Vector2(300, 24), d["color"], 17)
+		var top := 116.0 + ceilf(kinds.size() / 4.0) * 80.0 + 10.0
+		var name := _label(panel, Vector2(24, top), Vector2(400, 30), d["color"], 22)
 		name.text = d["name"]
-		var note := _label(row, Vector2(60, 27), Vector2(190, 20), Color(0.7, 0.66, 0.6), 12)
-		note.text = "also trains %ss" % crew[0] if not crew.is_empty() else ""
-		var tier: int = campaign.trained_tier(kind)
-		for i in 4:
-			var pip := _label(row, Vector2(250 + i * 30, 13), Vector2(28, 24), Color(1, 0.85, 0.3) if i < tier else Color(0.4, 0.38, 0.35), 16)
-			pip.text = ["I", "II", "III", "IV"][i]
-			pip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		var cost: int = campaign.train_cost(kind)
-		var b := _button(row, Vector2(380, 6), Vector2(186, 40), "Fully trained" if cost == 0 else "Train tier %s · %d pt%s" % [["I", "II", "III", "IV"][tier], cost, "" if cost == 1 else "s"])
-		b.disabled = not campaign.can_train(kind)
-		b.pressed.connect(func():
-			if campaign.train(kind):
-				sound.emit("upgrade")
-				refresh()
-				_fill_training(dim))
-		y += 56.0
-	if campaign.trainable().size() < 8:
-		var more := _label(panel, Vector2(24, y + 6), Vector2(560, 22), Color(0.6, 0.56, 0.5), 13)
-		more.text = "More units join as more peoples join the Line."
-		more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		var prog: Array = campaign.level_progress(kind)
+		var lvl := _label(panel, Vector2(24, top + 32), Vector2(560, 20), Color(0.85, 0.82, 0.76), 14)
+		lvl.text = "Level %d  ·  %s" % [campaign.level_of(kind), "%d / %d XP to the next point" % [roundi(prog[0]), roundi(prog[1])] if prog[1] > 0.0 else "top level"]
+		var pts_l := _label(panel, Vector2(380, top + 4), Vector2(204, 24), Color(1, 0.85, 0.3), 16)
+		var pts: int = campaign.points(kind)
+		pts_l.text = "%d point%s to spend" % [pts, "" if pts == 1 else "s"] if pts > 0 else ("Fully trained" if campaign.untrained_tiers(kind) == 0 else "No points yet")
+		pts_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var row_h := minf(84.0, (880.0 - (top + 60.0)) / 4.0)
+		for p in 4:
+			var path: Dictionary = d["paths"][p]
+			var y := top + 60.0 + p * row_h
+			var row := Panel.new()
+			var style := StyleBoxFlat.new()
+			style.bg_color = Color(0.18, 0.15, 0.13)
+			style.set_corner_radius_all(4)
+			row.add_theme_stylebox_override("panel", style)
+			row.position = Vector2(16, y)
+			row.size = Vector2(576, row_h - 6.0)
+			panel.add_child(row)
+			var pn := _label(row, Vector2(10, 4), Vector2(220, 22), Color(1, 0.95, 0.85), 16)
+			pn.text = path["name"]
+			var tier: int = campaign.path_tier(kind, p)
+			for i in 4:
+				var pip := _label(row, Vector2(10 + i * 30, 28), Vector2(28, 20), Color(1, 0.85, 0.3) if i < tier else Color(0.4, 0.38, 0.35), 15)
+				pip.text = ["I", "II", "III", "IV"][i]
+				pip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			if tier < 4:
+				var nt: Dictionary = path["tiers"][tier]
+				var desc := _label(row, Vector2(140, 26), Vector2(250, row_h - 34.0), Color(0.72, 0.68, 0.62), 12)
+				desc.text = "Next: %s. %s" % [nt["name"], nt["desc"]]
+				desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				desc.clip_text = true
+			var b := _button(row, Vector2(400, (row_h - 6.0) / 2.0 - 20.0), Vector2(166, 40), "Fully open" if tier >= 4 else "Open tier %s · 1 pt" % ["I", "II", "III", "IV"][tier])
+			b.disabled = not campaign.can_unlock(kind, p)
+			b.pressed.connect(func():
+				if campaign.unlock(kind, p):
+					sound.emit("upgrade")
+					refresh()
+					_fill_training(dim))
 	var close := _button(panel, Vector2(204, 900), Vector2(200, 46), "Done")
 	close.pressed.connect(func():
 		overlay = null

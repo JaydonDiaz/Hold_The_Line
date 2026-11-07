@@ -145,6 +145,7 @@ func aegis_at(p: Vector2) -> float:
 func take_damage(amount: float) -> void:
 	if not is_active():
 		return
+	main.earn_xp(kind, minf(hp, amount * (1.0 - armor)), "soak")   # holding the line trains it
 	hp -= amount * (1.0 - armor)
 	hurt = 0.1
 	since_hit = 0.0
@@ -172,7 +173,10 @@ func take_damage(amount: float) -> void:
 func struck(attacker, amount: float) -> void:
 	take_damage(amount)
 	if thorns > 0.0 and is_instance_valid(attacker) and not attacker.dead:
+		var was: String = main.credit
+		main.credit = kind
 		attacker.take_damage(attacker.max_hp * thorns * attacker.cc_mult, false)
+		main.credit = was
 
 
 func _process(delta: float) -> void:

@@ -277,6 +277,7 @@ func _heal_light(p: Vector2) -> void:
 
 
 func _thunder(p: Vector2, d: Dictionary) -> void:
+	main.credit = ""   # the castle's own doing: it trains no one
 	main.sfx("zap")
 	var hit := []
 	var e = _nearest_enemy(p, radius("lightning"))
@@ -324,6 +325,7 @@ func revive_share() -> float:
 
 
 func _process(delta: float) -> void:
+	main.credit = ""
 	t += delta
 	if main.game_over:
 		aiming = ""

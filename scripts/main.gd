@@ -48,7 +48,10 @@ var permadeath := false   # downed warriors die for good unless revived (every d
 var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn any wave at will
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
-var campaign := false    # a story campaign battle (the Campaign autoload says which mission)
+var campaign := false
+var credit := ""             # campaign XP: the unit kind whose doing the damage dealt right now is
+var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
+const CD_XP_RATES = preload("res://scripts/campaign_data.gd").XP_RATES    # a story campaign battle (the Campaign autoload says which mission)
 var mission := {}        # that mission's data (campaign_data.gd MISSIONS); empty outside the campaign
 var temp_allies := []    # units the mission put on the field from the start
 var gold: int = Data.START_GOLD
@@ -963,10 +966,20 @@ func allowed(key: String) -> bool:
 	return not campaign or Campaign.allows(key, mission.get("lend", []))
 
 
-## The highest upgrade tier `kind` may take here: all four outside the campaign; in it,
-## what the Line's troops have been trained for (see Campaign.trained_tier).
-func max_tier(kind: String) -> int:
-	return Campaign.trained_tier(kind) if campaign else Warrior.MAX_TIER
+## The highest upgrade tier `kind` may take on path `p` here: all four outside the
+## campaign; in it, what that unit has been trained for on that path (see
+## Campaign.path_tier). Without a path: its best-trained path.
+func max_tier(kind: String, p := -1) -> int:
+	if not campaign:
+		return Warrior.MAX_TIER
+	return Campaign.path_tier(kind, p) if p >= 0 else Campaign.trained_tier(kind)
+
+
+## Campaign experience: `amount` of `what` (an XP_RATES key) done by unit kind `kind`
+## this battle. Outside a campaign, or with no one to credit, it counts for nothing.
+func earn_xp(kind: String, amount: float, what := "damage") -> void:
+	if campaign and kind != "" and amount > 0.0:
+		battle_xp[kind] = battle_xp.get(kind, 0.0) + amount * CD_XP_RATES[what]
 
 
 ## Why `key` is locked ("" if it isn't).
@@ -988,6 +1001,9 @@ func retry_mission() -> void:
 
 
 func back_to_map() -> void:
+	if campaign and not game_over and not battle_xp.is_empty():
+		Campaign.bank_xp(battle_xp, false)   # left before the end: it counts like a loss
+		Campaign.save_game()
 	Campaign.screen = "map"
 	_restart()
 
@@ -1043,7 +1059,7 @@ func _finish(won: bool) -> void:
 	wall_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	var survived := wave if won else wave - 1
 	if campaign:
-		Campaign.finish_mission(won, _mission_flags() if won else [])
+		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
 		hud.show_campaign_end(won, mission, survived)
 		return
 	var previous := _save_record(survived)

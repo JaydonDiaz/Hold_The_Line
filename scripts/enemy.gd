@@ -107,6 +107,10 @@ var thorn_dps := 0.0        # Thornwild: caught in thorny plants or vines
 var thorn_timer := 0.0
 var charged_timer := 0.0    # struck by lightning: a Storm mage's blasts pull it in
 var burn_timer := 0.0
+var burn_credit := ""       # campaign XP: whose fire, poison, rot and thorns these are
+var poison_credit := ""
+var decay_credit := ""
+var thorn_credit := ""
 # Alchemist effects.
 var poisons := {}           # alchemist id -> [dps per stack, stacks, seconds left]; only the worst one hurts
 var poison_stacks := 0      # stacks of the worst poison (for the bubbles)
@@ -180,6 +184,8 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if dead:
 		return
+	if main.campaign:
+		main.credit = ""
 	walking = false
 	fighting = false
 	if slow_timer > 0.0:
@@ -201,16 +207,19 @@ func _process(delta: float) -> void:
 			discord_slow = 0.0
 	if burn_timer > 0.0:
 		burn_timer -= delta
+		main.credit = burn_credit
 		take_damage(burn_dps * delta, false)
 		if dead:
 			return
 	charged_timer = maxf(charged_timer - delta, 0.0)
 	if thorn_timer > 0.0:
 		thorn_timer -= delta
+		main.credit = thorn_credit
 		take_damage(thorn_dps * delta, false)
 		if dead:
 			return
 	if decay_timer > 0.0:
+		main.credit = decay_credit
 		take_damage(decay_dps * delta, false, MAGIC)   # before the timer runs down, so a rot kill still counts
 		decay_timer -= delta
 		if dead:
@@ -230,9 +239,12 @@ func _process(delta: float) -> void:
 			elif dose[0] * dose[1] > worst:
 				worst = dose[0] * dose[1]
 				poison_stacks = dose[1]
+		main.credit = poison_credit
 		take_damage(worst * delta, false)
+		main.credit = ""
 		if dead:
 			return
+	main.credit = ""
 	if fuse >= 0.0:
 		# Lit: stands there fizzing, then goes off. Killing it first defuses it.
 		fuse -= delta
@@ -724,6 +736,8 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 		if school == ICE:
 			amount *= ICE_BONUS
 			ice_over()
+	if main.campaign:
+		main.earn_xp(main.credit, minf(hp, amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))))
 	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
 	if show_hit:
 		flash = 0.08
@@ -735,6 +749,8 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 
 ## Burning keeps the strongest burn and refreshes its duration.
 func apply_burn(dps: float, duration: float) -> void:
+	if burn_timer <= 0.0 or dps >= burn_dps:
+		burn_credit = main.credit
 	if burn_timer <= 0.0:
 		burn_dps = 0.0
 	burn_dps = maxf(burn_dps, dps)
@@ -744,6 +760,7 @@ func apply_burn(dps: float, duration: float) -> void:
 ## Each dose adds a stack (up to max_stacks) to the poison from that Alchemist.
 ## Poisons from different Alchemists don't add up: only the worst one hurts.
 func apply_poison(dps: float, duration: float, max_stacks: int, source: int) -> void:
+	poison_credit = main.credit
 	var dose: Array = poisons.get(source, [dps, 0, 0.0])
 	dose[0] = maxf(dose[0], dps)
 	dose[1] = mini(dose[1] + 1, maxi(max_stacks, dose[1]))
@@ -802,11 +819,13 @@ func apply_decay(dps: float, duration: float, source: int) -> void:
 	if decay_timer <= 0.0 or dps >= decay_dps:
 		decay_dps = dps
 		decay_source = source
+		decay_credit = main.credit
 	decay_timer = maxf(decay_timer, duration)
 
 
 ## Thornwild: thorny plants and vines.
 func apply_thorns(dps: float, duration: float) -> void:
+	thorn_credit = main.credit
 	if thorn_timer <= 0.0:
 		thorn_dps = 0.0
 	thorn_dps = maxf(thorn_dps, dps)
