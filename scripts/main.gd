@@ -1107,6 +1107,8 @@ func _on_hire_pressed(kind: String) -> void:
 func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 	if p.x < 0 or p.x > FIELD_W or p.y < DEPLOY_TOP or p.y > CASTLE_Y:
 		return false
+	if ground_problem(p) != "":
+		return false
 	for w in get_warriors():
 		if w != ignore and w.post.distance_to(p) < MIN_POST_GAP:
 			return false
@@ -1114,6 +1116,21 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 		if b.gap_from(p) < Warrior.RADIUS:
 			return false
 	return true
+
+
+## Why the battlefield itself won't take a post at p ("" if it will): rock, cliff,
+## trees or the quarry, a spot troops can't walk to, or ground kept clear (the gate).
+## Always "" on the open meadow (Classic, Freeplay, the Tutorial).
+func ground_problem(p: Vector2) -> String:
+	if not paths.has_terrain():
+		return ""
+	if paths.in_no_build(p):
+		return "Keep the gate clear"
+	if paths.blocked(p, Warrior.RADIUS):
+		return "Can't stand there"
+	if not paths.troop_can_stand(p):
+		return "Your troops can't get there"
+	return ""
 
 
 # --- Barricades ----------------------------------------------------------
@@ -1194,6 +1211,8 @@ func hire_at(p: Vector2) -> void:
 		_wall_click(p)
 		return
 	if not can_post_at(p):
+		if ground_problem(p) != "":
+			hud.show_message(ground_problem(p))
 		return
 	var data: Dictionary = Data.WARRIORS[placing_type]
 	var cost := hire_cost(placing_type)
@@ -1334,10 +1353,10 @@ func order_group(p: Vector2) -> void:
 ## already handed out to the group all count, the group's own old posts don't), else
 ## the nearest free spot close by, or INF.
 func _free_spot(p: Vector2, taken: Array) -> Vector2:
-	for r in [0.0, 18.0, 32.0, 46.0]:
+	for r in [0.0, 18.0, 32.0, 46.0] + ([64.0, 84.0, 104.0] if paths.has_terrain() else []):   # further out round rock
 		for i in (1 if r == 0.0 else 8):
 			var q := _clamp_post(p + Vector2.from_angle(i * TAU / 8.0) * r)
-			var ok := q.y >= DEPLOY_TOP and q.y <= CASTLE_Y
+			var ok := q.y >= DEPLOY_TOP and q.y <= CASTLE_Y and ground_problem(q) == ""
 			for w in get_warriors():
 				if not group.has(w) and w.post.distance_to(q) < MIN_POST_GAP:
 					ok = false
@@ -1380,7 +1399,7 @@ func _end_group_drag() -> void:
 		if not is_instance_valid(w):
 			continue
 		var p: Vector2 = w.post
-		var ok := p.y >= DEPLOY_TOP and p.y <= CASTLE_Y
+		var ok := p.y >= DEPLOY_TOP and p.y <= CASTLE_Y and ground_problem(p) == ""
 		for o in get_warriors():
 			if not group_from.has(o) and o.post.distance_to(p) < MIN_POST_GAP:
 				ok = false
@@ -1396,6 +1415,8 @@ func _end_group_drag() -> void:
 
 func order_move(p: Vector2) -> void:
 	if selected == null or not can_post_at(p, selected):
+		if selected != null and ground_problem(p) != "":
+			hud.show_message(ground_problem(p))
 		return
 	if selected.is_emplacement():
 		hud.show_message("Emplacements can't move during a wave")

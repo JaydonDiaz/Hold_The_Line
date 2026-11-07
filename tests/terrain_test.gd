@@ -15,6 +15,9 @@ extends SceneTree
 ##                  never cross or enter terrain or back into a dead end; shoves into rock
 ##                  slide; a full battle (every troop kind, trained upgrades, Slimes, Skeleton
 ##                  Archers, knockback) never leaves a unit or Engineer inside terrain
+##   L  placement   hires, emplacements, move orders, drags and group moves are refused on
+##                  terrain, in no-build zones and out of reach (with a message), by click,
+##                  hotkey or drag; barricades may rest their ends on rock to seal a gap
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const Maps = preload("res://scripts/maps.gd")
@@ -56,6 +59,8 @@ func _run() -> void:
 		await _enemies()
 	if _wants("T"):
 		await _troops()
+	if _wants("L"):
+		await _placement()
 	print("%d checks, %d failed" % [checks, fails])
 	if main != null:
 		main.free()
@@ -595,3 +600,65 @@ func _troops() -> void:
 		for e in main.get_enemies():
 			e.free()
 		main.enemies_changed()
+
+
+# --- L: placement rules -------------------------------------------------------------------
+
+func _placement() -> void:
+	await _mission("ashwatch")
+	for w in main.get_warriors():
+		w.free()
+	main.warriors_changed()
+	var gold: int = main.gold
+	var count: int = main.get_warriors().size()
+	main._on_hire_pressed("swordsman")   # as the hotkey does
+	main.hire_at(Vector2(330, 350))      # the centre rock
+	check(main.get_warriors().size() == count and main.gold == gold, "L  a Swordsman can't be posted on the rock (and costs nothing)")
+	check(main.hud.message_label.text != "", "L  ...and a message says why (\"%s\")" % main.hud.message_label.text)
+	main._on_hire_pressed("tower")
+	main.hire_at(Vector2(560, 600))      # the trees
+	check(main.get_warriors().size() == count, "L  an Archer Tower can't be built in the trees")
+	main._on_hire_pressed("swordsman")
+	main.hire_at(Vector2(320, 712))      # the gate
+	check(main.get_warriors().size() == count and "gate" in main.hud.message_label.text, "L  nothing goes in front of the gate (\"%s\")" % main.hud.message_label.text)
+	main._on_hire_pressed("swordsman")
+	main.hire_at(Vector2(20, 330))       # tucked between the field edge and the ridge
+	check(main.get_warriors().size() == count, "L  nor where troops can't stand")
+	main.placing_type = ""
+	var w = _hire("swordsman", Vector2(240, 470))
+	check(main.get_warriors().size() == count + 1, "L  open ground is fine")
+	# Move orders, drags and group moves.
+	main.selected = w
+	main.order_move(Vector2(330, 350))
+	check(w.post == Vector2(240, 470), "L  a move order onto the rock is refused")
+	main._start_drag(w)
+	w.post = Vector2(110, 350)
+	w.position = w.post
+	main._end_drag()
+	check(w.post == Vector2(240, 470) and w.position == Vector2(240, 470), "L  a unit dragged onto the rock goes back where it was")
+	main.selected = null
+	var w2 = _hire("archer", Vector2(300, 470))
+	main._set_group([w, w2])
+	main.order_group(Vector2(330, 350))
+	await process_frame
+	var on_ground: bool = [w, w2].all(func(x): return main.ground_problem(x.post) == "")
+	check(on_ground, "L  a group sent onto the rock is given spots on open ground beside it (%s, %s)" % [w.post.round(), w2.post.round()])
+	main.group = []
+	for x in main.get_warriors():
+		x.free()
+	main.warriors_changed()
+	# Barricades: their ends may rest on rock, sealing a gap.
+	var walls_before: int = main.get_barricades().size()
+	main.placing_type = "barricade"
+	main.hire_at(Vector2(190, 360))   # in the left rock
+	main.hire_at(Vector2(290, 360))   # in the centre rock
+	main.placing_type = ""
+	check(main.get_barricades().size() == walls_before + 1, "L  a barricade across the left gap may rest its ends on the rocks")
+	await process_frame
+	check(main.paths.breach_at(Vector2(240, 250), 14.0) == null, "L  ...and enemies route through the other gap rather than break it")
+	# Classic: nothing changes.
+	await _fresh()
+	var n: int = main.get_warriors().size()
+	main._on_hire_pressed("swordsman")
+	main.hire_at(Vector2(330, 350))
+	check(main.get_warriors().size() == n + 1 and main.ground_problem(Vector2(330, 350)) == "", "L  Classic: the same spot is open meadow")

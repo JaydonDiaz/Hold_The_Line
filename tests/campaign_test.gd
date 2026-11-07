@@ -217,7 +217,7 @@ func _unlocks() -> void:
 	var gold0: int = main.gold
 	# Troops: Swordsmen only.
 	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(200, 400))
+	main.hire_at(Vector2(200, 480))
 	check(main.gold == gold0 - main.hire_cost("swordsman"), "U  a Swordsman can be hired")
 	main._on_hire_pressed("archer")
 	check(main.placing_type == "", "U  the Archer button does nothing (locked)")
@@ -226,7 +226,7 @@ func _unlocks() -> void:
 	check(main.placing_type == "", "U  ...nor does its hotkey, 2")
 	main.placing_type = "archer"   # even if something sets it directly
 	var n: int = main.get_warriors().size()
-	main.hire_at(Vector2(300, 400))
+	main.hire_at(Vector2(300, 480))
 	check(main.get_warriors().size() == n and main.placing_type == "", "U  ...and hire_at refuses a locked kind outright")
 	for kind in ["mage", "frost", "martial", "healer", "bard", "alchemist"]:
 		main._on_hire_pressed(kind)
@@ -272,8 +272,8 @@ func _unlocks() -> void:
 	check(main.allowed("barricade") and main.allowed("repair"), "U  Stonehollow's mission lends barricades and repairs")
 	check(not main.allowed("tower") and not main.allowed("path:0") and not main.allowed("archer"), "U  ...but not towers, Fortify or archers")
 	main._on_hire_pressed("barricade")
-	main.hire_at(Vector2(200, 400))
-	main.hire_at(Vector2(330, 400))
+	main.hire_at(Vector2(200, 480))
+	main.hire_at(Vector2(360, 480))
 	check(main.get_barricades().size() == 1, "U  a barricade can be built there")
 	# Once Stonehollow has joined: its unlocks everywhere, emplacements still need their people.
 	campaign.allies = ["stonehollow"]
@@ -591,7 +591,7 @@ func _training() -> void:
 	await _play("stonehollow")
 	main.gold = 99999
 	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(300, 470))
+	main.hire_at(Vector2(226, 560))
 	w = main.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
 	main.selected = w
 	for i in 4:
@@ -847,7 +847,7 @@ func _regression() -> void:
 		all_open = all_open and main.allowed("path:%d" % p)
 	check(all_open and main.allowed("repair"), "R  ...every unit, ability, castle path and repair is open")
 	main._on_hire_pressed("archer")
-	main.hire_at(Vector2(300, 400))
+	main.hire_at(Vector2(300, 480))
 	check(main.get_warriors().size() == 1 and main.get_warriors()[0].kind == "archer", "R  ...an Archer can be hired")
 	main.hud.hire_tab = "abilities"
 	main.gold = 5000
