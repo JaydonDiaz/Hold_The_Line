@@ -623,6 +623,29 @@ func _training() -> void:
 	main.battle_xp = {"archer": 400.0}
 	main.back_to_map()
 	check(is_equal_approx(campaign.xp["archer"], 1000.0 * CD.XP_LOSS_SHARE + 400.0 * CD.XP_LOSS_SHARE), "T  leaving a battle early banks half of it too")
+	# Closing the game mid-battle: half, banked and saved, and only once.
+	var had: float = campaign.xp["archer"]
+	main.game_over = false
+	main.battle_xp = {"archer": 200.0}
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	var on_disk := ConfigFile.new()
+	on_disk.load(TEST_SAVE)
+	check(is_equal_approx(campaign.xp["archer"], had + 100.0) and is_equal_approx(float(on_disk.get_value("state", "xp", {}).get("archer", 0.0)), had + 100.0),
+			"T  closing the game mid-battle banks half its XP and saves it, once")
+	# A won mission replayed banks its XP again (in full).
+	had = campaign.xp["archer"]
+	campaign.mission_id = "ashwatch"
+	campaign.finish_mission(true, [], {"archer": 300.0})
+	check(is_equal_approx(campaign.xp["archer"], had + 300.0), "T  replaying a mission already won banks its XP in full")
+	# Everything about training survives a save and a load: XP, tiers, points spent and unspent.
+	campaign.xp["mine"] = CD.XP_FIRST * 2.5   # two levels and change: two points, unspent
+	campaign.save_game()
+	var keep := [campaign.xp.duplicate(), campaign.unlocked.duplicate(true), campaign.spent.duplicate(), campaign.points("swordsman"), campaign.points("mine"), campaign.level_progress("mine")]
+	campaign.reset()
+	campaign.load_game()
+	var back := [campaign.xp, campaign.unlocked, campaign.spent, campaign.points("swordsman"), campaign.points("mine"), campaign.level_progress("mine")]
+	check(back == keep and campaign.points("mine") == 2, "T  XP, tiers, spent and unspent points all come back after a save and load")
 	# Who gets the credit: an Archer's arrows, a Healer's mending, a Mine's gold, a burn
 	# for whoever lit it; the castle's own abilities train no one.
 	campaign.new_campaign("normal")
@@ -651,6 +674,12 @@ func _training() -> void:
 	check(main.battle_xp.get("archer", 0.0) > 0.0, "T  an Archer's arrows train Archers (%d XP)" % roundi(main.battle_xp.get("archer", 0.0)))
 	check(main.battle_xp.get("healer", 0.0) > 0.0, "T  a Healer's mending trains Healers (%d XP)" % roundi(main.battle_xp.get("healer", 0.0)))
 	check(main.battle_xp.get("mine", 0.0) > 0.0, "T  a Gold Mine's gold trains Gold Mines (%d XP)" % roundi(main.battle_xp.get("mine", 0.0)))
+	# XP belongs to the unit kind, not the soldier: an Archer falling loses none of it.
+	var archer_xp: float = main.battle_xp.get("archer", 0.0)
+	archer.take_damage(1e9)
+	for f in 5:
+		await process_frame
+	check(main.battle_xp.get("archer", 0.0) >= archer_xp, "T  an Archer falling in battle keeps the XP Archers earned")
 	var before: Dictionary = main.battle_xp.duplicate()
 	main.credit = "alchemist"
 	orc.apply_burn(50.0, 1.0)

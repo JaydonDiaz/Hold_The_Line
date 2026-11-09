@@ -1015,11 +1015,23 @@ func retry_mission() -> void:
 
 
 func back_to_map() -> void:
-	if campaign and not game_over and not battle_xp.is_empty():
-		Campaign.bank_xp(battle_xp, false)   # left before the end: it counts like a loss
-		Campaign.save_game()
+	_bank_unfinished()
 	Campaign.screen = "map"
 	_restart()
+
+
+## A campaign battle left before it ended (back to the map, or the game closed): its XP
+## counts like a loss. Banked once; the battle's tally is then emptied.
+func _bank_unfinished() -> void:
+	if campaign and not game_over and not battle_xp.is_empty():
+		Campaign.bank_xp(battle_xp, false)
+		Campaign.save_game()
+		battle_xp = {}
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_bank_unfinished()   # closing the window mid-battle keeps half its XP too
 
 
 # --- Freeplay ------------------------------------------------------------
