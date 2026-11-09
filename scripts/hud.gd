@@ -1633,8 +1633,10 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int) -> void:
 		for i in mini(earned.size(), 8):
 			var kind: String = earned[i]
 			var got: Array = Campaign.last_battle[kind]
-			var line := _label(dim, Vector2(WIDTH / 2.0 - 190, 570 + i * 24), Vector2(380, 22), Color(0.92, 0.9, 0.85), 15)
-			line.text = "%s  +%d XP%s" % [Data.WARRIORS[kind]["name"], roundi(got[0]), "  ·  +%d training point%s!" % [got[1], "" if got[1] == 1 else "s"] if got[1] > 0 else ""]
+			var line := _label(dim, Vector2(WIDTH / 2.0 - 240, 570 + i * 24), Vector2(480, 22), Color(0.92, 0.9, 0.85), 15)
+			var caught: bool = got.size() > 2 and got[2] > 0.0
+			line.text = "%s  +%d XP%s%s" % [Data.WARRIORS[kind]["name"], roundi(got[0]), " (x2 catch-up)" if caught else "",
+					"  ·  +%d training point%s!" % [got[1], "" if got[1] == 1 else "s"] if got[1] > 0 else ""]
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			if got[1] > 0:
 				line.add_theme_color_override("font_color", Color(1, 0.85, 0.3))

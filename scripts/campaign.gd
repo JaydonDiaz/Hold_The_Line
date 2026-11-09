@@ -300,17 +300,51 @@ func unlock(kind: String, p: int) -> bool:
 	return true
 
 
-## Banks a battle's XP (unit kind -> XP): all of it for a win, a share for a loss or a
-## battle left early. Remembers what each kind earned (and any points) for the map.
+## Banks a battle's XP (unit kind -> XP): all of it for a win, a share for a loss. A
+## kind behind the rest catches up at double XP (see catch_up_xp). Remembers what each
+## kind earned for the map: [XP, training points reached, of that XP the catch-up bonus].
 func bank_xp(gains: Dictionary, won: bool) -> void:
 	last_battle = {}
 	var share := 1.0 if won else CD.XP_LOSS_SHARE
+	var target := catch_up_xp()
 	for kind in gains:
 		if not Data.WARRIORS.has(kind) or gains[kind] <= 0.0:
 			continue
 		var before := level_of(kind)
-		xp[kind] = float(xp.get(kind, 0.0)) + gains[kind] * share
-		last_battle[kind] = [gains[kind] * share, level_of(kind) - before]
+		var had: float = xp.get(kind, 0.0)
+		var got: float = gains[kind] * share
+		var bonus := clampf(target - had, 0.0, got)   # doubled, but only up to the catch-up mark
+		xp[kind] = had + got + bonus
+		last_battle[kind] = [got + bonus, level_of(kind) - before, bonus]
+
+
+## XP to reach `level` from nothing.
+static func xp_for_level(level: int) -> float:
+	var total := 0.0
+	for n in range(1, level + 1):
+		total += level_cost(n)
+	return total
+
+
+## Catch-up: the XP of the average level among the unit kinds the Line has trained at
+## all. A kind below it earns double XP until it gets there, so a people who join late
+## (or a unit you've fielded less) isn't left behind, without speeding up the leaders.
+func catch_up_xp() -> float:
+	var levels := []
+	for kind in xp:
+		if xp[kind] > 0.0:
+			levels.append(level_of(kind))
+	if levels.is_empty():
+		return 0.0
+	var sum := 0
+	for l in levels:
+		sum += l
+	return xp_for_level(floori(float(sum) / levels.size()))
+
+
+## Whether `kind` earns double XP right now (it's below the catch-up mark).
+func catching_up(kind: String) -> bool:
+	return float(xp.get(kind, 0.0)) < catch_up_xp()
 
 
 # --- Classic on the campaign's battlefields ----------------------------------------

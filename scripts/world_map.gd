@@ -536,7 +536,8 @@ func _fill_training(dim: Control) -> void:
 		name.text = d["name"]
 		var prog: Array = campaign.level_progress(kind)
 		var lvl := _label(panel, Vector2(24, top + 32), Vector2(560, 20), Color(0.85, 0.82, 0.76), 14)
-		lvl.text = "Level %d  ·  %s" % [campaign.level_of(kind), "%d / %d XP to the next point" % [roundi(prog[0]), roundi(prog[1])] if prog[1] > 0.0 else "top level"]
+		lvl.text = "Level %d  ·  %s%s" % [campaign.level_of(kind), "%d / %d XP to the next point" % [roundi(prog[0]), roundi(prog[1])] if prog[1] > 0.0 else "top level",
+				"  ·  catching up: double XP" if campaign.catching_up(kind) else ""]
 		var pts_l := _label(panel, Vector2(380, top + 4), Vector2(204, 24), Color(1, 0.85, 0.3), 16)
 		var pts: int = campaign.points(kind)
 		pts_l.text = "%d point%s to spend" % [pts, "" if pts == 1 else "s"] if pts > 0 else ("Fully trained" if campaign.untrained_tiers(kind) == 0 else "No points yet")
