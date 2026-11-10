@@ -18,9 +18,10 @@ const LEND_BUILDERS := "engineers"     # ...or a mission that lends them (see MI
 const ENDING_ALLIES := 8               # every regional alliance: the fully united ending
 
 # Troop training: in the campaign, a unit kind can only take upgrade tiers it has been
-# trained for. Tier I is always open; II, III and IV are bought with training points
-# (earned by winning missions) at the Training Grounds on the map, for all four of the
-# kind's paths at once, in order. Towers share their crew's training.
+# trained for. Tier I is always open; II, III and IV are opened one path at a time with
+# training points at the Training Grounds on the map. Every kind trains on its own
+# (towers apart from their crews). Tier IV also needs the beacon of the kind's home
+# region lit (see TERRITORIES; the Swordsman's home is Ashwatch).
 # Unit experience: in a campaign battle every kind of unit (emplacements too) earns XP by
 # being used. Each level it reaches gives that kind a training point; a point opens the
 # next tier (II, III, IV) of one of its four upgrade paths, so 12 points train it fully.
@@ -77,27 +78,39 @@ const FACTIONS := {
 		"people": "In towers of crystal and starglass, the mages of the Conclave study the deepest arts. Brilliant and secretive, they alone remember how the beacons were truly lit."},
 }
 
-# requires: {"all": [territories]} and/or {"any": [territories], "count": n}.
-# known: shown on the map from the start (as the goal), even before it's reachable.
+# A territory is a short regional campaign:
+#   missions   its required missions, played in order. The one whose "reward" is the
+#              territory's people brings them into the Line (usually the first); winning
+#              the last lights the territory's beacon: it's secured.
+#   optional   missions that open once its people have joined (or, with no people, once
+#              its first mission is won); they never count toward the beacon. Their reward
+#              is training points for a unit of the region on the first win (a mission's
+#              "bonus_points": {kind: n}, 1 or 2): help for a player who's struggling,
+#              never needed, and given once, so there's nothing to farm.
+#   requires   what opens it: {"joined": [territories]} (their people joined, or their
+#              first mission won), {"all": [territories]} (their beacons lit) and/or
+#              {"any": [territories], "count": n} (n of those beacons lit).
+#   known      shown on the map from the start (as the goal), even before it's reachable.
+# A mission may have "requires" of its own (same keys) before it can be played.
 # Territories with no missions yet are reachable but have nothing to play (later phases).
 const TERRITORIES := {
 	"ashwatch": {"name": "Ashwatch Keep", "pos": Vector2(250, 640), "faction": "", "act": 1,
 		"requires": {}, "missions": ["ashwatch"],
 		"blurb": "Your frontier keep, at the southern edge of the continent. Half its garrison rode south a week ago and never came back."},
 	"stonehollow": {"name": "Stonehollow", "pos": Vector2(430, 566), "faction": "stonehollow", "act": 1,
-		"requires": {"all": ["ashwatch"]}, "missions": ["stonehollow"],
+		"requires": {"joined": ["ashwatch"]}, "missions": ["stonehollow"],
 		"blurb": "A guild town cut into the mountain. Its masons raised the old beacon towers, and they still keep the plans."},
 	"greenwood": {"name": "Greenwood", "pos": Vector2(118, 452), "faction": "greenwood", "act": 2,
-		"requires": {"all": ["stonehollow"]}, "missions": [],
+		"requires": {"joined": ["stonehollow"]}, "missions": [],
 		"blurb": "Deep forest held by the Woodland Watch, elven archers who trust no road they didn't cut themselves."},
 	"mercyvale": {"name": "Mercy Vale", "pos": Vector2(300, 468), "faction": "mercyvale", "act": 2,
-		"requires": {"all": ["stonehollow"]}, "missions": [],
+		"requires": {"joined": ["stonehollow"]}, "missions": [],
 		"blurb": "A valley of hospices and shrines. The Sanctuary takes in anyone wounded, from any side."},
 	"deepdelve": {"name": "Deepdelve", "pos": Vector2(506, 452), "faction": "deepdelve", "act": 2,
-		"requires": {"all": ["stonehollow"]}, "missions": [],
+		"requires": {"joined": ["stonehollow"]}, "missions": [],
 		"blurb": "Mine shafts and smelters under the eastern peaks. The Mining Guild's gold paid for half the old Line."},
 	"sable": {"name": "Sable Crossing", "pos": Vector2(300, 352), "faction": "", "act": 2,
-		"requires": {"any": ["greenwood", "mercyvale", "deepdelve"], "count": 2}, "missions": [],
+		"requires": {"all": ["ashwatch", "stonehollow"], "any": ["greenwood", "mercyvale", "deepdelve"], "count": 2}, "missions": [],
 		"blurb": "The only bridge over the Sable river. Whoever holds it decides whether the south and north ever meet."},
 	"frostmarch": {"name": "Frostmarch", "pos": Vector2(112, 214), "faction": "frostmarch", "act": 3,
 		"requires": {"all": ["sable"]}, "missions": [],

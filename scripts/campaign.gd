@@ -31,6 +31,11 @@ var screen := ""
 var mission_id := ""
 var pending_story := ""    # STORY key to play when the map opens (a mission's outro)
 var just_joined := ""      # faction that joined in the battle just won (the map announces it)
+var just_lit := ""         # territory whose beacon the battle just won lit (the map announces it)
+# The campaign's content (campaign_data.gd), read through these so tests can try other
+# regional chains without changing the real ones.
+var territories: Dictionary = CD.TERRITORIES
+var missions: Dictionary = CD.MISSIONS
 
 
 func _ready() -> void:
@@ -52,6 +57,7 @@ func reset() -> void:
 	mission_id = ""
 	pending_story = ""
 	just_joined = ""
+	just_lit = ""
 
 
 func new_campaign(diff: String) -> void:
@@ -96,7 +102,7 @@ func load_game() -> bool:
 func _read(cfg: ConfigFile) -> bool:
 	var diff = cfg.get_value("state", "difficulty", "normal")
 	difficulty = diff if diff is String and Data.DIFFICULTIES.has(diff) else "normal"
-	completed = _strings(cfg.get_value("state", "completed", []), CD.MISSIONS)
+	completed = _strings(cfg.get_value("state", "completed", []), missions)
 	allies = _strings(cfg.get_value("state", "allies", []), CD.FACTIONS)
 	seen = _strings(cfg.get_value("state", "seen", []), CD.STORY)
 	var f = cfg.get_value("state", "flags", {})
@@ -251,7 +257,27 @@ func level_progress(kind: String) -> Array:
 ## Training points `kind` has to spend (earned by its levels, not yet spent; never more
 ## than its untrained tiers).
 func points(kind: String) -> int:
-	return clampi(level_of(kind) - int(spent.get(kind, 0)), 0, untrained_tiers(kind))
+	return clampi(level_of(kind) + bonus_points(kind) - int(spent.get(kind, 0)), 0, untrained_tiers(kind))
+
+
+## Of `kind`'s points, how many can't be spent until its home region's beacon is lit
+## (everything below Tier IV already open, so only Tier IV is left to buy with them).
+func points_waiting(kind: String) -> int:
+	if tier4_open(kind):
+		return 0
+	var below := 0
+	for p in 4:
+		below += maxi(0, 3 - path_tier(kind, p))
+	return maxi(0, points(kind) - below)
+
+
+## Training points `kind` was given outright: an optional mission's reward on its first
+## win ("bonus_points": {kind: n}). Worked out from the missions won, never stored.
+func bonus_points(kind: String) -> int:
+	var n := 0
+	for m in completed:
+		n += int(missions.get(m, {}).get("bonus_points", {}).get(kind, 0))
+	return n
 
 
 ## Tiers still shut on `kind`'s paths (12 for a kind never trained).
@@ -285,7 +311,41 @@ func trainable() -> Array:
 
 
 func can_unlock(kind: String, p: int) -> bool:
-	return points(kind) > 0 and path_tier(kind, p) < 4 and trainable().has(kind)
+	return points(kind) > 0 and path_tier(kind, p) < 4 and trainable().has(kind) \
+			and (path_tier(kind, p) < 3 or tier4_open(kind))
+
+
+## The territory whose beacon opens `kind`'s Tier IV: the home of the people who bring
+## it (Ashwatch for what the garrison has from the start). "" if none does.
+func region_of(kind: String) -> String:
+	if CD.START_UNLOCKS.has(kind):
+		return "ashwatch"
+	var f := source_of(kind)
+	for t in territories:
+		if f != "" and territories[t]["faction"] == f:
+			return t
+	return ""
+
+
+## Whether `kind` may train Tier IV: its home region's beacon is lit.
+func tier4_open(kind: String) -> bool:
+	var t := region_of(kind)
+	return t != "" and beacon_lit(t)
+
+
+## Why the next tier of `kind`'s path `p` can't be opened now ("" if it can, or it's
+## only a matter of points): for Tier IV, the home region's beacon.
+func tier_lock_reason(kind: String, p: int) -> String:
+	if path_tier(kind, p) == 3 and not tier4_open(kind):
+		var t := region_of(kind)
+		var name: String = territories[t]["name"] if t != "" else "its home region"
+		return "Tier IV locked: complete %s's regional campaign and light its beacon" % name
+	return ""
+
+
+## The kinds a territory's beacon opens Tier IV for.
+func tier4_kinds(t: String) -> Array:
+	return Data.WARRIORS.keys().filter(func(k): return region_of(k) == t and not Data.WARRIORS[k].get("summon", false))
 
 
 ## Spends one of `kind`'s points on the next tier of path `p`. Returns whether it did.
@@ -355,87 +415,171 @@ func open_maps() -> Array:
 	var out := []
 	if not has_save():
 		return out
-	for m in CD.MISSIONS:
-		var d: Dictionary = CD.MISSIONS[m]
+	for m in missions:
+		var d: Dictionary = missions[m]
 		var map: String = d.get("map", "")
-		if map != "" and not out.has(map) and (completed.has(m) or requirements_met(d["territory"])):
+		if map != "" and not out.has(map) and (completed.has(m) or mission_open(m)):
 			out.append(map)
 	return out
 
 
 # --- The map --------------------------------------------------------------------
 
+## Whether territory t is secured: every one of its required missions won, so its
+## beacon is lit. (Worked out from the missions won; never stored.)
+func beacon_lit(t: String) -> bool:
+	var ms: Array = territories[t]["missions"]
+	if ms.is_empty():
+		return false
+	for m in ms:
+		if not completed.has(m):
+			return false
+	return true
+
+
+## (The old name: a territory is "done" once it's secured.)
 func territory_done(t: String) -> bool:
-	var ms: Array = CD.TERRITORIES[t]["missions"]
-	return not ms.is_empty() and completed.has(ms[-1])
+	return beacon_lit(t)
 
 
-func requirements_met(t: String) -> bool:
-	var req: Dictionary = CD.TERRITORIES[t]["requires"]
+## Whether t's people have joined the Line (for a territory with no people of its own,
+## whether its first mission is won).
+func joined(t: String) -> bool:
+	var f: String = territories[t]["faction"]
+	if f != "":
+		return allied(f)
+	var ms: Array = territories[t]["missions"]
+	return not ms.is_empty() and completed.has(ms[0])
+
+
+func _holds_req(req: Dictionary) -> bool:
+	for r in req.get("joined", []):
+		if not joined(r):
+			return false
 	for r in req.get("all", []):
-		if not territory_done(r):
+		if not beacon_lit(r):
 			return false
 	if req.has("any"):
 		var n := 0
 		for r in req["any"]:
-			if territory_done(r):
+			if beacon_lit(r):
 				n += 1
 		if n < req.get("count", 1):
 			return false
 	return true
 
 
-## "hidden", "locked", "available" (reachable, nothing to play there yet), "attack" (a
-## mission to play) or "allied" (its last mission is won).
+func requirements_met(t: String) -> bool:
+	return _holds_req(territories[t]["requires"])
+
+
+## Whether mission m can be played now: its territory is open and its own requirements
+## are met.
+func mission_open(m: String) -> bool:
+	var d: Dictionary = missions.get(m, {})
+	return not d.is_empty() and requirements_met(d["territory"]) and _holds_req(d.get("requires", {}))
+
+
+## "hidden", "locked", "available" (reachable, nothing to play there yet), "attack" (its
+## people not yet won over, a mission to play), "unfinished" (joined, required missions
+## left) or "secured" (every required mission won: the beacon is lit).
 func territory_state(t: String) -> String:
-	if territory_done(t):
-		return "allied"
+	if beacon_lit(t):
+		return "secured"
+	if joined(t):
+		return "unfinished"
 	if requirements_met(t):
-		return "attack" if next_mission(t) != "" else "available"
-	var d: Dictionary = CD.TERRITORIES[t]
+		return "attack" if playable_mission(t) != "" else "available"
+	var d: Dictionary = territories[t]
 	if d.get("known", false):
 		return "locked"
-	# Discovered once a road leads to it from somewhere already won.
+	# Discovered once a road leads to it from somewhere whose people have joined.
 	for r in CD.ROUTES:
 		var other := ""
 		if r[0] == t:
 			other = r[1]
 		elif r[1] == t:
 			other = r[0]
-		if other != "" and territory_done(other):
+		if other != "" and territories.has(other) and joined(other):
 			return "locked"
 	return "hidden"
 
 
-## The first mission of territory t not yet won ("" if none is left, or none exists yet).
+## The first required mission of territory t not yet won ("" if none is left, or none
+## exists yet), whether or not it can be played yet.
 func next_mission(t: String) -> String:
-	for m in CD.TERRITORIES[t]["missions"]:
+	for m in territories[t]["missions"]:
 		if not completed.has(m):
 			return m
 	return ""
 
 
+## The required mission to play next in t, if it can be played now ("" if not).
+func playable_mission(t: String) -> String:
+	var m := next_mission(t)
+	return m if m != "" and mission_open(m) else ""
+
+
+## t's optional missions that can be played now (once its people have joined), won or not.
+func optional_missions(t: String) -> Array:
+	if not joined(t):
+		return []
+	return (territories[t].get("optional", []) as Array).filter(func(m): return mission_open(m))
+
+
+## [required missions won, required missions in all] for territory t.
+func progress(t: String) -> Array:
+	var ms: Array = territories[t]["missions"]
+	return [ms.filter(func(m): return completed.has(m)).size(), ms.size()]
+
+
+## What has to happen before `req` is met, in words.
+func req_text(req: Dictionary) -> String:
+	var parts := []
+	var j: Array = req.get("joined", []).filter(func(r): return not joined(r))
+	if not j.is_empty():
+		parts.append("Win over " + " and ".join(j.map(func(r): return territories[r]["name"])))
+	var all: Array = req.get("all", []).filter(func(r): return not beacon_lit(r))
+	if not all.is_empty():
+		parts.append("Light the beacon%s of %s" % ["s" if all.size() > 1 else "", " and ".join(all.map(func(r): return territories[r]["name"]))])
+	if req.has("any"):
+		var names: Array = req["any"].map(func(r): return territories[r]["name"])
+		var lit: int = req["any"].filter(func(r): return beacon_lit(r)).size()
+		parts.append("Light the beacons of any %d of %s (%d lit)" % [req.get("count", 1), ", ".join(names), lit])
+	return "; ".join(parts)
+
+
 ## What has to happen before t opens up, in words.
 func requirement_text(t: String) -> String:
-	var req: Dictionary = CD.TERRITORIES[t]["requires"]
-	var parts := []
-	var all: Array = req.get("all", [])
-	if not all.is_empty():
-		parts.append("Defend " + " and ".join(all.map(func(r): return CD.TERRITORIES[r]["name"])))
-	if req.has("any"):
-		var names: Array = req["any"].map(func(r): return CD.TERRITORIES[r]["name"])
-		parts.append("Defend any %d of %s" % [req.get("count", 1), ", ".join(names)])
-	return "; ".join(parts)
+	return req_text(territories[t]["requires"])
 
 
 func alliance_count() -> int:
 	return allies.size()
 
 
+## Beacons lit, of the territories that have one (every territory with missions of its
+## own and a people, plus Ashwatch).
+func beacon_count() -> int:
+	return beacon_territories().filter(func(t): return beacon_lit(t)).size()
+
+
+func beacon_territories() -> Array:
+	return territories.keys().filter(func(t): return territories[t]["faction"] != "" or t == "ashwatch")
+
+
+## Every people's beacon lit: the fully united ending.
+func fully_united() -> bool:
+	for t in territories:
+		if territories[t]["faction"] != "" and not beacon_lit(t):
+			return false
+	return true
+
+
 # --- Missions -------------------------------------------------------------------
 
 func mission() -> Dictionary:
-	return CD.MISSIONS.get(mission_id, {})
+	return missions.get(mission_id, {})
 
 
 ## A mission was won or lost. A win records it, brings its faction into the Line, sets
@@ -448,9 +592,19 @@ func finish_mission(won: bool, new_flags: Array = [], gains: Dictionary = {}) ->
 	if not won:
 		save_game()
 		return
+	var t: String = m.get("territory", "")
+	var was_lit := t != "" and territories.has(t) and beacon_lit(t)
 	var first_win := not completed.has(mission_id)
 	if first_win:
 		completed.append(mission_id)
+	just_lit = t if t != "" and territories.has(t) and not was_lit and beacon_lit(t) else ""
+	if first_win:
+		# An optional mission's reward: training points for a unit of its region, once.
+		var bonus: Dictionary = m.get("bonus_points", {})
+		for kind in bonus:
+			var row: Array = last_battle.get(kind, [0.0, 0, 0.0])
+			row[1] = int(row[1]) + int(bonus[kind])
+			last_battle[kind] = row
 	just_joined = ""
 	var f: String = m.get("reward", "")
 	if f != "" and not allies.has(f):

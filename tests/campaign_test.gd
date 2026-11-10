@@ -357,7 +357,7 @@ func _missions() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(TEST_SAVE)
 	check((cfg.get_value("state", "completed", []) as Array).has("ashwatch"), "M  ...and saved straight away")
-	check(campaign.territory_state("ashwatch") == "allied" and campaign.territory_state("stonehollow") == "attack", "M  Stonehollow is discovered and under attack")
+	check(campaign.territory_state("ashwatch") == "secured" and campaign.territory_state("stonehollow") == "attack", "M  Stonehollow is discovered and under attack")
 	check(campaign.pending_story == "ashwatch_outro", "M  the map will play Ashwatch's outro")
 	main.back_to_map()
 	await _fresh_main()

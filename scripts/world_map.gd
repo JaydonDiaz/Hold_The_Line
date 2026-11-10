@@ -81,7 +81,7 @@ func _ready() -> void:
 
 func _default_selection() -> String:
 	for k in CD.TERRITORIES:
-		if campaign.territory_state(k) == "attack":
+		if campaign.playable_mission(k) != "":
 			return k
 	return "ashwatch"
 
@@ -160,7 +160,8 @@ func _build_panel() -> void:
 
 
 func refresh() -> void:
-	info["header"].text = "%s  ·  Alliances %d/%d" % [Data.DIFFICULTIES[campaign.difficulty]["name"], campaign.alliance_count(), CD.FACTIONS.size()]
+	info["header"].text = "%s  ·  Alliances %d/%d  ·  Beacons %d/%d" % [Data.DIFFICULTIES[campaign.difficulty]["name"], campaign.alliance_count(), CD.FACTIONS.size(),
+			campaign.beacon_count(), campaign.beacon_territories().size()]
 	var pts := 0
 	for kind in campaign.trainable():
 		pts += campaign.points(kind)
@@ -179,9 +180,11 @@ func _show_info(k: String) -> void:
 	var f: String = d["faction"]
 	info["name"].text = d["name"]
 	info["name"].add_theme_color_override("font_color", CD.FACTIONS[f]["color"] if f != "" else Color(1, 0.85, 0.3))
-	info["state"].text = {"locked": "Locked", "available": "Open", "attack": "Under attack!", "allied": "Allied", "hidden": ""}[st]
+	var prog: Array = campaign.progress(k)
+	info["state"].text = {"locked": "Locked", "available": "Open", "attack": "Under attack!",
+			"unfinished": ("Allied" if f != "" else "Held") + "  ·  %d/%d" % prog, "secured": "Beacon lit", "hidden": ""}[st]
 	info["state"].add_theme_color_override("font_color", {"locked": Color(0.7, 0.7, 0.7), "available": Color(0.9, 0.85, 0.6),
-			"attack": Color(1, 0.45, 0.35), "allied": Color(0.55, 1.0, 0.55), "hidden": Color.WHITE}[st])
+			"attack": Color(1, 0.45, 0.35), "unfinished": Color(0.75, 0.95, 0.6), "secured": Color(1, 0.85, 0.35), "hidden": Color.WHITE}[st])
 	if f != "":
 		info["people"].text = CD.FACTIONS[f]["name"]
 	elif k == "ashwatch":
@@ -194,19 +197,32 @@ func _show_info(k: String) -> void:
 	if leader != "":
 		info["leader"].texture = Portraits.texture(leader, CD.SPEAKERS[leader]["look"])
 		info["leader_frame"].tooltip_text = CD.SPEAKERS[leader]["name"]
-	var mid: String = campaign.next_mission(k)
-	var m: Dictionary = CD.MISSIONS.get(mid, {})
+	var mid: String = _mission_here(k)
+	var m: Dictionary = campaign.missions.get(mid, {})
+	var optional: bool = mid != "" and mid != campaign.playable_mission(k)
 	match st:
 		"locked":
 			info["mission"].text = "To reach it: " + campaign.requirement_text(k)
 		"available":
 			info["mission"].text = "No battle here yet. This territory's story arrives in a later update."
-		"attack":
-			info["mission"].text = "Mission: %s  ·  %d waves  ·  %d gold  ·  +%d training" % [m["name"], m["waves"], m["gold"], m.get("training", 0)]
-			if not (m["lend"] as Array).is_empty():
-				info["mission"].text += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
-		"allied":
-			info["mission"].text = "Allied with the Line." if f != "" else "Defended."
+		"attack", "unfinished":
+			if optional:
+				info["mission"].text = _optional_text(mid)
+			elif not m.is_empty():
+				info["mission"].text = "Mission %d of %d: %s  ·  %d waves  ·  %d gold" % [prog[0] + 1, prog[1], m["name"], m["waves"], m["gold"]]
+				if not (m["lend"] as Array).is_empty():
+					info["mission"].text += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
+			else:
+				var nxt: Dictionary = campaign.missions.get(campaign.next_mission(k), {})
+				info["mission"].text = ("Next: %s. Opens when you: %s." % [nxt["name"], campaign.req_text(nxt.get("requires", {}))]) if not nxt.is_empty() \
+						else "Its next battle arrives in a later update."
+			if st == "unfinished":
+				info["mission"].text += "\nSecure the region to light its beacon and open Tier IV training for %s." % _kind_names(campaign.tier4_kinds(k))
+		"secured":
+			info["mission"].text = ("Secured: its beacon burns. Tier IV training open for %s." % _kind_names(campaign.tier4_kinds(k))) if not campaign.tier4_kinds(k).is_empty() else "Secured."
+			if optional:
+				info["mission"].text += "
+" + _optional_text(mid)
 	# Threats: the enemies the mission sends.
 	for c in threat_box.get_children():
 		c.queue_free()
@@ -228,17 +244,48 @@ func _show_info(k: String) -> void:
 		c.queue_free()
 	var unlocks: Array = CD.FACTIONS[f]["unlocks"] if f != "" else []
 	info["reward_title"].visible = not unlocks.is_empty()
-	info["reward_title"].text = "JOINED THE LINE, THEY BRING" if st == "allied" else "IF THEY JOIN THE LINE"
+	info["reward_title"].text = "JOINED THE LINE, THEY BRING" if campaign.joined(k) else "IF THEY JOIN THE LINE"
 	for key in unlocks:
 		reward_box.add_child(_reward(key))
-	info["defend"].disabled = st != "attack"
-	info["defend"].text = "Defended" if st == "allied" and f == "" else ("Allied" if st == "allied" else "Defend")
+	info["defend"].disabled = mid == ""
+	info["defend"].text = "Optional" if optional else ("Secured" if st == "secured" else ("Defend" if mid != "" or st == "attack" else ("Allied" if f != "" else "Held")))
 
 
 func _on_defend() -> void:
-	var mid: String = campaign.next_mission(selected)
-	if mid != "" and campaign.territory_state(selected) == "attack":
+	var mid := _mission_here(selected)
+	if mid != "":
 		defend.emit(mid)
+
+
+## The mission Defend plays in territory k: the next required one if it can be played;
+## otherwise an optional one (one not yet won first, then any, to play it again).
+func _mission_here(k: String) -> String:
+	var mid: String = campaign.playable_mission(k)
+	if mid != "":
+		return mid
+	var opts: Array = campaign.optional_missions(k)
+	for o in opts:
+		if not campaign.completed.has(o):
+			return o
+	return opts[0] if not opts.is_empty() else ""
+
+
+func _optional_text(mid: String) -> String:
+	var m: Dictionary = campaign.missions[mid]
+	var text := "Optional: %s  ·  %d waves" % [m["name"], m["waves"]]
+	var bonus: Dictionary = m.get("bonus_points", {})
+	if not bonus.is_empty():
+		var parts: Array = bonus.keys().map(func(kind): return "+%d %s training point%s" % [bonus[kind], Data.WARRIORS[kind]["name"], "" if bonus[kind] == 1 else "s"])
+		text += ("  ·  won: " if campaign.completed.has(mid) else "  ·  first win: ") + ", ".join(parts)
+	return text
+
+
+## "Archers and Archer Towers": unit kinds by name, for the beacon lines.
+func _kind_names(kinds: Array) -> String:
+	var names: Array = kinds.map(func(k): return Data.WARRIORS[k]["name"] + "s")
+	if names.size() <= 1:
+		return "".join(names)
+	return ", ".join(names.slice(0, -1)) + " and " + names[-1]
 
 
 # --- Unlock names and icons ---------------------------------------------------
@@ -355,6 +402,35 @@ func play_story(key: String, then: Callable = Callable()) -> void:
 	add_child(s)
 
 
+## A beacon was lit in the battle just won: the region is secured, and its people's
+## units can now train Tier IV (nothing is granted: the points still have to be spent).
+func _announce_beacon() -> void:
+	var t: String = campaign.just_lit
+	campaign.just_lit = ""
+	var d: Dictionary = CD.TERRITORIES[t]
+	var f: String = d["faction"]
+	var col: Color = CD.FACTIONS[f]["color"] if f != "" else Color(1, 0.85, 0.3)
+	var dim := _dim()
+	var panel := _panel(dim, Rect2(50, 360, 540, 250), Color(1, 0.8, 0.3))
+	var title := _label(panel, Vector2(0, 22), Vector2(540, 34), col, 26)
+	title.text = "%s stands with the Line!" % d["name"]
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := _label(panel, Vector2(30, 70), Vector2(480, 30), Color(1, 0.85, 0.35), 17)
+	sub.text = "Its beacon is lit."
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var kinds: Array = campaign.tier4_kinds(t)
+	var body := _label(panel, Vector2(30, 104), Vector2(480, 70), Color(0.9, 0.88, 0.84), 15)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.text = ("Tier IV %s training is now available at the Training Grounds, for any path already trained to Tier III." % _kind_names(kinds)) if not kinds.is_empty() else ""
+	var ok := _button(panel, Vector2(170, 184), Vector2(200, 50), "Onward")
+	ok.pressed.connect(func():
+		overlay = null
+		dim.queue_free()
+		_announce_join())
+	sound.emit("fanfare")
+
+
 ## Unit kinds the last battle levelled up: kind -> training points it earned.
 func _new_points() -> Dictionary:
 	var out := {}
@@ -365,6 +441,9 @@ func _new_points() -> Dictionary:
 
 
 func _announce_join() -> void:
+	if campaign.just_lit != "":
+		_announce_beacon()
+		return
 	var f: String = campaign.just_joined
 	var gained := _new_points()
 	var pts := 0
@@ -433,7 +512,7 @@ func show_ledger() -> void:
 		var name := _label(panel, Vector2(16, y), Vector2(360, 24), faction["color"] if known else Color(0.5, 0.5, 0.5), 18)
 		name.text = faction["name"] if known else "Undiscovered"
 		var status := _label(panel, Vector2(380, y + 2), Vector2(212, 22), Color(0.55, 1.0, 0.55) if joined else Color(0.7, 0.7, 0.7), 14)
-		status.text = "Allied" if joined else ("Not yet allied" if known else "")
+		status.text = ("Beacon lit" if campaign.beacon_lit(home) else "Allied") if joined else ("Not yet allied" if known else "")
 		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		var where := _label(panel, Vector2(16, y + 24), Vector2(576, 20), Color(0.75, 0.7, 0.62), 13)
 		where.text = "%s  ·  %s" % [faction["home"], faction["gives"]] if known else "Somewhere beyond the roads you know."
@@ -542,6 +621,11 @@ func _fill_training(dim: Control) -> void:
 		var pts: int = campaign.points(kind)
 		pts_l.text = "%d point%s to spend" % [pts, "" if pts == 1 else "s"] if pts > 0 else ("Fully trained" if campaign.untrained_tiers(kind) == 0 else "No points yet")
 		pts_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var waiting: int = campaign.points_waiting(kind)
+		if waiting > 0:
+			var wl := _label(panel, Vector2(300, top + 28), Vector2(284, 20), Color(1, 0.6, 0.4), 12)
+			wl.text = "%d wait for %s's beacon (Tier IV)" % [waiting, CD.TERRITORIES[campaign.region_of(kind)]["name"]]
+			wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		var row_h := minf(84.0, (880.0 - (top + 60.0)) / 4.0)
 		for p in 4:
 			var path: Dictionary = d["paths"][p]
@@ -569,6 +653,12 @@ func _fill_training(dim: Control) -> void:
 				desc.clip_text = true
 			var b := _button(row, Vector2(400, (row_h - 6.0) / 2.0 - 20.0), Vector2(166, 40), "Fully open" if tier >= 4 else "Open tier %s · 1 pt" % ["I", "II", "III", "IV"][tier])
 			b.disabled = not campaign.can_unlock(kind, p)
+			var why: String = campaign.tier_lock_reason(kind, p)
+			if why != "":
+				b.text = "Tier IV locked"
+				b.tooltip_text = why + "."
+				var lock := _label(row, Vector2(140, row_h - 26.0), Vector2(256, 18), Color(1, 0.6, 0.4), 11)
+				lock.text = "Needs %s's beacon lit" % CD.TERRITORIES[campaign.region_of(kind)]["name"]
 			b.pressed.connect(func():
 				if campaign.unlock(kind, p):
 					sound.emit("upgrade")
@@ -880,7 +970,20 @@ func _draw_keep(k: String, st: String) -> void:
 			for i in 3:
 				var rise := fmod(t * 5.0 + i * 4.0, 12.0)
 				_b(ox + 4 + sin(t + i) * 2.0, oy - 4 - rise, 1, 1, Color(0.35, 0.32, 0.32, 1.0 - rise / 12.0))
-		"allied":
+		"unfinished":
+			# The people's banner on the left tower; the beacon on the right stands cold,
+			# with a pip for each required mission (gold once won).
+			var colu: Color = CD.FACTIONS[f]["color"] if f != "" else Color(0.3, 0.45, 0.85)
+			_b(ox + 1, oy - 4, 1, 4, OUTLINE)
+			_b(ox + 2, oy - 4, 3, 2, colu)
+			_b(ox + 5, oy - 3, 5, 3, OUTLINE)
+			_b(ox + 6, oy - 3, 3, 2, Color(0.55, 0.52, 0.5))
+			_b(ox + 7, oy - 3, 1, 1, Color(0.22, 0.2, 0.2))   # cold coals
+			var pr: Array = campaign.progress(k)
+			for i in pr[1]:
+				# A pip per required mission, gold once won, above the keep.
+				_b(ox + 4 - pr[1] + i * 2 + 1, oy - 7, 1, 1, Color(1, 0.85, 0.3) if i < pr[0] else Color(0.6, 0.56, 0.5))
+		"secured":
 			# The people's banner on the left tower, and the beacon lit on the right.
 			var col: Color = CD.FACTIONS[f]["color"] if f != "" else Color(0.3, 0.45, 0.85)
 			_b(ox + 1, oy - 4, 1, 4, OUTLINE)
