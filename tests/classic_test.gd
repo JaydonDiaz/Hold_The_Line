@@ -51,6 +51,8 @@ func _foe(kind: String, at: Vector2):
 
 func _run() -> void:
 	await _castle()
+	await _castle_paths()
+	await _repairs()
 	await _siege()
 	await _walls()
 	await _modes()
@@ -80,6 +82,51 @@ func _castle() -> void:
 	await _frames(120)
 	check(e.hp < hp0, "...and shoot an enemy come close to the castle")
 	check(guards.all(func(g): return g.position.distance_to(g.post) < 1.0), "...without leaving their posts")
+
+
+## The castle's four paths: every tier of each can be bought (they just cost more), each
+## doing what it says.
+func _castle_paths() -> void:
+	await _fresh()
+	main.gold = 99999
+	var hp0: float = main.castle_max
+	var costs := []
+	for t in 4:
+		costs.append(main.powers.tier_cost(0, t) if main.powers.has_method("tier_cost") else 0)
+		main.castle_upgrade(0)
+	check(main.powers.tiers[0] == 4, "Castle paths: all four Fortify tiers can be bought")
+	check(main.castle_max >= hp0 * 1.6 - 1.0 and main.powers.armor() >= 0.35, "...the Citadel: +60% health (%d to %d), 35%% less damage" % [roundi(hp0), roundi(main.castle_max)])
+	for t in 4:
+		main.castle_upgrade(2)
+	await _frames(5)
+	var kinds: Array = main.powers.guards.filter(func(w): return is_instance_valid(w)).map(func(w): return w.kind)
+	check(main.powers.tiers[2] == 4 and kinds.count("mage") == 2 and kinds.count("frost") == 2, "Wall Mages to the Archmage Tower: 2 Mages and 2 Frost Witches on the wall (%s)" % str(kinds))
+	var p0: float = main.powers.boost()
+	for t in 4:
+		main.castle_upgrade(3)
+	check(main.powers.tiers[3] == 4 and main.powers.boost() > p0 * 1.8, "Ability Power to the Crown of Storms: abilities %.1fx as strong" % main.powers.boost())
+	var g: int = main.gold
+	main.castle_upgrade(0)
+	check(main.gold == g, "...and a path at its top tier sells nothing more")
+
+
+## Repairs: each button mends its share of the castle for its share of the price; short of
+## gold, the full repair mends as much as the gold buys. Not during a wave.
+func _repairs() -> void:
+	await _fresh()
+	main.castle_hp = main.castle_max * 0.3
+	main.gold = 99999
+	var share: float = main.Data.REPAIR_CHUNKS[1]
+	check(is_equal_approx(main.repair_amount(1), roundf(main.castle_max * share)), "Repairs: the %d%% button mends %d%% of the castle" % [roundi(share * 100), roundi(share * 100)])
+	check(main.repair_cost(main.castle_max) > main.repair_cost(main.castle_max * 0.25), "...a bigger repair costs more")
+	main.gold = main.repair_cost(main.castle_max * 0.2)
+	check(main.repair_all_gold() and main.repair_amount(3) <= main.castle_max * 0.2 + 1.0 and main.repair_amount(3) >= 1.0,
+			"...short of gold, the full repair mends what the gold buys (%d)" % roundi(main.repair_amount(3)))
+	main.wave_active = true
+	check(not main.can_repair(0), "...and nothing is repaired during a wave")
+	main.wave_active = false
+	main.castle_hp = main.castle_max
+	check(not main.can_repair(0), "...or when the castle is whole")
 
 
 func _siege() -> void:
@@ -141,6 +188,31 @@ func _walls() -> void:
 	await _frames(60 * 6)
 	check(not is_instance_valid(gob) or gob.dead or absf(gob.position.x - 300.0) > 60.0 or gob.position.y < 440.0,
 			"An enemy walks round a wall (or stops at it), not through")
+	check(not main.can_post_at(Vector2(300, 452)), "...nothing can be posted on a wall")
+	check(main.wall_cost(Vector2(0, 400), Vector2(300, 400)) > main.wall_cost(Vector2(0, 400), Vector2(100, 400)), "...a longer wall costs more")
+	# A wall sealing the field: enemies break through it rather than wait.
+	await _fresh()
+	main.gold = 99999
+	main.placing_type = "barricade"
+	main._wall_click(Vector2(0, 420))
+	main._wall_click(Vector2(main.FIELD_W, 420))
+	main.placing_type = ""
+	await _frames(3)
+	var wall = main.get_barricades()[0]
+	main.wave_active = true
+	var orc = _foe("orc", Vector2(320, 360))
+	await _frames(60 * 6)
+	check(wall.hp < wall.max_hp, "A wall across the whole field: enemies hack at it to get through")
+	# Selling a wall gives some back.
+	main.wave_active = false
+	for e in main.get_enemies():
+		e.free()
+	main.enemies_changed()
+	var g: int = main.gold
+	main.selected = wall
+	main.sell_selected()
+	await _frames(3)
+	check(main.get_barricades().is_empty() and main.gold > g, "...and selling it gives some gold back")
 
 
 func _modes() -> void:
