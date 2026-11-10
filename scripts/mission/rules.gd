@@ -22,6 +22,16 @@ static func make(m: Dictionary) -> RefCounted:
 			script = load("res://scripts/mission/rules_pass.gd")
 		"positions":
 			script = load("res://scripts/mission/rules_positions.gd")
+		"protect":
+			script = load("res://scripts/mission/rules_protect.gd")
+		"evac":
+			script = load("res://scripts/mission/rules_evac.gd")
+		"capture":
+			script = load("res://scripts/mission/rules_capture.gd")
+		"escort":
+			script = load("res://scripts/mission/rules_escort.gd")
+		"retreat":
+			script = load("res://scripts/mission/rules_retreat.gd")
 		_:
 			script = load("res://scripts/mission/rules.gd")
 	return script.new()
@@ -36,6 +46,12 @@ func setup(m, mis: Dictionary) -> void:
 ## one, the bottom of the field is open ground with a work camp, and an enemy that gets
 ## there is dealt with by on_reached_bottom.
 func has_castle() -> bool:
+	return true
+
+
+## Without a castle: whether the work camp stands at the bottom of the field (an escort
+## carries its camp with the wagon instead).
+func show_camp() -> bool:
 	return true
 
 
@@ -93,6 +109,32 @@ func score_text(s: int) -> String:
 ## A line for the end screen about how it went ("" for none).
 func summary(_won: bool) -> String:
 	return ""
+
+
+## Where new troops come onto the field (and Engineers set out from): Vector2.INF for the
+## usual way (the side nearer the post, or the castle gate).
+func entry_point(_post: Vector2) -> Vector2:
+	return Vector2.INF
+
+
+## The HUD's wave counter ("Wave 3/5" by default).
+func wave_text() -> String:
+	return "Wave %d/%d" % [main.wave, main.last_wave()]
+
+
+## A battle-specific order the player can give (a button over the field, key Y): its
+## label, "" for none.
+func action_label() -> String:
+	return ""
+
+
+func action() -> void:
+	pass
+
+
+## The objectives troops can be told to follow (a wagon, a column of civilians).
+func followable() -> Array:
+	return objectives().filter(func(o): return o.is_mover() and o.is_target())
 
 
 ## The objectives on the field (objective.gd nodes).

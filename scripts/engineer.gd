@@ -27,7 +27,7 @@ const RADIUS := 12.0
 
 
 func gate() -> Vector2:
-	return Vector2(main.FIELD_W / 2.0, main.CASTLE_Y + 6.0)
+	return main.engineer_gate() if main.has_method("engineer_gate") else Vector2(main.FIELD_W / 2.0, main.CASTLE_Y + 6.0)
 
 
 func _target() -> Vector2:

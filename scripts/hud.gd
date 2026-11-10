@@ -12,6 +12,7 @@ signal speed_pressed
 signal auto_pressed
 signal restart_pressed
 signal battle_again(key: String)
+signal action_pressed
 signal menu_confirmed
 signal mode_chosen(mode: String)
 signal freeplay_level_changed(step: int)
@@ -79,6 +80,7 @@ var mode_screen: ColorRect
 var title_scene: Control   # the castle scene behind the mode cards (changes as cards are hovered)
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
 var status_label: Label
+var action_btn: Button
 var world_map: Control = null   # the campaign map, while it's up
 var story: Control = null       # a story scene, while one is playing
 var classic_map := ""      # the battlefield picked for Classic ("" = the open meadow)
@@ -261,6 +263,12 @@ func _ready() -> void:
 	status_label.add_theme_constant_override("outline_size", 4)
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_label.visible = false
+	# A battle's own order (Fighting Retreat: Fall back), over the field's top-left corner.
+	action_btn = _button(self, Vector2(10, 44), Vector2(170, 40), "")
+	action_btn.add_theme_font_size_override("font_size", 15)
+	action_btn.tooltip_text = "[Y]"
+	action_btn.visible = false
+	action_btn.pressed.connect(func(): action_pressed.emit())
 
 	_make_hover_card()
 	layout(WIDTH)
@@ -589,7 +597,9 @@ func refresh(main) -> void:
 		boss_fill.color = Color(1.0, 0.35, 0.1) if boss.enraged else Color(0.85, 0.2, 0.15)
 	speed_btn.text = "%dx" % int(Engine.time_scale)
 	auto_btn.set_pressed_no_signal(main.auto_play)
-	auto_btn.disabled = main.freeplay
+	auto_btn.disabled = main.freeplay or main.forced_auto
+	action_btn.text = main.rules.action_label() if main.started and not main.game_over else ""
+	action_btn.visible = action_btn.text != ""
 	if main.freeplay:
 		gold_label.text = "Gold: free"
 		lives_label.text = "Freeplay"   # the castle can't fall here
@@ -602,11 +612,11 @@ func refresh(main) -> void:
 	else:
 		gold_label.text = "Gold %d" % main.gold
 		lives_label.text = "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status()
-		wave_label.text = "Endless %d" % main.wave if main.endless else "Wave %d/%d" % [main.wave, main.last_wave()]
+		wave_label.text = "Endless %d" % main.wave if main.endless else main.rules.wave_text()
 		start_btn.disabled = main.wave_active or main.game_over or main.choosing
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
 		if main.auto_play and not main.wave_active and not main.game_over and not main.choosing:
-			start_btn.text = "Wave %d in %ds" % [main.wave + 1, ceili(main.auto_timer)]
+			start_btn.text = ("Deploy: %ds" % ceili(main.auto_timer)) if main.deploying else "Wave %d in %ds" % [main.wave + 1, ceili(main.auto_timer)]
 	for kind in hire_buttons:
 		var b: Button = hire_buttons[kind]
 		var cost: int = main.hire_cost(kind)
@@ -1136,9 +1146,11 @@ func _show_cards(set_name: String) -> void:
 			mode_sub.text = "Battle Modes: choose a kind of battle"
 			for t in Scenarios.TYPES:
 				var ty: Dictionary = Scenarios.TYPES[t]
-				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
+				modes.append(["goto:classic" if t == "castle" else "goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
 			modes.append(back)
-			spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
+			# Three rows of three (the kinds of battle, then Back in the middle of the last).
+			for i in modes.size():
+				spots.append(Vector2([20, 225, 430][i % 3], [438, 636, 834][i / 3]))
 		"new":
 			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
 			for key in Data.DIFFICULTIES:
@@ -1873,7 +1885,31 @@ func _open_orders(main, w) -> void:
 	box.add_child(slider)
 	orders_ui["slider"] = slider
 	orders_ui["size"] = _label(box, Vector2(362, 154), Vector2(84, 22), Color(0.7, 0.95, 1.0), 13)
-	var meaning := _label(box, Vector2(12, 186), Vector2(box.size.x - 24, 80), Color(0.9, 0.9, 0.85), 12)
+	var meaning_y := 186.0
+	# Something on the field to follow (a wagon, villagers): a row to follow it, or not.
+	var movers: Array = main.rules.followable() if not w.is_emplacement() and not w.wall_guard else []
+	if not movers.is_empty():
+		box.size.y += 36.0
+		box.position.y -= 36.0
+		var fl := _label(box, Vector2(12, 190), Vector2(104, 22), Color(0.85, 0.82, 0.76), 13)
+		fl.text = "Follow [J]"
+		var opts: Array = [null] + movers.slice(0, 2)
+		var bw := (box.size.x - 120.0 - 12.0) / opts.size() - 4.0
+		var fbtns := []
+		for i in opts.size():
+			var o = opts[i]
+			var b := _button(box, Vector2(120.0 + i * (bw + 4.0), 186), Vector2(bw, 30), "Its post" if o == null else o.label)
+			b.toggle_mode = true
+			b.add_theme_font_size_override("font_size", 13)
+			b.tooltip_text = "Keeps to the post you gave it" if o == null else "Its post moves with the %s, and it keeps its place around it" % o.label.to_lower()
+			b.pressed.connect(func():
+				main.set_follow(o, [orders_for])
+				_refresh_orders(main, orders_for))
+			b.set_meta("follow", o)
+			fbtns.append(b)
+		orders_ui["follow"] = fbtns
+		meaning_y += 36.0
+	var meaning := _label(box, Vector2(12, meaning_y), Vector2(box.size.x - 24, 80), Color(0.9, 0.9, 0.85), 12)
 	meaning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	orders_ui["meaning"] = meaning
 	_refresh_orders(main, w)
@@ -1919,5 +1955,10 @@ func _refresh_orders(main, w) -> void:
 	orders_syncing = false
 	var size_label: Label = orders_ui["size"]
 	size_label.text = Data.ft(w.zone_radius()) if sized else ("at its post" if w.move_mode == "hold" and not fixed else "any distance" if not fixed else "-")
+	for b in orders_ui.get("follow", []):
+		var fo = b.get_meta("follow")
+		b.set_pressed_no_signal((fo == null and w.anchor == null) or (fo != null and w.anchor == fo))
 	var meaning: Label = orders_ui["meaning"]
 	meaning.text = orders_meaning(w)
+	if w.anchor != null:
+		meaning.text += " Follows the %s." % w.anchor.label.to_lower()

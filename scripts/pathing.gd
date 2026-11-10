@@ -44,7 +44,8 @@ const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to tro
 const HALF_DIAG := 11.32   # from a cell's centre to its corner: how far `clear` can be off anywhere in the cell
 const MELEE_REACH := 36.0  # a cell is in melee reach if a troop can stand this close to its centre (radius 18 + an archer's 11 + a blow's 8, less a little)
 
-var objectives := []       # standing objectives (mission/objective.gd): solid to enemies and troops, and goals for enemy fields
+var objectives := []       # the mission's objectives (mission/objective.gd): goals for enemy fields
+var solid_objs := []       # the standing structures among them (solid to enemies and troops), as of the last invalidate()
 var terrain := []          # {"kind", "poly": PackedVector2Array, "box": Rect2}
 var lanes := []            # Vector2(x from, x to) along the top edge where enemies come in
 var no_build := []         # Rect2s nothing may be posted in
@@ -447,6 +448,7 @@ func invalidate() -> void:
 		old_fields[key] = fields[key]   # stand-ins while the new ones are built (see _field)
 	fields.clear()
 	troop_grid = null
+	solid_objs = objectives.filter(func(o): return is_instance_valid(o) and o.is_solid())
 	walls = main.get_barricades().filter(func(b): return b.is_active())
 	troop_walls = walls.filter(func(b): return not b.lets_troops())
 	shot_walls = walls.filter(func(b): return not b.lets_shots())
@@ -479,8 +481,8 @@ func path_blocked(a: Vector2, b: Vector2, clearance: float, posts := false) -> b
 			var k := clampf((e.position - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.01 else 0.0
 			if k > 0.0 and (a + ab * k).distance_to(e.position) < clearance + TROOP_RADIUS - 6.0:
 				return true
-		for o in objectives:
-			if is_instance_valid(o) and not o.dead:
+		for o in solid_objs:
+			if is_instance_valid(o) and o.is_solid():
 				var k := clampf((o.position - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.01 else 0.0
 				if (a + ab * k).distance_to(o.position) < o.RADIUS + clearance - 6.0:
 					return true
@@ -513,7 +515,7 @@ func _emplacements() -> Array:
 
 
 func has_emplacements() -> bool:
-	return not _emplacements().is_empty() or not objectives.is_empty()
+	return not _emplacements().is_empty() or not solid_objs.is_empty()
 
 
 func _troop_grid() -> AStarGrid2D:
@@ -584,14 +586,14 @@ func set_objectives(list: Array) -> void:
 
 
 func _live_objectives() -> Array:
-	return objectives.filter(func(o): return is_instance_valid(o) and not o.dead)
+	return solid_objs.filter(func(o): return is_instance_valid(o) and o.is_solid())
 
 
 ## Which way an enemy of this size should walk from `pos` (to the bottom line, or to
 ## objective `goal`), or ZERO when there's nothing in the way (enemies then just march
 ## straight down as usual, or straight at their goal).
 func direction(pos: Vector2, radius: float, goal = null) -> Vector2:
-	if walls.is_empty() and terrain.is_empty() and objectives.is_empty():
+	if walls.is_empty() and terrain.is_empty() and solid_objs.is_empty():
 		return Vector2.ZERO
 	var f := _field(radius, goal)
 	var wall: PackedInt32Array = f["wall"]

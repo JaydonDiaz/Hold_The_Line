@@ -64,6 +64,9 @@ var leash := LEASH_DEFAULT.duplicate()   # each zone mode's size (px from the po
 var commit := "focused"        # Orders: see COMMITS
 var chase_best := INF          # nearest it has got to its target (for spotting a chase going nowhere)
 var chase_time := 0.0          # seconds since it last got closer
+var anchor = null              # Orders: an objective it follows (a wagon, civilians): its post goes where that goes
+var anchor_off := Vector2.ZERO # where it keeps itself, from the anchor
+var anchor_check := 0.0
 var shun_id := 0               # an enemy it gave up on, not picked again until shun_left runs out
 var shun_left := 0.0
 
@@ -1073,6 +1076,7 @@ func _process(delta: float) -> void:
 	# Re-pick a target a few times a second, or right away if the current one is gone.
 	retarget_timer -= delta
 	shun_left = maxf(shun_left - delta, 0.0)
+	_follow_anchor(delta)
 	if ordered:
 		target = null
 		if position.distance_to(post) <= RADIUS:
@@ -1324,8 +1328,31 @@ func _blink_spot(e) -> Vector2:
 	return spot
 
 
+## Following something: a few times a second its post moves with it (kept on open ground
+## a troop can stand on), so its zone, its orders and its way back all go along. It walks
+## there like anywhere else: round terrain, never through it.
+func _follow_anchor(delta: float) -> void:
+	if anchor == null:
+		return
+	if not is_instance_valid(anchor) or not anchor.is_target():
+		anchor = null
+		return
+	anchor_check -= delta
+	if anchor_check > 0.0:
+		return
+	anchor_check = 0.25
+	var p: Vector2 = main._clamp_post(anchor.position + anchor_off)
+	p = main.paths.open_spot(p)
+	if p.distance_to(post) > 6.0:
+		post = p
+		lost_time = 0.0
+
+
 ## Couldn't find its way back to its post in time: blinks straight there.
 func _teleport_home() -> void:
+	if anchor != null:
+		lost_time = 0.0
+		return   # a moving post: it keeps walking after it, it never blinks
 	main.spawn_burst(position, 22, Color(0.75, 0.85, 1.0))
 	position = post
 	main.spawn_burst(position, 22, Color(0.75, 0.85, 1.0))
@@ -1543,6 +1570,8 @@ func copy_orders(w) -> void:
 	commit = w.commit
 	move_mode = w.move_mode
 	leash = w.leash.duplicate()
+	anchor = w.anchor
+	anchor_off = w.anchor_off
 
 
 func cycle_priority() -> void:
@@ -1614,7 +1643,7 @@ func _separate() -> void:
 		# Nobody stands inside a mission objective.
 		var off: Vector2 = position - o.position
 		var room: float = o.RADIUS + RADIUS
-		if not o.dead and off.length_squared() < room * room:
+		if (o.is_solid() or (o.is_mover() and o.is_target())) and off.length_squared() < room * room:
 			position = o.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * room
 	if wall_guard:
 		position = post   # standing at its post on the wall

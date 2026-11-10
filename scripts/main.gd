@@ -92,6 +92,9 @@ var castle_selected := false
 var repair_job := {}           # a repair the Engineers are working on: {"left": health still to come, "rate": per second}   # the castle was clicked: the panel shows its upgrades
 var auto_play := false         # start each wave by itself after the last one's cleared
 var auto_timer := 0.0          # seconds until auto-play starts the next wave
+var forced_auto := false       # this battle keeps coming (a mission's "pace": {"auto": "forced"}): auto-play can't be turned off
+var deploying := false         # forced pace: the opening seconds to set up, before the first wave
+var wave_clock := 0.0          # forced pace with an "interval": seconds since the last wave came (the next comes regardless)
 const AUTO_DELAY := 3.0
 var wall_start = null     # first click while placing a barricade (Vector2), or null
 var last_priority := {}   # unit kind -> target priority new hires start with
@@ -176,6 +179,7 @@ func _ready() -> void:
 	hud.auto_pressed.connect(toggle_auto)
 	hud.restart_pressed.connect(_restart)
 	hud.battle_again.connect(play_again)
+	hud.action_pressed.connect(func(): rules.action())
 	hud.menu_confirmed.connect(func(): back_to_map() if campaign else _restart())
 	hud.campaign_retry.connect(retry_mission)
 	hud.campaign_map.connect(back_to_map)
@@ -283,6 +287,14 @@ func choose_mode(mode: String) -> void:
 	rules = MissionRules.make(mission)
 	rules.setup(self, mission)
 	_show_castle(rules.has_castle())
+	# The battle's pace: forced auto-play gives a few seconds to deploy, then sends the
+	# waves itself with short breaks. (Speed and pause work as ever.)
+	var pace: Dictionary = mission.get("pace", {})
+	forced_auto = pace.get("auto", "free") == "forced"
+	if forced_auto:
+		auto_play = true
+		deploying = true
+		auto_timer = float(pace.get("deploy", 15.0))
 	# The battlefield: a campaign mission's own map (terrain, lanes, castle), Classic on
 	# one the campaign has opened, or the open meadow.
 	var classic := not campaign and battle_id == "" and Data.DIFFICULTIES.has(mode)
@@ -357,6 +369,13 @@ func _process(delta: float) -> void:
 			if not wave_active:
 				castle_hp = castle_max   # sandbox: patched up once the field is clear
 				gates_warned = false
+		elif forced_auto and wave_active and spawn_queue.is_empty() and mission.get("pace", {}).has("interval"):
+			# A relentless pace: the next wave comes on time whether this one's beaten or not.
+			wave_clock += delta
+			if wave_clock >= float(mission["pace"]["interval"]):
+				start_wave(true)
+			elif get_enemies().is_empty():
+				_end_wave()
 		elif auto_play and started and not wave_active and not choosing:
 			auto_timer -= delta / maxf(Engine.time_scale, 1.0)   # real seconds, whatever the speed
 			if auto_timer <= 0.0:
@@ -519,14 +538,18 @@ func barricade_touching(p: Vector2, reach: float):
 
 # --- Waves ---------------------------------------------------------------
 
-func start_wave() -> void:
+func start_wave(force := false) -> void:
 	if freeplay:
 		spawn_freeplay_wave()
 		return
-	if wave_active or game_over or not started or choosing:
+	if (wave_active and not force) or game_over or not started or choosing:
 		return
+	wave_clock = 0.0
 	if dragging != null:
 		_end_drag()
+	if deploying:
+		deploying = false
+		hud.show_message("They're coming!")
 	wave += 1
 	sfx("horn")
 	wave_active = true
@@ -537,7 +560,7 @@ func start_wave() -> void:
 	spawn_interval = maxf(0.35, 0.9 - level * 0.03)
 	spawn_timer = 0.0
 	if scripted():
-		hud.show_message(mission.get("notes", {}).get(wave, "Wave %d of %d" % [wave, last_wave()]))
+		hud.show_message(mission.get("notes", {}).get(wave, rules.wave_text().replace("/", " of ")))
 		return
 	var warlords := _warlords(wave)
 	var wyverns := _wyverns(wave)
@@ -692,11 +715,17 @@ func _show_castle(on: bool) -> void:
 	if on and camp != null:
 		camp.queue_free()
 		camp = null
-	elif not on and camp == null:
+	elif not on and camp == null and rules.show_camp():
 		camp = Camp.new()
 		camp.main = self
 		add_child(camp)
 		move_child(camp, castle.get_index())
+
+
+## Where an Engineer sets out from: the castle gate, or the battle's own camp.
+func engineer_gate() -> Vector2:
+	var g: Vector2 = rules.entry_point(Vector2.ZERO)
+	return g if g != Vector2.INF else Vector2(FIELD_W / 2.0, CASTLE_Y + 6.0)
 
 
 ## Puts a mission objective on the field (under the troops, over the ground).
@@ -864,13 +893,21 @@ func select_castle() -> void:
 func toggle_auto() -> void:
 	if freeplay or game_over:
 		return
+	if forced_auto:
+		hud.show_message("This battle doesn't wait: the attacks keep coming")
+		return
 	auto_play = not auto_play
 	auto_timer = AUTO_DELAY
 	hud.show_message("Auto-play on" if auto_play else "Auto-play off")
 
 
+## Seconds between waves under auto-play (a forced pace sets its own short break).
+func auto_delay() -> float:
+	return float(mission.get("pace", {}).get("break", 4.0)) if forced_auto else AUTO_DELAY
+
+
 func _end_wave() -> void:
-	auto_timer = AUTO_DELAY
+	auto_timer = auto_delay()
 	wave_active = false
 	sfx("fanfare")
 	var bonus := late_gold(20 + wave * 5)
@@ -1238,7 +1275,7 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 ## Always "" on the open meadow (Classic, Freeplay, the Tutorial).
 func ground_problem(p: Vector2) -> String:
 	for o in rules.objectives():
-		if not o.dead and p.distance_to(o.position) < o.RADIUS + Warrior.RADIUS:
+		if o.is_solid() and p.distance_to(o.position) < o.RADIUS + Warrior.RADIUS:
 			return "Keep the %s clear" % o.label.to_lower()
 	if not paths.has_terrain():
 		return ""
@@ -1288,7 +1325,7 @@ func wall_problem(a: Vector2, b: Vector2) -> String:
 		if c.distance_to(w.post) < Warrior.RADIUS + Barricade.WALL_HALF:
 			return "Blocked by a unit"
 	for o in rules.objectives():
-		if not o.dead and Geometry2D.get_closest_point_to_segment(o.position, a, b).distance_to(o.position) < o.RADIUS + Barricade.WALL_HALF:
+		if o.is_solid() and Geometry2D.get_closest_point_to_segment(o.position, a, b).distance_to(o.position) < o.RADIUS + Barricade.WALL_HALF:
 			return "Can't wall through the %s" % o.label.to_lower()
 	return ""
 
@@ -1371,6 +1408,9 @@ func hire_at(p: Vector2) -> void:
 ## may be cliffs) troops come out of the castle gate instead.
 func _entry_point(post: Vector2) -> Vector2:
 	var r := Warrior.RADIUS
+	var from: Vector2 = rules.entry_point(post)
+	if from != Vector2.INF:
+		return from   # the battle's own way in (a wagon carrying the camp)
 	if paths.has_terrain():
 		return Vector2(FIELD_W / 2.0, CASTLE_Y - r)
 	var x := r if post.x < FIELD_W / 2.0 else FIELD_W - r
@@ -1462,6 +1502,8 @@ func filter_group(kind: String, drop: bool) -> void:
 func order_group(p: Vector2) -> void:
 	if group.is_empty():
 		return
+	for w in group:
+		w.anchor = null   # a move order sets fixed posts again
 	var mid := Vector2.ZERO
 	for w in group:
 		mid += w.post
@@ -1540,6 +1582,8 @@ func _end_group_drag() -> void:
 
 
 func order_move(p: Vector2) -> void:
+	if selected != null:
+		selected.anchor = null   # a move order sets a fixed post again
 	if selected == null or not can_post_at(p, selected):
 		if selected != null and ground_problem(p) != "":
 			hud.show_message(ground_problem(p))
@@ -1667,6 +1711,45 @@ func cycle_move_mode() -> void:
 	spawn_text(units[0].position + Vector2(0, -50), Warrior.MOVE_NAMES[next], Color(0.7, 0.95, 1.0))
 
 
+## Tells `units` to follow objective `o` (a wagon, civilians), each keeping its place
+## around it (spread round it if they were all bunched up); null: back to a fixed post.
+func set_follow(o, units: Array = []) -> void:
+	if units.is_empty():
+		units = order_units().filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	var i := 0
+	for w in units:
+		if o == null:
+			w.anchor = null
+			continue
+		var off: Vector2 = w.post - o.position
+		if off.length() > 140.0 or off.length() < 30.0:
+			off = Vector2.from_angle(PI * 0.15 + i * TAU / maxf(units.size(), 1.0)) * 60.0   # ring round it
+		w.anchor = o
+		w.anchor_off = off
+		w.anchor_check = 0.0
+		i += 1
+	if not units.is_empty():
+		spawn_text(units[0].position + Vector2(0, -50), ("Following the " + o.label.to_lower()) if o != null else "Holding a post", Color(0.7, 0.95, 1.0))
+
+
+## J: follow the nearest thing that can be followed, or stop following.
+func toggle_follow() -> void:
+	var units := order_units().filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	if units.is_empty():
+		return
+	if units[0].anchor != null:
+		set_follow(null, units)
+		return
+	var best = null
+	for o in rules.followable():
+		if best == null or o.position.distance_to(units[0].position) < best.position.distance_to(units[0].position):
+			best = o
+	if best == null:
+		hud.show_message("There's nothing here to follow")
+		return
+	set_follow(best, units)
+
+
 ## N: Focused or Reactive for the selection.
 func toggle_commit() -> void:
 	var units := order_units().filter(func(w): return w.uses_targeting())
@@ -1752,7 +1835,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				powers.aiming = ""
 			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
-			if not group.is_empty():
+			var mover = null
+			for o in rules.followable():
+				if o.position.distance_to(p) < o.RADIUS + 10.0:
+					mover = o
+			if mover != null and (not group.is_empty() or selected != null):
+				set_follow(mover)   # right-click a wagon (or civilians): follow it
+			elif not group.is_empty():
 				order_group(p)
 			elif selected != null:
 				order_move(p)
@@ -1839,6 +1928,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				cycle_target_priority()
 			KEY_M:
 				cycle_move_mode()
+			KEY_Y:
+				if rules.action_label() != "":
+					rules.action()
+			KEY_J:
+				toggle_follow()
 			KEY_N:
 				toggle_commit()
 			KEY_O:

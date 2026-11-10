@@ -300,9 +300,10 @@ func _process(delta: float) -> void:
 		aggro = _attacker()
 	elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
 		aggro = null
-	if goal != null and (not is_instance_valid(goal) or goal.dead):
-		goal = main.rules.enemy_goal(self)   # its objective has fallen: on to the next
-	var at_goal: bool = goal != null and position.distance_to(goal.position) - radius - goal.RADIUS <= REACH + 4.0
+	if goal != null and (not is_instance_valid(goal) or not goal.is_target()):
+		goal = main.rules.enemy_goal(self)   # its objective has fallen (or got away): on to the next
+	var holding: bool = goal != null and goal.kind == "zone" and position.distance_to(goal.position) <= goal.zone_r - radius
+	var at_goal: bool = goal != null and not holding and goal.kind != "zone" and position.distance_to(goal.position) - radius - goal.RADIUS <= REACH + 4.0
 	var at_castle: bool = goal == null and position.y + radius * 0.5 >= main.CASTLE_Y
 	if at_castle and main.rules.on_reached_bottom(self):
 		# No castle here: it got past your army, and the rules have counted it.
@@ -343,6 +344,8 @@ func _process(delta: float) -> void:
 			cd_timer = attack_cd
 			lunge = 0.15
 			wall.struck(self, wall_damage * (1.0 - weaken))
+	elif holding:
+		walking = false   # in the ground it was sent to take: it stays, and fights what comes
 	elif at_goal:
 		# At its objective: hack at it until something kills it (or it falls).
 		fighting = true
@@ -366,7 +369,11 @@ func _process(delta: float) -> void:
 	else:
 		drift += delta * 1.3
 		var dir := Vector2(sin(drift) * 0.3, 1.0).normalized()
-		var route: Vector2 = Vector2.ZERO if flying else main.paths.direction(position, radius, goal)
+		var route: Vector2
+		if goal != null and (goal.is_mover() or goal.kind == "zone"):
+			route = _chase_dir(goal.position, delta)   # after something that moves (or open ground): head for it, round any terrain
+		else:
+			route = Vector2.ZERO if flying else main.paths.direction(position, radius, goal)
 		if route == Vector2.ZERO and goal != null:
 			route = position.direction_to(goal.position)   # nothing in the way (or it flies): straight there
 		if aggro != null and not breath.is_empty() and position.distance_to(aggro.position) <= breath["range"] * 0.75:
@@ -517,7 +524,7 @@ func _shoot_from_range() -> bool:
 			best = d
 			mark = w
 	var at_wall: bool = goal == null and position.y + radius >= main.CASTLE_Y - r and main.rules.has_castle()
-	var at_goal: bool = goal != null and position.distance_to(goal.position) - radius - goal.RADIUS <= r
+	var at_goal: bool = goal != null and goal.kind != "zone" and goal.is_target() and position.distance_to(goal.position) - radius - goal.RADIUS <= r
 	if mark == null and not at_wall and not at_goal:
 		return false
 	fighting = true
@@ -600,6 +607,8 @@ func ice_over() -> void:
 ## units attacking it any more.
 func _set_on_castle() -> bool:
 	if goal != null:
+		if goal.kind == "zone" or goal.is_mover():
+			return false   # it turns on whoever's hitting it on the way
 		return position.distance_to(goal.position) - goal.RADIUS <= CASTLE_COMMIT * 0.6   # nearly at its objective
 	return sieging or position.y >= main.CASTLE_Y - CASTLE_COMMIT
 
@@ -626,7 +635,7 @@ func _explode() -> void:
 	if position.y + r * 0.5 >= main.CASTLE_Y:
 		main.damage_castle(bomb["units"] * 2.0)   # the castle's walls are thicker than a barricade's
 	for o in main.rules.objectives():
-		if not o.dead and position.distance_to(o.position) <= r + o.RADIUS:
+		if o.is_target() and position.distance_to(o.position) <= r + o.RADIUS:
 			o.take_damage(bomb["units"])   # (a workshop's walls are no castle's)
 	main.spawn_flash(position, r * 0.7)
 	main.spawn_burst(position, r, Color(1.0, 0.55, 0.2))
