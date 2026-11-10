@@ -300,6 +300,12 @@ func _process(delta: float) -> void:
 	elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
 		aggro = null
 	var at_castle: bool = position.y + radius * 0.5 >= main.CASTLE_Y
+	if at_castle and main.rules.on_reached_bottom(self):
+		# No castle here: it got past your army, and the rules have counted it.
+		dead = true
+		main.enemies_changed()
+		queue_free()
+		return
 	if at_castle and not sieging:
 		sieging = true
 		reached_castle.emit(self)
@@ -494,7 +500,7 @@ func _shoot_from_range() -> bool:
 		if d <= r and d < best and not _wall_across(position, w.position):
 			best = d
 			mark = w
-	var at_wall: bool = position.y + radius >= main.CASTLE_Y - r
+	var at_wall: bool = position.y + radius >= main.CASTLE_Y - r and main.rules.has_castle()
 	if mark == null and not at_wall:
 		return false
 	fighting = true

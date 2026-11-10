@@ -95,7 +95,7 @@ const FACTIONS := {
 # Territories with no missions yet are reachable but have nothing to play (later phases).
 const TERRITORIES := {
 	"ashwatch": {"name": "Ashwatch Keep", "pos": Vector2(250, 640), "faction": "", "act": 1,
-		"requires": {}, "missions": ["ashwatch"],
+		"requires": {}, "missions": ["ashwatch", "ashwatch_road"],
 		"blurb": "Your frontier keep, at the southern edge of the continent. Half its garrison rode south a week ago and never came back."},
 	"stonehollow": {"name": "Stonehollow", "pos": Vector2(430, 566), "faction": "stonehollow", "act": 1,
 		"requires": {"joined": ["ashwatch"]}, "missions": ["stonehollow"],
@@ -149,6 +149,10 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #   mood         the field's light (an ambience.gd mood)
 #   map          the battlefield it's fought on (maps.gd)
 #   intro / outro   STORY keys: before the first wave, and on the map after a win
+#   type         the battle's rules (scripts/mission/rules.gd): "castle" (the default),
+#                "pass" (Hold the Pass: no castle, at most "limit" enemies may get through),
+#                "positions" (Multiple Positions: "objectives" to keep standing)
+#   requires     what has to happen in the campaign before it can be played (see TERRITORIES)
 const MISSIONS := {
 	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 240,
 		"count": [10, 4], "mood": "normal", "map": "ashwatch_ridge",
@@ -168,6 +172,18 @@ const MISSIONS := {
 		"allies": [{"kind": "swordsman", "at": Vector2(220, 520)}, {"kind": "swordsman", "at": Vector2(420, 520)}],
 		"lend": ["barricade", "repair", "engineers"], "reward": "stonehollow", "track": {},
 		"intro": "stonehollow_intro", "outro": "stonehollow_outro"},
+	"ashwatch_road": {"name": "The Ridge Road", "territory": "ashwatch", "type": "pass", "limit": 10,
+		"waves": 5, "level": 5, "gold": 340, "count": [7, 2], "mood": "normal", "map": "ashwatch_ridge",
+		"requires": {"joined": ["stonehollow"]},
+		"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
+		"extra": {2: ["skeleton_archer"], 3: ["troll", "skeleton_archer"], 4: ["wolf", "skeleton_archer"],
+			5: ["troll", "orc", "orc", "skeleton_archer"]},
+		"notes": {1: "Hold the ridge road: no more than 10 may get past your lines.", 2: "Wolves run for any gap. Wall it.",
+			5: "Their column is on the road. A Troll counts double if it gets through!"},
+		"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true},
+			{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
+		"lend": [], "reward": "", "track": {},
+		"intro": "ashwatch_road_intro", "outro": "ashwatch_road_outro"},
 }
 
 # Named characters. "look" draws their portrait (portraits.gd): each wears the dress of
@@ -254,6 +270,16 @@ const STORY := {
 		{"who": "hale", "text": "They called it the Line. Every keep and every hold, sworn to come when a beacon was lit. Ours hasn't burned in two hundred years."},
 		{"who": "ogre", "text": "One little fire on the frontier? Let it flicker. They will fall one by one, as they always have."},
 		{"who": "hale", "text": "We can't stop an army alone. Stonehollow's guild built these beacons. If anyone remembers the oath, it's them."},
+	],
+	"ashwatch_road_intro": [
+		{"who": "hale", "text": "Commander, the King's column has turned for the high road. Past the ridge it runs to every village in the south."},
+		{"who": "vell", "text": "Then it goes no further. No castle out there, but my crews will pitch a camp on the road and wall whatever you point at."},
+		{"who": "hale", "text": "Tamsin's tower covers the road. A few stragglers we can hunt down later, but if more than ten get past us, the south is open to them."},
+	],
+	"ashwatch_road_outro": [
+		{"who": "hale", "text": "The road held. Look up, Commander: Tamsin has lit the old beacon on the ridge."},
+		{"who": "hale", "text": "Two hundred years dark, and Ashwatch burns again. The first light of the Line."},
+		{"who": "vell", "text": "Your swordsmen fight like veterans now. Drill them hard: the old masters' arts are open to them."},
 	],
 	"stonehollow_intro": [
 		{"who": "vell", "text": "You're the ones from Ashwatch? Bad timing. They've come for the quarry road."},

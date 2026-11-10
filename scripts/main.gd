@@ -18,6 +18,8 @@ const Tutorial = preload("res://scripts/tutorial.gd")
 const CastlePowers = preload("res://scripts/castle_powers.gd")
 const Engineer = preload("res://scripts/engineer.gd")
 const Maps = preload("res://scripts/maps.gd")
+const MissionRules = preload("res://scripts/mission/rules.gd")
+const Camp = preload("res://scripts/mission/camp.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -49,6 +51,8 @@ var freeplay := false    # sandbox: unlimited gold, the castle can't fall, spawn
 var freeplay_level := 1  # wave level used for freeplay spawns
 var tutorial := false    # tutorial mode: a normal game with a guide, where the castle can't fall
 var campaign := false
+var rules = null   # the battle's rules (scripts/mission/rules.gd): castle defense unless the mission says otherwise
+var camp: Node2D = null   # the work camp standing in for the castle, on a battlefield without one
 var classic_map := ""      # Classic on one of the campaign's battlefields ("" = the open meadow)
 var map_id := ""           # the battlefield this game is on (a maps.gd id, "" for the meadow)
 var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
@@ -122,6 +126,8 @@ var song_on := true   # the player can switch the eight-Bard song off (from any 
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
+	rules = MissionRules.make({})   # castle defense until a mode is chosen
+	rules.setup(self, {})
 	_size_window()
 	audio = Audio.new()
 	add_child(audio)
@@ -266,6 +272,9 @@ func _fit_screen() -> void:
 func choose_mode(mode: String) -> void:
 	campaign = mode == "campaign"
 	mission = Campaign.mission() if campaign else {}
+	rules = MissionRules.make(mission)
+	rules.setup(self, mission)
+	_show_castle(rules.has_castle())
 	# The battlefield: a campaign mission's own map (terrain, lanes, castle), Classic on
 	# one the campaign has opened, or the open meadow.
 	var classic := not campaign and Data.DIFFICULTIES.has(mode)
@@ -300,8 +309,9 @@ func choose_mode(mode: String) -> void:
 		hud.show_freeplay_bar()
 	started = true
 	hud.hide_mode_select()
-	if campaign:
+	if scripted():
 		_begin_mission()
+	rules.start()
 	if tutorial:
 		var guide := Tutorial.new()
 		guide.main = self
@@ -324,6 +334,8 @@ func _process(delta: float) -> void:
 	if selected != null and (not is_instance_valid(selected) or selected.is_queued_for_deletion()):
 		selected = null
 	if not game_over:
+		if started:
+			rules.process(delta)
 		if not spawn_queue.is_empty():
 			spawn_timer -= delta
 			if spawn_timer <= 0.0:
@@ -516,7 +528,7 @@ func start_wave() -> void:
 	spawn_queue = _build_wave(wave).map(func(k): return [k, level])
 	spawn_interval = maxf(0.35, 0.9 - level * 0.03)
 	spawn_timer = 0.0
-	if campaign:
+	if scripted():
 		hud.show_message(mission.get("notes", {}).get(wave, "Wave %d of %d" % [wave, last_wave()]))
 		return
 	var warlords := _warlords(wave)
@@ -534,7 +546,7 @@ func start_wave() -> void:
 
 
 func _build_wave(n: int) -> Array:
-	if campaign:
+	if scripted():
 		return _mission_wave(n)
 	var pool := ["goblin", "goblin"]
 	if n >= 2:
@@ -624,7 +636,7 @@ func reinforce(kinds: Array, level: int) -> void:
 ## The final wave, and every tenth wave past it, ends with the Ogre King once
 ## everything else is beaten.
 func _boss_due() -> bool:
-	return not campaign and not boss_spawned and wave >= Data.FINAL_WAVE and (wave - Data.FINAL_WAVE) % 10 == 0
+	return not scripted() and not boss_spawned and wave >= Data.FINAL_WAVE and (wave - Data.FINAL_WAVE) % 10 == 0
 
 
 func _spawn_boss() -> void:
@@ -664,9 +676,23 @@ func _on_enemy_at_castle(_e) -> void:
 		hud.show_message("The enemy is at the gates!")
 
 
+## The castle at the bottom of the field, or (rules without one) the work camp in its place.
+func _show_castle(on: bool) -> void:
+	castle.visible = on
+	castle.top_part.visible = on
+	if on and camp != null:
+		camp.queue_free()
+		camp = null
+	elif not on and camp == null:
+		camp = Camp.new()
+		camp.main = self
+		add_child(camp)
+		move_child(camp, castle.get_index())
+
+
 ## Enemies hitting the castle. In freeplay it can't fall.
 func damage_castle(amount: float) -> void:
-	if game_over or amount <= 0.0:
+	if game_over or amount <= 0.0 or not rules.has_castle():
 		return
 	amount *= 1.0 - powers.armor()
 	castle_hp -= amount
@@ -798,6 +824,8 @@ func _castle_hovered() -> bool:
 
 ## Whether p is on the castle (its wall or a tower), for clicking it.
 func on_castle(p: Vector2) -> bool:
+	if not rules.has_castle():
+		return false
 	if p.y >= CASTLE_Y - 4.0 and p.y <= FIELD_H:
 		return true
 	for r in castle._towers():
@@ -808,7 +836,7 @@ func on_castle(p: Vector2) -> bool:
 
 ## Selects the castle: the panel shows its upgrade paths.
 func select_castle() -> void:
-	if game_over or not started:
+	if game_over or not started or not rules.has_castle():
 		return
 	_cancel()
 	castle_selected = true
@@ -837,7 +865,7 @@ func _end_wave() -> void:
 		if w.is_active() and not w.interest.is_empty():
 			interest = mini(int(banked * w.interest[0]), int(w.interest[1]))
 		gold += w.wave_payout(interest)
-	if campaign and wave >= last_wave():
+	if rules.wave_cleared(wave):
 		_finish(true)   # the mission's last wave: it's won
 		return
 	if wave == Data.FINAL_WAVE and not endless:
@@ -956,12 +984,18 @@ func _mission_wave(n: int) -> Array:
 
 ## Enemy strength on wave n (Classic: the wave number; a mission starts at its level).
 func wave_level(n: int) -> int:
-	return int(mission["level"]) + n - 1 if campaign else n
+	return int(mission["level"]) + n - 1 if scripted() else n
 
 
 ## The wave that ends the game (or, in Classic, offers endless).
 func last_wave() -> int:
-	return int(mission["waves"]) if campaign else Data.FINAL_WAVE
+	return int(mission["waves"]) if scripted() else Data.FINAL_WAVE
+
+
+## Whether this battle follows a mission (a campaign battle, or a Battle Modes scenario)
+## rather than Classic's endless waves.
+func scripted() -> bool:
+	return not mission.is_empty()
 
 
 ## Story flags the mission sets on a win: each "track" flag whose starting ally is still up.
@@ -1087,7 +1121,7 @@ func _finish(won: bool) -> void:
 	var survived := wave if won else wave - 1
 	if campaign:
 		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
-		hud.show_campaign_end(won, mission, survived)
+		hud.show_campaign_end(won, mission, survived, rules.summary(won) if rules.has_method("summary") else "")
 		return
 	var previous := _save_record(survived)
 	hud.show_end(won, survived, previous, endless)

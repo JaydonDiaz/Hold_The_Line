@@ -357,7 +357,7 @@ func _missions() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(TEST_SAVE)
 	check((cfg.get_value("state", "completed", []) as Array).has("ashwatch"), "M  ...and saved straight away")
-	check(campaign.territory_state("ashwatch") == "secured" and campaign.territory_state("stonehollow") == "attack", "M  Stonehollow is discovered and under attack")
+	check(campaign.territory_state("ashwatch") == "unfinished" and campaign.territory_state("stonehollow") == "attack", "M  Stonehollow is discovered and under attack")
 	check(campaign.pending_story == "ashwatch_outro", "M  the map will play Ashwatch's outro")
 	main.back_to_map()
 	await _fresh_main()
@@ -384,8 +384,10 @@ func _missions() -> void:
 	check(map.overlay != null, "M  after the outro, the map announces who joined")
 	map.select("greenwood")
 	check(map.info["defend"].disabled, "M  a territory with no battle yet can't be defended")
-	map.select("ashwatch")
+	map.select("stonehollow")
 	check(map.info["defend"].disabled, "M  ...nor one already won")
+	map.select("ashwatch")
+	check(not map.info["defend"].disabled and "Ridge Road" in map.info["mission"].text, "M  ...while Ashwatch now offers its second mission, the Ridge Road")
 	# Any 2 of 3 southern territories opens Sable Crossing (checked on the data, ahead of Phase 3).
 	campaign.completed = ["ashwatch", "stonehollow"]
 	check(_sable_opens_with(["greenwood", "deepdelve"]) and _sable_opens_with(["mercyvale", "greenwood"]) and not _sable_opens_with(["deepdelve"]),
@@ -611,6 +613,9 @@ func _training() -> void:
 	check(w.tiers[0] == 3 and w.tiers[1] == 1, "T  in the next battle: path 1 goes to tier III (not IV), path 2 stops at tier I")
 	main.selected = null
 	# Twelve points train a unit fully, and no more.
+	for m in ["ashwatch", "ashwatch_road"]:   # Tier IV needs Ashwatch's beacon lit
+		if not campaign.completed.has(m):
+			campaign.completed.append(m)
 	campaign.xp["swordsman"] = 1e9
 	check(campaign.level_of("swordsman") == CD.MAX_TRAINING and campaign.points("swordsman") == 10, "T  at the top level: 12 points, 2 of them spent")
 	var opened := 0

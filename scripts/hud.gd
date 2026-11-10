@@ -76,6 +76,7 @@ var message_tween: Tween
 var mode_screen: ColorRect
 var title_scene: Control   # the castle scene behind the mode cards (changes as cards are hovered)
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
+var status_label: Label
 var world_map: Control = null   # the campaign map, while it's up
 var story: Control = null       # a story scene, while one is playing
 var classic_map := ""      # the battlefield picked for Classic ("" = the open meadow)
@@ -251,6 +252,13 @@ func _ready() -> void:
 	hard_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	hard_label.add_theme_constant_override("outline_size", 4)
 	hard_label.visible = false
+	# How the battle stands, for rules that say (objectives left, enemies through).
+	status_label = _label(self, Vector2(WIDTH - 340, 30), Vector2(330, 22), Color(1, 0.95, 0.8), 14)
+	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	status_label.add_theme_constant_override("outline_size", 4)
+	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	status_label.visible = false
 
 	_make_hover_card()
 	layout(WIDTH)
@@ -276,6 +284,7 @@ func layout(w: float) -> void:
 	message_label.size.x = ui_w
 	boss_bar.position.x = (ui_w - 400.0) / 2.0
 	hard_label.position.x = ui_w - 130
+	status_label.position.x = ui_w - 340
 	for c in centered:
 		if is_instance_valid(c):
 			c.position.x = (ui_w - WIDTH) / 2.0
@@ -555,6 +564,8 @@ static func _base_stats(d: Dictionary) -> String:
 
 func refresh(main) -> void:
 	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial or main.campaign)
+	status_label.text = main.rules.status() if main.started else ""
+	status_label.visible = status_label.text != ""
 	if hard_label.visible and main.campaign:
 		var diff_name: String = Data.DIFFICULTIES[main.difficulty]["name"]
 		hard_label.text = (main.mission["name"] as String).to_upper() + ("" if main.difficulty == "normal" else "  ·  " + diff_name.to_upper())
@@ -588,7 +599,7 @@ func refresh(main) -> void:
 			freeplay_spawn_buttons[kind].tooltip_text = "Spawn one %s at level %d" % [kind.capitalize(), main.freeplay_level]
 	else:
 		gold_label.text = "Gold %d" % main.gold
-		lives_label.text = "Castle %d" % ceili(main.castle_hp)
+		lives_label.text = "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status()
 		wave_label.text = "Endless %d" % main.wave if main.endless else "Wave %d/%d" % [main.wave, main.last_wave()]
 		start_btn.disabled = main.wave_active or main.game_over or main.choosing
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
@@ -622,7 +633,7 @@ func refresh(main) -> void:
 		hide_hover()
 	_refresh_castle(main, w == null and grave == null and not castle_sel and not in_group, castle_sel)
 	for t in tab_buttons:
-		tab_buttons[t].visible = w == null and grave == null and not castle_sel and not in_group
+		tab_buttons[t].visible = w == null and grave == null and not castle_sel and not in_group and (t != "repair" or main.rules.has_castle())
 		tab_buttons[t].set_pressed_no_signal(t == hire_tab)
 	_refresh_group(main, in_group)
 	for card in path_cards:
@@ -677,7 +688,8 @@ func refresh(main) -> void:
 			info_label.text = "Castle %d/%d. Masons mend the castle between waves: a full repair from nothing costs %dg, smaller ones their share of that." % [
 					ceili(main.castle_hp), roundi(main.castle_max), main.price(Data.REPAIR_FULL_COST)]
 		else:
-			info_label.text = "Hire warriors to stop enemies reaching the bottom. Click a warrior to select it, or the castle to upgrade it."
+			info_label.text = "Hire warriors to stop enemies reaching the bottom. Click a warrior to select it, or the castle to upgrade it." if main.rules.has_castle() \
+					else "Hire warriors to stop enemies getting past your camp at the bottom. Click a warrior to select it."
 		return
 	info_label.position = Vector2(14, 162)
 	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 100)
@@ -1600,7 +1612,7 @@ func hide_world_map() -> void:
 
 ## A mission is over: won (on to the map, where its story and reward wait) or lost
 ## (try it again, or go back to the map; nothing is lost either way).
-func show_campaign_end(won: bool, mission: Dictionary, survived: int) -> void:
+func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary := "") -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.7)
 	dim.size = Vector2(WIDTH, HEIGHT)
@@ -1614,11 +1626,11 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int) -> void:
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if won:
-		sub.text = "%s: you held through all %d waves." % [mission["name"], mission["waves"]]
+		sub.text = "%s: you held through all %d waves." % [mission["name"], mission["waves"]] + ("\n" + summary if summary != "" else "")
 		var go := _button(dim, Vector2(200, 460), Vector2(240, 56), "Continue to the map")
 		go.pressed.connect(func(): campaign_map.emit())
 	else:
-		sub.text = "%s: you held %d of %d waves. Half of what your troops learned still counts; try again." % [mission["name"], survived, mission["waves"]]
+		sub.text = (summary + " " if summary != "" else "%s: you held %d of %d waves. " % [mission["name"], survived, mission["waves"]]) + "Half of what your troops learned still counts; try again."
 		var again := _button(dim, Vector2(110, 460), Vector2(200, 56), "Try again")
 		again.pressed.connect(func(): campaign_retry.emit())
 		var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
