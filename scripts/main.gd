@@ -88,6 +88,7 @@ var auto_timer := 0.0          # seconds until auto-play starts the next wave
 const AUTO_DELAY := 3.0
 var wall_start = null     # first click while placing a barricade (Vector2), or null
 var last_priority := {}   # unit kind -> target priority new hires start with
+var last_orders := {}     # unit kind -> {commit, move_mode, leash} new hires start with (the last given to that kind)
 var selected: Warrior = null
 var group := []             # several troops selected together (box or Shift+click); `selected` is null then
 var box_start = null        # where a left-drag on open field started (Vector2), while the button's held
@@ -160,6 +161,7 @@ func _ready() -> void:
 	hud.upgrade_pressed.connect(upgrade_selected)
 	hud.sell_pressed.connect(sell_selected)
 	hud.target_pressed.connect(cycle_target_priority)
+	hud.orders_pressed.connect(func(): hud.toggle_orders(self))
 	hud.song_pressed.connect(toggle_song)
 	hud.speed_pressed.connect(cycle_speed)
 	hud.auto_pressed.connect(toggle_auto)
@@ -1251,6 +1253,11 @@ func hire_at(p: Vector2) -> void:
 	w.setup(placing_type, data, self, _clamp_post(p))
 	w.spent = cost
 	w.priority = last_priority.get(placing_type, "closest")
+	if last_orders.has(placing_type):
+		var o: Dictionary = last_orders[placing_type]
+		w.commit = o["commit"]
+		w.move_mode = o["move_mode"]
+		w.leash = o["leash"].duplicate()
 	# New hires march in from whichever side of the field is nearer their post;
 	# emplacements are built on the spot.
 	w.position = w.post if w.is_emplacement() else _entry_point(w.post)
@@ -1517,6 +1524,65 @@ func cycle_target_priority() -> void:
 	spawn_text(selected.position + Vector2(0, -50), "Target: " + Warrior.PRIORITY_NAMES[selected.priority], Color(1, 1, 0.6))
 
 
+# --- Orders: priority, commitment, movement zone ----------------------------------------
+
+## The units an order goes to: the selected unit, or every troop in the group. (Barricades
+## take no orders.)
+func order_units() -> Array:
+	var out := group.duplicate() if selected == null else [selected]
+	return out.filter(func(w): return is_instance_valid(w) and w is Warrior)
+
+
+## Gives `units` an order: "priority", "commit", "move_mode" or "leash" (a size for the
+## current zone mode). Emplacements, wall guards and Healers skip what doesn't apply to
+## them. Remembered per kind for the next hire; kept through waves and upgrades.
+func give_order(field: String, value, units: Array = []) -> void:
+	if units.is_empty():
+		units = order_units()
+	for w in units:
+		match field:
+			"priority":
+				if not w.uses_targeting():
+					continue
+				w.priority = value
+				w.target = null
+				w.retarget_timer = 0.0
+				last_priority[w.kind] = value
+			"commit":
+				if not w.uses_targeting():
+					continue
+				w.commit = value
+			"move_mode":
+				if w.is_emplacement() or w.wall_guard:
+					continue
+				w.move_mode = value
+			"leash":
+				w.set_leash(value)
+		if field != "priority":
+			last_orders[w.kind] = {"commit": w.commit, "move_mode": w.move_mode, "leash": w.leash.duplicate()}
+
+
+## M: the next movement mode for the selection (Hold, Short Leash, Guard Area, Free Roam).
+func cycle_move_mode() -> void:
+	var units := order_units().filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	if units.is_empty():
+		return
+	var modes := Warrior.MOVE_MODES
+	var next: String = modes[(modes.find(units[0].move_mode) + 1) % modes.size()]
+	give_order("move_mode", next, units)
+	spawn_text(units[0].position + Vector2(0, -50), Warrior.MOVE_NAMES[next], Color(0.7, 0.95, 1.0))
+
+
+## N: Focused or Reactive for the selection.
+func toggle_commit() -> void:
+	var units := order_units().filter(func(w): return w.uses_targeting())
+	if units.is_empty():
+		return
+	var next := "reactive" if units[0].commit == "focused" else "focused"
+	give_order("commit", next, units)
+	spawn_text(units[0].position + Vector2(0, -50), Warrior.COMMIT_NAMES[next], Color(1, 1, 0.6))
+
+
 func sell_selected() -> void:
 	if selected == null:
 		return
@@ -1677,6 +1743,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				sell_selected()
 			KEY_T:
 				cycle_target_priority()
+			KEY_M:
+				cycle_move_mode()
+			KEY_N:
+				toggle_commit()
+			KEY_O:
+				hud.toggle_orders(self)
 			KEY_G:
 				toggle_song()
 			KEY_F:
@@ -1864,6 +1936,7 @@ func _draw_overlay() -> void:
 		overlay.draw_set_transform(Vector2.ZERO)
 		if w.ordered:
 			overlay.draw_line(w.position, w.post, Color(0.7, 0.95, 1.0, 0.3), 1.5, true)
+		_draw_zone(w, 0.5)
 	if castle_selected or _castle_hovered():
 		# The castle outlined in gold: solid while selected, faint while hovered.
 		var col := Color(1.0, 0.85, 0.35, 0.95 if castle_selected else 0.45)
@@ -1904,6 +1977,7 @@ func _draw_overlay() -> void:
 	elif selected != null and is_instance_valid(selected):
 		var post := selected.post
 		var col := Color(1, 1, 0.6)
+		_draw_zone(selected, 1.0)
 		# Attack range around the warrior, plus a marker for the post it returns to.
 		var reach := selected.attack_range + Warrior.RADIUS
 		overlay.draw_circle(selected.position, reach, Color(col, 0.1), true, -1.0, true)
@@ -1916,6 +1990,23 @@ func _draw_overlay() -> void:
 			overlay.draw_line(selected.position, post, Color(col, 0.4), 1.5, true)
 		overlay.draw_line(post + Vector2(-7, -7), post + Vector2(7, 7), col, 2.5, true)
 		overlay.draw_line(post + Vector2(-7, 7), post + Vector2(7, -7), col, 2.5, true)
+
+
+## A unit's movement zone: the ground around its post it may fight from (a ring at the
+## post on Hold). Nothing for units roaming free or that never move.
+func _draw_zone(w, strength: float) -> void:
+	if not (w is Warrior) or not w.zoned():
+		return
+	var col := Color(0.55, 0.85, 1.0)
+	var r: float = w.zone_radius()
+	if r <= 0.0:
+		overlay.draw_arc(w.post, Warrior.RADIUS + 3.0, 0, TAU, 32, Color(col, 0.8 * strength), 2.5, true)
+		return
+	overlay.draw_circle(w.post, r, Color(col, 0.07 * strength), true, -1.0, true)
+	var n := 48
+	for i in n:
+		if i % 2 == 0:
+			overlay.draw_arc(w.post, r, i * TAU / n, (i + 1) * TAU / n, 4, Color(col, 0.75 * strength), 2.0, true)
 
 
 ## Placing a barricade: a marker before the first click, then the wall-to-be with

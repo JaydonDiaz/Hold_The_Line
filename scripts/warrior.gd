@@ -31,6 +31,17 @@ const PRIORITIES := ["closest", "first", "strongest", "weakest"]
 const PRIORITY_NAMES := {
 	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest",
 }
+# Orders: how far a unit may go from its post (its anchor) to fight, and how firmly it
+# sticks to the enemy it picked. Incidental blows on the way (see _victim) never change either.
+const MOVE_MODES := ["hold", "short", "guard", "free"]
+const MOVE_NAMES := {"hold": "Hold Position", "short": "Short Leash", "guard": "Guard Area", "free": "Free Roam"}
+const LEASH_LIMITS := {"short": [40.0, 160.0], "guard": [120.0, 400.0]}   # each zone's size range, px from the post
+const LEASH_DEFAULT := {"short": 90.0, "guard": 200.0}
+const COMMITS := ["focused", "reactive"]
+const COMMIT_NAMES := {"focused": "Focused", "reactive": "Reactive"}
+const ZONE_SLACK := 16.0   # a target already picked is let go only this far past where it could be picked (no flicker at the edge)
+const STALL_TIME := 2.5    # chasing without getting any closer for this long: the target's out of its way, so let it go
+const SHUN_TIME := 3.0     # ...and don't pick that one again for this long
 
 var kind := ""
 var data: Dictionary
@@ -48,6 +59,13 @@ var multiform := {}   # Multiform: copies, power, hp, cooldown
 var multiform_timer := 0.0
 var spent := 0
 var priority := "closest"
+var move_mode := "free"        # Orders: see MOVE_MODES
+var leash := LEASH_DEFAULT.duplicate()   # each zone mode's size (px from the post)
+var commit := "focused"        # Orders: see COMMITS
+var chase_best := INF          # nearest it has got to its target (for spotting a chase going nowhere)
+var chase_time := 0.0          # seconds since it last got closer
+var shun_id := 0               # an enemy it gave up on, not picked again until shun_left runs out
+var shun_left := 0.0
 
 # Current stats, rebuilt from data + tiers by _apply_upgrades().
 var max_hp := 1.0
@@ -1054,12 +1072,13 @@ func _process(delta: float) -> void:
 
 	# Re-pick a target a few times a second, or right away if the current one is gone.
 	retarget_timer -= delta
+	shun_left = maxf(shun_left - delta, 0.0)
 	if ordered:
 		target = null
 		if position.distance_to(post) <= RADIUS:
 			ordered = false
-	elif not _is_valid(target) or retarget_timer <= 0.0 or (is_emplacement() and not _in_range(target)):
-		target = _find_target()
+	elif not _keep_target() or (commit == "reactive" and retarget_timer <= 0.0):
+		_set_target(_find_target())
 		retarget_timer = 0.3
 	# Movement: chase the target (melee closes all the way in, ranged stops at range),
 	# otherwise head back to the post.
@@ -1081,19 +1100,20 @@ func _process(delta: float) -> void:
 			# Ki users hold at blast range and fire volleys; they still punch anything that closes in.
 			var r: float = blast["range"]
 			if not _sees(target):
-				_move_toward(target.position, gap, delta)   # a wall's in the way: go round it
+				_chase_move(target.position, gap, delta)   # a wall's in the way: go round it
 			elif gap > r:
-				_move_toward(target.position, gap - r + 1.0, delta)
+				_chase_move(target.position, gap - r + 1.0, delta)
 		elif is_melee():
 			if not dash.is_empty() and run_time >= RUN_BEFORE_DASH and gap > 6.0 and gap <= dash["reach"] and _can_dash(target):
 				_start_dash(target)
 				return
 			if gap > 0.0:
-				_move_toward(target.position, gap, delta)
+				_chase_move(target.position, gap, delta)
 		elif not _sees(target):
-			_move_toward(target.position, gap, delta)
+			_chase_move(target.position, gap, delta)
 		elif gap > attack_range:
-			_move_toward(target.position, gap - attack_range + 1.0, delta)
+			_chase_move(target.position, gap - attack_range + 1.0, delta)
+		_watch_chase(gap, delta)
 	else:
 		var d := position.distance_to(post)
 		if d > 2.0:
@@ -1274,6 +1294,8 @@ func _fire_beam() -> void:
 ## Flash Step is used once the target is out of range and either far away or already
 ## past this warrior on its way to the goal.
 func _should_blink(e, gap: float) -> bool:
+	if zoned() and not _in_zone(_blink_spot(e), 4.0):
+		return false   # it would land outside its zone
 	var reach: float = attack_range if blast.is_empty() else blast["range"]
 	if gap <= reach and _sees(e):
 		return false
@@ -1284,18 +1306,22 @@ func _should_blink(e, gap: float) -> bool:
 func _blink_to(e) -> void:
 	main.spawn_burst(position, 22, Color(0.9, 0.95, 1.0))
 	main.sfx("dash", 1.4)
-	# Land between the enemy and the goal (the bottom line): right below it for
-	# brawlers, or just inside blast range below it for Ki users.
+	position = _clear_of_walls(_blink_spot(e), e.position)
+	main.spawn_burst(position, 22, Color(0.9, 0.95, 1.0))
+	teleport_timer = teleport["cooldown"]
+	route = PackedVector2Array()
+
+
+## Where a Flash Step toward `e` lands: between the enemy and the goal (the bottom line),
+## right below it for brawlers, or just inside blast range below it for Ki users.
+func _blink_spot(e) -> Vector2:
 	var gap_after: float = 2.0 if blast.is_empty() else blast["range"] * 0.8
 	var spot: Vector2 = e.position + Vector2(0, RADIUS + e.radius + gap_after)
 	spot.y = minf(spot.y, main.CASTLE_Y - RADIUS)
 	if spot.distance_to(e.position) < RADIUS + e.radius:
 		# Squeezed against the bottom edge: step to the side instead.
 		spot.x += (RADIUS + e.radius) * (1.0 if e.position.x < main.FIELD_W / 2.0 else -1.0)
-	position = _clear_of_walls(spot, e.position)
-	main.spawn_burst(position, 22, Color(0.9, 0.95, 1.0))
-	teleport_timer = teleport["cooldown"]
-	route = PackedVector2Array()
+	return spot
 
 
 ## Couldn't find its way back to its post in time: blinks straight there.
@@ -1368,13 +1394,113 @@ func _find_target():
 		return _pick(main.get_enemies().filter(_in_range))
 	if wall_guard:
 		return _pick(main.get_enemies().filter(_in_range))
-	var all: Array = main.get_enemies().filter(_is_valid)
+	var all: Array = main.get_enemies().filter(_eligible)
 	if main.paths.has_walls() and not shoots_over_walls():
 		# Rather go after an enemy on this side of the walls than one it can't get at.
 		var seen: Array = all.filter(_sees)
 		if not seen.is_empty():
 			return _pick(seen)
 	return _pick(all)
+
+
+## Whether it may pick `e`: a valid target it can fight without leaving its zone, and not
+## one it just gave up on.
+func _eligible(e) -> bool:
+	return _is_valid(e) and _engageable(e) and not (shun_left > 0.0 and e.get_instance_id() == shun_id)
+
+
+## Whether it keeps the target it has. Units that can't move keep it while it's in
+## reach; the rest while it's valid and still engageable from their zone (a little slack,
+## so an enemy on the edge isn't dropped and picked up over and over). Reactive units
+## also look again every 0.3s (in _process); Focused ones only when this says no.
+func _keep_target() -> bool:
+	if target == null:
+		return false
+	if is_emplacement() or wall_guard:
+		return _in_range(target)
+	return _is_valid(target) and _engageable(target, ZONE_SLACK)
+
+
+func _set_target(e) -> void:
+	if e != target:
+		chase_best = INF
+		chase_time = 0.0
+	target = e
+
+
+## A chase going nowhere (round a wall it can't find a way past, or an enemy that keeps
+## its distance): after STALL_TIME without getting closer, give it up for a while.
+func _watch_chase(gap: float, delta: float) -> void:
+	if target == null or _can_strike(target) or (not blast.is_empty() and gap <= blast["range"]):
+		chase_best = INF
+		chase_time = 0.0
+		return
+	if gap < chase_best - 4.0:
+		chase_best = gap
+		chase_time = 0.0
+		return
+	chase_time += delta
+	if chase_time >= STALL_TIME:
+		shun_id = target.get_instance_id()
+		shun_left = SHUN_TIME
+		_set_target(null)
+		retarget_timer = 0.0
+
+
+# --- Orders: the zone around the post --------------------------------------------------
+
+## Whether its movement is limited to a zone around its post (troops on Hold, Short
+## Leash or Guard Area; emplacements and wall guards never move anyway).
+func zoned() -> bool:
+	return move_mode != "free" and not is_emplacement() and not wall_guard
+
+
+## How far from its post it may go: 0 on Hold, the zone's size otherwise.
+func zone_radius() -> float:
+	if move_mode == "hold":
+		return 0.0
+	return leash.get(move_mode, INF)
+
+
+func set_leash(r: float) -> void:
+	if LEASH_LIMITS.has(move_mode):
+		leash[move_mode] = clampf(r, LEASH_LIMITS[move_mode][0], LEASH_LIMITS[move_mode][1])
+
+
+func _in_zone(p: Vector2, slack := 0.0) -> bool:
+	return not zoned() or p.distance_to(post) <= zone_radius() + slack
+
+
+## The nearest point to `p` it may stand on.
+func _zone_clamp(p: Vector2) -> Vector2:
+	if not zoned():
+		return p
+	return post + (p - post).limit_length(zone_radius())
+
+
+## How far it can reach out from where it stands to fight: its weapon, or its ki blasts.
+func _engage_reach() -> float:
+	return maxf(attack_range, blast.get("range", 0.0))
+
+
+## Whether it can fight `e` from somewhere in its zone (always, roaming free).
+func _engageable(e, slack := 0.0) -> bool:
+	if not zoned():
+		return true
+	return post.distance_to(e.position) - zone_radius() - RADIUS - e.radius <= _engage_reach() + slack
+
+
+## Moves toward `p` (at most `max_dist`) to fight, but never out of its zone: the stop
+## is pulled back to the zone's edge, where it waits (no stepping back and forth).
+func _chase_move(p: Vector2, max_dist: float, delta: float) -> void:
+	if not zoned():
+		_move_toward(p, max_dist, delta)
+		return
+	var stop := position + position.direction_to(p) * minf(max_dist, position.distance_to(p))
+	var q := _zone_clamp(stop)
+	var d := position.distance_to(q)
+	if d > 1.5:
+		_move_toward(q, d, delta)
 
 
 func _in_range(e) -> bool:
@@ -1409,6 +1535,14 @@ func _priority_score(e) -> float:
 			# Lowest enemy tier first (a goblin over a wolf), with the same stickiness.
 			return -e.tier * 10000.0 - _gap_to(e) + (1000.0 if e == target else 0.0)
 	return -_gap_to(e)
+
+
+## Takes on another unit's orders (a Multiform copy, its original's).
+func copy_orders(w) -> void:
+	priority = w.priority
+	commit = w.commit
+	move_mode = w.move_mode
+	leash = w.leash.duplicate()
 
 
 func cycle_priority() -> void:
@@ -1611,8 +1745,8 @@ func under_construction() -> bool:
 ## can still brawl) stand and fight, except against a Slime their blows can't hurt:
 ## that they back away from too. Returns whether it's backing off this frame.
 func _kite(delta: float) -> bool:
-	if wall_guard:
-		return false
+	if wall_guard or move_mode == "hold":
+		return false   # (on Hold it stands its ground)
 	var brawler := is_melee() or summoned or clone_of != null
 	if brawler and main.Enemy.slimes_out <= 0:
 		return false   # only Slimes make a brawler back off
@@ -1642,6 +1776,10 @@ func _kite(delta: float) -> bool:
 			retreat_check = 0.25
 			retreat_to = _retreat_spot(dir, threat)
 		dest = retreat_to
+	if zoned():
+		dest = _zone_clamp(dest)   # backs off only as far as its zone allows
+		if not main.paths.terrain.is_empty() and not main.paths.troop_can_stand(dest):
+			dest = position
 	if position.distance_to(dest) < 10.0:
 		kiting = false   # cornered: stand and fight
 		return false
@@ -2095,7 +2233,12 @@ func _go_within_reach(w, delta: float) -> void:
 		facing = position.direction_to(w.position)
 	var gap := _ally_gap(w)
 	if gap > attack_range:
-		_move_toward(w.position, gap - attack_range + 1.0, delta)
+		_chase_move(w.position, gap - attack_range + 1.0, delta)
+
+
+## Whether a Healer may go to `w`: it can reach it from its zone (always, roaming free).
+func _ally_in_zone(w) -> bool:
+	return not zoned() or post.distance_to(w.position) - zone_radius() - RADIUS * 2.0 <= attack_range
 
 
 func _revive_time() -> float:
@@ -2107,7 +2250,7 @@ func _pick_downed():
 	var best = null
 	var best_score := INF
 	for w in main.get_warriors():
-		if w == self or w.is_active() or w.is_queued_for_deletion():
+		if w == self or w.is_active() or w.is_queued_for_deletion() or not _ally_in_zone(w):
 			continue
 		var score: float = w.down_timer * 100.0 if main.permadeath else position.distance_to(w.position)
 		if w == rez_target:
@@ -2122,7 +2265,7 @@ func _pick_hurt():
 	var best = null
 	var best_frac := 0.999
 	for w in main.get_warriors():
-		if not w.is_active():
+		if not w.is_active() or not _ally_in_zone(w):
 			continue
 		var frac: float = w.hp / w.max_hp
 		if frac < best_frac:
@@ -2298,7 +2441,7 @@ func _multiform_step(delta: float) -> void:
 		return
 	multiform_timer = multiform["cooldown"]
 	var side := Vector2(-facing.y, facing.x) if facing != Vector2.ZERO else Vector2.RIGHT
-	var spot := _clear_of_walls(position + side * RADIUS * 2.2, position)
+	var spot := _clear_of_walls(_zone_clamp(position + side * RADIUS * 2.2), position)   # (inside its zone)
 	var w = get_script().new()
 	w.tiers = tiers.duplicate()
 	w.last_path = last_path
@@ -2311,6 +2454,7 @@ func _multiform_step(delta: float) -> void:
 	w.hp = w.max_hp
 	w.position = spot
 	w.priority = priority
+	w.copy_orders(self)
 	main.add_summon(w)
 	main.spawn_burst(position, 26.0, Color(0.7, 0.9, 1.0))
 	main.spawn_burst(spot, 26.0, Color(0.7, 0.9, 1.0))
@@ -2335,6 +2479,7 @@ func raise_skeleton(at: Vector2) -> void:
 	w.setup("skeleton", d, main, spot)
 	w.position = spot
 	w.priority = priority
+	w.commit = commit   # (a skeleton roams free from where it rose)
 	main.add_summon(w)
 	main.spawn_burst(spot, 20.0, Color(0.55, 0.95, 0.45))
 	main.spawn_burst(spot, 12.0, Color(0.9, 0.88, 0.8))
@@ -2416,7 +2561,8 @@ func _rain_on(at: Vector2) -> void:
 
 ## Charge: a dash needs a clear run at the target.
 func _can_dash(e) -> bool:
-	return _is_valid(e) and not e.flying and not main.paths.path_blocked(position, e.position, RADIUS)
+	return _is_valid(e) and not e.flying and not main.paths.path_blocked(position, e.position, RADIUS) \
+			and _in_zone(e.position - position.direction_to(e.position) * (RADIUS + e.radius), 4.0)
 
 
 func _start_dash(e) -> void:

@@ -6,6 +6,7 @@ signal start_wave_pressed
 signal upgrade_pressed(path: int)
 signal sell_pressed
 signal target_pressed
+signal orders_pressed
 signal song_pressed
 signal speed_pressed
 signal auto_pressed
@@ -204,13 +205,10 @@ func _ready() -> void:
 	sell_btn.pressed.connect(func(): sell_pressed.emit())
 	target_btn = _button(panel, Vector2(414, 212), Vector2(106, 48), "")
 	target_btn.add_theme_font_size_override("font_size", 12)
-	target_btn.tooltip_text = ("Which enemy this unit goes after [T]:\n"
-			+ "Closest - nearest to this unit\n"
-			+ "First - closest to the bottom line\n"
-			+ "Strongest - toughest enemy type (warlord > troll > orc, sapper > wolf, bat > goblin)\n"
-			+ "Weakest - weakest enemy type (goblin first, warlord last)\n"
-			+ "Bats fly: melee units and Cannoneers can't hit them.")
-	target_btn.pressed.connect(func(): target_pressed.emit())
+	target_btn.tooltip_text = ("This unit's orders [O]: which enemy it picks, how firmly it sticks to it,\n"
+			+ "and how far from its post it may go to fight.\n"
+			+ "T: next target priority.  N: Focused / Reactive.  M: next movement mode.")
+	target_btn.pressed.connect(func(): orders_pressed.emit())
 	song_btn = _button(panel, Vector2(326, 212), Vector2(84, 48), "")
 	song_btn.add_theme_font_size_override("font_size", 12)
 	song_btn.tooltip_text = "Every instrument is on the field: play the Bards' song between waves, or not [G]"
@@ -630,7 +628,8 @@ func refresh(main) -> void:
 	for card in path_cards:
 		card["button"].visible = w != null or grave != null
 	sell_btn.visible = w != null
-	target_btn.visible = w != null and w.uses_targeting()
+	target_btn.visible = _takes_orders(w)
+	_refresh_orders(main, w)
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
 	if grave != null:
 		info_label.position = Vector2(14, 162)
@@ -690,7 +689,8 @@ func refresh(main) -> void:
 		how += "  (no targeting)"
 	info_label.text = "%s - %s   Upgrades %d/%d\n%s" % [w.data["name"], how, w.total_upgrades(), Warrior.MAX_UPGRADES, w.stats_text()]
 	sell_btn.text = "Sell +%dg" % w.sell_value()
-	target_btn.text = "Target [T]\n%s" % Warrior.PRIORITY_NAMES[w.priority]
+	target_btn.text = "Orders [O]\n%s" % _orders_short(w)
+	info_label.text += "\nOrders: " + orders_summary(w)
 	song_btn.text = "Song [G]\n%s" % ("On" if main.song_on else "Off")
 	for p in path_cards.size():
 		_refresh_card(path_cards[p], w, p, main.gold)
@@ -1660,3 +1660,190 @@ func _button(parent: Node, pos: Vector2, size: Vector2, text: String) -> Button:
 	b.focus_mode = Control.FOCUS_NONE  # keep Space/number keys for the game
 	parent.add_child(b)
 	return b
+
+
+# --- Orders: the selected unit's target priority, commitment and movement zone ----------
+
+var orders_box: Panel = null
+var orders_for = null          # the unit the box was built for
+var orders_main = null
+var orders_ui := {}            # the box's controls, by name
+var orders_syncing := false    # set while the box is brought in step with its unit (its controls' own signals are ignored then)
+
+
+## A unit's orders in a few words, for the panel's button.
+func _orders_short(w) -> String:
+	var mode: String = {"hold": "Hold", "short": "Leash", "guard": "Guard", "free": "Free"}[w.move_mode] if not w.is_emplacement() and not w.wall_guard else "Fixed"
+	if not w.uses_targeting():
+		return mode
+	return "%s · %s" % [Warrior.PRIORITY_NAMES[w.priority], mode]
+
+
+## A unit's orders spelled out (the info line under its stats).
+func orders_summary(w) -> String:
+	var parts := []
+	if w.uses_targeting():
+		parts.append(Warrior.PRIORITY_NAMES[w.priority] + " target")
+		parts.append(Warrior.COMMIT_NAMES[w.commit])
+	if not w.is_emplacement() and not w.wall_guard:
+		var mode: String = Warrior.MOVE_NAMES[w.move_mode]
+		if w.move_mode in ["short", "guard"]:
+			mode += " (%s)" % Data.ft(w.zone_radius())
+		parts.append(mode)
+	return "  ·  ".join(parts)
+
+
+## What a unit's orders mean, in a sentence or three.
+func orders_meaning(w) -> String:
+	var out := ""
+	if w.uses_targeting():
+		var pick: String = {"closest": "the nearest enemy", "first": "the enemy closest to the castle",
+				"strongest": "the toughest kind of enemy", "weakest": "the weakest kind of enemy"}[w.priority]
+		out += "Picks %s, " % pick
+		out += ("and sees it through: no switching until it falls, gets out of reach or leaves this unit's area. "
+				if w.commit == "focused" else "and switches whenever a better one comes along. ")
+	if w.is_emplacement() or w.wall_guard:
+		out += "Never moves: fights what comes in range."
+	else:
+		match w.move_mode:
+			"hold":
+				out += "Stands at its post and fights only what it can reach from there."
+			"short", "guard":
+				out += "Goes no further than %s from its post to fight, then comes back." % Data.ft(w.zone_radius())
+			_:
+				out += "Chases enemies anywhere on the field."
+		if w.uses_targeting() and w.move_mode != "hold":
+			out += " Strikes anything it passes on the way."
+	return out
+
+
+## Whether `w` has orders to give: a targeting unit, or one that moves (a Healer).
+func _takes_orders(w) -> bool:
+	return w != null and is_instance_valid(w) and w.kind != "barricade" and (w.uses_targeting() or (not w.is_emplacement() and not w.wall_guard))
+
+
+func toggle_orders(main) -> void:
+	if orders_box != null:
+		_close_orders()
+	elif _takes_orders(main.selected):
+		_open_orders(main, main.selected)
+
+
+func _close_orders() -> void:
+	if orders_box != null:
+		orders_box.queue_free()
+	orders_box = null
+	orders_for = null
+	orders_ui = {}
+
+
+func _open_orders(main, w) -> void:
+	_close_orders()
+	orders_main = main
+	orders_for = w
+	var box := Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.13, 0.11, 0.1, 0.96)
+	style.border_color = Color(0.45, 0.35, 0.2)
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(4)
+	box.add_theme_stylebox_override("panel", style)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP   # clicks on it never reach the field
+	box.size = Vector2(456, 272)
+	box.position = Vector2(ui_w - box.size.x - 8.0, TOP - box.size.y - 8.0)
+	add_child(box)
+	orders_box = box
+	var title := _label(box, Vector2(12, 8), Vector2(330, 24), Color(1, 0.85, 0.3), 17)
+	title.text = "Orders  ·  " + w.data["name"]
+	var close := _button(box, Vector2(box.size.x - 40, 8), Vector2(30, 26), "X")
+	close.tooltip_text = "Close [O]"
+	close.pressed.connect(_close_orders)
+	var rows := [
+		["Target [T]", "priority", Warrior.PRIORITIES, {"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest"}],
+		["Commit [N]", "commit", Warrior.COMMITS, Warrior.COMMIT_NAMES],
+		["Movement [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "short": "Leash", "guard": "Guard", "free": "Free"}],
+	]
+	var tips := {"focused": "Sticks to the enemy it picked until it falls, gets out of reach or leaves this unit's area (recommended)",
+			"reactive": "Looks again a few times a second and switches to whichever enemy is now the best pick",
+			"hold": "Stays at its post and fights only what it can reach from there",
+			"short": "Goes a short way from its post to fight (size below)",
+			"guard": "Defends a wider area around its post (size below)",
+			"free": "Chases enemies anywhere on the field",
+			"closest": "The enemy nearest this unit", "first": "The enemy closest to the castle",
+			"strongest": "The toughest kind of enemy", "weakest": "The weakest kind of enemy"}
+	for r in rows.size():
+		var y := 42.0 + r * 36.0
+		var lab := _label(box, Vector2(12, y + 4), Vector2(104, 22), Color(0.85, 0.82, 0.76), 13)
+		lab.text = rows[r][0]
+		var keys: Array = rows[r][2]
+		var bw := (box.size.x - 120.0 - 12.0) / keys.size() - 4.0
+		var btns := {}
+		for i in keys.size():
+			var key: String = keys[i]
+			var b := _button(box, Vector2(120.0 + i * (bw + 4.0), y), Vector2(bw, 30), rows[r][3][key])
+			b.toggle_mode = true
+			b.add_theme_font_size_override("font_size", 13)
+			b.tooltip_text = tips.get(key, "")
+			var field: String = rows[r][1]
+			b.pressed.connect(func(): _order_from_box(field, key))
+			btns[key] = b
+		orders_ui[rows[r][1]] = btns
+	var size_lab := _label(box, Vector2(12, 154), Vector2(96, 22), Color(0.85, 0.82, 0.76), 13)
+	size_lab.text = "Area size"
+	var slider := HSlider.new()
+	slider.position = Vector2(120, 156)
+	slider.size = Vector2(230, 20)
+	slider.step = 5.0
+	slider.focus_mode = Control.FOCUS_NONE
+	slider.value_changed.connect(func(v): _order_from_box("leash", v))
+	box.add_child(slider)
+	orders_ui["slider"] = slider
+	orders_ui["size"] = _label(box, Vector2(362, 154), Vector2(84, 22), Color(0.7, 0.95, 1.0), 13)
+	var meaning := _label(box, Vector2(12, 186), Vector2(box.size.x - 24, 80), Color(0.9, 0.9, 0.85), 12)
+	meaning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	orders_ui["meaning"] = meaning
+	_refresh_orders(main, w)
+
+
+func _order_from_box(field: String, value) -> void:
+	if orders_syncing or orders_main == null or orders_for == null or not is_instance_valid(orders_for):
+		return
+	if field == "leash" and not orders_for.zoned():
+		return
+	orders_main.give_order(field, value, [orders_for])
+	_refresh_orders(orders_main, orders_for)
+
+
+## Keeps the box in step with its unit (and with orders given by hotkey); follows the
+## selection to another unit, and closes when nothing that takes orders is selected.
+func _refresh_orders(main, w) -> void:
+	if orders_box == null:
+		return
+	if not _takes_orders(w):
+		_close_orders()
+		return
+	if w != orders_for:
+		_open_orders(main, w)
+		return
+	var fixed: bool = w.is_emplacement() or w.wall_guard
+	var current := {"priority": w.priority, "commit": w.commit, "move_mode": w.move_mode}
+	for field in current:
+		var off: bool = (field == "move_mode" and fixed) or (field != "move_mode" and not w.uses_targeting())
+		for key in orders_ui[field]:
+			var b: Button = orders_ui[field][key]
+			b.set_pressed_no_signal(key == current[field] and not off)
+			b.disabled = off
+	var slider: HSlider = orders_ui["slider"]
+	var lim: Array = Warrior.LEASH_LIMITS.get(w.move_mode, [0.0, 1.0])
+	var sized: bool = Warrior.LEASH_LIMITS.has(w.move_mode) and not fixed
+	slider.editable = sized
+	slider.modulate.a = 1.0 if sized else 0.4
+	orders_syncing = true   # (a new range moves the handle, which would otherwise count as an order)
+	slider.min_value = lim[0]
+	slider.max_value = lim[1]
+	slider.set_value_no_signal(w.zone_radius() if sized else lim[0])
+	orders_syncing = false
+	var size_label: Label = orders_ui["size"]
+	size_label.text = Data.ft(w.zone_radius()) if sized else ("at its post" if w.move_mode == "hold" and not fixed else "any distance" if not fixed else "-")
+	var meaning: Label = orders_ui["meaning"]
+	meaning.text = orders_meaning(w)
