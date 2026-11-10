@@ -385,7 +385,7 @@ func _missions() -> void:
 	map.select("greenwood")
 	check(map.info["defend"].disabled, "M  a territory with no battle yet can't be defended")
 	map.select("stonehollow")
-	check(map.info["defend"].disabled, "M  ...nor one already won")
+	check(not map.info["defend"].disabled and "Protect the Workshops" in map.info["mission"].text, "M  Stonehollow offers its second mission, Protect the Workshops")
 	map.select("ashwatch")
 	check(not map.info["defend"].disabled and "Ridge Road" in map.info["mission"].text, "M  ...while Ashwatch now offers its second mission, the Ridge Road")
 	# Any 2 of 3 southern territories opens Sable Crossing (checked on the data, ahead of Phase 3).
@@ -890,7 +890,7 @@ func _regression() -> void:
 	var hud = main.hud
 	await create_timer(0.8).timeout
 	var names: Array = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
-	check(names == ["Campaign", "Classic", "Freeplay", "Tutorial", "Settings"], "R  the title menu: %s" % ", ".join(names))
+	check(names == ["Campaign", "Classic", "Battle Modes", "Freeplay", "Tutorial", "Settings"], "R  the title menu: %s" % ", ".join(names))
 	hud._show_cards("classic")
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(names == ["Easy", "Normal", "Hard", "Back"], "R  Classic opens the three difficulties: %s" % ", ".join(names))

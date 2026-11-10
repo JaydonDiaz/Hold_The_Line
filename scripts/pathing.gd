@@ -44,6 +44,7 @@ const POST_CLEAR := 28.0   # cells this close to an emplacement are solid to tro
 const HALF_DIAG := 11.32   # from a cell's centre to its corner: how far `clear` can be off anywhere in the cell
 const MELEE_REACH := 36.0  # a cell is in melee reach if a troop can stand this close to its centre (radius 18 + an archer's 11 + a blow's 8, less a little)
 
+var objectives := []       # standing objectives (mission/objective.gd): solid to enemies and troops, and goals for enemy fields
 var terrain := []          # {"kind", "poly": PackedVector2Array, "box": Rect2}
 var lanes := []            # Vector2(x from, x to) along the top edge where enemies come in
 var no_build := []         # Rect2s nothing may be posted in
@@ -478,6 +479,11 @@ func path_blocked(a: Vector2, b: Vector2, clearance: float, posts := false) -> b
 			var k := clampf((e.position - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.01 else 0.0
 			if k > 0.0 and (a + ab * k).distance_to(e.position) < clearance + TROOP_RADIUS - 6.0:
 				return true
+		for o in objectives:
+			if is_instance_valid(o) and not o.dead:
+				var k := clampf((o.position - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.01 else 0.0
+				if (a + ab * k).distance_to(o.position) < o.RADIUS + clearance - 6.0:
+					return true
 	for w in troop_walls:
 		var pts := Geometry2D.get_closest_points_between_segments(a, b, w.seg_a(), w.seg_b())
 		if pts[0].distance_to(pts[1]) < clearance:
@@ -507,7 +513,7 @@ func _emplacements() -> Array:
 
 
 func has_emplacements() -> bool:
-	return not _emplacements().is_empty()
+	return not _emplacements().is_empty() or not objectives.is_empty()
 
 
 func _troop_grid() -> AStarGrid2D:
@@ -538,6 +544,15 @@ func _troop_grid() -> AStarGrid2D:
 		for i in cols * rows:
 			if troop_open[i] == 0:
 				g.set_point_solid(Vector2i(i % cols, i / cols))
+	for o in _live_objectives():
+		var r: float = o.RADIUS + 10.0
+		var olo := _cell(o.position - Vector2(r, r))
+		var ohi := _cell(o.position + Vector2(r, r))
+		for cy in range(olo.y, ohi.y + 1):
+			for cx in range(olo.x, ohi.x + 1):
+				var c := Vector2i(cx, cy)
+				if _inside(c) and _center(c).distance_to(o.position) < r:
+					g.set_point_solid(c)
 	for pos in sig:
 		var lo := _cell(Vector2(pos) - Vector2(POST_CLEAR, POST_CLEAR))
 		var hi := _cell(Vector2(pos) + Vector2(POST_CLEAR, POST_CLEAR))
@@ -562,15 +577,28 @@ func _free_near(g: AStarGrid2D, c: Vector2i) -> Vector2i:
 					return n
 	return c
 
-## Which way an enemy of this size should walk from `pos`, or ZERO when there are
-## no walls (enemies then just march straight down as usual).
-func direction(pos: Vector2, radius: float) -> Vector2:
-	if walls.is_empty() and terrain.is_empty():
+## The mission's objectives (enemies walk round them, and to the one they're sent for).
+func set_objectives(list: Array) -> void:
+	objectives = list
+	invalidate()
+
+
+func _live_objectives() -> Array:
+	return objectives.filter(func(o): return is_instance_valid(o) and not o.dead)
+
+
+## Which way an enemy of this size should walk from `pos` (to the bottom line, or to
+## objective `goal`), or ZERO when there's nothing in the way (enemies then just march
+## straight down as usual, or straight at their goal).
+func direction(pos: Vector2, radius: float, goal = null) -> Vector2:
+	if walls.is_empty() and terrain.is_empty() and objectives.is_empty():
 		return Vector2.ZERO
-	var f := _field(radius)
+	var f := _field(radius, goal)
 	var wall: PackedInt32Array = f["wall"]
 	var c := _cell(pos)
 	var best := _best_step(f, c)
+	if best == c and goal != null and is_instance_valid(goal):
+		return pos.direction_to(goal.position)   # arrived where its objective is in reach: close in on it
 	if best == c:
 		if not terrain.is_empty() and wall[_index(c)] == SOLID:
 			# Squeezed into a cell too tight for it: back out away from the terrain.
@@ -612,10 +640,10 @@ func _best_step(f: Dictionary, c: Vector2i) -> Vector2i:
 
 ## The barricade an enemy at `pos` has to break through to reach the bottom line
 ## (the first one on its best route), or null if there's a way around every wall.
-func breach_at(pos: Vector2, radius: float):
+func breach_at(pos: Vector2, radius: float, goal = null):
 	if walls.is_empty():
 		return null
-	var f := _field(radius)
+	var f := _field(radius, goal)
 	var i: int = f["breach"][_index(_cell(pos))]
 	if i < 0:
 		return null
@@ -623,23 +651,25 @@ func breach_at(pos: Vector2, radius: float):
 	return w if is_instance_valid(w) and w.is_active() else null
 
 
-func _field(radius: float) -> Dictionary:
+func _field(radius: float, goal = null) -> Dictionary:
 	# Two sizes are enough: goblins, wolves and orcs share one field, trolls and
 	# warlords the other. Each is built for the biggest enemy in its group.
 	# Building one is the slow part of a wall going up or coming down, so only one is
 	# built a frame: the other size makes do with its last field for a frame.
-	var key := (14 if radius <= 14.0 else 24) if terrain.is_empty() else _size_key(radius)
+	# Enemies sent for an objective have fields of their own, one per objective (and size).
+	var size := (14 if radius <= 14.0 else 24) if terrain.is_empty() else _size_key(radius)
+	var key = size if goal == null else "%d|%d" % [size, goal.get_instance_id()]
 	if not fields.has(key):
 		var frame := Engine.get_process_frames()
 		if frame == _built_frame and old_fields.has(key) and old_fields[key]["cols"] == cols:
 			return old_fields[key]
 		_built_frame = frame
-		fields[key] = _build(key)
+		fields[key] = _build(size, goal)
 		old_fields.erase(key)
 	return fields[key]
 
 
-func _build(radius: float) -> Dictionary:
+func _build(radius: float, goal = null) -> Dictionary:
 	var n := cols * rows
 	# Mark the cells each wall covers. Slightly narrower than the enemy's real reach
 	# so a cell an enemy is standing in is never counted as wall; gaps that are too
@@ -651,6 +681,17 @@ func _build(radius: float) -> Dictionary:
 		for i in n:
 			if clear[i] < radius:
 				wall[i] = SOLID   # too tight for this size, for good
+	# Standing objectives are solid (an enemy walks round one it isn't after, and stops at
+	# the edge of the one it is).
+	for o in _live_objectives():
+		var r: float = o.RADIUS + radius * 0.5
+		var lo := _cell(o.position - Vector2(r, r))
+		var hi := _cell(o.position + Vector2(r, r))
+		for cy in range(lo.y, hi.y + 1):
+			for cx in range(lo.x, hi.x + 1):
+				var c := Vector2i(cx, cy)
+				if _inside(c) and _center(c).distance_to(o.position) < r:
+					wall[_index(c)] = SOLID
 	for i in walls.size():
 		var a: Vector2 = walls[i].seg_a()
 		var b: Vector2 = walls[i].seg_b()
@@ -680,8 +721,23 @@ func _build(radius: float) -> Dictionary:
 	var heap := PackedFloat64Array()   # wall steps: cost * HEAP_SPAN + cell
 	var size := 0
 	var wall_step := int(WALL_COST) * 10
-	for cx in cols:
-		var i := (rows - 1) * cols + cx
+	# Where the field leads: the bottom row, or the ring of cells round the goal objective.
+	var seeds := PackedInt32Array()
+	if goal == null:
+		for cx in cols:
+			seeds.append((rows - 1) * cols + cx)
+	else:
+		var r_in: float = goal.RADIUS + radius * 0.5
+		var r_out: float = r_in + CELL * 1.5
+		var lo := _cell(goal.position - Vector2(r_out, r_out))
+		var hi := _cell(goal.position + Vector2(r_out, r_out))
+		for cy in range(lo.y, hi.y + 1):
+			for cx in range(lo.x, hi.x + 1):
+				var c := Vector2i(cx, cy)
+				var dd := _center(c).distance_to(goal.position)
+				if _inside(c) and dd >= r_in and dd < r_out:
+					seeds.append(_index(c))
+	for i in seeds:
 		if wall[i] == SOLID:
 			continue
 		breach[i] = wall[i]

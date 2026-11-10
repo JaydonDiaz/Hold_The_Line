@@ -11,6 +11,7 @@ signal song_pressed
 signal speed_pressed
 signal auto_pressed
 signal restart_pressed
+signal battle_again(key: String)
 signal menu_confirmed
 signal mode_chosen(mode: String)
 signal freeplay_level_changed(step: int)
@@ -34,6 +35,7 @@ const CD = preload("res://scripts/campaign_data.gd")
 const MapViewer = preload("res://scripts/map_viewer.gd")
 const TitleScene = preload("res://scripts/title_scene.gd")
 const WorldMap = preload("res://scripts/world_map.gd")
+const Scenarios = preload("res://scripts/mission/scenarios.gd")
 const Story = preload("res://scripts/story.gd")
 const Cutscene = preload("res://scripts/cutscene.gd")
 const LOCKED_TINT := Color(1, 1, 1, 0.4)
@@ -246,7 +248,7 @@ func _ready() -> void:
 	boss_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boss_bar.add_child(boss_fill)
 
-	hard_label = _label(self, Vector2(WIDTH - 130, 6), Vector2(120, 24), Color(1, 0.4, 0.35), 16)
+	hard_label = _label(self, Vector2(WIDTH - 340, 6), Vector2(330, 24), Color(1, 0.4, 0.35), 16)
 	hard_label.text = "HARD MODE"
 	hard_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hard_label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -283,7 +285,7 @@ func layout(w: float) -> void:
 	_layout_hire()
 	message_label.size.x = ui_w
 	boss_bar.position.x = (ui_w - 400.0) / 2.0
-	hard_label.position.x = ui_w - 130
+	hard_label.position.x = ui_w - 340
 	status_label.position.x = ui_w - 340
 	for c in centered:
 		if is_instance_valid(c):
@@ -563,10 +565,10 @@ static func _base_stats(d: Dictionary) -> String:
 
 
 func refresh(main) -> void:
-	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial or main.campaign)
+	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial or main.scripted())
 	status_label.text = main.rules.status() if main.started else ""
 	status_label.visible = status_label.text != ""
-	if hard_label.visible and main.campaign:
+	if hard_label.visible and main.scripted():
 		var diff_name: String = Data.DIFFICULTIES[main.difficulty]["name"]
 		hard_label.text = (main.mission["name"] as String).to_upper() + ("" if main.difficulty == "normal" else "  ·  " + diff_name.to_upper())
 		hard_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
@@ -1107,10 +1109,11 @@ func _show_cards(set_name: String) -> void:
 			var save_note := "Alliances %d/8 so far" % Campaign.alliance_count() if Campaign.has_save() else "against the\nOgre King"
 			modes = [["goto:campaign", "Campaign", "Unite the peoples\nof the continent\n" + save_note, Color(1.0, 0.72, 0.45), "swordsman", "campaign"],
 				["goto:classic", "Classic", "Survive 20 waves\nwith every unit,\nthen go endless", Color(0.95, 0.85, 0.45), "archer", "normal"],
+				["goto:battle", "Battle Modes", "The campaign's\nkinds of battle,\nto play on\ntheir own", Color(0.85, 0.7, 1.0), "engineer", "normal"],
 				["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage", "freeplay"],
 				["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard", "tutorial"],
 				["settings", "Settings", "Music and\nsound effects\nvolume", Color(0.82, 0.84, 0.9), "engineer", "settings"]]
-			spots = top + [Vector2(122, 834), Vector2(327, 834)]
+			spots = top + [Vector2(20, 834), Vector2(225, 834), Vector2(430, 834)]
 		"classic":
 			mode_sub.text = "Classic Survival: choose your difficulty"
 			for key in Data.DIFFICULTIES:
@@ -1129,12 +1132,37 @@ func _show_cards(set_name: String) -> void:
 				spots = [Vector2(225, 636)]
 			modes.append(back)
 			spots.append(Vector2(225, 834))
+		"battle":
+			mode_sub.text = "Battle Modes: choose a kind of battle"
+			for t in Scenarios.TYPES:
+				var ty: Dictionary = Scenarios.TYPES[t]
+				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
+			modes.append(back)
+			spots = top.slice(0, modes.size() - 1) + [Vector2(225, 834)]
 		"new":
 			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
 			for key in Data.DIFFICULTIES:
 				modes.append(_difficulty_card(key, "campaign:new:" + key))
 			modes.append(["goto:campaign", "Back", "Back to the\ncampaign menu", Color(0.8, 0.8, 0.8), "goblin", ""])
 			spots = top + [Vector2(225, 834)]
+	if set_name.begins_with("bm:"):
+		# A kind of battle: its scenarios.
+		var t := set_name.substr(3)
+		mode_sub.text = "%s: choose a battle" % Scenarios.TYPES[t]["name"]
+		for id in Scenarios.of_type(t):
+			var sc: Dictionary = Scenarios.SCENARIOS[id]
+			modes.append(["goto:bmd:" + id, sc["name"], "%d waves\n%s" % [sc["waves"], "on the meadow" if sc["map"] == "" else sc["map"]],
+					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], "normal"])
+		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
+		spots = top.slice(0, modes.size() - 1) + [Vector2(225, 834)]
+	elif set_name.begins_with("bmd:"):
+		# A scenario: its difficulty.
+		var id := set_name.substr(4)
+		mode_sub.text = "%s: choose your difficulty" % Scenarios.SCENARIOS[id]["name"]
+		for key in Data.DIFFICULTIES:
+			modes.append(_difficulty_card(key, "battle:%s:%s" % [id, key]))
+		modes.append(["goto:bm:" + Scenarios.SCENARIOS[id]["type"], "Back", "Back to the\nbattles", Color(0.8, 0.8, 0.8), "goblin", ""])
+		spots = top + [Vector2(225, 834)]
 	var cards := []
 	for i in modes.size():
 		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07))
@@ -1531,6 +1559,30 @@ func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
 	rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var btn := _button(dim, Vector2(220, 480), Vector2(200, 56), "Play again")
 	btn.pressed.connect(func(): restart_pressed.emit())
+
+
+## The end of a Battle Modes scenario: how it went, the best result, and Play again.
+func show_battle_end(won: bool, name: String, summary: String, record: String, again_key: String) -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.size = Vector2(WIDTH, HEIGHT)
+	add_child(dim)
+	_center(dim)
+	_bleed(dim)
+	var title := _label(dim, Vector2(0, 300), Vector2(WIDTH, 60), Color(1, 0.85, 0.3) if won else Color(1, 0.4, 0.35), 44)
+	title.text = "Victory!" if won else "The line has broken"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := _label(dim, Vector2(40, 370), Vector2(WIDTH - 80, 50), Color.WHITE, 18)
+	sub.text = name + (": " + summary if summary != "" else "")
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var rec := _label(dim, Vector2(0, 424), Vector2(WIDTH, 26), Color(1, 0.85, 0.3), 16)
+	rec.text = record
+	rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var again := _button(dim, Vector2(110, 470), Vector2(200, 56), "Play again")
+	again.pressed.connect(func(): battle_again.emit(again_key))
+	var menu := _button(dim, Vector2(330, 470), Vector2(200, 56), "Main menu")
+	menu.pressed.connect(func(): restart_pressed.emit())
 
 
 # --- Campaign ----------------------------------------------------------------

@@ -81,6 +81,23 @@ func panel_status() -> String:
 	return ""
 
 
+## How well a won battle went, for Battle Modes records (higher is better).
+func score() -> int:
+	return main.wave
+
+
+func score_text(s: int) -> String:
+	return "%d waves" % s
+
+
+## A line for the end screen about how it went ("" for none).
+func summary(_won: bool) -> String:
+	return ""
+
+
 ## The objectives on the field (objective.gd nodes).
 func objectives() -> Array:
-	return []
+	return NONE
+
+
+const NONE: Array = []   # (asked every frame by every troop: no new array each time)

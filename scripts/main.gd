@@ -20,6 +20,7 @@ const Engineer = preload("res://scripts/engineer.gd")
 const Maps = preload("res://scripts/maps.gd")
 const MissionRules = preload("res://scripts/mission/rules.gd")
 const Camp = preload("res://scripts/mission/camp.gd")
+const Scenarios = preload("res://scripts/mission/scenarios.gd")
 
 var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in a normal window
 const FIELD_H := 768
@@ -53,6 +54,8 @@ var tutorial := false    # tutorial mode: a normal game with a guide, where the 
 var campaign := false
 var rules = null   # the battle's rules (scripts/mission/rules.gd): castle defense unless the mission says otherwise
 var camp: Node2D = null   # the work camp standing in for the castle, on a battlefield without one
+var battle_id := ""       # a Battle Modes scenario being played (scenarios.gd), "" otherwise
+var objective_layer: Node2D = null   # the mission's objectives (see rules_positions.gd), under the troops
 var classic_map := ""      # Classic on one of the campaign's battlefields ("" = the open meadow)
 var map_id := ""           # the battlefield this game is on (a maps.gd id, "" for the meadow)
 var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
@@ -172,6 +175,7 @@ func _ready() -> void:
 	hud.speed_pressed.connect(cycle_speed)
 	hud.auto_pressed.connect(toggle_auto)
 	hud.restart_pressed.connect(_restart)
+	hud.battle_again.connect(play_again)
 	hud.menu_confirmed.connect(func(): back_to_map() if campaign else _restart())
 	hud.campaign_retry.connect(retry_mission)
 	hud.campaign_map.connect(back_to_map)
@@ -248,6 +252,10 @@ func _fit_screen() -> void:
 			else:
 				w.position.x *= k
 				w.route = PackedVector2Array()
+		if objective_layer != null:
+			for o in objective_layer.get_children():
+				o.position.x *= k   # objectives keep their place across the field, like the map
+			paths.invalidate()
 		for b in wall_layer.get_children():
 			if b.post != b.fitted_post:
 				b.end_u = Vector2(b.seg_a().x, b.seg_b().x) / old_w   # built or moved since the last resize
@@ -271,14 +279,14 @@ func _fit_screen() -> void:
 ## mode: a difficulty ("easy", "normal", "hard"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
 	campaign = mode == "campaign"
-	mission = Campaign.mission() if campaign else {}
+	mission = Campaign.mission() if campaign else (Scenarios.get_scenario(battle_id) if battle_id != "" else {})
 	rules = MissionRules.make(mission)
 	rules.setup(self, mission)
 	_show_castle(rules.has_castle())
 	# The battlefield: a campaign mission's own map (terrain, lanes, castle), Classic on
 	# one the campaign has opened, or the open meadow.
-	var classic := not campaign and Data.DIFFICULTIES.has(mode)
-	map_id = mission.get("map", "") if campaign else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
+	var classic := not campaign and battle_id == "" and Data.DIFFICULTIES.has(mode)
+	map_id = mission.get("map", "") if scripted() else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
 	# Battles fill the window: a map stretches across the field like the meadow does (the
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
 	_lock_portrait(false)
@@ -616,6 +624,7 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 	e.level = level
 	e.died.connect(_on_enemy_died)
 	e.reached_castle.connect(_on_enemy_at_castle)
+	e.goal = rules.enemy_goal(e)   # an objective the rules send it for (null: the castle, as ever)
 	enemy_layer.add_child(e)
 	if e.boss:
 		hud.show_message("The Ogre King approaches!")
@@ -688,6 +697,15 @@ func _show_castle(on: bool) -> void:
 		camp.main = self
 		add_child(camp)
 		move_child(camp, castle.get_index())
+
+
+## Puts a mission objective on the field (under the troops, over the ground).
+func add_objective(o: Node2D) -> void:
+	if objective_layer == null:
+		objective_layer = Node2D.new()
+		add_child(objective_layer)
+		move_child(objective_layer, wall_layer.get_index())
+	objective_layer.add_child(o)
 
 
 ## Enemies hitting the castle. In freeplay it can't fall.
@@ -884,7 +902,9 @@ func _end_wave() -> void:
 func _open_start_screen() -> void:
 	var where: String = Campaign.screen
 	Campaign.screen = ""
-	if where == "map":
+	if where.begins_with("battle:"):
+		_on_mode_chosen(where)   # a Battle Modes scenario played again
+	elif where == "map":
 		open_world_map()
 	elif where == "battle" and not Campaign.mission().is_empty():
 		choose_mode("campaign")
@@ -905,6 +925,10 @@ func _on_mode_chosen(key: String) -> void:
 	elif key.begins_with("campaign:new:"):
 		Campaign.new_campaign(key.get_slice(":", 2))
 		play_prologue()
+	elif key.begins_with("battle:"):
+		# A Battle Modes scenario: "battle:<scenario>:<difficulty>".
+		battle_id = key.get_slice(":", 1)
+		choose_mode(key.get_slice(":", 2))
 	else:
 		# Classic on a campaign battlefield comes as "<difficulty>|<map>".
 		classic_map = key.get_slice("|", 1) if "|" in key else ""
@@ -1123,8 +1147,38 @@ func _finish(won: bool) -> void:
 		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
 		hud.show_campaign_end(won, mission, survived, rules.summary(won) if rules.has_method("summary") else "")
 		return
+	if battle_id != "":
+		_finish_battle_mode(won)
+		return
 	var previous := _save_record(survived)
 	hud.show_end(won, survived, previous, endless)
+
+
+## A Battle Modes scenario over: its result, its best (kept per scenario and
+## difficulty, for wins), and the way to play it again.
+func _finish_battle_mode(won: bool) -> void:
+	var key := "%s@%s" % [battle_id, difficulty]
+	var score: int = rules.score() if won else -1
+	var best := -1
+	if records_path != "":
+		var cfg := ConfigFile.new()
+		cfg.load(records_path)
+		best = cfg.get_value("battle", key, -1)
+		if score > best:
+			cfg.set_value("battle", key, score)
+			cfg.save(records_path)
+	var record := ""
+	if won:
+		record = "New best!" if score > best else "Best: " + rules.score_text(best)
+	elif best >= 0:
+		record = "Best: " + rules.score_text(best)
+	hud.show_battle_end(won, mission["name"], rules.summary(won), record, "battle:%s:%s" % [battle_id, difficulty])
+
+
+## Plays a Battle Modes scenario again from the start (the scene reloads, as for any game).
+func play_again(key: String) -> void:
+	Campaign.screen = key
+	_restart()
 
 
 ## Records the waves survived if it beats this mode's best; returns the best from before.
@@ -1183,6 +1237,9 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 ## trees or the quarry, a spot troops can't walk to, or ground kept clear (the gate).
 ## Always "" on the open meadow (Classic, Freeplay, the Tutorial).
 func ground_problem(p: Vector2) -> String:
+	for o in rules.objectives():
+		if not o.dead and p.distance_to(o.position) < o.RADIUS + Warrior.RADIUS:
+			return "Keep the %s clear" % o.label.to_lower()
 	if not paths.has_terrain():
 		return ""
 	if paths.in_no_build(p):
@@ -1230,6 +1287,9 @@ func wall_problem(a: Vector2, b: Vector2) -> String:
 		var c := Geometry2D.get_closest_point_to_segment(w.post, a, b)
 		if c.distance_to(w.post) < Warrior.RADIUS + Barricade.WALL_HALF:
 			return "Blocked by a unit"
+	for o in rules.objectives():
+		if not o.dead and Geometry2D.get_closest_point_to_segment(o.position, a, b).distance_to(o.position) < o.RADIUS + Barricade.WALL_HALF:
+			return "Can't wall through the %s" % o.label.to_lower()
 	return ""
 
 

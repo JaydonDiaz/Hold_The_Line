@@ -1610,6 +1610,12 @@ func _route_step(p: Vector2, delta: float) -> Vector2:
 func _separate() -> void:
 	if is_emplacement():
 		return   # rooted in place; everyone else steps around it
+	for o in main.rules.objectives():
+		# Nobody stands inside a mission objective.
+		var off: Vector2 = position - o.position
+		var room: float = o.RADIUS + RADIUS
+		if not o.dead and off.length_squared() < room * room:
+			position = o.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * room
 	if wall_guard:
 		position = post   # standing at its post on the wall
 		return

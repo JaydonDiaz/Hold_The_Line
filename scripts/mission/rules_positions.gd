@@ -1,0 +1,105 @@
+extends "res://scripts/mission/rules.gd"
+## Multiple Positions: besides the castle (if the mission keeps one), several objectives
+## stand on the field (workshops, watchtowers...) and the enemy splits up to go for them.
+## Lose too many (more than "can_lose") and the battle is lost; the castle falling still
+## loses too. Clear the last wave with enough of them standing to win.
+##
+## Mission data: "type": "positions",
+##   "objectives": [{"id", "kind", "name", "at", "hp"}]   placed on the map as drawn up (640 wide)
+##   "can_lose": n          how many may be destroyed (default 0: keep them all)
+##   "castle": false        no castle (default: keep it)
+##   "castle_share": 0.25   share of enemies that go for the castle instead
+## Each enemy picks its objective when it comes in: most go for the one nearest where they
+## enter, the rest for any other still standing, so the attack spreads but has a weight.
+
+const Objective = preload("res://scripts/mission/objective.gd")
+
+var objs: Array = []
+var lost := 0
+var over := false
+
+
+func has_castle() -> bool:
+	return mission.get("castle", true)
+
+
+func can_lose() -> int:
+	return int(mission.get("can_lose", 0))
+
+
+func start() -> void:
+	for d in mission.get("objectives", []):
+		var o := Objective.new()
+		o.setup(main, d)
+		main.add_objective(o)
+		o.destroyed.connect(on_objective_lost)
+		objs.append(o)
+	main.paths.set_objectives(objs)
+
+
+func objectives() -> Array:
+	return objs
+
+
+func standing() -> Array:
+	return objs.filter(func(o): return not o.dead)
+
+
+func enemy_goal(e):
+	var alive := standing()
+	if alive.is_empty():
+		return null
+	if has_castle() and randf() < float(mission.get("castle_share", 0.25)):
+		return null
+	if randf() < 0.7:
+		var best = alive[0]
+		for o in alive:
+			if absf(o.position.x - e.position.x) < absf(best.position.x - e.position.x):
+				best = o
+		return best
+	return alive.pick_random()
+
+
+func on_objective_lost(o) -> void:
+	lost += 1
+	if lost > can_lose() and not over and not main.game_over:
+		over = true
+		main.hud.show_message("The %s has fallen. The line is broken!" % o.label)
+		main.call_deferred("_finish", false)
+	else:
+		var left := can_lose() - lost
+		main.hud.show_message("The %s has fallen! %s" % [o.label, "Lose one more and it's over." if left == 0 else "%d more can be lost." % left])
+
+
+func _plural() -> String:
+	var name: String = (objs[0].kind as String).capitalize() if not objs.is_empty() else "Position"
+	return name + "s"
+
+
+func status() -> String:
+	if objs.is_empty():
+		return ""
+	var text := "%s standing: %d of %d" % [_plural(), standing().size(), objs.size()]
+	if can_lose() > 0:
+		text += "  ·  can lose %d" % (can_lose() - mini(lost, can_lose()))
+	return text
+
+
+func panel_status() -> String:
+	return "%s %d/%d" % [_plural().left(4), standing().size(), objs.size()]
+
+
+func score() -> int:
+	return standing().size()
+
+
+func score_text(s: int) -> String:
+	return "%d of %d %s kept" % [s, objs.size(), _plural().to_lower()]
+
+
+func summary(won: bool) -> String:
+	if won:
+		return "%d of %d %s still stand." % [standing().size(), objs.size(), _plural().to_lower()]
+	if lost > can_lose():
+		return "Too many %s fell (%d of %d)." % [_plural().to_lower(), lost, objs.size()]
+	return ""

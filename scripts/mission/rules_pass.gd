@@ -47,6 +47,14 @@ func panel_status() -> String:
 	return "Past %d/%d" % [through, limit()]
 
 
+func score() -> int:
+	return limit() - through
+
+
+func score_text(s: int) -> String:
+	return "%d got through" % (limit() - s)
+
+
 ## For the end screen: how it went.
 func summary(won: bool) -> String:
 	if won:
