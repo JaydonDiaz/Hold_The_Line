@@ -1138,7 +1138,7 @@ func _show_cards(set_name: String) -> void:
 				var ty: Dictionary = Scenarios.TYPES[t]
 				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
 			modes.append(back)
-			spots = top.slice(0, modes.size() - 1) + [Vector2(225, 834)]
+			spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
 		"new":
 			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
 			for key in Data.DIFFICULTIES:
@@ -1154,7 +1154,7 @@ func _show_cards(set_name: String) -> void:
 			modes.append(["goto:bmd:" + id, sc["name"], "%d waves\n%s" % [sc["waves"], "on the meadow" if sc["map"] == "" else sc["map"]],
 					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], "normal"])
 		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
-		spots = top.slice(0, modes.size() - 1) + [Vector2(225, 834)]
+		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
 	elif set_name.begins_with("bmd:"):
 		# A scenario: its difficulty.
 		var id := set_name.substr(4)
@@ -1186,6 +1186,16 @@ func _show_cards(set_name: String) -> void:
 		else:
 			card.pressed.connect(func():
 				_pick_mode(key, card, cards, mode_title, mode_sub))
+
+
+## Where n cards (up to three) sit in the top row, centred.
+func _row_spots(n: int) -> Array:
+	match n:
+		1:
+			return [Vector2(225, 636)]
+		2:
+			return [Vector2(122, 636), Vector2(327, 636)]
+	return [Vector2(20, 636), Vector2(225, 636), Vector2(430, 636)]
 
 
 ## Classic, after the difficulty: the battlefield viewer. Start goes into the game on the
