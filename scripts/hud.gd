@@ -74,6 +74,8 @@ var target_btn: Button
 var song_btn: Button   # a Bard's switch for the eight-Bard song (only while all eight instruments are out)
 var message_label: Label
 var message_tween: Tween
+var foe_card: Panel = null   # a new kind of foe on the field (see show_foe), and the ones waiting their turn
+var foe_queue: Array = []
 var mode_screen: ColorRect
 var title_scene: Control   # the castle scene behind the mode cards (changes as cards are hovered)
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
@@ -1064,6 +1066,52 @@ func show_message(text: String) -> void:
 	message_tween = create_tween()
 	message_tween.tween_interval(1.5)
 	message_tween.tween_property(message_label, "modulate:a", 0.0, 0.6)
+
+
+## Introduces a kind of foe the first time it comes on: a small card in the field's
+## top corner with its picture, its name and a tip. Several at once take turns.
+func show_foe(kind: String, title: String, tip: String) -> void:
+	if foe_card != null:
+		foe_queue.append([kind, title, tip])
+		return
+	foe_card = Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.08, 0.07, 0.85)
+	style.border_color = Color(0.75, 0.3, 0.25)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(4)
+	foe_card.add_theme_stylebox_override("panel", style)
+	foe_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foe_card.size = Vector2(262, 60)
+	foe_card.position = Vector2(-270, 100)
+	add_child(foe_card)
+	var icon := TextureRect.new()
+	icon.texture = Sprites.frames(kind)[0]
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.position = Vector2(4, 6)
+	icon.size = Vector2(48, 48)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foe_card.add_child(icon)
+	var head := _label(foe_card, Vector2(56, 2), Vector2(190, 18), Color(1, 0.55, 0.45), 13)
+	head.text = "New foe: " + title
+	var body := _label(foe_card, Vector2(56, 19), Vector2(200, 40), Color(0.95, 0.92, 0.85), 11)
+	body.text = tip
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for l in [head, body]:
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var card := foe_card
+	var tw := create_tween()
+	tw.tween_property(card, "position:x", 8.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(4.5)
+	tw.tween_property(card, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func():
+		card.queue_free()
+		foe_card = null
+		if not foe_queue.is_empty():
+			var next: Array = foe_queue.pop_front()
+			show_foe(next[0], next[1], next[2]))
 
 
 ## The title screen. Cards fly in one after another; hovering lifts a card, and

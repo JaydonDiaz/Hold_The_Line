@@ -45,6 +45,7 @@ var _warriors_frame := -1
 var started := false     # set once the player picks a mode
 var selected_grave = null   # a grave clicked to see who fell there
 var grave_layer := Node2D.new()
+var corpse_layer := Node2D.new()   # enemies falling as they die (see spawn_corpse), on the ground under the troops
 var ambience := Ambience.new()   # the mood over the field (light, weather, critters), by mode
 var powers := CastlePowers.new()   # the Castle tab: abilities, Stone Walls, Ballistae
 var permadeath := false   # downed warriors die for good unless revived (every difficulty; not the Tutorial or Freeplay)
@@ -145,6 +146,9 @@ func _ready() -> void:
 	_size_window()
 	audio = Audio.new()
 	add_child(audio)
+	get_tree().node_added.connect(_click_on_press)   # every button, menus and HUD alike, ticks when pressed
+	for b in find_children("*", "BaseButton", true, false):
+		_click_on_press(b)
 	paths.setup(self)
 	castle.main = self
 	# The castle goes over the warriors (it hides any standing behind it, showing their
@@ -166,7 +170,7 @@ func _ready() -> void:
 	ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # smooth when shown smaller than painted
 	add_child(ground_sprite)
 	castle.top_part.castle = castle
-	for layer in [grave_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
+	for layer in [grave_layer, corpse_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	for sig in [enemy_layer.child_entered_tree, enemy_layer.child_exiting_tree]:
@@ -291,6 +295,8 @@ func _fit_screen() -> void:
 
 ## mode: a difficulty ("easy", "normal", "hard"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
+	_foes_seen.clear()   # (each battle introduces its foes afresh)
+	hud.foe_queue.clear()
 	campaign = mode == "campaign"
 	mission = Campaign.mission() if campaign else (Scenarios.get_scenario(battle_id) if battle_id != "" else {})
 	rules = MissionRules.make(mission)
@@ -643,17 +649,26 @@ func _wyverns(n: int) -> int:
 
 
 ## A word of warning the first time a game sees one of these.
+## The first time each kind of foe comes on in a battle, a card names it and says how
+## to deal with it (bosses announce themselves; goblins need no introduction).
 const FOE_HINTS := {
-	"skeleton_archer": "Skeleton Archers! They hang back and shoot: rush them down.",
-	"slime": "Slimes! Blades and arrows can't hurt them. Use magic, ki or ice (ice lets steel bite).",
+	"orc": ["Orc", "Tough and hits hard. Hold it with a Knight."],
+	"wolf": ["Wolf", "Fast. Runs past your troops to bite at the walls."],
+	"bat": ["Bat", "Flies over troops and walls: only ranged troops and spells reach it."],
+	"skeleton_archer": ["Skeleton Archer", "Hangs back and shoots: rush it down, or outrange it."],
+	"slime": ["Slime", "Blades and arrows can't hurt it. Use magic, ki or ice (ice lets steel bite)."],
+	"sapper": ["Sapper", "Carries a bomb for your walls. Stop it before it gets there."],
+	"troll": ["Troll", "Huge and slow, and knocks troops back. Gang up on it."],
+	"warlord": ["Warlord", "A champion. Shrugs off stuns and hits like a falling tree."],
+	"wyvern": ["Wyvern", "Flying elite that breathes fire on whatever's below."],
 }
 var _foes_seen := {}
 
 
 func _spawn_enemy(kind: String, level: int, at = null) -> void:
-	if FOE_HINTS.has(kind) and not _foes_seen.has(kind):
+	if FOE_HINTS.has(kind) and not _foes_seen.has(kind) and not tutorial:
 		_foes_seen[kind] = true
-		hud.show_message(FOE_HINTS[kind])
+		hud.show_foe(kind, FOE_HINTS[kind][0], FOE_HINTS[kind][1])
 	var d: Dictionary = Data.ENEMIES[kind]
 	var r: float = d["radius"]
 	if at == null:
@@ -715,6 +730,7 @@ func late_gold(amount: int) -> int:
 func _on_enemy_died(e) -> void:
 	enemies_changed()
 	sfx("die", 1.3 if e.radius < 14.0 else (0.7 if e.radius > 20.0 else 1.0))
+	spawn_corpse(e)
 	var bounty := late_gold(e.bounty)
 	gold += bounty
 	spawn_text(e.position, "+%d" % bounty, Color(1, 0.85, 0.2))
@@ -2211,6 +2227,22 @@ func spawn_text(pos: Vector2, text: String, color: Color) -> void:
 	fx_layer.add_child(f)
 
 
+## A slain enemy topples over and fades, with a puff of dust where it falls.
+func spawn_corpse(e) -> void:
+	if corpse_layer.get_child_count() > 40:   # (a huge wave dying at once: the rest just vanish)
+		return
+	var f := Fx.new()
+	f.mode = "fall"
+	f.tex = Sprites.frames(e.kind)[0]
+	f.radius = e.radius
+	f.size = Vector2(Sprites.SIZE, Sprites.SIZE) * e.sprite_scale
+	f.flip = e.flip
+	f.height = 18.0 if e.flying else 0.0   # (enemy.gd FLY_HEIGHT)
+	f.life = 0.55
+	f.position = e.position
+	corpse_layer.add_child(f)
+
+
 func spawn_bolt(path: PackedVector2Array, color: Color) -> void:
 	# Jag each segment so it reads as lightning.
 	var pts := PackedVector2Array([path[0]])
@@ -2309,6 +2341,12 @@ func _bard_instruments() -> Array:
 		if w.kind == "bard":
 			found[w.instrument_sound()] = true
 	return found.keys()
+
+
+## Gives a new button a soft click when it's pressed (see _ready).
+func _click_on_press(node: Node) -> void:
+	if node is BaseButton and not node.has_meta("silent"):
+		node.pressed.connect(sfx.bind("click"))
 
 
 ## Plays a sound effect (see audio.gd).

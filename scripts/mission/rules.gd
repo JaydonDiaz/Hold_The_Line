@@ -182,6 +182,8 @@ func change_field(map_id: String) -> void:
 			n.queue_free()
 	for g in main.get_graves():
 		g.queue_free()
+	for c in main.corpse_layer.get_children():
+		c.queue_free()
 	var maps = load("res://scripts/maps.gd")
 	main.map_id = map_id
 	main.paths.set_map(maps.get_map(map_id))

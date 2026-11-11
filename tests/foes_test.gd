@@ -231,10 +231,32 @@ func _waves() -> void:
 	main.wave_active = true
 	main._spawn_enemy("slime", 6, Vector2(320, 100))
 	await process_frame
-	check("Slimes" in main.hud.message_label.text, "W  the first Slime puts up a warning")
+	check(main.hud.foe_card != null and _foe_title() == "New foe: Slime", "W  the first Slime puts up a New foe card")
+	main._spawn_enemy("slime", 6, Vector2(300, 100))
+	main._spawn_enemy("goblin", 6, Vector2(340, 100))
+	check(main.hud.foe_queue.is_empty(), "W  ...once: another Slime (or a goblin) doesn't")
+	main._spawn_enemy("wolf", 6, Vector2(360, 100))
+	check(main.hud.foe_queue.size() == 1 and main.hud.foe_queue[0][1] == "Wolf", "W  a new kind waits its turn behind the card up")
+	await _frames(60 * 6)
+	check(main.hud.foe_card != null and _foe_title() == "New foe: Wolf", "W  ...and comes up when the first card goes")
+	# The fallen topple over and fade, on the ground under the troops.
+	var victim = main.get_enemies().filter(func(e): return e.kind != "slime")[0]   # (steel can't touch a Slime)
+	victim.take_damage(99999.0)
+	await process_frame
+	var falls: Array = main.corpse_layer.get_children().filter(func(f): return f.mode == "fall")
+	check(falls.size() == 1 and main.corpse_layer.get_index() < main.warrior_layer.get_index(), "E  a slain foe leaves a falling body under the troops")
+	await _frames(60)
+	check(main.corpse_layer.get_child_count() == 0, "E  ...that fades away")
+	# Buttons click when pressed.
+	var clicks: Array = main.hud.start_btn.pressed.get_connections().filter(func(c): return c["callable"].get_method() == "sfx")
+	check(clicks.size() == 1, "E  buttons click when pressed")
 	main.free()
 	main = null
 
+
+
+func _foe_title() -> String:
+	return main.hud.foe_card.get_child(1).text
 
 
 # --- M: the Ash Marshal --------------------------------------------------------------------

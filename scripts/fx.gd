@@ -9,6 +9,10 @@ var color := Color.WHITE
 var radius := 30.0
 var points := PackedVector2Array()   # bolt/beam path in local coordinates
 var life := 0.7
+var tex: Texture2D = null   # "fall": the enemy's sprite, its drawn size and facing, and how high it flew
+var size := Vector2.ZERO
+var flip := 1.0
+var height := 0.0
 var t := 0.0
 
 
@@ -29,6 +33,23 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var a := 1.0 - t / life
 	match mode:
+		"fall":
+			# Tips over sideways (a flyer drops out of the air first), then fades into the grass.
+			var k := minf(t / (life * 0.45), 1.0)
+			var fade := clampf((1.0 - t / life) * 2.2, 0.0, 1.0)
+			var ease_k := k * k
+			var drop := height * (1.0 - ease_k)
+			draw_set_transform(Vector2(0, radius - drop), -flip * ease_k * PI * 0.5, Vector2(flip, 1.0))
+			draw_texture_rect(tex, Rect2(Vector2(-size.x / 2, -size.y), size), false, Color(1, 0.75, 0.75, fade))
+			draw_set_transform(Vector2.ZERO)
+			if k >= 1.0 or height == 0.0:
+				# The dust it kicks up.
+				var d := t / life
+				for i in 5:
+					var ang := PI + i * PI / 4.0
+					var p := Vector2(cos(ang) * radius * (0.6 + d), radius + sin(ang) * radius * 0.25 * (1.0 + d))
+					var sz := 3.0 + 3.0 * d
+					draw_texture_rect(Sprites.white(), Rect2(p - Vector2(sz, sz) / 2, Vector2(sz, sz)), false, Color(0.75, 0.68, 0.55, 0.5 * (1.0 - d)))
 		"text":
 			draw_string_outline(ThemeDB.fallback_font, Vector2(-40, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 80, 18, 4, Color(0, 0, 0, a))
 			draw_string(ThemeDB.fallback_font, Vector2(-40, 0), text, HORIZONTAL_ALIGNMENT_CENTER, 80, 18, Color(color, a))
