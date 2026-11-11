@@ -209,7 +209,7 @@ func _show_info(k: String) -> void:
 			if optional:
 				info["mission"].text = _optional_text(mid)
 			elif not m.is_empty():
-				info["mission"].text = "Mission %d of %d: %s  ·  %d waves  ·  %d gold" % [prog[0] + 1, prog[1], m["name"], m["waves"], m["gold"]]
+				info["mission"].text = "Mission %d of %d: %s  ·  %s  ·  %d gold" % [prog[0] + 1, prog[1], m["name"], campaign.length_text(m), m["gold"]]
 				if not (m["lend"] as Array).is_empty():
 					info["mission"].text += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
 			else:
@@ -272,7 +272,7 @@ func _mission_here(k: String) -> String:
 
 func _optional_text(mid: String) -> String:
 	var m: Dictionary = campaign.missions[mid]
-	var text := "Optional: %s  ·  %d waves" % [m["name"], m["waves"]]
+	var text := "Optional: %s  ·  %s" % [m["name"], campaign.length_text(m)]
 	var bonus: Dictionary = m.get("bonus_points", {})
 	if not bonus.is_empty():
 		var parts: Array = bonus.keys().map(func(kind): return "+%d %s training point%s" % [bonus[kind], Data.WARRIORS[kind]["name"], "" if bonus[kind] == 1 else "s"])

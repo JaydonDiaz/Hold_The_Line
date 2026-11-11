@@ -153,6 +153,21 @@ func _run() -> void:
 		await create_timer(0.2).timeout
 		parts = (main.audio._music["battle_quarry"] as AudioStreamSynchronized).stream_count if main.audio._music.has("battle_quarry") else 0
 	check(parts == main.audio.INSTRUMENTS.size() + 1, "...with a part for every Bard instrument too")
+	# Greenwood and Sable Crossing: their own peaceful music between waves (made on demand,
+	# while the battle's set up).
+	for pair in [["greenwood_roads", "forest"], ["sable_crossing", "river"]]:
+		await _fresh()
+		main.hud.picking = true
+		main.records_path = ""
+		main.classic_map = pair[0]
+		var c0 := Time.get_ticks_msec()
+		main.choose_mode("normal")
+		while not main.audio._music.has(pair[1]) and Time.get_ticks_msec() - c0 < 60000:   # (real seconds: it's composed on its own thread)
+			await process_frame
+		var ms := Time.get_ticks_msec() - c0
+		var now: String = await _playing()
+		check(now == pair[1], "%s between waves: its own peaceful music, %s (ready %.1fs after the battle opened, composed in the background)" % [
+				pair[0], pair[1], ms / 1000.0])
 	check(main.audio._cache.has("battle_quarry") and (main.audio._cache["battle"] as AudioStreamWAV).data != (main.audio._cache["battle_quarry"] as AudioStreamWAV).data,
 			"...and it isn't the meadow's")
 	main.free()

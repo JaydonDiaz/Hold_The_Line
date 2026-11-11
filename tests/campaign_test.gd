@@ -20,6 +20,9 @@ extends SceneTree
 ## B  balance         a simple swordsmen-first bot, held to its training, wins each playable
 ##                    mission on every difficulty
 ## R  regression      Classic, Freeplay and the title menu behave as before
+## S  the south       each southern mission plays on its own field by its own rules, with its
+##                    loans; Greenwood's loaned Archers clear its bats on their own; Sable
+##                    Crossing's help comes from exactly the peoples who've joined
 
 const CD = preload("res://scripts/campaign_data.gd")
 const Maps = preload("res://scripts/maps.gd")
@@ -69,6 +72,8 @@ func _run() -> void:
 		await _cutscene()
 	if _wants("B"):
 		await _balance()
+	if _wants("S"):
+		await _south()
 	if _wants("R"):
 		await _regression()
 	check(_hash_other_files() == guarded, "P  the Classic records and the settings files were never touched")
@@ -373,7 +378,7 @@ func _missions() -> void:
 	await _win_mission()
 	check(campaign.allies == ["stonehollow"] and campaign.just_joined == "stonehollow", "M  winning Stonehollow brings the Engineers' Guild into the Line")
 	for t in ["greenwood", "mercyvale", "deepdelve"]:
-		check(campaign.territory_state(t) == "available", "M  %s opens up (no battle there until Phase 3)" % t)
+		check(campaign.territory_state(t) == "attack" and campaign.playable_mission(t) != "", "M  %s opens up, under attack, with its first mission (%s)" % [t, campaign.playable_mission(t)])
 	check(campaign.territory_state("sable") == "hidden", "M  Sable Crossing is still undiscovered")
 	main.back_to_map()
 	await _fresh_main()
@@ -383,6 +388,9 @@ func _missions() -> void:
 	await process_frame
 	check(map.overlay != null, "M  after the outro, the map announces who joined")
 	map.select("greenwood")
+	check(not map.info["defend"].disabled and "Forest Exodus" in map.info["mission"].text and "an evacuation" in map.info["mission"].text,
+			"M  Greenwood offers the Forest Exodus (%s)" % map.info["mission"].text.replace("\n", " "))
+	map.select("frostmarch")
 	check(map.info["defend"].disabled, "M  a territory with no battle yet can't be defended")
 	map.select("stonehollow")
 	check(not map.info["defend"].disabled and "Protect the Workshops" in map.info["mission"].text, "M  Stonehollow offers its second mission, Protect the Workshops")
@@ -472,7 +480,16 @@ func _data() -> void:
 			for e in list:
 				fliers = fliers or Data.ENEMIES[e].get("flying", false)
 				slimes = slimes or Data.ENEMIES[e].get("gooey", false)
-		for allies in alliance_sets_for(m["territory"]):
+		# Once its people have joined (the missions after the one that brings them in), the
+		# territory's own people are always with you.
+		var own: String = CD.TERRITORIES[m["territory"]]["faction"]
+		var chain: Array = CD.TERRITORIES[m["territory"]]["missions"] + CD.TERRITORIES[m["territory"]].get("optional", [])
+		var joins_here: bool = m["reward"] == own
+		var after_join: bool = own != "" and not joins_here and chain.has(mid)
+		for base in alliance_sets_for(m["territory"]):
+			var allies: Array = base.duplicate()
+			if after_join and not allies.has(own):
+				allies.append(own)
 			sets_checked += 1
 			if fliers and not _has_cover(allies, m, AIR_KEYS, AIR_ATTACKS):
 				air_problems.append("%s with %s" % [mid, str(allies)])
@@ -951,4 +968,70 @@ func _regression() -> void:
 	check(get_root().content_scale_aspect == Window.CONTENT_SCALE_ASPECT_KEEP and main.FIELD_W == 640, "R  a campaign battle keeps the 640-wide field")
 	main.free()
 	main = null
+	campaign.reset()
+
+
+
+# --- S: the south ----------------------------------------------------------------------------
+
+## A campaign at the south with `joined` peoples in (each region's missions won as needed).
+func _south_save(joined: Array) -> void:
+	campaign.new_campaign("normal")
+	campaign.completed = ["ashwatch", "stonehollow", "ashwatch_road", "stonehollow_workshops"]
+	campaign.allies = ["stonehollow"]
+	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
+	for t in joined:
+		campaign.completed.append_array(chains[t])
+		campaign.allies.append(t)
+
+
+func _south() -> void:
+	var expect := {
+		"gw_exodus": ["greenwood_roads", "rules_evac.gd", ["archer", "archer"]],
+		"gw_watchfires": ["greenwood_roads", "rules_positions.gd", []],
+		"gw_trail": ["greenwood_roads", "rules.gd", []],
+		"mv_wounded": ["mercy_fields", "rules_evac.gd", ["healer"]],
+		"mv_sanctuary": ["mercy_fields", "rules.gd", []],
+		"dd_entrance": ["deepdelve_switchbacks", "rules.gd", ["cannon", "mine"]],
+		"dd_orerun": ["convoy_ridge", "rules_escort.gd", []],
+	}
+	for mid in expect:
+		_south_save(["greenwood", "mercyvale", "deepdelve"] if not mid in ["gw_exodus", "mv_wounded", "dd_entrance"] else [])
+		await _play(mid)
+		var e: Array = expect[mid]
+		var lent: Array = main.temp_allies.map(func(w): return w.kind)
+		check(main.mission["name"] == CD.MISSIONS[mid]["name"] and main.map_id == e[0] and main.rules.get_script().resource_path.get_file() == e[1] and lent == e[2],
+				"S  %s: on %s, by %s, with %s" % [CD.MISSIONS[mid]["name"], main.map_id, main.rules.get_script().resource_path.get_file(), str(lent) if not lent.is_empty() else "no loans"])
+	# Greenwood's two loaned Archers bring down its bats on their own.
+	_south_save([])
+	await _play("gw_exodus")
+	main.start_wave()
+	await process_frame
+	main.spawn_queue.clear()
+	main.rules.next_in = 999.0
+	for en in main.get_enemies():
+		en.free()
+	var bats := []
+	for i in 4:
+		main._spawn_enemy("bat", 3, Vector2(200 + i * 70, 80))
+		bats.append(main.get_enemies()[-1])
+	var t0 := 0
+	while bats.any(func(b): return is_instance_valid(b) and not b.dead) and t0 < 60 * 30:
+		await process_frame
+		t0 += 1
+	check(not bats.any(func(b): return is_instance_valid(b) and not b.dead) and main.get_warriors().filter(func(w): return w.kind == "archer").size() == 2,
+			"S  Greenwood's two loaned Archers bring down its bats on their own (%.0fs)" % (t0 / 60.0))
+	# Sable Crossing: help from exactly the peoples who've joined.
+	for joined in [["greenwood", "mercyvale"], ["deepdelve", "mercyvale"], ["greenwood", "deepdelve"], ["greenwood", "mercyvale", "deepdelve"]]:
+		_south_save(joined)
+		await _play("sable_crossing")
+		var kinds: Array = main.temp_allies.map(func(w): return w.kind)
+		var archers := kinds.count("archer")
+		var ok: bool = archers == (2 if joined.has("greenwood") else 0) and kinds.has("healer") == joined.has("mercyvale") \
+				and kinds.has("mine") == joined.has("deepdelve") and main.powers.owned.has("arrows") == joined.has("greenwood") \
+				and main.gold == CD.MISSIONS["sable_crossing"]["gold"] + (150 if joined.has("deepdelve") else 0) \
+				and is_equal_approx(main.down_time, main.Data.DIFFICULTIES["normal"]["down_time"] * (1.5 if joined.has("mercyvale") else 1.0)) \
+				and main.get_barricades().size() == 1
+		check(ok, "S  Sable Crossing with %s: help from exactly them (and Stonehollow's wall at the ford)" % ", ".join(joined))
+	check(main.allowed("ability:arrows"), "S  ...Greenwood's free Arrow Storm can be cast")
 	campaign.reset()

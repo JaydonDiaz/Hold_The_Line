@@ -28,6 +28,7 @@ func _run() -> void:
 	campaign = root.get_node("Campaign")
 	campaign.save_path = TEST_SAVE
 	_real_data()
+	_south()
 	_chains()
 	_gates()
 	_tier4()
@@ -48,6 +49,43 @@ func _win(m: String) -> void:
 	campaign.finish_mission(true)
 
 
+## The south, as it ships: each region a chain (join on the first mission, the beacon on
+## the last), and every pair of southern beacons (with Ashwatch's and Stonehollow's)
+## opening Sable Crossing, whose win opens the north.
+func _south() -> void:
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
+	for pair in [["greenwood", "mercyvale"], ["greenwood", "deepdelve"], ["mercyvale", "deepdelve"]]:
+		campaign.new_campaign("normal")
+		for m in ["ashwatch", "stonehollow", "ashwatch_road", "stonehollow_workshops"]:
+			_win(m)
+		var ok := true
+		for t in pair:
+			ok = ok and campaign.playable_mission(t) == chains[t][0]
+			_win(chains[t][0])
+			ok = ok and campaign.allied(t) and not campaign.beacon_lit(t) and campaign.playable_mission(t) == chains[t][1]
+			_win(chains[t][1])
+			ok = ok and campaign.beacon_lit(t)
+		ok = ok and campaign.territory_state("sable") == "attack" and campaign.playable_mission("sable") == "sable_crossing"
+		_win("sable_crossing")
+		ok = ok and campaign.territory_state("sable") == "secured" and campaign.requirements_met("frostmarch")
+		check(ok, "South: %s and %s, each joined then their beacon lit, open Sable Crossing; its win opens the north" % pair)
+	campaign.new_campaign("normal")
+	for m in ["ashwatch", "stonehollow", "ashwatch_road", "stonehollow_workshops", "gw_exodus", "gw_watchfires"]:
+		_win(m)
+	check(not campaign.requirements_met("sable"), "...one southern beacon isn't enough")
+	check(campaign.optional_missions("greenwood") == ["gw_trail"] and campaign.bonus_points("archer") == 0, "...Greenwood's Hunter's Trail is there to play, optional")
+	_win("gw_trail")
+	check(campaign.bonus_points("archer") == 1, "...and wins the Archers a training point")
+	campaign.new_campaign("normal")
+	for m in ["ashwatch", "stonehollow"]:
+		_win(m)
+	_win("gw_exodus")
+	check(campaign.optional_missions("greenwood") == ["gw_trail"] and campaign.playable_mission("greenwood") == "gw_watchfires",
+			"...the Trail opens as soon as the Watch joins, beside the Watchfires")
+
+
 ## The campaign as it ships today (one mission in Ashwatch and in Stonehollow so far).
 func _real_data() -> void:
 	campaign.territories = CD.TERRITORIES
@@ -63,7 +101,7 @@ func _real_data() -> void:
 	_win("ashwatch_road")
 	check(campaign.beacon_lit("ashwatch") and campaign.just_lit == "ashwatch", "...which lights Ashwatch's beacon")
 	for t in ["greenwood", "mercyvale", "deepdelve"]:
-		check(campaign.territory_state(t) == "available", "...%s opens once Stonehollow's people join" % t)
+		check(campaign.territory_state(t) == "attack", "...%s opens once Stonehollow's people join, under attack" % t)
 	check(campaign.territory_state("sable") in ["hidden", "locked"] and not campaign.requirements_met("sable"), "...Sable Crossing waits for two southern beacons")
 
 

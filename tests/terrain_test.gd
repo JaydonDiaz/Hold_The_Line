@@ -318,6 +318,8 @@ func _grid() -> void:
 	# The campaign maps.
 	for mid in CD.MISSIONS:
 		var map_id: String = CD.MISSIONS[mid].get("map", "")
+		if Maps.ZONES.has(map_id):
+			continue   # (a convoy's roads: checked with the other Battle Modes fields, group Z)
 		check(Maps.MAPS.has(map_id), "G  %s has a map (%s)" % [mid, map_id])
 		if not Maps.MAPS.has(map_id):
 			continue

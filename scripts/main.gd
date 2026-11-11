@@ -66,6 +66,7 @@ var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
 const CD_XP_RATES = preload("res://scripts/campaign_data.gd").XP_RATES    # a story campaign battle (the Campaign autoload says which mission)
 var mission := {}        # that mission's data (campaign_data.gd MISSIONS); empty outside the campaign
 var temp_allies := []    # units the mission put on the field from the start
+var help_lend := []      # unlock keys the allied peoples' help brings to this battle (see _send_help)
 var gold: int = Data.START_GOLD
 var difficulty := "normal"   # a key of Data.DIFFICULTIES ("normal" in freeplay)
 var cost_mult := 1.0         # prices for this difficulty
@@ -1030,6 +1031,7 @@ func _army_gone() -> bool:
 ## This battlefield's own battle music (getting it composed now, ready for the first wave).
 func set_battle_music(map: Dictionary) -> void:
 	battle_music = Audio.battle_for(map)
+	audio.prepare(stage_music)   # (a map's own peaceful music first, if it's made on demand: it's needed first)
 	audio.prepare(battle_music)
 
 
@@ -1147,18 +1149,59 @@ func _lock_portrait(on: bool) -> void:
 func _begin_mission() -> void:
 	gold = mission.get("gold", Data.START_GOLD)
 	for a in mission.get("allies", []):
-		var kind: String = a["kind"]
-		var w := Warrior.new()
-		var at: Vector2 = a["at"]
-		w.setup(kind, Data.WARRIORS[kind], self, Vector2(at.x * FIELD_W / Maps.BASE_W, at.y))   # placed on the map as stretched
-		w.spent = 0   # on loan: selling it brings nothing
-		w.position = w.post
-		warrior_layer.add_child(w)
-		temp_allies.append(w)
+		_lend_unit(a)
+	if campaign:
+		_send_help()
 	var intro: String = mission.get("intro", "")
 	if intro != "" and not Campaign.seen.has(intro):
 		Campaign.mark_seen(intro)
 		hud.play_story(Campaign.story_lines(intro))
+
+
+## A unit on loan for this battle ({"kind", "at"} as drawn up): free, and worth nothing sold.
+func _lend_unit(a: Dictionary) -> void:
+	var kind: String = a["kind"]
+	var w := Warrior.new()
+	var at: Vector2 = a["at"]
+	w.setup(kind, Data.WARRIORS[kind], self, Vector2(at.x * FIELD_W / Maps.BASE_W, at.y))   # placed on the map as stretched
+	w.spent = 0   # on loan: selling it brings nothing
+	w.position = w.post
+	warrior_layer.add_child(w)
+	temp_allies.append(w)
+
+
+## The peoples who've joined the Line send help ("help": {faction: {...}}), each only if
+## they're allied: "allies" (units on loan), "gold", "free" (abilities, owned from the
+## start: they can be cast though not yet unlocked), "down_time" (fallen troops hold on
+## that much longer), "walls" ([[a, b]]: barricades already up).
+func _send_help() -> void:
+	var sent := []
+	for f in mission.get("help", {}):
+		if not Campaign.allied(f):
+			continue
+		var h: Dictionary = mission["help"][f]
+		for a in h.get("allies", []):
+			_lend_unit(a)
+		gold += int(h.get("gold", 0))
+		for key in h.get("free", []):
+			help_lend.append("ability:" + key)
+			powers.owned[key] = true
+		down_time *= float(h.get("down_time", 1.0))
+		var k: float = FIELD_W / Maps.BASE_W
+		for seg in h.get("walls", []):
+			var a: Vector2 = Vector2(seg[0].x * k, seg[0].y)
+			var b: Vector2 = Vector2(seg[1].x * k, seg[1].y)
+			var wall := Barricade.new()
+			wall.half = (b - a) / 2.0
+			wall.setup("barricade", Data.WARRIORS["barricade"], self, (a + b) / 2.0)
+			wall.spent = 0
+			wall.position = wall.post
+			wall_layer.add_child(wall)
+		if not h.get("walls", []).is_empty():
+			walls_changed()
+		sent.append(h.get("note", f.capitalize()))
+	if not sent.is_empty():
+		hud.show_message("Help has come: " + ", ".join(sent))
 
 
 ## The mission's waves: wave n draws from every enemy kind its pool has added by then,
@@ -1217,7 +1260,7 @@ func _mission_flags() -> Array:
 ## Whether unlock key `key` (a unit kind, "ability:x", "path:n", "repair") can be used
 ## in this game. Only a campaign mission locks anything.
 func allowed(key: String) -> bool:
-	return not campaign or Campaign.allows(key, mission.get("lend", []))
+	return not campaign or Campaign.allows(key, mission.get("lend", []) + help_lend)
 
 
 ## The highest upgrade tier `kind` may take on path `p` here: all four outside the
@@ -1238,7 +1281,7 @@ func earn_xp(kind: String, amount: float, what := "damage") -> void:
 
 ## Why `key` is locked ("" if it isn't).
 func lock_note(key: String) -> String:
-	return "" if allowed(key) else Campaign.lock_reason(key, mission.get("lend", []))
+	return "" if allowed(key) else Campaign.lock_reason(key, mission.get("lend", []) + help_lend)
 
 
 ## Stops a locked action with a message saying who unlocks it.

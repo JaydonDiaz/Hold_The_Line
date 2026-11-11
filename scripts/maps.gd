@@ -87,7 +87,7 @@ const MAPS := {
 	# Greenwood: three narrow roads through the forest (each about 72-100px), meeting in a
 	# clearing above the gate. Too many to wall off, too narrow for Swordsmen alone.
 	"greenwood_roads": {
-		"name": "Greenwood Roads", "battle": "greenwood",
+		"name": "Greenwood Roads", "battle": "greenwood", "music": "forest",
 		"blurb": "Three forest\nroads meeting\nat the gate",
 		"biome": "meadow", "tint": Color(0.86, 0.96, 0.86),
 		"lanes": [[122, 184], [282, 358], [462, 518]],
@@ -120,7 +120,7 @@ const MAPS := {
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"trails": [[Vector2(320, 96), Vector2(330, 180), Vector2(390, 215), Vector2(390, 270), Vector2(330, 330), Vector2(250, 370), Vector2(245, 430), Vector2(300, 500), Vector2(310, 620), Vector2(320, 736)]],
 		"castle": "guildgate",
-		"bot_posts": [Vector2(320, 560), Vector2(270, 600), Vector2(370, 600), Vector2(320, 640), Vector2(380, 520),
+		"bot_posts": [Vector2(320, 560), Vector2(290, 616), Vector2(370, 600), Vector2(320, 640), Vector2(380, 520),
 			Vector2(260, 520), Vector2(300, 360), Vector2(380, 340), Vector2(320, 680)],
 	},
 	# Mercy Vale: farmland broken by hedgerows with gaps, enemies down both flanks, and the
@@ -131,11 +131,11 @@ const MAPS := {
 		"biome": "meadow",
 		"lanes": [[40, 200], [440, 600]],
 		"terrain": [
-			{"kind": "hedge", "poly": [Vector2(0, 250), Vector2(180, 250), Vector2(180, 272), Vector2(0, 272)]},
-			{"kind": "hedge", "poly": [Vector2(250, 250), Vector2(390, 250), Vector2(390, 272), Vector2(250, 272)]},
-			{"kind": "hedge", "poly": [Vector2(460, 250), Vector2(640, 250), Vector2(640, 272), Vector2(460, 272)]},
-			{"kind": "hedge", "poly": [Vector2(80, 430), Vector2(260, 430), Vector2(260, 452), Vector2(80, 452)]},
-			{"kind": "hedge", "poly": [Vector2(380, 430), Vector2(560, 430), Vector2(560, 452), Vector2(380, 452)]},
+			{"kind": "hedge", "poly": [Vector2(159, 250), Vector2(167, 253), Vector2(170, 261), Vector2(167, 269), Vector2(159, 272), Vector2(0, 272), Vector2(0, 250)]},
+			{"kind": "hedge", "poly": [Vector2(369, 250), Vector2(377, 253), Vector2(380, 261), Vector2(377, 269), Vector2(369, 272), Vector2(271, 272), Vector2(263, 269), Vector2(260, 261), Vector2(263, 253), Vector2(271, 250)]},
+			{"kind": "hedge", "poly": [Vector2(640, 250), Vector2(640, 272), Vector2(481, 272), Vector2(473, 269), Vector2(470, 261), Vector2(473, 253), Vector2(481, 250)]},
+			{"kind": "hedge", "poly": [Vector2(249, 430), Vector2(257, 433), Vector2(260, 441), Vector2(257, 449), Vector2(249, 452), Vector2(107, 452), Vector2(99, 449), Vector2(96, 441), Vector2(99, 433), Vector2(107, 430)]},
+			{"kind": "hedge", "poly": [Vector2(533, 430), Vector2(541, 433), Vector2(544, 441), Vector2(541, 449), Vector2(533, 452), Vector2(391, 452), Vector2(383, 449), Vector2(380, 441), Vector2(383, 433), Vector2(391, 430)]},
 			{"kind": "shrine", "poly": [Vector2(285, 400), Vector2(355, 400), Vector2(355, 480), Vector2(285, 480)]},
 		],
 		"no_build": [Rect2(260, 380, 120, 120), Rect2(272, 688, 96, 48)],
@@ -147,7 +147,7 @@ const MAPS := {
 	# Sable Crossing: a river across the field, two bridges (80px, room for the Marshal) and
 	# a shallow ford between them that slows anyone wading it.
 	"sable_crossing": {
-		"name": "Sable Crossing", "battle": "sable",
+		"name": "Sable Crossing", "battle": "sable", "music": "river",
 		"blurb": "A river, two\nbridges and\na ford",
 		"biome": "meadow",
 		"lanes": [[40, 600]],

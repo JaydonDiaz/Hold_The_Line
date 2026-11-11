@@ -8,6 +8,8 @@ extends Node
 ##   villain   the Ogre King's and his heralds' cutscenes: drums and dread
 ##   calm      the meadow's peaceful music, between waves (Classic, Ashwatch...)
 ##   mountain  the mountains' peaceful music, between waves (Stonehollow)
+##   forest    Greenwood's peaceful music between waves: a woodland air   } composed when
+##   river     Sable Crossing's between waves: a march by the river      } first needed
 ##   battle    during waves on the open meadow (Classic, and battlefields without their own)
 ##   battle_*  during waves on each other map: its own battle piece (BATTLES, by the map's
 ##             "battle" style), composed when that map is first fought on (see prepare)
@@ -218,6 +220,14 @@ func set_track(track: String) -> void:
 	_wanted_track = track
 
 
+const ON_DEMAND_CALM := ["forest", "river"]   # stage tracks made only once a map needs them
+
+
+## Whether `track` is made when it's first needed (prepare) rather than at startup.
+static func on_demand(track: String) -> bool:
+	return (track.begins_with("battle_") and BATTLES.has(track.substr(7))) or track in ON_DEMAND_CALM
+
+
 ## The battle music for map `m` (maps.gd): its own piece, or the meadow's.
 static func battle_for(m: Dictionary) -> String:
 	return "battle_" + m["battle"] if BATTLES.has(m.get("battle", "")) else "battle"
@@ -225,7 +235,7 @@ static func battle_for(m: Dictionary) -> String:
 
 ## Gets `track` (a map's battle music) composed next, with its Bard parts, if it isn't yet.
 func prepare(track: String) -> void:
-	if not track.begins_with("battle_") or not BATTLES.has(track.substr(7)):
+	if not on_demand(track):
 		return
 	_cache_lock.lock()
 	var missing := not _cache.has(track)
@@ -244,8 +254,8 @@ func prepare(track: String) -> void:
 func _process(_delta: float) -> void:
 	_pick_up()
 	var want := _wanted_track
-	if want.begins_with("battle_") and not _music.has(want):
-		want = "battle"   # (its own piece is still being composed: the usual one till then)
+	if on_demand(want) and not _music.has(want):
+		want = "battle" if want.begins_with("battle") else "calm"   # (its own piece is still being composed: the usual one till then)
 	if want == _playing_track:
 		return
 	if want != "" and not _music.has(want):
@@ -438,6 +448,10 @@ func _compose_all() -> void:
 			made = _compose_battle()
 		elif piece.begins_with("battle_") and not ":" in piece:
 			made = _compose_battle_style(piece.substr(7))
+		elif piece == "forest":
+			made = _compose_forest()
+		elif piece == "river":
+			made = _compose_river()
 		elif piece == "title":
 			made = _compose_title()
 		elif piece == "story":
@@ -472,18 +486,18 @@ func _pick_up() -> void:
 			effects[sound_name] = cache["fx:" + sound_name]
 	if not effects.is_empty():
 		_effects_ready(effects)
-	var battles := []
+	var battles := ON_DEMAND_CALM.duplicate()
 	for style in BATTLES:
 		battles.append("battle_" + style)
 	for track in STAGE_TRACKS + battles + SCENE_TRACKS:
 		if not cache.has(track):
 			continue
 		var parts := [cache[track]]
-		if track in STAGE_TRACKS or track.begins_with("battle"):
+		if track in STAGE_TRACKS or on_demand(track):
 			for instrument in INSTRUMENTS:
 				if cache.has(track + ":" + instrument):
 					parts.append(cache[track + ":" + instrument])
-		var full := parts.size() == (INSTRUMENTS.size() + 1 if track in STAGE_TRACKS or track.begins_with("battle") else 1)
+		var full := parts.size() == (INSTRUMENTS.size() + 1 if track in STAGE_TRACKS or on_demand(track) else 1)
 		var shown: int = (_music[track] as AudioStreamSynchronized).stream_count if _music.has(track) else 0
 		if shown == 0 or (full and shown < parts.size()):
 			_music_ready({track: parts if full else [parts[0]]})
@@ -549,6 +563,12 @@ static func _track_info(track: String) -> Dictionary:
 		"map":
 			return {"step": 60.0 / 96.0 / 4.0, "chords": [[41, maj], [46, maj], [43, mn], [48, maj], [41, maj], [45, mn], [46, maj], [48, maj],
 					[38, mn], [46, maj], [41, maj], [48, maj], [38, mn], [43, mn], [48, maj], [41, maj]]}
+		"forest":
+			return {"step": 60.0 / 88.0 / 4.0, "chords": [[52, mn], [50, maj], [48, maj], [50, maj], [52, mn], [47, mn], [48, maj], [50, maj],
+					[45, mn], [48, maj], [50, maj], [52, mn], [45, mn], [47, mn], [48, maj], [52, mn]]}
+		"river":
+			return {"step": 60.0 / 112.0 / 4.0, "chords": [[50, maj], [55, maj], [57, maj], [50, maj], [47, mn], [55, maj], [57, maj], [57, maj],
+					[50, maj], [55, maj], [52, mn], [57, maj], [55, maj], [57, maj], [50, maj], [50, maj]]}
 		"mountain":
 			return {"step": 60.0 / 92.0 / 4.0, "chords": [[43, maj], [41, maj], [48, maj], [43, maj], [43, maj], [41, maj], [45, mn], [50, maj]]}
 	if track.begins_with("battle_"):
@@ -1086,4 +1106,69 @@ static func _compose_battle_style(name: String) -> AudioStreamWAV:
 		for nt in notes:
 			_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.95, _hz(nt[2]), _hz(nt[2]), lead,
 					0.075 if lead == "tri" else (0.05 if lead == "saw" else 0.07), 0.9, 0.5)
+	return _to_stream(buf, true)
+
+
+
+## Greenwood between waves: a woodland air in E minor. A breathy flute tune over harp-like
+## ripples, a low drone, and a soft hand drum like footfalls on moss.
+static func _compose_forest() -> AudioStreamWAV:
+	var info := _track_info("forest")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[76, 6], [79, 2], [78, 4], [76, 4]], [[74, 8], [71, 4], [74, 4]], [[72, 6], [74, 2], [76, 8]], [[78, 12], [74, 4]],
+		[[76, 4], [79, 4], [83, 6], [81, 2]], [[79, 8], [78, 8]], [[76, 6], [74, 2], [72, 4], [74, 4]], [[78, 16]],
+		[[81, 6], [79, 2], [76, 8]], [[76, 4], [79, 4], [81, 8]], [[83, 6], [81, 2], [79, 4], [78, 4]], [[76, 12], [79, 4]],
+		[[81, 4], [79, 4], [76, 4], [74, 4]], [[71, 8], [74, 8]], [[72, 6], [74, 2], [78, 8]], [[76, 16]],
+	]
+	_melody(buf, step, tune, "sine", 0.11, 0.6, 0.5, 1.0)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 12), _hz(root - 12), "tri", 0.1, 0.3)
+		for i in 6:
+			var midi: int = root + 12 + tones[i % tones.size()] + 12 * (i / tones.size())
+			_voice(buf, int((t0 + i * 1.5 * step) * RATE), step * 6.0, _hz(midi), _hz(midi), "tri", 0.05, 2.2)
+		for i in [0, 10]:
+			_voice(buf, int((t0 + i * step) * RATE), 0.16, 150.0, 70.0, "sine", 0.16, 2.0)
+		# Now and then a bird.
+		if b % 4 == 3:
+			for k in 3:
+				_voice(buf, int((t0 + (8 + k) * step) * RATE), 0.06, 2600.0 + k * 300.0, 3200.0, "sine", 0.03, 2.0)
+	return _to_stream(buf, true)
+
+
+## Sable Crossing between waves: a river march in D. A fife tune and its harmony, a marching
+## snare and bass drum, and a tuba-like bass walking root and fifth.
+static func _compose_river() -> AudioStreamWAV:
+	var info := _track_info("river")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[74, 3], [74, 1], [78, 4], [81, 4], [78, 4]], [[79, 4], [83, 4], [81, 8]], [[81, 3], [79, 1], [78, 4], [76, 4], [78, 4]], [[74, 12], [69, 4]],
+		[[71, 4], [74, 4], [78, 4], [76, 4]], [[74, 4], [79, 4], [83, 8]], [[81, 4], [79, 4], [78, 4], [76, 4]], [[76, 16]],
+		[[74, 3], [74, 1], [78, 4], [81, 4], [86, 4]], [[83, 4], [79, 4], [83, 8]], [[78, 4], [81, 4], [79, 4], [76, 4]], [[81, 12], [78, 4]],
+		[[79, 4], [83, 4], [81, 4], [79, 4]], [[78, 4], [76, 4], [74, 8]], [[76, 3], [78, 1], [76, 4], [73, 8]], [[74, 16]],
+	]
+	_melody(buf, step, tune, "square", 0.06, 0.9, 0.25, 0.9)
+	var harmony := []
+	for bar in tune:
+		harmony.append(bar.map(func(n): return [n[0] - 4, n[1]]))
+	_melody(buf, step, harmony, "tri", 0.05, 0.9, 0.5, 0.9)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var t0: float = b * 16 * step
+		for half in 4:
+			var midi: int = root - 12 + (7 if half % 2 == 1 else 0)
+			_voice(buf, int((t0 + half * 4 * step) * RATE), step * 3.0, _hz(midi), _hz(midi), "square", 0.08, 1.2, 0.5)
+		for i in 16:
+			var at := int((t0 + i * step) * RATE)
+			if i % 8 == 0:
+				_voice(buf, at, 0.16, 110.0, 50.0, "sine", 0.3, 2.0)
+			if i in [4, 12] or (b % 2 == 1 and i in [13, 14, 15]):
+				_voice(buf, at, 0.08, 3600.0, 1600.0, "noise", 0.14, 3.0, 0.5, [], 21 + i)
 	return _to_stream(buf, true)

@@ -475,6 +475,22 @@ func requirements_met(t: String) -> bool:
 
 ## Whether mission m can be played now: its territory is open and its own requirements
 ## are met.
+## How long a mission is, for the map: its waves, or (a timed battle) what kind it is.
+static func length_text(m: Dictionary) -> String:
+	match m.get("type", "castle"):
+		"evac":
+			return "an evacuation"
+		"escort":
+			return "a convoy"
+		"capture":
+			return "take and hold"
+		"protect":
+			return "until it's done"
+		"retreat":
+			return "a fighting retreat"
+	return "%d waves" % int(m.get("waves", 0))
+
+
 func mission_open(m: String) -> bool:
 	var d: Dictionary = missions.get(m, {})
 	return not d.is_empty() and requirements_met(d["territory"]) and _holds_req(d.get("requires", {}))
