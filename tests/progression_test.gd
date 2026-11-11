@@ -68,9 +68,16 @@ func _south() -> void:
 			_win(chains[t][1])
 			ok = ok and campaign.beacon_lit(t)
 		ok = ok and campaign.territory_state("sable") == "attack" and campaign.playable_mission("sable") == "sable_crossing"
+		var lit_before: int = campaign.beacon_count()
 		_win("sable_crossing")
 		ok = ok and campaign.territory_state("sable") == "secured" and campaign.requirements_met("frostmarch")
 		check(ok, "South: %s and %s, each joined then their beacon lit, open Sable Crossing; its win opens the north" % pair)
+		check(not campaign.has_beacon("sable") and not campaign.beacon_lit("sable") and campaign.just_lit == "" and campaign.beacon_count() == lit_before,
+				"...Sable Crossing is only the bridge: held, but no beacon is lit there")
+	check(campaign.beacon_territories().size() == 9 and not campaign.beacon_territories().has("sable"), "Nine beacons: Ashwatch's and the eight peoples', none at Sable Crossing")
+	check(load("res://scripts/cutscene.gd").BEACONS.size() == 9, "...and the cutscene's ridge has all nine")
+	campaign.new_campaign("normal")
+	check(campaign.req_text(CD.TERRITORIES["frostmarch"]["requires"]) == "Hold Sable Crossing", "...the north opens on holding it (%s)" % campaign.req_text(CD.TERRITORIES["frostmarch"]["requires"]))
 	campaign.new_campaign("normal")
 	for m in ["ashwatch", "stonehollow", "ashwatch_road", "stonehollow_workshops", "gw_exodus", "gw_watchfires"]:
 		_win(m)

@@ -504,9 +504,9 @@ func open_maps() -> Array:
 
 # --- The map --------------------------------------------------------------------
 
-## Whether territory t is secured: every one of its required missions won, so its
-## beacon is lit. (Worked out from the missions won; never stored.)
-func beacon_lit(t: String) -> bool:
+## Whether territory t is secured: every one of its required missions won. (Worked out
+## from the missions won; never stored.)
+func secured(t: String) -> bool:
 	var ms: Array = territories[t]["missions"]
 	if ms.is_empty():
 		return false
@@ -516,9 +516,19 @@ func beacon_lit(t: String) -> bool:
 	return true
 
 
+## Whether t has a beacon (Sable Crossing, the bridge between south and north, has none).
+func has_beacon(t: String) -> bool:
+	return territories[t].get("beacon", true)
+
+
+## Whether t's beacon is lit: it has one, and the region is secured.
+func beacon_lit(t: String) -> bool:
+	return has_beacon(t) and secured(t)
+
+
 ## (The old name: a territory is "done" once it's secured.)
 func territory_done(t: String) -> bool:
-	return beacon_lit(t)
+	return secured(t)
 
 
 ## Whether t's people have joined the Line (for a territory with no people of its own,
@@ -536,12 +546,12 @@ func _holds_req(req: Dictionary) -> bool:
 		if not joined(r):
 			return false
 	for r in req.get("all", []):
-		if not beacon_lit(r):
+		if not secured(r):
 			return false
 	if req.has("any"):
 		var n := 0
 		for r in req["any"]:
-			if beacon_lit(r):
+			if secured(r):
 				n += 1
 		if n < req.get("count", 1):
 			return false
@@ -579,7 +589,7 @@ func mission_open(m: String) -> bool:
 ## people not yet won over, a mission to play), "unfinished" (joined, required missions
 ## left) or "secured" (every required mission won: the beacon is lit).
 func territory_state(t: String) -> String:
-	if beacon_lit(t):
+	if secured(t):
 		return "secured"
 	if joined(t):
 		return "unfinished"
@@ -634,12 +644,16 @@ func req_text(req: Dictionary) -> String:
 	var j: Array = req.get("joined", []).filter(func(r): return not joined(r))
 	if not j.is_empty():
 		parts.append("Win over " + " and ".join(j.map(func(r): return territories[r]["name"])))
-	var all: Array = req.get("all", []).filter(func(r): return not beacon_lit(r))
+	var all: Array = req.get("all", []).filter(func(r): return not secured(r))
+	var held: Array = all.filter(func(r): return not has_beacon(r))   # (no beacon to light: just hold it)
+	all = all.filter(has_beacon)
+	if not held.is_empty():
+		parts.append("Hold " + " and ".join(held.map(func(r): return territories[r]["name"])))
 	if not all.is_empty():
 		parts.append("Light the beacon%s of %s" % ["s" if all.size() > 1 else "", " and ".join(all.map(func(r): return territories[r]["name"]))])
 	if req.has("any"):
 		var names: Array = req["any"].map(func(r): return territories[r]["name"])
-		var lit: int = req["any"].filter(func(r): return beacon_lit(r)).size()
+		var lit: int = req["any"].filter(func(r): return secured(r)).size()
 		parts.append("Light the beacons of any %d of %s (%d lit)" % [req.get("count", 1), ", ".join(names), lit])
 	return "; ".join(parts)
 

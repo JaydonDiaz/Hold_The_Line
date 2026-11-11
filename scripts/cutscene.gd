@@ -462,9 +462,10 @@ func _walker(kind: String, x: float, y: float, phase: float, scale := 4.0) -> vo
 
 # --- The beacons ----------------------------------------------------------------------
 
-# One beacon for each of the eight peoples of the Line, hill to hill across the ridge.
-const BEACONS := [Vector2(10, 94), Vector2(30, 82), Vector2(50, 90), Vector2(70, 78),
-		Vector2(90, 88), Vector2(110, 76), Vector2(130, 86), Vector2(150, 80)]
+# The nine beacons of the Line (Ashwatch's and one for each of the eight peoples), hill
+# to hill across the ridge.
+const BEACONS := [Vector2(8, 94), Vector2(26, 82), Vector2(44, 90), Vector2(62, 78), Vector2(80, 88),
+		Vector2(98, 76), Vector2(116, 86), Vector2(134, 80), Vector2(152, 90)]
 const LIGHT_STEP := 0.5   # seconds between one beacon catching and the next
 const DARK_STEP := 0.6    # seconds between one going out and the next
 

@@ -88,9 +88,11 @@ const FACTIONS := {
 #              "bonus_points": {kind: n}, 1 or 2): help for a player who's struggling,
 #              never needed, and given once, so there's nothing to farm.
 #   requires   what opens it: {"joined": [territories]} (their people joined, or their
-#              first mission won), {"all": [territories]} (their beacons lit) and/or
+#              first mission won), {"all": [territories]} (secured: their beacons lit) and/or
 #              {"any": [territories], "count": n} (n of those beacons lit).
 #   known      shown on the map from the start (as the goal), even before it's reachable.
+#   beacon     false: no beacon (Sable Crossing, only the bridge between south and north):
+#              winning its missions secures it (opening what needs it), lighting nothing.
 # A mission may have "requires" of its own (same keys) before it can be played.
 # Territories with no missions yet are reachable but have nothing to play (later phases).
 const TERRITORIES := {
@@ -109,7 +111,7 @@ const TERRITORIES := {
 	"deepdelve": {"name": "Deepdelve", "pos": Vector2(506, 452), "faction": "deepdelve", "act": 2,
 		"requires": {"joined": ["stonehollow"]}, "missions": ["dd_entrance", "dd_orerun"],
 		"blurb": "Mine shafts and smelters under the eastern peaks. The Mining Guild's gold paid for half the old Line."},
-	"sable": {"name": "Sable Crossing", "pos": Vector2(300, 352), "faction": "", "act": 2,
+	"sable": {"name": "Sable Crossing", "pos": Vector2(300, 352), "faction": "", "act": 2, "beacon": false,
 		"requires": {"all": ["ashwatch", "stonehollow"], "any": ["greenwood", "mercyvale", "deepdelve"], "count": 2}, "missions": ["sable_crossing"],
 		"blurb": "The only bridge over the Sable river. Whoever holds it decides whether the south and north ever meet."},
 	"frostmarch": {"name": "Frostmarch", "pos": Vector2(112, 214), "faction": "frostmarch", "act": 3,

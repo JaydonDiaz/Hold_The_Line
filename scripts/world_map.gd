@@ -183,7 +183,7 @@ func _show_info(k: String) -> void:
 	info["name"].add_theme_color_override("font_color", CD.FACTIONS[f]["color"] if f != "" else Color(1, 0.85, 0.3))
 	var prog: Array = campaign.progress(k)
 	info["state"].text = {"locked": "Locked", "available": "Open", "attack": "Under attack!",
-			"unfinished": ("Allied" if f != "" else "Held") + "  ·  %d/%d" % prog, "secured": "Beacon lit", "hidden": ""}[st]
+			"unfinished": ("Allied" if f != "" else "Held") + "  ·  %d/%d" % prog, "secured": "Beacon lit" if campaign.has_beacon(k) else "Held", "hidden": ""}[st]
 	info["state"].add_theme_color_override("font_color", {"locked": Color(0.7, 0.7, 0.7), "available": Color(0.9, 0.85, 0.6),
 			"attack": Color(1, 0.45, 0.35), "unfinished": Color(0.75, 0.95, 0.6), "secured": Color(1, 0.85, 0.35), "hidden": Color.WHITE}[st])
 	if f != "":
@@ -1001,6 +1001,11 @@ func _draw_keep(k: String, st: String) -> void:
 			var col: Color = CD.FACTIONS[f]["color"] if f != "" else Color(0.3, 0.45, 0.85)
 			_b(ox + 1, oy - 4, 1, 4, OUTLINE)
 			_b(ox + 2, oy - 4, 3, 2, col)
+			if not campaign.has_beacon(k):
+				# No beacon here (Sable Crossing): held, a banner flies on the right tower too.
+				_b(ox + 7, oy - 4, 1, 4, OUTLINE)
+				_b(ox + 8, oy - 4, 3, 2, col)
+				return
 			var glow := 0.6 + 0.4 * sin(t * 5.0 + c.x)
 			_b(ox + 5, oy - 4, 5, 4, Color(1, 0.7, 0.2, 0.25 * glow))
 			_b(ox + 7, oy - 2, 1, 2, Color(1, 0.6, 0.15))
