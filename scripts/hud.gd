@@ -1225,7 +1225,7 @@ func _show_cards(set_name: String) -> void:
 			modes.append(["campaign:continue:%d" % n, "Continue", "%s\nAlliances %d/8\nBeacons lit %d\nBack to the map" % [Data.DIFFICULTIES[info["difficulty"]]["name"],
 					info["alliances"], info["beacons"]], Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
 		modes.append(["goto:new:%d" % n, "Start Over", "A new campaign\nin this save\n(replaces it)", Color(0.95, 0.85, 0.45), "engineer", "campaign"])
-		modes.append(["goto:del:%d" % n, "Delete", "Erase this\nsave for good", Color(1.0, 0.5, 0.45), "goblin", ""])
+		modes.append(["goto:del:%d" % n, "Delete", "Erase this\nsave for good", Color(1.0, 0.5, 0.45), "ogre_king", ""])
 		modes.append(["goto:campaign", "Back", "Back to the\nsaves", Color(0.8, 0.8, 0.8), "goblin", ""])
 		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
 	elif set_name.begins_with("new"):
@@ -1240,7 +1240,7 @@ func _show_cards(set_name: String) -> void:
 	elif set_name.begins_with("del:"):
 		var n := int(set_name.substr(4))
 		mode_sub.text = "Delete Save %d? This can't be undone." % n
-		modes.append(["delete:%d" % n, "Delete", "Erase Save %d\nfor good" % n, Color(1.0, 0.5, 0.45), "goblin", ""])
+		modes.append(["delete:%d" % n, "Delete", "Erase Save %d\nfor good" % n, Color(1.0, 0.5, 0.45), "ogre_king", ""])
 		modes.append(["goto:slot:%d" % n, "Keep It", "Back to the\nsave", Color(0.8, 0.8, 0.8), "swordsman", "campaign"])
 		spots = _row_spots(2)
 	elif set_name.begins_with("bm:"):
