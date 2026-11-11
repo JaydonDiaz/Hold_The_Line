@@ -14,11 +14,15 @@ extends SceneTree
 ##   engineer     an emplacement waits for an Engineer to build it
 ##   route        a troop walks round a wall to get where it's going
 ##   group        box-style groups: select all, keep only a kind, move together
+##   knight       the Knight: Charge at tier III is a spear knight; with an axe or two swords
+##                as well, the spear's on his back till he charges, then they swap
 ## Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/units_test.gd [-- <section>]
 ## Exits 1 if anything failed.
 
 const Warrior = preload("res://scripts/warrior.gd")
+const Sprites = preload("res://scripts/sprites.gd")
+const Data = preload("res://scripts/data.gd")
 
 var main
 var fails := 0
@@ -141,7 +145,7 @@ func _wants(s: String) -> bool:
 
 
 func _run() -> void:
-	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group"]:
+	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group", "knight"]:
 		if _wants(s):
 			await call("_" + s)
 	if main != null:
@@ -382,3 +386,59 @@ func _group() -> void:
 	check(main.group.is_empty() or main.selected == null, "...dropping the Swordsmen leaves no group")
 	main._set_group([c])
 	check(main.selected == c and main.group.is_empty(), "A group of one is an ordinary selection")
+
+
+func _knight_with(paths: Array):
+	var w = _hire("swordsman", Vector2(80 + main.get_warriors().size() * 80, 600))
+	main.selected = w
+	for p in paths:
+		main.upgrade_selected(p)
+	main.selected = null
+	return w
+
+
+func _knight() -> void:
+	await _fresh()
+	var plain = _knight_with([0, 0, 0])
+	check(Data.WARRIORS["swordsman"]["name"] == "Knight", "Knight: the Swordsman is called a Knight now")
+	check(not plain._lance_out() and plain.back_weapon() == "" and plain.sprite_name() == "swordsman_p0", "...an axe Knight without Charge carries nothing on his back")
+	var spear = _knight_with([3, 3, 3])
+	check(spear.sprite_name() == "swordsman_p3" and spear.back_weapon() == "", "Charge at tier III: a spear knight, spear in hand, nothing on his back")
+	spear.run_time = Warrior.LANCE_AFTER
+	check(spear._lance_out() and spear._lance_look(spear._look())["name"] == "swordsman_p3", "...running in to charge, the spear comes down level (%s)" % spear._lance_look(spear._look())["name"])
+	check(Sprites.pose("swordsman_p3", "couch") != null and Sprites.pose("swordsman_p3", "strike") != null, "...it has its own couch and thrust poses")
+	var axe = _knight_with([0, 0, 0, 3, 3, 3])
+	check(axe.sprite_name() == "swordsman_p0p3" and axe.back_weapon() == "spear", "Axe and Charge: fights with the axe, the spear on his back")
+	axe.run_time = Warrior.LANCE_AFTER
+	check(axe._lance_out() and axe.back_weapon() == "axe" and axe._lance_look(axe._look())["name"] == "swordsman_p0p3_lance" and Sprites.combo_source("swordsman_p0p3_lance", "right") == 3
+			and Sprites.combo_source("swordsman_p0p3_lance", "body") == 0, "...charging, the spear comes off his back and the axe goes on it (his armor as it was)")
+	axe.run_time = 0.0
+	axe.lance_left = 0.1
+	check(axe._lance_out(), "...and the blow that ends the dash is the spear's")
+	axe.lance_left = 0.0
+	check(not axe._lance_out() and axe.back_weapon() == "spear", "...then back to the axe")
+	var swords = _knight_with([1, 1, 1, 3, 3, 3])
+	swords.run_time = Warrior.LANCE_AFTER
+	check(swords.back_weapon() == "swords", "Two swords and Charge: charging, both swords go on his back")
+	# Every tier-III path has its own armor, and two of them mix: the head from one, the body from the other.
+	var looks := {}
+	for p in 4:
+		looks[p] = Sprites._entry("swordsman_p%d" % p)["rows"].slice(0, 7)
+	check(looks.values().all(func(r): return r != Sprites._entry("swordsman")["rows"].slice(0, 7)) and looks[0] != looks[1],
+			"Each path's tier III wears its own armor, Damage and Blades included")
+	for pair in [[0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]:
+		var c := Sprites.combo("swordsman", pair[0], pair[1])
+		var head := Sprites.combo_source(c, "head")
+		var body := Sprites.combo_source(c, "body")
+		check(head != body and pair.has(head) and pair.has(body), "...%s mixes them: the head from path %d, the body from path %d" % [c, head, body])
+	var plate = _knight_with([2, 2, 2, 3, 3, 3])
+	check(plate.back_weapon() == "" and Sprites.combo_source(plate.sprite_name(), "right") == 3, "Plate and Charge: the spear stays in hand, nothing on his back")
+	# It all still plays the same: a Charge Knight with the axe dashes and strikes.
+	var e_hp := 0.0
+	main._spawn_enemy("orc", 1, Vector2(320, 330))
+	var orc = main.get_enemies()[-1]
+	orc.speed = 0.0
+	e_hp = orc.hp
+	axe.position = Vector2(320, 560)
+	await _frames(240)
+	check(not is_instance_valid(orc) or orc.dead or orc.hp < e_hp, "...and a charging axe-and-spear Knight still runs in and hits")

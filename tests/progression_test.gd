@@ -93,11 +93,11 @@ func _real_data() -> void:
 	campaign.new_campaign("normal")
 	check(campaign.territory_state("ashwatch") == "attack" and campaign.territory_state("stonehollow") == "hidden", "Real data: a new campaign starts at Ashwatch")
 	_win("ashwatch")
-	check(campaign.territory_state("ashwatch") == "unfinished" and campaign.playable_mission("ashwatch") == "", "...Ashwatch held, the Ridge Road waiting for Stonehollow")
+	check(campaign.territory_state("ashwatch") == "unfinished" and campaign.playable_mission("ashwatch") == "", "...Ashwatch held, the Armoury Wagon waiting for Stonehollow")
 	check(campaign.territory_state("stonehollow") == "attack", "...Stonehollow is under attack")
 	_win("stonehollow")
 	check(campaign.allied("stonehollow"), "...Stonehollow joins")
-	check(campaign.playable_mission("ashwatch") == "ashwatch_road", "...and the Ridge Road opens")
+	check(campaign.playable_mission("ashwatch") == "ashwatch_road", "...and the Armoury Wagon opens")
 	_win("ashwatch_road")
 	check(campaign.beacon_lit("ashwatch") and campaign.just_lit == "ashwatch", "...which lights Ashwatch's beacon")
 	for t in ["greenwood", "mercyvale", "deepdelve"]:

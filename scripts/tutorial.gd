@@ -24,8 +24,8 @@ var finished := false
 # Each step: [title, text, what to point at (see _target), when it's done (see _done) or "" for a Next button].
 var steps := [
 	["Welcome!", "Enemies march down from the top of the field. Stop them before they reach your castle at the bottom. (The castle can't fall in the tutorial.)", "", ""],
-	["Hire a Swordsman", "Click the Swordsman button below (or press 1), then click the field to post him. Swordsmen are tough and hold enemies in place.", "hire:swordsman", "has:swordsman"],
-	["Hire an Archer", "Archers shoot from long range but are fragile. Hire one (press 2) and post it behind your Swordsman.", "hire:archer", "has:archer"],
+	["Hire a Knight", "Click the Knight button below (or press 1), then click the field to post him. Knights are tough and hold enemies in place.", "hire:swordsman", "has:swordsman"],
+	["Hire an Archer", "Archers shoot from long range but are fragile. Hire one (press 2) and post it behind your Knight.", "hire:archer", "has:archer"],
 	["Gold", "Hiring costs gold (top left). You earn more for every enemy you defeat and every wave you clear.", "gold", ""],
 	["Start the wave", "Ready? Press Start Wave (or Space) to send in the enemies.", "start", "wave_on"],
 	["Hold the line!", "Your warriors find enemies and fight on their own. Watch them work until the wave is cleared.", "", "wave_done:1"],

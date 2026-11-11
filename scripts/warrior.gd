@@ -23,6 +23,7 @@ const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.
 const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.0, 0.45, 0.15), Color(0.95, 0.3, 0.25)]
 const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
 const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
+const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers his spear for it
 const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Warrior
 const IDLE_AFTER := 0.8   # seconds with nothing to do before a troop starts its idle animation
 const WINDUP := 0.18      # melee troops rear back over the last moment before a blow
@@ -238,6 +239,7 @@ var offhand_timer := 0.0   # > 0 while the off-hand blade's follow-up strike is 
 var block_flash := 0.0
 var pose := ""          # attack pose held for pose_left seconds (Martial Artist)
 var pose_left := 0.0
+var lance_left := 0.0   # a Charge Knight's spear blow at the end of a dash, still showing
 var hurt := 0.0
 var down_timer := 0.0
 var walk := 0.0
@@ -730,6 +732,29 @@ func stop_staying() -> void:
 		priority = "revive"
 
 
+## Back to the battle's default targeting, with nothing in its sights (a convoy entering a
+## new stretch): the Objective priority (or Closest with nothing to guard), a mobile
+## Healer's Revive, and no target, chase, volley, beam, dash or revive carried over.
+func reset_targeting() -> void:
+	if is_mobile_healer():
+		stop_staying()
+		priority = "revive"
+	else:
+		priority = OBJECTIVE_PRIORITY if main.rules.guards() else "closest"
+	target = null
+	dash_target = null
+	volley_target = null
+	volley_left = 0
+	beam_target = null
+	beam_charge = 0.0
+	rez_target = null
+	rez_progress = 0.0
+	chase_best = INF
+	chase_time = 0.0
+	run_time = 0.0
+	retarget_timer = 0.0
+
+
 ## Its wards still on the field, and its post kept with the nearest of them.
 func _keep_wards() -> void:
 	wards = wards.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
@@ -1055,6 +1080,7 @@ func _process(delta: float) -> void:
 	swing = maxf(swing - delta, 0.0)
 	goo_timer = maxf(goo_timer - delta, 0.0)
 	pose_left = maxf(pose_left - delta, 0.0)
+	lance_left = maxf(lance_left - delta, 0.0)
 	block_flash = maxf(block_flash - delta, 0.0)
 	queue_redraw()
 	_animate(delta)
@@ -2776,6 +2802,7 @@ func _dash_step(delta: float) -> void:
 		facing = position.direction_to(e.position)
 		swing = 0.15
 		_hold_pose("strike", 0.2)
+		lance_left = 0.2   # (the blow is the spear's)
 		e.take_damage(damage * dash["damage"] * _power())
 		if not e.dead and dash["stun"] > 0.0:
 			e.apply_stun(dash["stun"])
@@ -2941,6 +2968,87 @@ func _pose_name() -> String:
 			if swing <= 0.0 and _readying() > 0.0:
 				return "draw"
 	return ""
+
+
+# --- The Knight's spear (Charge tier 3) ------------------------------------------
+# A Knight with Charge at tier 3 is a spear knight. With Damage or Blades at tier 3 as
+# well, he fights with the axe or the two swords, and the spear rides on his back; when
+# he runs at a foe to charge, it comes down level and the axe (or the swords) go on his
+# back instead, till the blow that ends the dash is struck.
+
+## Whether his spear is out: the run-up to a charge, the dash and the blow at its end.
+func _lance_out() -> bool:
+	return kind == "swordsman" and tiers[3] >= 3 and not dash.is_empty() \
+			and (dash_left > 0.0 or lance_left > 0.0 or run_time >= LANCE_AFTER)
+
+
+## An axe or two swords in hand, beside Charge: the spear is carried on his back.
+func _spear_on_back() -> bool:
+	return kind == "swordsman" and tiers[3] >= 3 and (tiers[0] >= 3 or tiers[1] >= 3)
+
+
+## His look with the spear out: his own, if he carries it already; else the same mixed
+## armor with the spear in his hand (and the axe or swords on his back).
+func _lance_look(look: Dictionary) -> Dictionary:
+	if not _spear_on_back():
+		return look
+	if not look.has("lance"):
+		var high := _high_paths()
+		var spear := Sprites.combo_forced(kind, high[0], high[1], {"right": 3, "left": "body"}, look["name"] + "_lance")
+		look["lance"] = {"name": spear, "layers": look["layers"], "tag": look["tag"], "recolor": look["recolor"],
+				"frames": Sprites.frames(spear, look["recolor"], look["tag"], look["layers"]), "poses": {}}
+	return look["lance"]
+
+
+## What's slung on his back right now: "spear", "axe", "swords" or "".
+func back_weapon() -> String:
+	if not _spear_on_back():
+		return ""
+	if not _lance_out():
+		return "spear"
+	return "axe" if tiers[0] >= 3 else "swords"
+
+
+## The slung weapon, drawn before the body so only what sticks out past it shows.
+## `top_left` is the sprite's top-left corner, in the body's own (unflipped) space.
+func _draw_back_weapon(what: String, top_left: Vector2) -> void:
+	var px := func(x: float, y: float) -> Vector2: return top_left + Vector2(x + 0.5, y + 0.5) * SCALE
+	var wood := Color(0.58, 0.4, 0.22)
+	var steel := Color(0.85, 0.88, 0.95)
+	var gold := Color(0.95, 0.78, 0.3)
+	var pole := func(a: Vector2, b: Vector2, col: Color) -> void:
+		draw_line(a, b, OUTLINE_COLOR, SCALE * 3.0)
+		draw_line(a, b, col, SCALE)
+	match what:
+		"spear":
+			var butt: Vector2 = px.call(11.5, 13.0)
+			var top: Vector2 = px.call(0.5, -1.5)
+			pole.call(butt, top, wood)
+			var d := butt.direction_to(top)
+			var n := d.orthogonal()
+			var blade := PackedVector2Array([top + d * SCALE * 3.0, top + n * SCALE * 1.2, top - d * SCALE * 0.5, top - n * SCALE * 1.2])
+			draw_colored_polygon(PackedVector2Array(Array(blade).map(func(q): return top + (q - top) * 1.6)), OUTLINE_COLOR)
+			draw_colored_polygon(blade, steel)
+		"axe":
+			var low: Vector2 = px.call(10.0, 12.5)
+			var high: Vector2 = px.call(2.5, -0.5)
+			pole.call(low, high, wood)
+			var head := PackedVector2Array([px.call(2.0, -1.5), px.call(-0.8, -2.5), px.call(-1.5, 2.0), px.call(1.5, 1.5)])
+			var mid := Vector2.ZERO
+			for q in head:
+				mid += q / 4.0
+			draw_colored_polygon(PackedVector2Array(Array(head).map(func(q): return mid + (q - mid) * 1.35)), OUTLINE_COLOR)
+			draw_colored_polygon(head, steel)
+		"swords":
+			for blade in [[px.call(0.0, -3.0), px.call(9.5, 11.0)], [px.call(11.5, -3.0), px.call(2.0, 11.0)]]:
+				var hilt: Vector2 = blade[0]
+				var tip: Vector2 = blade[1]
+				pole.call(hilt, tip, steel)
+				var d := hilt.direction_to(tip)
+				var guard := hilt + d * SCALE * 1.5
+				draw_line(guard - d.orthogonal() * SCALE * 1.5, guard + d.orthogonal() * SCALE * 1.5, OUTLINE_COLOR, SCALE * 2.0)
+				draw_line(guard - d.orthogonal() * SCALE, guard + d.orthogonal() * SCALE, gold, SCALE)
+				draw_rect(Rect2(hilt - Vector2(SCALE, SCALE) * 0.5, Vector2(SCALE, SCALE)), gold)
 
 
 ## Screen-local position of a pixel of the sprite as drawn this frame.
@@ -3231,6 +3339,11 @@ func _draw() -> void:
 	var pose_tex = _pose_tex(look, pose_name) if pose_name != "" else null
 	if pose_tex != null:
 		tex = pose_tex
+	if _lance_out():
+		# The spear comes down level for the charge (and the blow that ends it).
+		var spear = _pose_tex(_lance_look(look), "strike" if lance_left > 0.0 else "couch")
+		if spear != null:
+			tex = spear
 	var lunge := facing * (swing / 0.15) * 5.0
 	if is_emplacement() and kind != "cannon":
 		lunge = Vector2.ZERO
@@ -3260,6 +3373,9 @@ func _draw() -> void:
 		_draw_mounted(look, origin + Vector2(0, size.y / 2), Vector2(0, feet), tint)
 	else:
 		draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
+		var slung := back_weapon()
+		if slung != "":
+			_draw_back_weapon(slung, body.position)
 		draw_texture_rect(tex, body, false, tint)
 		_remember_body(tex, Transform2D(motion[1], Vector2(flip * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
 	draw_set_transform(Vector2.ZERO)

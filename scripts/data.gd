@@ -313,7 +313,7 @@ const FROST_PATHS := [
 
 const WARRIORS := {
 	"swordsman": {
-		"name": "Swordsman", "cost": 50, "color": Color(0.9, 0.72, 0.3),
+		"name": "Knight", "cost": 50, "color": Color(0.9, 0.72, 0.3),
 		"hp": 120.0, "speed": 90.0,
 		"damage": 16.0, "range": 8.0, "cooldown": 0.6, "attack": "melee",
 		"desc": "Tough and cheap. Charges in and holds enemies in place.",

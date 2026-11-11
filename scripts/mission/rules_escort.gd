@@ -4,14 +4,15 @@ extends "res://scripts/mission/rules.gd"
 ## pass): the wagon comes in at the bottom and rolls up the field, and when it leaves by
 ## the top, the march moves on into the next zone: the field changes to it, and your
 ## troops (and emplacements, packed up and set up again) come along, in their places
-## around the wagon. Enemies left behind stay behind; barricades are taken down and paid
+## around the wagon, their targeting back to guarding it. Enemies left behind stay behind; barricades are taken down and paid
 ## back; the wagon is patched up a little. In each zone, ambushes break out of cover as the wagon passes set points, and
 ## more keep coming. The wagon crawls while an enemy is at it, and picks up again once
 ## it's clear. Get it out of the last zone. Your camp travels with it: new troops join at the
 ## wagon and the Engineers set out from it. Troops can be told to follow the wagon (J, or
 ## right-click it). The attacks come at a forced pace. No castle.
 ##
-## Mission data: "type": "escort", "convoy": {"name", "speed", "hp", "patch": share of its
+## Mission data: "type": "escort", "convoy": {"name", "speed", "hp", "cargo" (its look: "arms"),
+##   "patch": share of its
 ##   health mended between zones (default 0.25),
 ##   "zones": [{"map": a zone (maps.gd ZONES: its ground, terrain and road), "name",
 ##     "ambushes": [{"at": share of that zone's road (0..1), "note", "group": [[kind, point], ...]}]}]}
@@ -82,7 +83,7 @@ func start() -> void:
 	wagon_speed = float(_c().get("speed", 22.0))
 	wagon = Objective.new()
 	wagon.setup(main, {"id": "wagon", "kind": "wagon", "name": _c().get("name", "Wagon"), "at": route[0], "route": route.slice(1),
-			"speed": wagon_speed, "hp": _c().get("hp", 900.0)})
+			"speed": wagon_speed, "hp": _c().get("hp", 900.0), "cargo": _c().get("cargo", "")})
 	main.add_objective(wagon)
 	wagon.destroyed.connect(func(_w): _end(false))
 	wagon.reached.connect(_on_reached)
@@ -168,10 +169,11 @@ func enter_next() -> void:
 		w.post = p
 		w.fitted_post = Vector2.INF
 		w.route = PackedVector2Array()
-		w.target = null
+		w.reset_targeting()   # a new stretch: everyone back on guarding the wagon
 	for n in main.fx_layer.get_children():
 		if n.has_method("gate"):
 			n.position = main._clamp_post(n.position + shift)
+	main.last_priority.clear()   # (and new hires start on it too)
 	main.warriors_changed()
 	main.paths.invalidate()
 	# A moment to get set, then on.

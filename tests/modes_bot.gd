@@ -5,8 +5,16 @@ extends "res://tests/campaign_test.gd"
 ##   Godot --headless --path . --fixed-fps 60 -s tests/modes_bot.gd -- [scenario]
 ## Prints one "MB" line a game: how many waves it survived (the battles are endless: it
 ## stops at a time limit if it's still going), and how the battle stood.
+## "mission:<id>" plays a campaign mission instead, with what the campaign has open by
+## then (CAMPAIGN_AT), untrained and with its Swordsmen trained to Tier III:
+##   Godot --headless --path . --fixed-fps 60 -s tests/modes_bot.gd -- mission:ashwatch_road
 var type := ""
 var prio := ""   # (a second argument: every troop on this target priority, to compare)
+
+## A campaign mission's state when it's played: missions won, peoples joined.
+const CAMPAIGN_AT := {
+	"ashwatch_road": [["ashwatch", "stonehollow"], ["stonehollow"]],
+}
 
 
 func _spots() -> Array:
@@ -57,7 +65,7 @@ func _spend() -> void:
 		var have: bool = main.get_warriors().any(func(w): return w.post.distance_to(at) < 12.0)
 		var kind: String = kinds[i % kinds.size()]
 		i += 1
-		if not have and main.gold >= main.hire_cost(kind) and main.can_post_at(at):
+		if not have and main.allowed(kind) and main.gold >= main.hire_cost(kind) and main.can_post_at(at):
 			main._on_hire_pressed(kind)
 			main.hire_at(at)
 			main.placing_type = ""
@@ -84,6 +92,10 @@ func _run() -> void:
 	campaign.reset()
 	var only: String = OS.get_cmdline_user_args()[0] if OS.get_cmdline_user_args().size() > 0 else ""
 	prio = OS.get_cmdline_user_args()[1] if OS.get_cmdline_user_args().size() > 1 else ""
+	if only.begins_with("mission:"):
+		await _missions_bot(only.trim_prefix("mission:"))
+		quit()
+		return
 	for id in ["three_towers", "open_road", "signal_beacon", "village_road", "old_fort", "supply_wagon", "long_retreat"]:
 		if only != "" and id != only:
 			continue
@@ -119,3 +131,41 @@ func _run() -> void:
 				print("MB %s %s seed %d: %s %d waves  %s" % [id, diff, s, "survived" if main.game_over else "still going after", main.waves_survived(),
 						main.rules.status().replace("\n", " ")])
 	quit()
+
+
+func _missions_bot(id: String) -> void:
+	var at: Array = CAMPAIGN_AT.get(id, [[], []])
+	for diff in ["easy", "normal", "hard"]:
+		for trained in [false, true]:
+			for s in 2:
+				seed(700 + s)
+				campaign.new_campaign(diff)
+				campaign.completed = at[0].duplicate()
+				campaign.allies = at[1].duplicate()
+				if trained:
+					campaign.unlocked["swordsman"] = [3, 3, 3, 3]
+				await _fresh_main()
+				main.hud.hide_mode_select()
+				main.start_mission(id)
+				await process_frame
+				if main.hud.story != null:
+					main.hud.story.skip()
+				await process_frame
+				main._lock_portrait(true)
+				await process_frame
+				type = main.mission.get("type", "castle")
+				Engine.time_scale = 4.0
+				var guard := 0
+				var tick := 0
+				while not main.game_over and guard < 60 * 60 * 6:
+					tick -= 1
+					if tick <= 0:
+						tick = 60
+						_spend()
+						if not main.wave_active and not main.forced_auto:
+							main.start_wave()
+					await process_frame
+					guard += 1
+				Engine.time_scale = 1.0
+				print("MB %s %s %s seed %d: %s wave %d  %s" % [id, diff, "trained" if trained else "untrained", s,
+						("WON" if main.victory else "lost") if main.game_over else "unfinished", main.wave, main.rules.status().replace("\n", " ")])

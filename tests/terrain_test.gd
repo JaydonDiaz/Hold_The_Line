@@ -319,7 +319,17 @@ func _grid() -> void:
 	for mid in CD.MISSIONS:
 		var map_id: String = CD.MISSIONS[mid].get("map", "")
 		if Maps.ZONES.has(map_id):
-			continue   # (a convoy's roads: checked with the other Battle Modes fields, group Z)
+			# (a convoy's roads: checked with the other Battle Modes fields, group Z). Its
+			# stretches are all roads there, and its troops start on open ground.
+			var zs: Array = CD.MISSIONS[mid].get("convoy", {}).get("zones", [])
+			check(not zs.is_empty() and zs.all(func(z): return Maps.ZONES.has(z["map"])), "G  %s: every stretch of its road is a convoy field" % mid)
+			await _mission(mid)
+			var open := []
+			for a in CD.MISSIONS[mid].get("allies", []):
+				if not main.paths.troop_can_stand(a["at"]):
+					open.append(str(a["at"]))
+			check(open.is_empty(), "G  %s: its troops start on open ground%s" % [mid, "" if open.is_empty() else " (" + ", ".join(open) + ")"])
+			continue
 		check(Maps.MAPS.has(map_id), "G  %s has a map (%s)" % [mid, map_id])
 		if not Maps.MAPS.has(map_id):
 			continue

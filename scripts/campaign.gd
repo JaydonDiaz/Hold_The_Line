@@ -1,8 +1,10 @@
 extends Node
 ## The story campaign's state (an autoload, "Campaign", so it outlives the scene reloads
 ## between the map and battles): the difficulty, which missions are won, who has joined
-## the Line, story flags, and which screen the next scene load opens. Saved to
-## user://campaign.cfg, apart from the Classic records and the settings.
+## the Line, story flags, and which screen the next scene load opens. Saved apart from the
+## Classic records and the settings, in one of SLOTS save files: Save 1 is
+## user://campaign.cfg (where the only save used to be), Save 2 user://campaign_2.cfg and
+## so on. A launch picks up the one played last.
 ##
 ## Outside a campaign battle (Classic, Freeplay, the Tutorial) nothing here restricts
 ## anything: main.gd only asks allows() while it's playing a campaign mission.
@@ -13,7 +15,19 @@ const VERSION := 3   # bump when the save's shape changes, and migrate older sav
 # 1: the first campaign save.  2: adds troop training (points and trained tiers).
 # 3: training is earned per unit by use (XP, points spent per path).
 
-var save_path := "user://campaign.cfg"
+const SLOTS := 3
+
+## The save file in use. Setting it (as the tests do, to keep off the player's saves)
+## makes it Save 1, with the other slots beside it.
+var save_path := "user://campaign.cfg":
+	set(v):
+		save_path = v
+		if not _to_slot:
+			base_path = v
+			slot = 1
+var base_path := "user://campaign.cfg"   # Save 1's file; Save n's is <base>_n.cfg
+var slot := 1                            # the save slot in use (1..SLOTS)
+var _to_slot := false
 var difficulty := "normal"
 var completed: Array = []   # mission ids won
 var allies: Array = []      # FACTIONS keys that have joined the Line
@@ -39,10 +53,74 @@ var missions: Dictionary = CD.MISSIONS
 
 
 func _ready() -> void:
+	use_slot(latest_slot())
 	load_game()
 
 
 # --- Saving -----------------------------------------------------------------
+
+## Save `n`'s file.
+func slot_path(n: int) -> String:
+	return base_path if n <= 1 else "%s_%d.%s" % [base_path.get_basename(), n, base_path.get_extension()]
+
+
+## Switches to save slot `n` (what's in memory isn't loaded or saved: see load_game).
+func use_slot(n: int) -> void:
+	_to_slot = true
+	slot = clampi(n, 1, SLOTS)
+	save_path = slot_path(slot)
+	_to_slot = false
+
+
+## The slot saved to last (Save 1 when there are none).
+func latest_slot() -> int:
+	var best := 1
+	var when := -1
+	for n in range(1, SLOTS + 1):
+		if FileAccess.file_exists(slot_path(n)):
+			var t := FileAccess.get_modified_time(slot_path(n))
+			if t > when:
+				when = t
+				best = n
+	return best
+
+
+## What save `n` holds, for the title screen: {} if it's empty; else "difficulty",
+## "alliances", "beacons", "missions" and "saved_at" (unix time, 0 if unknown), or "error"
+## if it can't be played.
+func slot_info(n: int) -> Dictionary:
+	var cfg := ConfigFile.new()
+	var err := cfg.load(slot_path(n))
+	if err == ERR_FILE_NOT_FOUND:
+		return {}
+	if err != OK or not cfg.get_value("meta", "version", 0) is int or cfg.get_value("meta", "version", 0) < 1:
+		return {"error": "Damaged: it can't be read"}
+	if cfg.get_value("meta", "version", 0) > VERSION:
+		return {"error": "From a newer version of the game"}
+	var won := _strings(cfg.get_value("state", "completed", []), missions)
+	var lit := beacon_territories().filter(func(t):
+		var ms: Array = territories[t]["missions"]
+		return not ms.is_empty() and ms.all(func(m): return won.has(m))).size()
+	var diff = cfg.get_value("state", "difficulty", "normal")
+	var at = cfg.get_value("meta", "saved_at", 0)
+	return {"difficulty": diff if diff is String and Data.DIFFICULTIES.has(diff) else "normal",
+		"alliances": _strings(cfg.get_value("state", "allies", []), CD.FACTIONS).size(),
+		"beacons": lit, "missions": won.size(),
+		"saved_at": int(at) if (at is int or at is float) else FileAccess.get_modified_time(slot_path(n))}
+
+
+## Erases save `n` for good. If it's the one in use, the campaign in memory goes too.
+func delete_slot(n: int) -> bool:
+	var path := slot_path(n)
+	var dir := DirAccess.open(path.get_base_dir())
+	if dir == null:
+		return false
+	for f in [path, path + ".tmp"]:
+		if FileAccess.file_exists(f):
+			dir.remove(f.get_file())
+	if n == slot:
+		reset()
+	return not FileAccess.file_exists(path)
 
 func reset() -> void:
 	difficulty = "normal"
@@ -160,6 +238,7 @@ func save_game() -> bool:
 		return false
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "version", VERSION)
+	cfg.set_value("meta", "saved_at", int(Time.get_unix_time_from_system()))
 	cfg.set_value("state", "difficulty", difficulty)
 	cfg.set_value("state", "completed", completed)
 	cfg.set_value("state", "allies", allies)

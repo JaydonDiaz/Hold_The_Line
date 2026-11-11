@@ -60,6 +60,7 @@ func _run() -> void:
 	var guarded := _hash_other_files()
 	if _wants("P"):
 		await _persistence()
+		await _slots()
 	if _wants("U"):
 		await _unlocks()
 	if _wants("M"):
@@ -89,6 +90,11 @@ func _wants(group: String) -> bool:
 # --- Helpers -----------------------------------------------------------------------
 
 func _delete_save() -> void:
+	for n in range(2, campaign.SLOTS + 1):
+		for f in [campaign.slot_path(n), campaign.slot_path(n) + ".tmp"]:
+			if FileAccess.file_exists(f):
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
+	campaign.use_slot(1)
 	for f in [TEST_SAVE, TEST_SAVE + ".tmp"]:
 		if FileAccess.file_exists(f):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
@@ -96,7 +102,7 @@ func _delete_save() -> void:
 
 func _hash_other_files() -> String:
 	var out := ""
-	for f in ["user://records.cfg", "user://settings.cfg", "user://campaign.cfg"]:
+	for f in ["user://records.cfg", "user://settings.cfg", "user://campaign.cfg", "user://campaign_2.cfg", "user://campaign_3.cfg"]:
 		out += f + ":" + (FileAccess.get_md5(f) if FileAccess.file_exists(f) else "none") + ";"
 	return out
 
@@ -218,6 +224,73 @@ func _persistence() -> void:
 	cfg = ConfigFile.new()
 	cfg.load(TEST_SAVE)
 	check(cfg.get_value("meta", "version", 0) == campaign.VERSION, "P  ...and is saved back as version %d" % campaign.VERSION)
+	_delete_save()
+	campaign.reset()
+
+
+## Three save slots: each its own campaign, kept apart, shown on the campaign menu,
+## started, continued and deleted from there; a launch picks up the one played last.
+func _slots() -> void:
+	_delete_save()
+	check(campaign.slot_path(1) == TEST_SAVE and campaign.slot_path(2) == "user://campaign_test_2.cfg",
+			"P  Save 1 is the old single save's file; the others sit beside it (%s)" % campaign.slot_path(3))
+	check(campaign.slot_info(1).is_empty() and campaign.slot_info(2).is_empty(), "P  no saves: every slot is empty")
+	# A campaign in Save 2 from the menu's key, and another in Save 1.
+	await _fresh_main()
+	main._on_mode_chosen("campaign:new:hard:2")
+	await process_frame
+	if main.hud.story != null:
+		main.hud.story.skip()
+	await process_frame
+	check(campaign.slot == 2 and FileAccess.file_exists(campaign.slot_path(2)) and not FileAccess.file_exists(TEST_SAVE),
+			"P  a new campaign in Save 2 is written to its own file, Save 1 left empty")
+	campaign.completed = ["ashwatch", "ashwatch_road"]
+	campaign.allies = ["stonehollow"]
+	campaign.save_game()
+	campaign.use_slot(1)
+	campaign.new_campaign("easy")
+	var two: Dictionary = campaign.slot_info(2)
+	check(two["difficulty"] == "hard" and two["alliances"] == 1 and two["beacons"] == 1 and two["missions"] == 2 and two["saved_at"] > 0,
+			"P  the menu reads each save without loading it: Save 2 is Hard, 1 alliance, 1 beacon")
+	check(campaign.slot_info(1)["difficulty"] == "easy" and campaign.completed.is_empty(), "P  ...Save 1 is its own campaign (Easy, nothing won)")
+	await _fresh_main()
+	main.hud._show_cards("campaign")
+	var names: Array = main.hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
+	check(names == ["Save 1", "Save 2", "Save 3", "Back"], "P  the campaign menu shows the three saves: %s" % ", ".join(names))
+	main.hud._show_cards("slot:2")
+	names = main.hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
+	check(names == ["Continue", "Start Over", "Delete", "Back"], "P  a save's own menu: %s" % ", ".join(names))
+	main.hud._show_cards("slot:3")
+	names = main.hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
+	check(not "Continue" in names, "P  ...an empty save has nothing to continue")
+	main._on_mode_chosen("campaign:continue:2")
+	await process_frame
+	check(campaign.slot == 2 and campaign.difficulty == "hard" and campaign.completed == ["ashwatch", "ashwatch_road"] and main.hud.world_map != null,
+			"P  continuing Save 2 loads it and opens the map")
+	# A launch carries on with the save played last.
+	campaign.use_slot(1)
+	campaign.load_game()
+	campaign.save_game()
+	check(campaign.latest_slot() == 1 or FileAccess.get_modified_time(campaign.slot_path(1)) == FileAccess.get_modified_time(campaign.slot_path(2)),
+			"P  the save played last is the one a launch picks up")
+	# Deleting: Save 2 gone, Save 1 untouched.
+	await _fresh_main()
+	main.hud._show_cards("del:2")
+	var del: Array = main.hud.mode_cards.filter(func(c): return (c.get_child(0) as Label).text == "Delete")
+	check(del.size() == 1, "P  deleting asks first")
+	del[0].pressed.emit()
+	await process_frame
+	check(not FileAccess.file_exists(campaign.slot_path(2)) and FileAccess.file_exists(TEST_SAVE) and campaign.slot_info(1)["difficulty"] == "easy",
+			"P  ...then erases that save alone")
+	# Deleting the save in use leaves a fresh campaign, not the old one in memory.
+	campaign.use_slot(1)
+	campaign.load_game()
+	campaign.completed = ["ashwatch"]
+	campaign.save_game()
+	main.hud._show_cards("del:1")
+	main.hud.mode_cards.filter(func(c): return (c.get_child(0) as Label).text == "Delete")[0].pressed.emit()
+	await process_frame
+	check(not FileAccess.file_exists(TEST_SAVE) and campaign.completed.is_empty() and not campaign.has_save(), "P  deleting the save in use clears the campaign in memory too")
 	_delete_save()
 	campaign.reset()
 
@@ -395,7 +468,7 @@ func _missions() -> void:
 	map.select("stonehollow")
 	check(not map.info["defend"].disabled and "Protect the Workshops" in map.info["mission"].text, "M  Stonehollow offers its second mission, Protect the Workshops")
 	map.select("ashwatch")
-	check(not map.info["defend"].disabled and "Ridge Road" in map.info["mission"].text, "M  ...while Ashwatch now offers its second mission, the Ridge Road")
+	check(not map.info["defend"].disabled and "Armoury Wagon" in map.info["mission"].text, "M  ...while Ashwatch now offers its second mission, the Armoury Wagon")
 	# Any 2 of 3 southern territories opens Sable Crossing (checked on the data, ahead of Phase 3).
 	campaign.completed = ["ashwatch", "stonehollow"]
 	check(_sable_opens_with(["greenwood", "deepdelve"]) and _sable_opens_with(["mercyvale", "greenwood"]) and not _sable_opens_with(["deepdelve"]),
@@ -810,6 +883,26 @@ func _cutscene() -> void:
 	check(main.hud.story != null and main.hud.world_map == null, "C  the Ledger's Replay button plays it again")
 	main.hud.story.skip()
 	await process_frame
+	# The enemy's lines are cutscenes of their own, unless he's there on the battlefield
+	# ("box"): at Sable Crossing the Marshal talks in the dialogue box, between the others.
+	var sable: Array = CD.STORY["sable_intro"].filter(func(l): return not l.has("if"))
+	check(sable.any(func(l): return l["who"] == "marshal" and l.get("box", false)), "C  Sable Crossing's Marshal line is marked for the dialogue box")
+	main.hud.play_story(sable)
+	await process_frame
+	var box_story = main.hud.story
+	check(box_story != null and box_story.get_script().resource_path.ends_with("story.gd") and box_story.lines.size() == sable.size()
+			and box_story.lines.any(func(l): return l["who"] == "marshal"), "C  ...so the whole intro is one dialogue, the Marshal's line in it (%d lines)" % sable.size())
+	box_story.skip()
+	await process_frame
+	main.hud.play_story([{"who": "hale", "text": "a"}, {"who": "marshal", "text": "b"}])
+	await process_frame
+	main.hud.story.advance()
+	main.hud.story.advance()
+	main.hud.story.advance()
+	await process_frame
+	check(main.hud.story != null and main.hud.story.get_script().resource_path.ends_with("cutscene.gd"), "C  ...while his other lines still cut away to his own scene")
+	main.hud.story.skip()
+	await process_frame
 	# Every named character has their own portrait.
 	var Portraits = load("res://scripts/portraits.gd")
 	var hashes := {}
@@ -913,7 +1006,7 @@ func _regression() -> void:
 	check(names == ["Easy", "Normal", "Hard", "Back"], "R  Classic opens the three difficulties: %s" % ", ".join(names))
 	hud._show_cards("campaign")
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
-	check(names == ["New", "Back"], "R  Campaign with no save: %s" % ", ".join(names))
+	check(names == ["Save 1", "Save 2", "Save 3", "Back"], "R  Campaign: the three saves, %s" % ", ".join(names))
 	# Classic: everything open, and it goes on until the castle falls (harder past wave 20).
 	await _fresh_main()
 	main.hud.hide_mode_select()

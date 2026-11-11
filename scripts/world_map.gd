@@ -43,6 +43,7 @@ var labels := {}
 var info: Dictionary = {}   # the panel's controls
 var reward_box: HBoxContainer
 var threat_box: HBoxContainer
+const THREAT_W := 176.0   # the threats' column, left of what joining brings
 var overlay: Control = null   # the Ledger, a story scene or an announcement, while one is up
 var story_player := Callable()   # the HUD's play_story(lines, then): villains' lines get their own cutscenes
 var training_kind := ""      # the unit picked in the Training Grounds
@@ -237,8 +238,20 @@ func _show_info(k: String) -> void:
 			for e in m["extra"][w]:
 				if not kinds.has(e):
 					kinds.append(e)
+		# As many as there are, shrunk to fit their column (left of what joining brings).
+		var size := clampf((THREAT_W - 4.0 * (kinds.size() - 1)) / maxf(kinds.size(), 1), 18.0, 34.0)
 		for e in kinds:
-			threat_box.add_child(_icon(Sprites.frames(e)[0], (e as String).capitalize(), 34))
+			threat_box.add_child(_icon(Sprites.frames(e)[0], (e as String).capitalize(), size))
+	# The rows below the mission text start under however many lines it took.
+	var ml: Label = info["mission"]
+	var font: Font = ml.get_theme_font("font")
+	var tall: float = font.get_multiline_string_size(ml.text, HORIZONTAL_ALIGNMENT_LEFT, ml.size.x, ml.get_theme_font_size("font_size"), -1,
+			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND).y
+	var row_y := 110.0 + maxf(tall, 38.0) + 4.0
+	info["threat_title"].position.y = row_y
+	info["reward_title"].position.y = row_y
+	threat_box.position.y = row_y + 18.0
+	reward_box.position.y = row_y + 18.0
 	# Rewards: what joining brings.
 	for c in reward_box.get_children():
 		c.queue_free()

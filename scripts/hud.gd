@@ -1146,17 +1146,12 @@ func _show_cards(set_name: String) -> void:
 			modes.append(back)
 			spots = top + [Vector2(225, 834)]
 		"campaign":
-			mode_sub.text = "Campaign: The Line"
-			if Campaign.has_save():
-				var diff_name: String = Data.DIFFICULTIES[Campaign.difficulty]["name"]
-				modes.append(["campaign:continue", "Continue", "%s\nAlliances %d/8\nBack to the map" % [diff_name, Campaign.alliance_count()], Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
-				modes.append(["goto:new", "New", "Start again at\nAshwatch Keep\n(replaces the\nsaved campaign)", Color(0.95, 0.85, 0.45), "engineer", "campaign"])
-				spots = [Vector2(122, 636), Vector2(327, 636)]
-			else:
-				modes.append(["goto:new", "New", "Start at\nAshwatch Keep\nwith a handful\nof swordsmen", Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
-				spots = [Vector2(225, 636)]
+			# The save slots, each with what's in it.
+			mode_sub.text = "Campaign: The Line\nChoose a save"
+			for n in range(1, Campaign.SLOTS + 1):
+				modes.append(_slot_card(n))
 			modes.append(back)
-			spots.append(Vector2(225, 834))
+			spots = top + [Vector2(225, 834)]
 		"battle":
 			mode_sub.text = "Battle Modes: choose a kind of battle"
 			# (Castle Defense is Classic, on its own card on the main menu.)
@@ -1170,13 +1165,34 @@ func _show_cards(set_name: String) -> void:
 			narrow = true
 			for i in modes.size():
 				spots.append(Vector2(8 + (i % 4) * (NARROW_W + 8), [636, 834][i / 4]))
-		"new":
-			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
-			for key in Data.DIFFICULTIES:
-				modes.append(_difficulty_card(key, "campaign:new:" + key))
-			modes.append(["goto:campaign", "Back", "Back to the\ncampaign menu", Color(0.8, 0.8, 0.8), "goblin", ""])
-			spots = top + [Vector2(225, 834)]
-	if set_name.begins_with("bm:"):
+	if set_name.begins_with("slot:"):
+		# A save: carry on with it, start it over, or delete it.
+		var n := int(set_name.substr(5))
+		var info: Dictionary = Campaign.slot_info(n)
+		mode_sub.text = "Save %d" % n + ("\n" + info["error"] if info.has("error") else "")
+		if not info.is_empty() and not info.has("error"):
+			modes.append(["campaign:continue:%d" % n, "Continue", "%s\nAlliances %d/8\nBeacons lit %d\nBack to the map" % [Data.DIFFICULTIES[info["difficulty"]]["name"],
+					info["alliances"], info["beacons"]], Color(1.0, 0.72, 0.45), "swordsman", "campaign"])
+		modes.append(["goto:new:%d" % n, "Start Over", "A new campaign\nin this save\n(replaces it)", Color(0.95, 0.85, 0.45), "engineer", "campaign"])
+		modes.append(["goto:del:%d" % n, "Delete", "Erase this\nsave for good", Color(1.0, 0.5, 0.45), "goblin", ""])
+		modes.append(["goto:campaign", "Back", "Back to the\nsaves", Color(0.8, 0.8, 0.8), "goblin", ""])
+		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
+	elif set_name.begins_with("new"):
+		# A new campaign's difficulty, in save n.
+		var n := int(set_name.substr(4)) if set_name.begins_with("new:") else Campaign.slot
+		var filled := not Campaign.slot_info(n).is_empty()
+		mode_sub.text = "New campaign in Save %d: choose your difficulty" % n + ("\n(this replaces what's in it)" if filled else "")
+		for key in Data.DIFFICULTIES:
+			modes.append(_difficulty_card(key, "campaign:new:%s:%d" % [key, n]))
+		modes.append(["goto:slot:%d" % n if filled else "goto:campaign", "Back", "Back to the\nsave" if filled else "Back to the\nsaves", Color(0.8, 0.8, 0.8), "goblin", ""])
+		spots = top + [Vector2(225, 834)]
+	elif set_name.begins_with("del:"):
+		var n := int(set_name.substr(4))
+		mode_sub.text = "Delete Save %d? This can't be undone." % n
+		modes.append(["delete:%d" % n, "Delete", "Erase Save %d\nfor good" % n, Color(1.0, 0.5, 0.45), "goblin", ""])
+		modes.append(["goto:slot:%d" % n, "Keep It", "Back to the\nsave", Color(0.8, 0.8, 0.8), "swordsman", "campaign"])
+		spots = _row_spots(2)
+	elif set_name.begins_with("bm:"):
 		# A kind of battle: its scenarios.
 		var t := set_name.substr(3)
 		mode_sub.text = "%s: choose a battle" % Scenarios.TYPES[t]["name"]
@@ -1219,6 +1235,17 @@ func _show_cards(set_name: String) -> void:
 			card.pressed.connect(func():
 				if not picking:
 					show_battlefields(key.substr(8)))
+		elif key.begins_with("delete:"):
+			card.pressed.connect(func():
+				if not picking:
+					var n := int(key.substr(7))
+					Campaign.delete_slot(n)
+					if n == Campaign.slot:
+						Campaign.use_slot(Campaign.latest_slot())
+						Campaign.load_game()
+					title_scene.set_look("")
+					_show_cards("campaign")
+					show_message("Save %d deleted" % n))
 		elif key.begins_with("goto:"):
 			card.pressed.connect(func():
 				if not picking:
@@ -1227,6 +1254,31 @@ func _show_cards(set_name: String) -> void:
 		else:
 			card.pressed.connect(func():
 				_pick_mode(key, card, cards, mode_title, mode_sub))
+
+
+## A save slot's card on the campaign menu: what's in it and when it was last played,
+## or an empty one to start a campaign in.
+func _slot_card(n: int) -> Array:
+	var info: Dictionary = Campaign.slot_info(n)
+	if info.is_empty():
+		return ["goto:new:%d" % n, "Save %d" % n, "Empty\n\nStart a new\ncampaign here", Color(0.75, 0.78, 0.85), "swordsman", "campaign"]
+	if info.has("error"):
+		return ["goto:slot:%d" % n, "Save %d" % n, info["error"].replace(": ", ":\n"), Color(1.0, 0.5, 0.45), "goblin", ""]
+	return ["goto:slot:%d" % n, "Save %d" % n, "%s\nAlliances %d/8\nBeacons lit %d\n%s" % [Data.DIFFICULTIES[info["difficulty"]]["name"], info["alliances"],
+			info["beacons"], _when(info["saved_at"])], Color(1.0, 0.72, 0.45), "swordsman", "campaign"]
+
+
+## A save's time, in the player's own time zone: "Today 14:05", "Nov 9" or "Nov 9 2025".
+func _when(unix: int) -> String:
+	if unix <= 0:
+		return ""
+	var bias: int = int(Time.get_time_zone_from_system().get("bias", 0)) * 60
+	var d := Time.get_datetime_dict_from_unix_time(unix + bias)
+	var now := Time.get_datetime_dict_from_unix_time(int(Time.get_unix_time_from_system()) + bias)
+	if d["year"] == now["year"] and d["month"] == now["month"] and d["day"] == now["day"]:
+		return "Today %02d:%02d" % [d["hour"], d["minute"]]
+	var mon: String = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d["month"] - 1]
+	return "%s %d" % [mon, d["day"]] + ("" if d["year"] == now["year"] else " %d" % d["year"])
 
 
 ## Where n cards (up to three) sit in the top row, centred.
@@ -1646,16 +1698,16 @@ func show_battle_end(won: bool, name: String, summary: String, record: String, a
 
 ## A story scene over everything; `then` runs once it's over (or skipped).
 ## A story: the allies' lines in the dialogue box, and the enemy's (the Ogre King's and
-## his heralds') each as a cutscene of their own, in order. Esc skips the rest of it.
+## his heralds') each as a cutscene of their own (unless marked "box"), in order. Esc skips the rest of it.
 func play_story(lines: Array, then: Callable = Callable()) -> void:
 	if lines.is_empty():
 		if then.is_valid():
 			then.call()
 		return
 	# The next run of lines with the same kind of speaker.
-	var villain: bool = VILLAINS.has(lines[0]["who"])
+	var villain: bool = _cutscene_line(lines[0])
 	var n := 0
-	while n < lines.size() and VILLAINS.has(lines[n]["who"]) == villain:
+	while n < lines.size() and _cutscene_line(lines[n]) == villain:
 		n += 1
 	var rest := lines.slice(n)
 	var next := func(skipped: bool):
@@ -1684,6 +1736,12 @@ func play_story(lines: Array, then: Callable = Callable()) -> void:
 		next.call(s.skipped))
 	add_child(s)
 	_center(s)
+
+
+## Whether a story line plays as a cutscene of its own: the enemy's, unless it's marked
+## "box" (a villain who's there on the battlefield talks in the dialogue box like anyone).
+func _cutscene_line(line: Dictionary) -> bool:
+	return VILLAINS.has(line["who"]) and not line.get("box", false)
 
 
 ## The campaign's prologue cutscene; `then` runs once it's over (or skipped).

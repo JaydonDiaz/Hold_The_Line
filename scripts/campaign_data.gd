@@ -193,16 +193,24 @@ const MISSIONS := {
 		"allies": [{"kind": "swordsman", "at": Vector2(240, 470)}, {"kind": "swordsman", "at": Vector2(400, 470)}],
 		"lend": [], "reward": "", "track": {},
 		"intro": "stonehollow_workshops_intro", "outro": "stonehollow_workshops_outro"},
-	"ashwatch_road": {"name": "The Ridge Road", "territory": "ashwatch", "type": "pass", "limit": 10,
-		"waves": 5, "level": 5, "gold": 340, "count": [7, 2], "mood": "normal", "map": "ashwatch_ridge",
+	"ashwatch_road": {"name": "The Armoury Wagon", "territory": "ashwatch", "type": "escort", "waves": 99,
+		"level": 5, "gold": 360, "count": [6, 2], "mood": "normal", "map": "convoy_pass",
 		"requires": {"joined": ["stonehollow"]},
-		"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
-		"extra": {2: ["skeleton_archer"], 3: ["troll", "skeleton_archer"], 4: ["wolf", "skeleton_archer"],
-			5: ["troll", "orc", "orc", "skeleton_archer"]},
-		"notes": {1: "Hold the ridge road: no more than 10 may get past your lines.", 2: "Wolves run for any gap. Wall it.",
-			5: "Their column is on the road. A Troll counts double if it gets through!"},
-		"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true},
-			{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
+		"convoy": {"name": "Armoury Wagon", "cargo": "arms", "speed": 20.0, "hp": 1500, "patch": 0.3,
+			"zones": [
+				{"map": "convoy_pass", "name": "The Guild Pass", "ambushes": [
+					{"at": 0.3, "note": "Raiders on the slopes! They want those swords.", "group": [["orc", Vector2(230, 460)], ["goblin", Vector2(250, 400)], ["goblin", Vector2(400, 400)], ["skeleton_archer", Vector2(420, 330)]]},
+					{"at": 0.7, "note": "They've blocked the top of the pass!", "group": [["orc", Vector2(260, 160)], ["orc", Vector2(380, 160)], ["skeleton_archer", Vector2(330, 60)]]}]},
+				{"map": "convoy_meadow", "name": "The Lowland Road", "ambushes": [
+					{"at": 0.3, "note": "Raiders out of the copses!", "group": [["orc", Vector2(600, 590)], ["goblin", Vector2(580, 615)], ["goblin", Vector2(60, 520)], ["wolf", Vector2(40, 570)]]},
+					{"at": 0.7, "note": "Sappers! They mean to blow the wagon apart.", "group": [["sapper", Vector2(500, 290)], ["sapper", Vector2(130, 330)], ["orc", Vector2(545, 280)], ["skeleton_archer", Vector2(520, 160)]]}]},
+				{"map": "convoy_ridge", "name": "The Climb to Ashwatch", "ambushes": [
+					{"at": 0.3, "note": "Down from the boulders!", "group": [["orc", Vector2(170, 520)], ["orc", Vector2(470, 500)], ["skeleton_archer", Vector2(260, 330)], ["goblin", Vector2(470, 350)]]},
+					{"at": 0.7, "note": "A Troll on the ridge road, in sight of the keep!", "group": [["troll", Vector2(320, 140)], ["orc", Vector2(260, 160)], ["orc", Vector2(400, 180)], ["skeleton_archer", Vector2(480, 260)]]}]}]},
+		"pace": {"auto": "forced", "deploy": 20},
+		"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf"], 4: ["sapper"], 5: ["orc"]},
+		"notes": {1: "Bring the Armoury Wagon home to Ashwatch. Raiders will go for the wagon: J or right-click it to have troops follow it."},
+		"allies": [{"kind": "swordsman", "at": Vector2(270, 640)}, {"kind": "swordsman", "at": Vector2(370, 640)}],
 		"lend": [], "reward": "", "track": {},
 		"intro": "ashwatch_road_intro", "outro": "ashwatch_road_outro"},
 	# --- Greenwood: the Woodland Watch ------------------------------------------------------
@@ -366,11 +374,13 @@ const PROLOGUE := [
 
 # Each line: {"who": SPEAKERS key, "text": ...}, optionally "if": a condition that must
 # hold for the line to be shown: {"flag": name}, {"no_flag": name}, {"ally": faction},
-# {"no_ally": faction} or {"difficulty": key}.
+# {"no_ally": faction} or {"difficulty": key}. The enemy's lines (the Ogre King's and the
+# Marshal's) play as cutscenes of their own, unless "box": true puts one in the dialogue
+# box like anyone else's (when he's there on that battlefield).
 const STORY := {
 	"ashwatch_intro": [
 		{"who": "hale", "text": "Commander! Torches on the ridge. Goblins, and a lot more behind them."},
-		{"who": "hale", "text": "Half the garrison rode south a week ago. What's left is you, me, two swordsmen and old Tamsin up in the watchtower."},
+		{"who": "hale", "text": "Half the garrison rode south a week ago. What's left is you, me, two knights and old Tamsin up in the watchtower."},
 		{"who": "hale", "text": "We can hire more swords with what's in the strongbox. Post them on the trail and keep everything out of the keep."},
 	],
 	"ashwatch_outro": [
@@ -383,14 +393,14 @@ const STORY := {
 		{"who": "hale", "text": "We can't stop an army alone. Stonehollow's guild built these beacons. If anyone remembers the oath, it's them."},
 	],
 	"ashwatch_road_intro": [
-		{"who": "hale", "text": "Commander, the King's column has turned for the high road. Past the ridge it runs to every village in the south."},
-		{"who": "vell", "text": "Then it goes no further. No castle out there, but my crews will pitch a camp on the road and wall whatever you point at."},
-		{"who": "hale", "text": "Tamsin's tower covers the road. A few stragglers we can hunt down later, but if more than ten get past us, the south is open to them."},
+		{"who": "vell", "text": "Your order's ready, Commander. Guild axes, mail shirts and a hundred new-forged swords, all on one wagon."},
+		{"who": "hale", "text": "Enough steel for every blade in Ashwatch. And the King's raiders know it's on the road: the pass, the lowlands and the climb to the keep."},
+		{"who": "vell", "text": "There's no wall out there but the wagon's sides. Keep them off it, and have your troops walk with it [J]."},
 	],
 	"ashwatch_road_outro": [
-		{"who": "hale", "text": "The road held. Look up, Commander: Tamsin has lit the old beacon on the ridge."},
+		{"who": "hale", "text": "The wagon's in, every axe and every hauberk. And look up, Commander: Tamsin has lit the old beacon on the ridge."},
 		{"who": "hale", "text": "Two hundred years dark, and Ashwatch burns again. The first light of the Line."},
-		{"who": "vell", "text": "Your swordsmen fight like veterans now. Drill them hard: the old masters' arts are open to them."},
+		{"who": "vell", "text": "Guild steel and guild mail. Your knights can learn the old masters' arts now: drill them hard."},
 	],
 	"stonehollow_workshops_intro": [
 		{"who": "vell", "text": "They're back, and this time they want the workshops. Every beacon plan, every lens and every pulley in the south was made in there."},
@@ -481,7 +491,7 @@ const STORY := {
 		{"who": "dagna", "text": "The guild sent gold and a mine, already digging. Don't spend it all on the first bridge!", "if": {"ally": "deepdelve"}},
 		{"who": "ilse", "text": "A healer walks with your line, and the Sanctuary's prayers will keep your fallen with us a little longer.", "if": {"ally": "mercyvale"}},
 		{"who": "vell", "text": "My crews walled the ford overnight. They'll have to come over the bridges, or break it."},
-		{"who": "marshal", "text": "You have lit a handful of fires. I have burned a hundred villages. Come, then. Hold the river."},
+		{"who": "marshal", "text": "You have lit a handful of fires. I have burned a hundred villages. Come, then. Hold the river.", "box": true},   # (he's on the far bank: in the box)
 		{"who": "hale", "text": "No more than a dozen past us. If the crossing falls, the north never hears the beacons."},
 	],
 	"sable_outro": [

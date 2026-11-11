@@ -50,6 +50,7 @@ var speed := 0.0
 var arrived := false
 var halted := false                 # a wagon held up by an enemy at it
 var look := ""                      # a villager's sprite
+var cargo := ""                     # a wagon's load: "" (a canvas tilt) or "arms" (open, stacked with weapons)
 var variant := 0                    # ...and the colours it wears
 var panic := 0.0                    # a villager running from a blow
 var face := 1.0                     # which way a mover faces (1: right)
@@ -98,6 +99,7 @@ func setup(m, d: Dictionary) -> void:
 	for p in d.get("route", []):
 		route.append(Vector2(p.x * k, p.y))
 	speed = float(d.get("speed", 0.0))
+	cargo = str(d.get("cargo", ""))
 	if kind == "civilian":
 		RADIUS = 12.0
 		variant = int(d.get("variant", 0))
@@ -488,14 +490,17 @@ func _draw_wagon() -> void:
 	var dark_wood := Color(0.36, 0.23, 0.12)
 	var ox := Color(0.55, 0.38, 0.24)
 	var moving: bool = not halted and main.started and not main.deploying and not main.game_over and not arrived
-	# The canvas tilt, rounded at the top, with its hoops.
-	_b(-13, -17, 16, 1, OUTLINE)
-	_b(-14, -16, 18, 9, OUTLINE)
-	_b(-12, -16, 14, 1, canvas)
-	_b(-13, -15, 16, 8, canvas)
-	for x in [-10, -6, -2]:
-		_b(x, -15, 1, 8, fold)
-	_b(-13, -8, 16, 1, fold)
+	if cargo == "arms":
+		_draw_arms()
+	else:
+		# The canvas tilt, rounded at the top, with its hoops.
+		_b(-13, -17, 16, 1, OUTLINE)
+		_b(-14, -16, 18, 9, OUTLINE)
+		_b(-12, -16, 14, 1, canvas)
+		_b(-13, -15, 16, 8, canvas)
+		for x in [-10, -6, -2]:
+			_b(x, -15, 1, 8, fold)
+		_b(-13, -8, 16, 1, fold)
 	# The bed: planks, and a crate at the back.
 	_b(-15, -8, 21, 4, OUTLINE)
 	_b(-14, -7, 19, 2, wood)
@@ -533,6 +538,38 @@ func _draw_wagon() -> void:
 			cv.draw_line(c - Vector2.from_angle(a) * 8.0, c + Vector2.from_angle(a) * 8.0, wood, 2.0)
 		cv.draw_circle(c, 2.5, dark_wood)
 	cv.draw_set_transform(Vector2.ZERO)
+
+
+## An armoury's load on an open bed: crates of mail, a rack of swords standing hilt-up,
+## axe heads over the side and a round shield hung on the boards.
+func _draw_arms() -> void:
+	var steel := Color(0.78, 0.8, 0.84)
+	var crate := Color(0.62, 0.45, 0.24)
+	var haft := Color(0.45, 0.3, 0.16)
+	var gold := Color(0.95, 0.78, 0.3)
+	# The bed's side boards.
+	_b(-15, -12, 21, 5, OUTLINE)
+	_b(-14, -11, 19, 3, crate.darkened(0.1))
+	# Two crates, one stacked on the other, a glint of mail at the lid.
+	_b(-14, -16, 7, 5, OUTLINE)
+	_b(-13, -15, 5, 3, crate)
+	_b(-12, -15, 3, 1, steel)
+	_b(-13, -19, 6, 4, OUTLINE)
+	_b(-12, -18, 4, 2, crate.lightened(0.1))
+	# Swords standing hilt-up in a rack: crossguards and pommels.
+	for x in [-6, -2]:
+		_b(x, -20, 1, 9, steel.darkened(0.15))
+		_b(x - 1, -17, 3, 1, gold)
+		_b(x, -21, 1, 1, gold)
+	# An axe, its blade over the side.
+	_b(2, -21, 1, 10, haft)
+	_b(3, -22, 3, 5, OUTLINE)
+	_b(3, -21, 2, 3, steel)
+	_b(5, -21, 1, 3, steel.lightened(0.3))
+	# A round shield on the boards.
+	cv.draw_circle(Vector2(-8.0 * PX, -9.5 * PX), 7.0, OUTLINE)
+	cv.draw_circle(Vector2(-8.0 * PX, -9.5 * PX), 5.5, Color(0.3, 0.45, 0.85))
+	cv.draw_circle(Vector2(-8.0 * PX, -9.5 * PX), 2.0, gold)
 
 
 ## Ground to take: the ruins of an old fort, a broken ring of stone walls round a yard,

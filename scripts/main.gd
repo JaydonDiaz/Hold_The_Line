@@ -1087,15 +1087,20 @@ func _open_start_screen() -> void:
 
 
 ## A title-screen choice: a Classic difficulty, Freeplay, the Tutorial, or the campaign
-## ("campaign:continue", "campaign:new:<difficulty>").
+## ("campaign:continue[:<slot>]", "campaign:new:<difficulty>[:<slot>]": the save slot in
+## use when there's none).
 func _on_mode_chosen(key: String) -> void:
-	if key == "campaign:continue":
+	if key.begins_with("campaign:continue"):
+		if key.get_slice_count(":") > 2:
+			Campaign.use_slot(int(key.get_slice(":", 2)))
 		if Campaign.load_game():
 			open_world_map()
 		else:
 			hud.show_mode_select()
 			hud.show_message(Campaign.load_error if Campaign.load_error != "" else "No campaign saved yet")
 	elif key.begins_with("campaign:new:"):
+		if key.get_slice_count(":") > 3:
+			Campaign.use_slot(int(key.get_slice(":", 3)))
 		Campaign.new_campaign(key.get_slice(":", 2))
 		play_prologue()
 	elif key.begins_with("battle:"):

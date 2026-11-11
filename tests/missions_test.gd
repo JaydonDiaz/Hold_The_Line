@@ -56,6 +56,7 @@ func _run() -> void:
 	await _evac()
 	await _capture()
 	await _escort()
+	await _armoury()
 	await _retreat()
 	await _targeting()
 	await _classic_unchanged()
@@ -71,13 +72,34 @@ func _run() -> void:
 
 # --- Hold the Pass ----------------------------------------------------------------------
 
+## Hold the Pass, as a campaign mission (Ashwatch's second mission was one, before it
+## became the Armoury Wagon): played in Ashwatch's place, to test the pass rules and that
+## winning one lights the territory's beacon.
+const PASS_MISSION := {"name": "The Ridge Road", "territory": "ashwatch", "type": "pass", "limit": 10,
+	"waves": 5, "level": 5, "gold": 340, "count": [7, 2], "mood": "normal", "map": "ashwatch_ridge",
+	"requires": {"joined": ["stonehollow"]},
+	"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
+	"extra": {2: ["skeleton_archer"], 3: ["troll", "skeleton_archer"], 4: ["wolf", "skeleton_archer"],
+		5: ["troll", "orc", "orc", "skeleton_archer"]},
+	"notes": {1: "Hold the ridge road: no more than 10 may get past your lines.", 2: "Wolves run for any gap. Wall it.",
+		5: "Their column is on the road. A Troll counts double if it gets through!"},
+	"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true},
+		{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
+	"lend": [], "reward": "", "track": {},
+	"intro": "ashwatch_road_intro", "outro": "ashwatch_road_outro"}
+
+
+
 func _pass() -> void:
 	campaign.new_campaign("normal")
 	campaign.completed = ["ashwatch", "stonehollow"]
 	campaign.allies = ["stonehollow"]
+	var real: Dictionary = campaign.missions
+	campaign.missions = real.duplicate()
+	campaign.missions["ashwatch_road"] = PASS_MISSION
 	await _play("ashwatch_road")
 	var r = main.rules
-	check(r.get_script().resource_path.ends_with("rules_pass.gd") and not r.has_castle(), "Pass: the Ridge Road plays by Hold the Pass rules")
+	check(r.get_script().resource_path.ends_with("rules_pass.gd") and not r.has_castle(), "Pass: a Hold the Pass mission plays by its rules")
 	check(not main.castle.visible and main.camp != null and main.camp.is_inside_tree(), "...no castle: a work camp holds the bottom of the field")
 	main.hud.refresh(main)
 	check(not main.hud.tab_buttons["repair"].visible and main.hud.lives_label.text == "Past 0/10", "...no Repair tab; the panel counts who got past (%s)" % main.hud.lives_label.text)
@@ -118,6 +140,7 @@ func _pass() -> void:
 	main.enemies_changed()
 	await _frames(10)
 	check(main.game_over and main.victory and campaign.beacon_lit("ashwatch"), "Clearing the last wave inside the limit holds the pass, and lights Ashwatch's beacon")
+	campaign.missions = real
 
 
 # --- Multiple Positions -------------------------------------------------------------------
@@ -707,6 +730,16 @@ func _escort() -> void:
 	for e in main.get_enemies():
 		e.position = Vector2(e.position.x, 150.0)   # (away from the wagon: it isn't held up)
 		e.speed = 0.0
+	# Targeting set for this stretch: Strongest, on an enemy that stays behind; a Healer
+	# staying with the Swordsman; new Swordsmen set to start on Strongest.
+	t1.priority = "strongest"
+	t1.target = main.get_enemies()[0] if not main.get_enemies().is_empty() else null
+	main.placing_type = "healer"
+	main.hire_at(Vector2(main.FIELD_W / 2.0 + 60.0, 420))
+	main.placing_type = ""
+	var medic = main.get_warriors()[-1]
+	medic.stay_with([t1])
+	main.last_priority["swordsman"] = "strongest"
 	var off: Vector2 = t1.position - wagon.position
 	wagon.position = wagon.route[-1]
 	wagon.leg = wagon.route.size()
@@ -718,6 +751,9 @@ func _escort() -> void:
 	check(wagon.position.y > 600.0 and not wagon.arrived and r.settle > 0.0 and wagon.speed == 0.0, "...the wagon starts again at the bottom, and waits a moment")
 	check(t1.position.distance_to(wagon.position) < 140.0 and not main.paths.blocked(t1.position, 10.0), "...your troops come along, round the wagon")
 	check(is_instance_valid(tower) and tower.position.y > 400.0 and not main.paths.blocked(tower.position, 10.0), "...and so do emplacements")
+	check(t1.priority == Warrior.OBJECTIVE_PRIORITY and t1.target == null and tower.priority == Warrior.OBJECTIVE_PRIORITY,
+			"...everyone's targeting is reset in the new zone: back on the wagon's attackers, nothing in their sights (%s)" % t1.priority)
+	check(medic.priority == "revive" and medic.wards.is_empty() and main.last_priority.is_empty(), "...a Healer back on Revive, and new hires start on the default too")
 	r.settle = 0.05
 	await _frames(10)
 	check(wagon.speed > 0.0, "...then it rolls on")
@@ -933,3 +969,27 @@ func _classic_unchanged() -> void:
 	await _frames(3)
 	check(main.rules.get_script().resource_path.ends_with("/rules.gd") and main.rules.has_castle() and main.castle.visible and main.camp == null,
 			"Classic: castle defense, with its castle")
+
+
+# --- The Armoury Wagon: Ashwatch's second mission, a convoy that opens Swordsman Tier IV ---
+
+func _armoury() -> void:
+	campaign.new_campaign("normal")
+	campaign.completed = ["ashwatch", "stonehollow"]
+	campaign.allies = ["stonehollow"]
+	check(campaign.playable_mission("ashwatch") == "ashwatch_road" and campaign.tier4_kinds("ashwatch") == ["swordsman"],
+			"Ashwatch's second mission is open once Stonehollow joins, and its beacon opens Swordsman Tier IV")
+	await _play("ashwatch_road")
+	var r = main.rules
+	var wagon = r.wagon
+	check(r.get_script().resource_path.ends_with("rules_escort.gd") and not r.endless() and r.zones().size() == 3,
+			"The Armoury Wagon is a convoy escort, three stretches long, with an end")
+	check(wagon.label == "Armoury Wagon" and wagon.cargo == "arms" and not main.castle.visible, "...the wagon's loaded with arms, and there's no castle")
+	check(main.get_warriors().filter(func(w): return w.kind == "swordsman").size() == 2, "...two of Hale's swordsmen walk with it")
+	check(main.forced_auto, "...the attacks come at a forced pace")
+	# Through the last stretch: home, and Ashwatch's beacon is lit.
+	r.zone_i = r.zones().size() - 1
+	r._on_reached(wagon)
+	await _frames(10)
+	check(main.game_over and main.victory and campaign.beacon_lit("ashwatch") and campaign.tier4_open("swordsman"),
+			"Bringing the wagon home wins, lights Ashwatch's beacon and opens Swordsman Tier IV")

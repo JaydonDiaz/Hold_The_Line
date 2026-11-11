@@ -2052,7 +2052,7 @@ const SPRITES := {
 			".kkkkk..kkk.....",
 		],
 	},
-	"swordsman_p0": {  # Damage: a broad axe on a long haft
+	"swordsman_p0": {  # Damage: a broad axe on a long haft; a dark iron great helm with a red crest, a fur mantle and a red tabard
 		"poses": {
 			"plant": {  # idle: resting on the axe, its head on the ground
 				0: "............______",
@@ -2104,19 +2104,20 @@ const SPRITES := {
 			},
 		},
 		"base": "swordsman",
-		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0)},
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0),
+			"i": Color(0.38, 0.38, 0.44), "I": Color(0.24, 0.24, 0.3), "r": Color(0.8, 0.15, 0.15), "m": Color(0.62, 0.5, 0.36), "M": Color(0.42, 0.32, 0.22), "T": Color(0.5, 0.1, 0.1), "t": Color(0.72, 0.16, 0.14), "n": Color(0.95, 0.78, 0.3)},
 		"rows": [
-			"......rr.....k....",
-			".....krrk...kakkk.",
-			"....khhhhk..kakwwk",
-			"...khhhhhHk.kakwWk",
-			"...khkkkkHk.kakwWk",
-			"...khhhhhHk.kakwwk",
-			"....kssssk..kakkk.",
-			"..kkTttttTkkkak...",
-			"..kTttttttTkkak...",
-			"..kTttttttTkkak...",
-			"..ksbbbbbbsksak...",
+			"....rrrr.....k....",
+			"...krrrrk...kakkk.",
+			"....kiiiik..kakwwk",
+			"...kiiiiiIk.kakwWk",
+			"...kkkkkkIk.kakwWk",
+			"...kiikiiIk.kakwwk",
+			"....kIIIIk..kakkk.",
+			"..kkmmmmmmkkkak...",
+			"..kmMmmmMmMkkak...",
+			"..ksTttttTskkak...",
+			"..ksbbnbbbsksak...",
 			"..kTttttttTkkak...",
 			"...kTttttTk..k....",
 			"...kppkkppk.......",
@@ -2129,7 +2130,7 @@ const SPRITES := {
 			"....kkkkkkk.......",
 		],
 	},
-	"swordsman_p1": {  # Speed: a sword in each hand
+	"swordsman_p1": {  # Blades: a sword in each hand; a duelist's green hood and scarf, a leather jerkin with a crossed belt
 		"poses": {
 			"plant": {  # idle: one sword planted, the other propped on his shoulder
 				0: ".k..............",
@@ -2142,7 +2143,7 @@ const SPRITES := {
 				7: "__ks........ksk_",
 				8: "___........kgggk",
 				9: "__..........kwk_",
-				10: "__.T......bkkwk_",
+				10: "__.L......Gkkwk_",
 				11: "._..........kwk.",
 				12: "............kwk.",
 				13: "............kwk.",
@@ -2165,27 +2166,27 @@ const SPRITES := {
 			},
 		},
 		"base": "swordsman",
-		"palette": {},
+		"palette": {"v": Color(0.28, 0.52, 0.32), "V": Color(0.18, 0.36, 0.22), "q": Color(0.14, 0.26, 0.18), "L": Color(0.36, 0.23, 0.13), "l": Color(0.52, 0.35, 0.2), "x": Color(0.22, 0.14, 0.08), "G": Color(0.25, 0.6, 0.38)},
 		"rows": [
-			"......rr........",
-			".....krrk.......",
-			".k..khhhhk....k.",
-			"kwkkhhhhhHk..kwk",
-			"kwkkhkkkkHk..kwk",
-			"kwkkhhhhhHk..kwk",
-			"kwk.kssssk...kwk",
-			"kwkkTttttTkk.kwk",
-			"kwkTttttttTk.kwk",
-			"ggkTttttttTkgggk",
-			"kgksbbbbbbskskk.",
-			".kkTttttttTk.k..",
-			"...kTttttTk.....",
+			"......kkk.......",
+			".....kvvvk......",
+			".k..kvvvvvk...k.",
+			"kwkkvvvvvvVk.kwk",
+			"kwkkvksskvVk.kwk",
+			"kwkkvqqqqvVk.kwk",
+			"kwk.kqqqqVk..kwk",
+			"kwkkLxlllLkk.kwk",
+			"kwkLllxlllLk.kwk",
+			"ggkLlllxllLkgggk",
+			"kgksGGGGGGskskk.",
+			".kkLlllllxLk.k..",
+			"...kLllllLk.....",
 			"...kppkkppk.....",
 			"...kffk.kffk....",
 			"...kkkk.kkkk....",
 		],
 	},
-	"swordsman_p0p1": {  # Damage and Blades both at tier 3: an axe in each hand
+	"swordsman_p0p1": {  # Damage and Blades both at tier 3: an axe in each hand; the duelist's hood over the fur and red tabard
 		"poses": {
 			"plant": {  # idle: resting on the right axe
 				0: "............______",
@@ -2253,19 +2254,21 @@ const SPRITES := {
 			},
 		},
 		"base": "swordsman",
-		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0)},
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0),
+			"i": Color(0.38, 0.38, 0.44), "I": Color(0.24, 0.24, 0.3), "r": Color(0.8, 0.15, 0.15), "m": Color(0.62, 0.5, 0.36), "M": Color(0.42, 0.32, 0.22), "T": Color(0.5, 0.1, 0.1), "t": Color(0.72, 0.16, 0.14), "n": Color(0.95, 0.78, 0.3),
+			"v": Color(0.28, 0.52, 0.32), "V": Color(0.18, 0.36, 0.22), "q": Color(0.14, 0.26, 0.18), "L": Color(0.36, 0.23, 0.13), "l": Color(0.52, 0.35, 0.2), "x": Color(0.22, 0.14, 0.08), "G": Color(0.25, 0.6, 0.38)},
 		"rows": [
-			".kkk..rr.....k....",
-			"kwWk.krrk...kakkk.",
-			"kwWkkhhhhk..kakwwk",
-			"kkakhhhhhHk.kakwWk",
-			"kakkhkkkkHk.kakwWk",
-			"kakkhhhhhHk.kakwwk",
-			"kak.kssssk..kakkk.",
-			"kakkTttttTkkkak...",
-			"kakTttttttTkkak...",
-			"kakTttttttTkkak...",
-			"kaksbbbbbbsksak...",
+			".kkk..kkk....k....",
+			"kwWk.kvvvk..kakkk.",
+			"kwWkkvvvvvk.kakwwk",
+			"kkakvvvvvvVkkakwWk",
+			"kakkvksskvVkkakwWk",
+			"kakkvqqqqvVkkakwwk",
+			"kak.kqqqqVk.kakkk.",
+			"kakkmmmmmmkkkak...",
+			"kakmMmmmMmMkkak...",
+			"kaksTttttTskkak...",
+			"kaksbbnbbbsksak...",
 			".kkTttttttTkkak...",
 			"...kTttttTk..k....",
 			"...kppkkppk.......",
@@ -2629,31 +2632,91 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"swordsman_p3": {  # Charge: a samurai: black kabuto with a gold crest, red half-mask, red lacquered armor, hakama and a katana
+	"swordsman_p3": {  # Charge: a spear knight: a closed steel helm with a blue plume, a blue tabard with a gold cross, and a pennoned spear
+		"poses": {
+			"plant": {},  # idle: the spear grounded upright beside him, as he stands
+			"swing": {  # drawn back at the shoulder, to thrust
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............__k_",
+				6: "kk..........k.kwk",
+				7: "ka..........sa.wwk",
+				8: "kk..........k.kwk",
+				9: "............___",
+				10: "............____",
+				11: "............____",
+				12: ".............___",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+			"strike": {  # the thrust, at full reach
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............____",
+				6: ".............___",
+				7: ".............___...kRRk",
+				8: ".............___...kRk..k",
+				9: "............_.k.kkkkkkkkwk",
+				10: ".............a.aaaaaaaaawwk",
+				11: "............_.k.kkkkkkkkwk",
+				12: ".............___........k",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+			"couch": {  # Charge: lowered and level for the run in, its pennant streaming
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............____",
+				6: ".............___",
+				7: ".............___kRRk",
+				8: ".............___kRk...k",
+				9: "kk.........._.k.kkkkkkwk",
+				10: "ka...........a.aaaaaaawwk",
+				11: "kk.........._.k.kkkkkkwk",
+				12: ".............___......k",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+		},
 		"base": "swordsman",
 		"palette": {
-			"y": Color(0.95, 0.8, 0.3), "h": Color(0.2, 0.18, 0.24), "r": Color(0.78, 0.18, 0.18),
-			"T": Color(0.72, 0.16, 0.16), "t": Color(0.5, 0.1, 0.12), "R": Color(0.75, 0.18, 0.18),
-			"n": Color(0.95, 0.8, 0.35), "p": Color(0.18, 0.2, 0.32), "f": Color(0.9, 0.9, 0.86),
-			"b": Color(0.9, 0.88, 0.8), "g": Color(0.35, 0.3, 0.4),
+			"r": Color(0.3, 0.5, 0.95), "T": Color(0.18, 0.28, 0.6), "t": Color(0.28, 0.42, 0.82), "n": Color(0.95, 0.8, 0.3),
+			"a": Color(0.58, 0.4, 0.22), "R": Color(0.85, 0.2, 0.2),
 		},
 		"rows": [
-			"...yy....yy.....",
-			".....yy.yy......",
-			"....khyyhk....k.",
-			"...khhhhhhk..kwk",
-			".khksksskskhkkwk",
-			".khksssssskhkkwk",
-			"..kkrrrrrrkk.kwk",
-			"kTTkRRRRRRkTTkwk",
-			"kTTkRnnnnRkTTkwk",
-			".ktkRRRRRRktgggk",
-			"..ksbbbbbbskskk.",
-			"..kpppppppppkk..",
-			"..kpppppppppk...",
-			"..kpppkkpppk....",
-			"...kffk.kffk....",
-			"...kkkk.kkkk....",
+			"......rr......k...",
+			".....krrk....kwk..",
+			"....khhhhk...kwk..",
+			"...khhhhhHk..kakk.",
+			"...khkkkkHk..kaRRk",
+			"...khhhhhHk..kaRk.",
+			"....kHhhHk...kak..",
+			"..kkTttntTkk.kak..",
+			"..kTttnnntTk.kak..",
+			"..kTtttnttTkkkak..",
+			"..ksbbbbbbskssak..",
+			"..kTtttnttTkkkak..",
+			"...kTttttTk..kak..",
+			"...kppkkppk..kak..",
+			"...kffk.kffk.kak..",
+			"...kkkk.kkkk..k...",
+		],
+		"legs_b": [
+			"...kppkppk...kak..",
+			"....kffkffk..kak..",
+			"....kkkkkkk...k...",
 		],
 	},
 	"archer_p3": {  # Trick Shots: a mystic with blue hair, a glowing string and seeker arrows
@@ -3023,7 +3086,7 @@ const ACCENTS := {
 		{"behind": {7: "k1", 8: "k11", 9: "k11", 10: "k12", 11: "k12", 12: "k12", 13: ".kk"}, "palette": {"1": Color(0.75, 0.15, 0.15), "2": Color(0.55, 0.1, 0.12)}},
 		{"over": {10: "......1111", 11: ".........1", 12: ".........1"}, "palette": {"1": Color(0.8, 0.15, 0.18)}},
 		{"over": {7: "..k55k..k55k", 8: "..k6k....k6k"}, "palette": {"5": Color(0.8, 0.82, 0.88), "6": Color(0.55, 0.58, 0.66)}},
-		{"behind": {0: "...3.....3", 1: "....3...3"}, "palette": {"3": Color(0.95, 0.8, 0.3)}},
+		{"behind": {0: "....33", 1: "...33"}, "palette": {"3": Color(0.3, 0.5, 0.95)}},   # Charge: a blue feather trailing from the plume
 	],
 	"archer": [
 		{"palette": {}},   # Damage: her arrows change instead (see Warrior.ARROW_GRADES)
@@ -3375,7 +3438,7 @@ static func _recolor_for(s: Dictionary, recolor: Dictionary) -> Dictionary:
 # <kind>_p<a>p<b> (e.g. swordsman_p0p1) is used instead when there is one.
 const COMBOS := {
 	"swordsman": {"map": "figure", "head_rows": 6, "left_col": 4, "right_col": 12, "right_full": true,
-		"lead": "body", "order": {"body": [2, 3, 1, 0], "head": [3, 2], "left": [1, 2], "right": [0, 1]}},
+		"lead": "body", "order": {"body": [2, 0, 3, 1], "left": [1, 2, 0, 3], "right": [0, 1]}},   # (the head always from the other path: both armors show)
 	"archer": {"map": "figure", "head_rows": 7, "left_col": 3, "right_col": 12, "right_full": true,
 		"lead": "head", "order": {"head": [3], "left": [2], "right": [1, 3]}},
 	"mage": {"map": "figure", "head_rows": 5, "left_col": -1, "right_col": 13, "right_full": true,
@@ -3446,7 +3509,16 @@ static func _combo_part(spec: Dictionary, x: int, y: int, head_rows: int) -> Str
 	return "left" if x <= spec["left_col"] else "body"
 
 
-static func _build_combo(kind: String, a: int, b: int) -> Dictionary:
+## A combined sprite with some parts forced: `force` maps a part to the path it comes
+## from, or to another part's name to take whatever path that part came from. (A Knight
+## charging with his spear: its armor as ever, the spear in his hand.) Named `sprite_name`.
+static func combo_forced(kind: String, a: int, b: int, force: Dictionary, sprite_name: String) -> String:
+	if not _generated.has(sprite_name) and COMBOS.has(kind):
+		_generated[sprite_name] = _build_combo(kind, a, b, force)
+	return sprite_name
+
+
+static func _build_combo(kind: String, a: int, b: int, force := {}) -> Dictionary:
 	var spec: Dictionary = COMBOS[kind]
 	var order: Dictionary = spec["order"]
 	var pair := [a, b]
@@ -3462,6 +3534,8 @@ static func _build_combo(kind: String, a: int, b: int) -> Dictionary:
 	for part in ["head", "body", "left", "right"]:
 		if part != lead:
 			src[part] = pick.call(part, other) if order.has(part) else other
+	for part in force:
+		src[part] = force[part] if force[part] is int else src[force[part]]
 	var head_rows: int = spec.get("head_rows", 0)
 	head_rows = spec.get("head_rows_by_body", {}).get(src["body"], head_rows)
 	# Rename every color letter so the two outfits' palettes can't clash.
