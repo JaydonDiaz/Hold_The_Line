@@ -296,6 +296,7 @@ func _fit_screen() -> void:
 ## mode: a difficulty ("easy", "normal", "hard"), "freeplay" or "tutorial".
 func choose_mode(mode: String) -> void:
 	_foes_seen.clear()   # (each battle introduces its foes afresh)
+	castle_warned = 0
 	hud.foe_queue.clear()
 	campaign = mode == "campaign"
 	mission = Campaign.mission() if campaign else (Scenarios.get_scenario(battle_id) if battle_id != "" else {})
@@ -795,6 +796,24 @@ func damage_castle(amount: float) -> void:
 	elif castle_hp <= 0.0:
 		castle_hp = 0.0
 		_finish(false)
+	else:
+		_warn_castle()
+
+
+## The alarm bell, as the castle falls below half its health and again below a quarter.
+var castle_warned := 0   # (how many of those it's rung this battle)
+const CASTLE_ALARMS := [[0.5, "The castle's walls are cracking!"], [0.25, "The castle is about to fall!"]]
+
+func _warn_castle() -> void:
+	while castle_warned > 0 and castle_hp > castle_max * (CASTLE_ALARMS[castle_warned - 1][0] + 0.1):
+		castle_warned -= 1   # (mended well clear of it: it can ring again)
+	if castle_warned >= CASTLE_ALARMS.size() or castle_hp > castle_max * CASTLE_ALARMS[castle_warned][0]:
+		return
+	while castle_warned < CASTLE_ALARMS.size() and castle_hp <= castle_max * CASTLE_ALARMS[castle_warned][0]:
+		castle_warned += 1
+	sfx("alarm")
+	var mend := " Repair it between waves [B]." if allowed("repair") else ""
+	hud.show_message(CASTLE_ALARMS[castle_warned - 1][1] + mend)
 
 
 # --- Castle ---------------------------------------------------------------

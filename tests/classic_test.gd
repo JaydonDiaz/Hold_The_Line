@@ -130,6 +130,22 @@ func _repairs() -> void:
 	main.wave_active = false
 	main.castle_hp = main.castle_max
 	check(not main.can_repair(0), "...or when the castle is whole")
+	# The alarm bell: below half, and again below a quarter (once each, until it's mended).
+	main.castle_warned = 0
+	main.damage_castle(main.castle_max * 0.3)
+	check(main.castle_warned == 0, "Alarm: quiet while the castle's above half")
+	main.damage_castle(main.castle_max * 0.25)
+	check(main.castle_warned == 1 and "cracking" in main.hud.message_label.text, "...below half, the bell rings: the walls are cracking")
+	main.damage_castle(main.castle_max * 0.05)
+	check(main.castle_warned == 1, "...once")
+	main.damage_castle(main.castle_max * 0.2)
+	check(main.castle_warned == 2 and "about to fall" in main.hud.message_label.text, "...and again below a quarter")
+	await _frames(2)
+	check(main.hud.lives_label.modulate != Color.WHITE, "...where the castle's health pulses")
+	main.castle_hp = main.castle_max
+	main.damage_castle(main.castle_max * 0.55)
+	check(main.castle_warned == 1, "...mended, it can ring again")
+	main.castle_hp = main.castle_max
 
 
 func _siege() -> void:

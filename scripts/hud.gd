@@ -616,6 +616,9 @@ func refresh(main) -> void:
 	else:
 		gold_label.text = "Gold %d" % main.gold
 		lives_label.text = "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status()
+		# A castle about to fall: its health pulses.
+		var low: bool = main.rules.has_castle() and not main.game_over and main.castle_hp <= main.castle_max * 0.25
+		lives_label.modulate = Color(1, 1, 1).lerp(Color(1.6, 0.6, 0.6), 0.5 + 0.5 * sin(Time.get_ticks_msec() / 130.0)) if low else Color.WHITE
 		wave_label.text = main.rules.wave_text()
 		start_btn.disabled = main.wave_active or main.game_over
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
