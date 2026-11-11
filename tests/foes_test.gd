@@ -247,6 +247,15 @@ func _waves() -> void:
 	check(falls.size() == 1 and main.corpse_layer.get_index() < main.warrior_layer.get_index(), "E  a slain foe leaves a falling body under the troops")
 	await _frames(60)
 	check(main.corpse_layer.get_child_count() == 0, "E  ...that fades away")
+	# An upgrade sends up motes of light in its path's colour.
+	main.gold = 9999
+	main._on_hire_pressed("archer")
+	main.hire_at(Vector2(320, 450))
+	main.placing_type = ""
+	main.selected = main.get_warriors()[-1]
+	main.upgrade_selected(1)
+	check(main.fx_layer.get_children().any(func(f): return "mode" in f and f.mode == "sparkle"), "E  an upgrade sparkles")
+	main.selected = null
 	# Buttons click when pressed.
 	var clicks: Array = main.hud.start_btn.pressed.get_connections().filter(func(c): return c["callable"].get_method() == "sfx")
 	check(clicks.size() == 1, "E  buttons click when pressed")

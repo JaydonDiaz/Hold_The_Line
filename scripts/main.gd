@@ -1840,6 +1840,7 @@ func upgrade_selected(path: int) -> void:
 	selected.upgrade(path)
 	sfx("upgrade")
 	spawn_text(selected.position + Vector2(0, -50), tier_name, Warrior.PATH_COLORS[path])
+	spawn_sparkle(selected.position, Warrior.PATH_COLORS[path])
 	if selected is Barricade:
 		walls_changed()   # an Energy Wall may now let troops or shots through
 
@@ -2242,6 +2243,17 @@ func spawn_text(pos: Vector2, text: String, color: Color) -> void:
 	f.mode = "text"
 	f.text = text
 	f.color = color
+	f.position = pos
+	fx_layer.add_child(f)
+
+
+## Motes of light rising round a troop that's just been upgraded, in its path's colour.
+func spawn_sparkle(pos: Vector2, color: Color) -> void:
+	var f := Fx.new()
+	f.mode = "sparkle"
+	f.color = color
+	f.radius = 18.0
+	f.life = 0.8
 	f.position = pos
 	fx_layer.add_child(f)
 

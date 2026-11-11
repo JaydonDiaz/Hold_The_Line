@@ -33,6 +33,18 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	var a := 1.0 - t / life
 	match mode:
+		"sparkle":
+			# Twelve motes spiralling up from the feet, bright at first, then fading out above.
+			var k := t / life
+			for i in 12:
+				var ph := i * TAU / 12.0 + k * 5.0
+				var rise := (k * 1.2 + (i % 3) * 0.12) * 46.0
+				var p := Vector2(cos(ph) * radius * (1.0 - k * 0.4), 8.0 - rise + sin(ph) * radius * 0.3)
+				var sz := 5.0 if i % 2 == 0 else 3.5
+				var col := Color(1, 1, 1).lerp(color.lightened(0.3), minf(k * 2.0, 1.0))
+				draw_texture_rect(Sprites.white(), Rect2(p - Vector2(sz, sz) / 2, Vector2(sz, sz)), false, Color(col, minf(a * 1.5, 1.0)))
+			# ...and a ring spreading on the ground.
+			draw_arc(Vector2(0, 10), radius * (0.6 + k), 0, TAU, 24, Color(color.lightened(0.2), a * 0.8), 3.0, true)
 		"fall":
 			# Tips over sideways (a flyer drops out of the air first), then fades into the grass.
 			var k := minf(t / (life * 0.45), 1.0)
