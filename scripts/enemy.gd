@@ -57,6 +57,18 @@ var knock_mult := 1.0       # share of knockback that lands
 var boss := false
 var stomp := {}             # Ogre King: damage (scaled), radius, cooldown, push, stun
 var cleave := {}            # Ogre King: reach, arc of its sweeping blows
+var banner := {}            # Ash Marshal: his war banner (radius, damage, speed, break, down)
+var banner_down := 0.0      # ...seconds before it's raised again, once knocked down
+var banner_tick := 0.0
+var recent_hurt := 0.0      # damage taken lately (fading): enough of it knocks the banner down
+var rush := {}              # Ash Marshal: his charge (cooldown, min, range, speed, damage, push, stun)
+var charge_timer := 6.0
+var charging := 0.0         # seconds of charge left
+var charge_dir := Vector2.ZERO
+var charge_hit := []        # troops already struck by this charge
+var rally := 0.0            # seconds left driven on by the Marshal's banner
+var rally_dmg := 0.0        # ...its share more damage
+var rally_speed := 0.0      # ...and speed
 var summon := {}            # Ogre King: kinds, count, cooldown
 var horn := {}              # Ogre King: kinds, count, cooldown of the war horn's new wave
 var breath := {}            # Wyvern: damage (scaled), radius, range, cooldown
@@ -133,6 +145,7 @@ var drift := 0.0
 var goal = null             # the objective it's been sent for (mission/objective.gd), or null for the castle / bottom line
 var aggro = null            # the unit attacking it that it has turned on
 var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
+var goal_check := 1.0             # when to ask the rules again for an objective (see rules.objective_only)
 
 
 func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult: float, bounty_mult: float) -> void:
@@ -156,6 +169,10 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 		breath = d["breath"].duplicate()
 		breath["damage"] *= dmg_mult
 	cleave = d.get("cleave", {})
+	banner = d.get("banner", {})
+	if d.has("charge"):
+		rush = d["charge"].duplicate()
+		rush["damage"] *= dmg_mult
 	ranged = d.get("ranged", {})
 	gooey = d.get("gooey", false)
 	if gooey:
@@ -196,6 +213,7 @@ func _process(delta: float) -> void:
 			slow_factor = 1.0
 	flash = maxf(flash - delta, 0.0)
 	lunge = maxf(lunge - delta, 0.0)
+	rally = maxf(rally - delta, 0.0)
 	ice_crust = maxf(ice_crust - delta, 0.0)
 	absorb_note = maxf(absorb_note - delta, 0.0)
 	cd_timer = maxf(cd_timer - delta, 0.0)
@@ -273,6 +291,10 @@ func _process(delta: float) -> void:
 
 	if boss:
 		_boss_update(delta)
+	if not rush.is_empty() and _charge_update(delta):
+		_push_out()
+		queue_redraw()
+		return
 	if not breath.is_empty():
 		_breathe(delta)
 	if confuse_timer > 0.0:
@@ -302,6 +324,11 @@ func _process(delta: float) -> void:
 		aggro = null
 	if goal != null and (not is_instance_valid(goal) or not goal.is_target()):
 		goal = main.rules.enemy_goal(self)   # its objective has fallen (or got away): on to the next
+	goal_check -= delta
+	if goal_check <= 0.0:
+		goal_check = 1.0
+		if (goal == null or goal.is_mover()) and main.rules.objective_only():
+			goal = main.rules.enemy_goal(self)   # nothing to go for yet (or something nearer to chase)
 	var holding: bool = goal != null and goal.kind == "zone" and position.distance_to(goal.position) <= goal.zone_r - radius
 	var at_goal: bool = goal != null and not holding and goal.kind != "zone" and position.distance_to(goal.position) - radius - goal.RADIUS <= REACH + 4.0
 	var at_castle: bool = goal == null and position.y + radius * 0.5 >= main.CASTLE_Y
@@ -331,7 +358,7 @@ func _process(delta: float) -> void:
 			cd_timer = attack_cd
 			lunge = 0.15
 			if cleave.is_empty():
-				blocker.take_damage(damage * (1.0 - weaken))
+				blocker.take_damage(damage * _hit_mult())
 				if not goo.is_empty() and blocker.is_active():
 					blocker.apply_goo(goo["slow"], goo["time"])
 			else:
@@ -343,7 +370,7 @@ func _process(delta: float) -> void:
 		if cd_timer <= 0.0:
 			cd_timer = attack_cd
 			lunge = 0.15
-			wall.struck(self, wall_damage * (1.0 - weaken))
+			wall.struck(self, wall_damage * _hit_mult())
 	elif holding:
 		walking = false   # in the ground it was sent to take: it stays, and fights what comes
 	elif at_goal:
@@ -355,7 +382,7 @@ func _process(delta: float) -> void:
 		if cd_timer <= 0.0:
 			cd_timer = attack_cd
 			lunge = 0.15
-			goal.take_damage(wall_damage * (1.0 - weaken))
+			goal.take_damage(wall_damage * _hit_mult())
 	elif at_castle:
 		# At the castle: hammer on its wall until something kills it.
 		fighting = true
@@ -363,7 +390,7 @@ func _process(delta: float) -> void:
 		if cd_timer <= 0.0:
 			cd_timer = attack_cd
 			lunge = 0.15
-			main.damage_castle(wall_damage * (1.0 - weaken))
+			main.damage_castle(wall_damage * _hit_mult())
 	elif root_timer > 0.0:
 		pass   # held in place by vines
 	else:
@@ -376,7 +403,10 @@ func _process(delta: float) -> void:
 			route = Vector2.ZERO if flying else main.paths.direction(position, radius, goal)
 		if route == Vector2.ZERO and goal != null:
 			route = position.direction_to(goal.position)   # nothing in the way (or it flies): straight there
-		if aggro != null and not breath.is_empty() and position.distance_to(aggro.position) <= breath["range"] * 0.75:
+		if goal == null and aggro == null and position.y >= main.rules.wait_y():
+			# Nothing to go for yet: it waits there for something to come along.
+			dir = Vector2(sin(drift * 0.7) * 0.4, 0.0)
+		elif aggro != null and not breath.is_empty() and position.distance_to(aggro.position) <= breath["range"] * 0.75:
 			# A Wyvern hangs in the air within breath range of whoever's shooting it.
 			dir = Vector2.ZERO
 		elif aggro != null:
@@ -385,7 +415,7 @@ func _process(delta: float) -> void:
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
-		_step_to(position + dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * delta)
+		_step_to(position + dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
 		bob += delta * (20.0 if flying else 10.0)   # bats flap fast
@@ -396,6 +426,11 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
+## How hard its blows land: less weakened, more when the Marshal's banner drives it on.
+func _hit_mult() -> float:
+	return (1.0 - weaken) * (1.0 + rally_dmg if rally > 0.0 else 1.0)
+
+
 ## Ogre King: stomps when anything of yours is close, calls in help, and gets
 ## angrier as it's worn down.
 func _boss_update(delta: float) -> void:
@@ -403,7 +438,9 @@ func _boss_update(delta: float) -> void:
 		enraged = true
 		speed *= ENRAGE_SPEED
 		attack_cd *= ENRAGE_RATE
-		main.hud.show_message("The Ogre King is enraged!")
+		main.hud.show_message("%s is enraged!" % main.Data.ENEMIES[kind].get("name", "It"))
+	if not banner.is_empty():
+		_banner_update(delta)
 	stomp_timer -= delta
 	if not stomp.is_empty() and stomp_timer <= 0.0:
 		var r: float = stomp["radius"]
@@ -439,6 +476,121 @@ func _boss_update(delta: float) -> void:
 		main.spawn_text(position + Vector2(0, -60), "WAR HORN!", Color(1, 0.4, 0.3))
 
 
+## His banner on its pole beside him, flapping (and the ground it drives on, faintly);
+## knocked down, it lies in the dirt.
+func _draw_banner(feet: float, size: Vector2) -> void:
+	var x := radius * 1.1 * flip
+	if banner_up():
+		var t := Time.get_ticks_msec() / 1000.0
+		draw_arc(Vector2(0, feet), float(banner["radius"]), 0.0, TAU, 48, Color(1.0, 0.45, 0.15, 0.12), 2.0)
+		var top := Vector2(x, feet - size.y * 1.3)
+		draw_rect(Rect2(top.x - 1.5, top.y, 3, feet - top.y), Color(0.12, 0.08, 0.06))
+		var wave := sin(t * 6.0) * 3.0
+		var flag := PackedVector2Array([top + Vector2(1, 2), top + Vector2(26 * flip, 4 + wave), top + Vector2(22 * flip, 14 + wave * 0.5), top + Vector2(26 * flip, 24 + wave), top + Vector2(1, 22)])
+		draw_colored_polygon(flag, Color(0.55, 0.16, 0.08))
+		draw_polyline(flag + PackedVector2Array([flag[0]]), Color(0.1, 0.05, 0.04), 1.5)
+		draw_circle(top + Vector2(12 * flip, 13 + wave * 0.7), 4.0, Color(1.0, 0.55, 0.15, 0.7 + 0.3 * sin(t * 9.0)))
+	else:
+		draw_line(Vector2(x - 20, feet + 2), Vector2(x + 20, feet - 2), Color(0.12, 0.08, 0.06), 3.0)
+		draw_rect(Rect2(x + 6, feet - 6, 14, 8), Color(0.4, 0.13, 0.07))
+
+
+## The Ash Marshal's war banner: every half second it drives on the enemies round him (more
+## damage, more speed) while it flies. Damage piling up on him (BREAK of his health, fading
+## over a few seconds) knocks it down for a while, then he raises it again.
+func _banner_update(delta: float) -> void:
+	recent_hurt *= exp(-delta / 4.0)
+	if banner_down > 0.0:
+		banner_down -= delta
+		if banner_down <= 0.0:
+			main.hud.show_message("The Ash Marshal raises his banner again!")
+			main.spawn_text(position + Vector2(0, -70), "RALLY!", Color(1, 0.5, 0.2))
+		return
+	if recent_hurt >= max_hp * float(banner["break"]):
+		banner_down = float(banner["down"])
+		recent_hurt = 0.0
+		main.hud.show_message("The Ash Marshal's banner is down! His host falters.")
+		main.spawn_text(position + Vector2(0, -70), "Banner down!", Color(0.6, 0.9, 1.0))
+		main.sfx("crumble")
+		return
+	banner_tick -= delta
+	if banner_tick > 0.0:
+		return
+	banner_tick = 0.5
+	for e in main.enemies_near(position, float(banner["radius"])):
+		if e != self and not e.dead and position.distance_to(e.position) <= float(banner["radius"]):
+			e.rally = 0.7
+			e.rally_dmg = float(banner["damage"])
+			e.rally_speed = float(banner["speed"])
+
+
+## Whether his banner is flying.
+func banner_up() -> bool:
+	return not banner.is_empty() and banner_down <= 0.0
+
+
+## The Ash Marshal's charge: now and then he rushes a troop of yours that's in his way
+## and out in front, straight at it, striking and throwing aside whoever he runs into. Only
+## along a line that's clear: never through rock, cliffs, water (a ford included) or a
+## wall, and a charge that meets one stops dead. Returns true while charging.
+func _charge_update(delta: float) -> bool:
+	if charging > 0.0:
+		charging -= delta
+		var next := position + charge_dir * float(rush["speed"]) * delta
+		var paths = main.paths
+		if paths.blocked(next, radius) or paths.in_ford(next) or paths.any_wall_between(position, next) \
+				or next.y > main.CASTLE_Y - radius or next.x < radius or next.x > main.FIELD_W - radius:
+			charging = 0.0   # (something in the way: it stops dead)
+			return false
+		position = next
+		walking = true
+		bob += delta * 30.0
+		for w in main.get_warriors():
+			if w.is_active() and not charge_hit.has(w) and position.distance_to(w.position) <= radius + w.RADIUS + 4.0:
+				charge_hit.append(w)
+				w.take_damage(float(rush["damage"]))
+				var side := Vector2(-charge_dir.y, charge_dir.x)
+				w.shove((side if side.dot(w.position - position) >= 0.0 else -side) * float(rush["push"]), float(rush["stun"]))
+		return charging > 0.0
+	charge_timer -= delta
+	if charge_timer > 0.0 or position.y < 40.0 or stun_timer > 0.0 or freeze_timer > 0.0:
+		return false
+	var best = null
+	var best_d := INF
+	for w in main.get_warriors():
+		if not w.is_active() or w.is_emplacement() or w.wall_guard:
+			continue
+		var d := position.distance_to(w.position)
+		if d < float(rush["min"]) or d > float(rush["range"]) or w.position.y < position.y - 20.0 or d >= best_d:
+			continue
+		if _clear_run(position, w.position):
+			best = w
+			best_d = d
+	if best == null:
+		charge_timer = 1.0   # (look again shortly)
+		return false
+	charge_timer = float(rush["cooldown"])
+	charge_dir = position.direction_to(best.position)
+	charging = (best_d + 20.0) / float(rush["speed"])
+	charge_hit = []
+	lunge_dir = charge_dir
+	main.spawn_text(position + Vector2(0, -70), "CHARGE!", Color(1, 0.45, 0.2))
+	main.sfx("dash", 0.7)
+	return true
+
+
+## Whether a charge from a to b would meet nothing: no rock, cliff, water, ford or wall.
+func _clear_run(a: Vector2, b: Vector2) -> bool:
+	var paths = main.paths
+	if paths.segment_blocked(a, b, radius) or paths.any_wall_between(a, b):
+		return false
+	var n := int(a.distance_to(b) / 12.0) + 1
+	for i in n + 1:
+		if paths.in_ford(a.lerp(b, float(i) / n)):
+			return false
+	return true
+
+
 ## Ogre King's blow: sweeps an arc in front of it, hitting everyone caught in it.
 func _cleave() -> void:
 	var reach: float = cleave["reach"]
@@ -451,7 +603,7 @@ func _cleave() -> void:
 			continue
 		if off.length() > 0.01 and absf(lunge_dir.angle_to(off)) > half:
 			continue
-		w.take_damage(damage * (1.0 - weaken))
+		w.take_damage(damage * _hit_mult())
 	var tip := position + lunge_dir * (radius + reach * 0.6)
 	main.spawn_burst(tip, reach + 10.0, Color(1.0, 0.85, 0.6))
 
@@ -479,7 +631,7 @@ func _breathe(delta: float) -> void:
 	var at: Vector2 = best.position
 	for w in main.get_warriors():
 		if w.is_active() and w.position.distance_to(at) <= breath["radius"] + w.RADIUS:
-			w.take_damage(breath["damage"] * (1.0 - weaken))
+			w.take_damage(breath["damage"] * _hit_mult())
 	lunge_dir = position.direction_to(at)
 	lunge = 0.15
 	main.spawn_flame(position + Vector2(0, -FLY_HEIGHT), at)
@@ -545,7 +697,7 @@ func _shoot_from_range() -> bool:
 		shot.target_pos = aim
 		shot.position = position + Vector2(8.0 * flip, -radius * 1.2)
 		shot.speed = ranged["speed"]
-		shot.damage = (damage if mark != null else wall_damage) * (1.0 - weaken)
+		shot.damage = (damage if mark != null else wall_damage) * _hit_mult()
 		main.add_projectile(shot)
 		main.sfx("bow", 0.8)
 	return true
@@ -554,6 +706,8 @@ func _shoot_from_range() -> bool:
 ## A step to `to`: straight there on open ground; on terrain, slid along any rock it
 ## would have walked into.
 func _step_to(to: Vector2) -> void:
+	if on_ground:
+		to = position + (to - position) * main.paths.wade_factor(position)   # (slow through a ford)
 	position = main.paths.slide(position, to, radius) if on_ground else to
 
 
@@ -769,6 +923,8 @@ func _push_from(p: Vector2, min_d: float, share: float) -> void:
 func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 	if dead:
 		return
+	if not banner.is_empty():
+		recent_hurt += amount   # (a hard enough beating knocks his banner down)
 	if gooey:
 		if resists(school):
 			if show_hit and absorb_note <= 0.0:
@@ -932,6 +1088,12 @@ func _draw() -> void:
 		draw_texture_rect(Sprites.white(), ice, false, Color(0.75, 0.92, 1.0, 0.45))
 		draw_rect(ice, Color(0.9, 0.97, 1.0, 0.9), false, 2.0)
 	draw_set_transform(Vector2.ZERO)
+	if not banner.is_empty():
+		_draw_banner(feet, size)
+	if rally > 0.0 and not boss:
+		# Driven on by the Marshal's banner: an ember over the head.
+		var e := Vector2(0, feet - size.y - 4.0 + sin(bob) * 1.5)
+		draw_rect(Rect2(e - Vector2(2, 2), Vector2(4, 4)), Color(1.0, 0.5, 0.15, 0.9))
 	if stun_timer > 0.0:
 		# Dazed: little stars circling the head.
 		var spin := Time.get_ticks_msec() / 200.0

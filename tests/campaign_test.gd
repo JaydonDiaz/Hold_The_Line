@@ -897,7 +897,7 @@ func _regression() -> void:
 	hud._show_cards("campaign")
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(names == ["New", "Back"], "R  Campaign with no save: %s" % ", ".join(names))
-	# Classic plays as before: everything open, 20 waves, the endless offer.
+	# Classic: everything open, and it goes on until the castle falls (harder past wave 20).
 	await _fresh_main()
 	main.hud.hide_mode_select()
 	main.choose_mode("normal")
@@ -917,15 +917,28 @@ func _regression() -> void:
 	main.gold = 5000
 	_key(KEY_1)
 	check(main.powers.owned.has("arrows"), "R  ...the ability hotkeys still buy")
-	check(main.last_wave() == Data.FINAL_WAVE and main._build_wave(5).has("warlord") and main.wave_level(7) == 7, "R  ...20 waves, Classic's wave mix and levels")
+	check(main.last_wave() == Data.FINAL_WAVE and main._build_wave(5).has("warlord") and main.wave_level(7) == 7, "R  ...Classic's wave mix and levels")
 	main.hud.refresh(main)
-	check(main.hud.wave_label.text == "Wave 0/20", "R  ...the HUD counts to 20")
+	check(main.survival() and main.hud.wave_label.text == "Wave 0", "R  ...a survival run: the HUD just counts the waves")
 	main.wave = Data.FINAL_WAVE - 1
 	main.start_wave()
 	await _clear_wave()
 	if main.wave_active:   # the Ogre King came out: beat him too
 		await _clear_wave()
-	check(main.choosing and not main.game_over, "R  ...clearing wave 20 offers endless, as before")
+	check(main.endless and not main.game_over and not main.wave_active, "R  ...clearing wave 20 goes straight on, harder from here (no stop)")
+	main.records_path = "user://campaign_test_records.cfg"
+	main.castle_hp = 1.0
+	main.wave = 23
+	main.damage_castle(10.0)
+	await process_frame
+	var shown := []
+	for n in main.hud.get_children():
+		if n is ColorRect:
+			for l in n.get_children():
+				if l is Label:
+					shown.append(l.text)
+	check(main.game_over and "You survived 23 waves, 3 past wave 20." in shown, "R  ...until the castle falls (%s)" % ", ".join(shown))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://campaign_test_records.cfg"))
 	check(get_root().content_scale_aspect == Window.CONTENT_SCALE_ASPECT_EXPAND, "R  ...and the field still widens with the window")
 	# Freeplay.
 	await _fresh_main()

@@ -24,6 +24,22 @@ const STYLES := {
 	"guildhall": {"stone": Color(0.47, 0.45, 0.47), "stone_dark": Color(0.32, 0.3, 0.33), "stone_light": Color(0.58, 0.56, 0.58),
 		"wood": Color(0.3, 0.19, 0.11), "iron": Color(0.66, 0.47, 0.2), "banner": Color(0.62, 0.36, 0.16),
 		"banner_trim": Color(0.95, 0.72, 0.3), "left_banner": Color(0.62, 0.36, 0.16), "ivy": false, "emblem": true},
+	# Greenwood's timber hall: weathered logs, mossy, the Watch's green banners.
+	"timberhall": {"stone": Color(0.55, 0.42, 0.3), "stone_dark": Color(0.38, 0.28, 0.2), "stone_light": Color(0.66, 0.52, 0.38),
+		"wood": Color(0.3, 0.2, 0.12), "iron": Color(0.4, 0.42, 0.38), "banner": Color(0.25, 0.55, 0.3),
+		"banner_trim": Color(0.85, 0.8, 0.45), "left_banner": Color(0.25, 0.55, 0.3), "ivy": true, "emblem": false},
+	# Deepdelve's guild gate: dark granite cut square, bronze fittings, the Guild's ochre.
+	"guildgate": {"stone": Color(0.38, 0.37, 0.4), "stone_dark": Color(0.24, 0.23, 0.27), "stone_light": Color(0.5, 0.49, 0.52),
+		"wood": Color(0.26, 0.17, 0.1), "iron": Color(0.72, 0.55, 0.25), "banner": Color(0.72, 0.52, 0.14),
+		"banner_trim": Color(0.3, 0.22, 0.12), "left_banner": Color(0.72, 0.52, 0.14), "ivy": false, "emblem": true},
+	# Mercy Vale's hospice wall: whitewashed stone, the Sanctuary's blue and white.
+	"hospice": {"stone": Color(0.86, 0.84, 0.78), "stone_dark": Color(0.66, 0.64, 0.6), "stone_light": Color(0.95, 0.94, 0.9),
+		"wood": Color(0.42, 0.3, 0.2), "iron": Color(0.55, 0.56, 0.6), "banner": Color(0.3, 0.45, 0.8),
+		"banner_trim": Color(0.96, 0.95, 0.9), "left_banner": Color(0.3, 0.45, 0.8), "ivy": true, "emblem": false},
+	# The forward fort at Sable Crossing: rough field stone, soot-dark, the Line's red.
+	"fort": {"stone": Color(0.52, 0.5, 0.46), "stone_dark": Color(0.34, 0.32, 0.3), "stone_light": Color(0.62, 0.6, 0.55),
+		"wood": Color(0.28, 0.18, 0.11), "iron": Color(0.45, 0.45, 0.48), "banner": Color(0.75, 0.2, 0.18),
+		"banner_trim": Color(0.9, 0.78, 0.4), "left_banner": Color(0.75, 0.2, 0.18), "ivy": false, "emblem": false},
 }
 const TOWER_W := 60.0
 const TOWER_RISE := 48.0     # how far the corner towers stand above the wall

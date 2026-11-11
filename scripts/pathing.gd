@@ -16,6 +16,11 @@ extends RefCounted
 ## sliding along it; push_out() puts back anything that ended up overlapping (pushes,
 ## knockback) and is only the safety net. With no map, every terrain call returns at
 ## once and nothing behaves differently.
+##
+## Fords ("ford" shapes) are shallow water: not terrain, anyone can walk in, but wading is
+## slow (wade_factor) and costs FORD_COST times as much in every route (the enemy fields,
+## enemy chase routes, troop routes), so a ford is a real way across that's weighed against
+## the long way round. "bridge" shapes are only art: a bridge is a gap left in the water.
 
 const CELL := 16
 const WALL_COST := 2000.0
@@ -24,6 +29,9 @@ const RING := 16    # open-ground steps cost at most 14 tenths, so 16 buckets go
 const HEAP_SPAN := 65536.0   # heap keys: cost * HEAP_SPAN + cell index (room for 65536 cells)
 const TROOP_RADIUS := 18.0   # Warrior.RADIUS
 const SOLID := -2          # a field cell terrain makes impassable (walls are their index, open ground -1)
+const FORD_COST := 2       # a step into a ford costs this many times one on dry ground (the time it takes: half speed)
+const FORD_SLOW := 0.5     # ...and anyone wading it goes at this share of their speed
+const NOT_TERRAIN := ["ford", "bridge"]   # map shapes that don't block (a ford is waded, a bridge is walked)
 const NEIGHBORS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
 
@@ -47,6 +55,8 @@ const MELEE_REACH := 36.0  # a cell is in melee reach if a troop can stand this 
 var objectives := []       # the mission's objectives (mission/objective.gd): goals for enemy fields
 var solid_objs := []       # the standing structures among them (solid to enemies and troops), as of the last invalidate()
 var terrain := []          # {"kind", "poly": PackedVector2Array, "box": Rect2}
+var fords := []            # PackedVector2Array: the fords' shapes
+var wade := PackedByteArray()   # per cell: 1 if its centre is in a ford (empty: no fords)
 var lanes := []            # Vector2(x from, x to) along the top edge where enemies come in
 var no_build := []         # Rect2s nothing may be posted in
 var clear := PackedFloat32Array()
@@ -81,8 +91,13 @@ func set_map(raw: Dictionary) -> void:
 	no_build = m.get("no_build", []).duplicate()
 	for l in m.get("lanes", []):
 		lanes.append(Vector2(l[0], l[1]))
+	fords.clear()
 	for t in m.get("terrain", []):
 		var poly := PackedVector2Array(t["poly"])
+		if t["kind"] in NOT_TERRAIN:
+			if t["kind"] == "ford":
+				fords.append(poly)
+			continue
 		var lo := poly[0]
 		var hi := poly[0]
 		for q in poly:
@@ -90,6 +105,14 @@ func set_map(raw: Dictionary) -> void:
 			hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
 		terrain.append({"kind": t["kind"], "poly": poly, "box": Rect2(lo, hi - lo)})
 	_build_clearance()
+	wade = PackedByteArray()
+	if not fords.is_empty():
+		wade.resize(cols * rows)
+		for i in cols * rows:
+			var c := _center(Vector2i(i % cols, i / cols))
+			for f in fords:
+				if Geometry2D.is_point_in_polygon(c, f):
+					wade[i] = 1
 	enemy_grids.clear()
 	for key in fields:
 		old_fields.erase(key)
@@ -100,6 +123,21 @@ func set_map(raw: Dictionary) -> void:
 
 func has_terrain() -> bool:
 	return not terrain.is_empty()
+
+
+## Whether p is in a ford.
+func in_ford(p: Vector2) -> bool:
+	if wade.is_empty():
+		return false
+	for f in fords:
+		if Geometry2D.is_point_in_polygon(p, f):
+			return true
+	return false
+
+
+## How fast something walking at p goes: slower wading a ford.
+func wade_factor(p: Vector2) -> float:
+	return FORD_SLOW if not wade.is_empty() and wade[_index(_cell(p))] == 1 and in_ford(p) else 1.0
 
 
 ## Exact distance from p to the nearest terrain (0 if it's inside some), or INF with none.
@@ -358,6 +396,8 @@ func enemy_route(from: Vector2, to: Vector2, r: float) -> PackedVector2Array:
 		for i in cols * rows:
 			if clear[i] < key:
 				g.set_point_solid(Vector2i(i % cols, i / cols))
+			elif not wade.is_empty() and wade[i] == 1:
+				g.set_point_weight_scale(Vector2i(i % cols, i / cols), FORD_COST)
 		enemy_grids[key] = g
 	var grid: AStarGrid2D = enemy_grids[key]
 	var a := _free_near(grid, _cell(from))
@@ -463,6 +503,14 @@ func has_troop_walls() -> bool:
 
 
 ## Whether a standing wall crosses the straight line from a to b (blocks a shot).
+## Whether any wall at all (a Phase Gate, an Arcane Lattice too) crosses the line a-b.
+func any_wall_between(a: Vector2, b: Vector2) -> bool:
+	for w in walls:
+		if is_instance_valid(w) and Geometry2D.segment_intersects_segment(a, b, w.seg_a(), w.seg_b()) != null:
+			return true
+	return false
+
+
 func wall_between(a: Vector2, b: Vector2) -> bool:
 	for w in shot_walls:
 		if Geometry2D.segment_intersects_segment(a, b, w.seg_a(), w.seg_b()) != null:
@@ -546,6 +594,8 @@ func _troop_grid() -> AStarGrid2D:
 		for i in cols * rows:
 			if troop_open[i] == 0:
 				g.set_point_solid(Vector2i(i % cols, i / cols))
+			elif not wade.is_empty() and wade[i] == 1:
+				g.set_point_weight_scale(Vector2i(i % cols, i / cols), FORD_COST)
 	for o in _live_objectives():
 		var r: float = o.RADIUS + 10.0
 		var olo := _cell(o.position - Vector2(r, r))
@@ -739,11 +789,15 @@ func _build(radius: float, goal = null) -> Dictionary:
 				var dd := _center(c).distance_to(goal.position)
 				if _inside(c) and dd >= r_in and dd < r_out:
 					seeds.append(_index(c))
+	var fording := not wade.is_empty()
 	for i in seeds:
 		if wall[i] == SOLID:
 			continue
 		breach[i] = wall[i]
-		if wall[i] >= 0:
+		if fording and wade[i] == 1 and wall[i] < 0:
+			d10[i] = 10 * FORD_COST
+			size = _push(heap, size, float(d10[i]) * HEAP_SPAN + i)
+		elif wall[i] >= 0:
 			d10[i] = wall_step
 			size = _push(heap, size, float(wall_step) * HEAP_SPAN + i)
 		else:
@@ -784,11 +838,12 @@ func _build(radius: float, goal = null) -> Dictionary:
 				if wall[j] == SOLID:
 					continue
 				var into_wall := wall[j] >= 0
-				var nd := at + (step * int(WALL_COST) if into_wall else step)
+				var wading := fording and wade[j] == 1
+				var nd := at + (step * int(WALL_COST) if into_wall else (step * FORD_COST if wading else step))
 				if nd < d10[j]:
 					d10[j] = nd
 					breach[j] = wall[j] if into_wall else from_breach
-					if into_wall:
+					if into_wall or wading:   # (beyond the ring's reach: on the heap)
 						size = _push(heap, size, float(nd) * HEAP_SPAN + j)
 					else:
 						ring[nd % RING].append(j)

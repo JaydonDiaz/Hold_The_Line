@@ -3,7 +3,8 @@ extends SceneTree
 ## clicked and upgraded, Wall Archers stand guard, enemies lay siege and wear it down,
 ## Sappers blow up against it, Skeleton Archers shoot it, it can fall, repairs mend it
 ## with Engineers walking out of the gate, walls follow their rules, and the Tutorial and
-## Freeplay start as they should. Run from the project folder:
+## Freeplay start as they should, and a game with no army left and no way to raise one is
+## over. Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/classic_test.gd
 ## Exits 1 if anything failed. (Kept in the repository so it's always there to run.)
 
@@ -56,6 +57,8 @@ func _run() -> void:
 	await _siege()
 	await _walls()
 	await _modes()
+	await _rout()
+	await _menu()
 	if main != null:
 		main.free()
 	print("%d checks, %d failed" % [checks, fails])
@@ -224,3 +227,76 @@ func _modes() -> void:
 	check(main.tutorial and main.started and main.castle.visible, "The Tutorial starts, with its castle")
 	await _fresh("hard")
 	check(main.difficulty == "hard" and main.castle_max < 450.0 and main.permadeath, "Hard: a weaker castle (%d) and permadeath" % roundi(main.castle_max))
+
+
+## No army and no way to raise one: every troop gone, no Gold Mine, and not the gold to hire
+## anything (even selling what can't fight). Then it's over, after a moment.
+func _rout() -> void:
+	await _fresh("normal")
+	main.start_wave()
+	await _frames(2)
+	main.spawn_queue.clear()
+	main.gold = 0
+	await _frames(60)
+	check(not main.game_over, "No army and no gold: not over straight away (it has to last a moment)")
+	await _frames(int(main.ROUT_GRACE * 60) + 20)
+	check(main.game_over and main.routed and not main.victory, "No troops, no Gold Mine, no gold to hire any: game over")
+	var shown := []
+	for n in main.hud.get_children():
+		if n is ColorRect:
+			for l in n.get_children():
+				if l is Label:
+					shown.append(l.text)
+	check("Your army is gone" in shown and "You survived 0 waves." in shown, "...the end screen says why, lost during wave 1: 0 survived (%s)" % ", ".join(shown))
+	# Each way out keeps it going.
+	for case in ["troop", "downed", "mine", "gold", "statue", "guards"]:
+		await _fresh("normal")
+		main.start_wave()
+		await _frames(2)
+		main.spawn_queue.clear()
+		main.gold = 999
+		match case:
+			"troop":
+				main.placing_type = "swordsman"
+			"downed":
+				main.placing_type = "swordsman"
+			"mine":
+				main.placing_type = "mine"
+			"statue":
+				main.placing_type = "statue"
+		if main.placing_type != "":
+			main.hire_at(Vector2(320, 600))
+			main.placing_type = ""
+		if case == "downed":
+			main.get_warriors()[-1].take_damage(1e9)
+		if case == "guards":
+			main.select_castle()
+			main.castle_upgrade(1)
+			main.castle_selected = false
+		main.gold = main.hire_cost("swordsman") if case == "gold" else 0
+		await _frames(int(main.ROUT_GRACE * 60) + 30)
+		check(not main.game_over, "...not over with %s" % {"troop": "a troop still standing", "downed": "a troop downed (it may be revived)",
+				"mine": "a Gold Mine", "gold": "the gold for a Swordsman", "statue": "a War Statue to sell for one", "guards": "Wall Archers on the castle"}[case])
+
+
+## The in-game Menu's "Return to the menu?" box covers the whole window: nothing behind it
+## (the Menu button included, wherever a wide window puts it) can be clicked, and it never
+## opens twice.
+func _menu() -> void:
+	await _fresh("normal")
+	main._lock_portrait(false)
+	await _frames(2)
+	var hud = main.hud
+	hud.menu_btn.emit_signal("pressed")
+	hud.menu_btn.emit_signal("pressed")
+	var boxes: Array = hud.get_children().filter(func(n): return n is ColorRect and n.get_child_count() > 0 and n.get_children().any(func(l): return l is Label and l.text == "Return to the menu?"))
+	check(boxes.size() == 1 and root.get_tree().paused, "Menu: pressed twice, its box opens once (and the game pauses)")
+	var cover: Rect2 = Rect2()
+	for c in boxes[0].get_children():
+		if c is ColorRect and c.mouse_filter == Control.MOUSE_FILTER_STOP:
+			cover = c.get_global_rect()
+	check(cover.has_point(hud.menu_btn.get_global_rect().get_center()) and cover.has_point(Vector2(5, 5)),
+			"...and its shade stops clicks across the whole window, the Menu button included")
+	root.get_tree().paused = false
+	boxes[0].queue_free()
+	await _frames(2)

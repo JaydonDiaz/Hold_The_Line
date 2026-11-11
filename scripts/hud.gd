@@ -18,8 +18,6 @@ signal mode_chosen(mode: String)
 signal freeplay_level_changed(step: int)
 signal freeplay_spawn_pressed(kind: String)
 signal freeplay_clear_pressed
-signal endless_chosen
-signal finish_chosen
 signal castle_pressed(path: int)
 signal ability_pressed(key: String)
 signal repair_pressed(chunk: int)
@@ -98,9 +96,11 @@ var freeplay_level_label: Label
 var freeplay_spawn_buttons := {}
 var boss_bar: Control       # the Ogre King's health, across the top of the field
 var boss_fill: ColorRect
+var boss_name: Label
 var ui_w := WIDTH           # screen width the HUD is laid out for (wider on a wide screen; see layout)
 var panel: Panel
 var menu_btn: Button
+var menu_dim: ColorRect = null   # the Menu's "Return to the menu?" box, while it's up
 var tabs_box := {}          # hire tab -> its buttons are laid out by _layout_hire
 var centered := []          # 640-wide overlays kept in the middle of the screen
 var freeplay_bar: Panel
@@ -232,7 +232,7 @@ func _ready() -> void:
 	boss_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	boss_bar.visible = false
 	add_child(boss_bar)
-	var boss_name := _label(boss_bar, Vector2(0, 0), Vector2(400, 22), Color(1, 0.8, 0.35), 16)
+	boss_name = _label(boss_bar, Vector2(0, 0), Vector2(400, 22), Color(1, 0.8, 0.35), 16)
 	boss_name.text = "THE OGRE KING"
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boss_name.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -257,8 +257,9 @@ func _ready() -> void:
 	hard_label.add_theme_constant_override("outline_size", 4)
 	hard_label.visible = false
 	# How the battle stands, for rules that say (objectives left, enemies through).
-	status_label = _label(self, Vector2(WIDTH - 340, 30), Vector2(330, 22), Color(1, 0.95, 0.8), 14)
+	status_label = _label(self, Vector2(WIDTH - 340, 30), Vector2(330, 44), Color(1, 0.95, 0.8), 14)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # (a long one goes onto a second line)
 	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	status_label.add_theme_constant_override("outline_size", 4)
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -593,6 +594,7 @@ func refresh(main) -> void:
 			boss = e
 	boss_bar.visible = boss != null
 	if boss != null:
+		boss_name.text = (Data.ENEMIES[boss.kind].get("name", boss.kind.capitalize()) as String).to_upper()
 		boss_fill.size.x = 396.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
 		boss_fill.color = Color(1.0, 0.35, 0.1) if boss.enraged else Color(0.85, 0.2, 0.15)
 	speed_btn.text = "%dx" % int(Engine.time_scale)
@@ -612,11 +614,17 @@ func refresh(main) -> void:
 	else:
 		gold_label.text = "Gold %d" % main.gold
 		lives_label.text = "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status()
-		wave_label.text = "Endless %d" % main.wave if main.endless else main.rules.wave_text()
-		start_btn.disabled = main.wave_active or main.game_over or main.choosing
+		wave_label.text = main.rules.wave_text()
+		start_btn.disabled = main.wave_active or main.game_over
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
-		if main.auto_play and not main.wave_active and not main.game_over and not main.choosing:
-			start_btn.text = ("Deploy: %ds" % ceili(main.auto_timer)) if main.deploying else "Wave %d in %ds" % [main.wave + 1, ceili(main.auto_timer)]
+		var next_in: float = main.next_wave_in()
+		if next_in >= 0.0 and not main.game_over:
+			if main.deploying:
+				start_btn.text = "Deploy: %ds" % ceili(next_in)
+			elif main.forced_auto and not main.wave_active:
+				start_btn.text = "Rest: wave %d in %ds" % [main.wave + 1, ceili(next_in)]
+			else:
+				start_btn.text = "Wave %d in %ds" % [main.wave + 1, ceili(next_in)]
 	for kind in hire_buttons:
 		var b: Button = hire_buttons[kind]
 		var cost: int = main.hire_cost(kind)
@@ -701,7 +709,8 @@ func refresh(main) -> void:
 					ceili(main.castle_hp), roundi(main.castle_max), main.price(Data.REPAIR_FULL_COST)]
 		else:
 			info_label.text = "Hire warriors to stop enemies reaching the bottom. Click a warrior to select it, or the castle to upgrade it." if main.rules.has_castle() \
-					else "Hire warriors to stop enemies getting past your camp at the bottom. Click a warrior to select it."
+					else ("Hire warriors to protect the objectives: the enemy is after them. Click a warrior to select it." if main.rules.guards() \
+					else "Hire warriors to stop enemies getting past your camp at the bottom. Click a warrior to select it.")
 		return
 	info_label.position = Vector2(14, 162)
 	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 100)
@@ -1046,6 +1055,9 @@ func _grave_card(card: Dictionary, grave, p: int) -> void:
 
 func show_message(text: String) -> void:
 	message_label.text = text
+	# (Under the battle's status line in the corner, where there is one, not over it.)
+	var m = get_parent()
+	message_label.position.y = 78.0 if m != null and m.has_method("scripted") and m.started and m.scripted() and m.rules != null and m.rules.status() != "" else 20.0
 	if message_tween:
 		message_tween.kill()
 	message_label.modulate.a = 1.0
@@ -1104,12 +1116,15 @@ func show_mode_select() -> void:
 ## the title scene's look]; a "goto:<set>" key opens another set of cards.
 func _show_cards(set_name: String) -> void:
 	for c in mode_cards:
+		if not is_instance_valid(c):
+			continue
 		var away := create_tween()
 		away.tween_property(c, "modulate:a", 0.0, 0.15)
 		away.tween_callback(c.queue_free)
 	mode_cards = []
 	picking = false
 	var modes := []
+	var narrow := false   # four cards to a row
 	var top := [Vector2(20, 636), Vector2(225, 636), Vector2(430, 636)]
 	var spots := []
 	var back := ["goto:top", "Back", "Back to the\nmain menu", Color(0.8, 0.8, 0.8), "goblin", ""]
@@ -1118,8 +1133,8 @@ func _show_cards(set_name: String) -> void:
 			mode_sub.text = "Choose a mode"
 			var save_note := "Alliances %d/8 so far" % Campaign.alliance_count() if Campaign.has_save() else "against the\nOgre King"
 			modes = [["goto:campaign", "Campaign", "Unite the peoples\nof the continent\n" + save_note, Color(1.0, 0.72, 0.45), "swordsman", "campaign"],
-				["goto:classic", "Classic", "Survive 20 waves\nwith every unit,\nthen go endless", Color(0.95, 0.85, 0.45), "archer", "normal"],
-				["goto:battle", "Battle Modes", "The campaign's\nkinds of battle,\nto play on\ntheir own", Color(0.85, 0.7, 1.0), "engineer", "normal"],
+				["goto:classic", "Classic", "Hold the castle\nwith every unit\nfor as many waves\nas you can", Color(0.95, 0.85, 0.45), "archer", "normal"],
+				["goto:battle", "Battle Modes", "The campaign's\nkinds of battle,\nto play on\ntheir own", Color(0.85, 0.7, 1.0), "alchemist", "normal"],
 				["freeplay", "Freeplay", "Unlimited gold\nSpawn any wave\nor enemy\nThe castle can't fall", Color(0.55, 0.8, 1.0), "mage", "freeplay"],
 				["tutorial", "Tutorial", "Learn the basics\nstep by step\nThe castle can't fall", Color(0.75, 1.0, 0.55), "bard", "tutorial"],
 				["settings", "Settings", "Music and\nsound effects\nvolume", Color(0.82, 0.84, 0.9), "engineer", "settings"]]
@@ -1144,13 +1159,17 @@ func _show_cards(set_name: String) -> void:
 			spots.append(Vector2(225, 834))
 		"battle":
 			mode_sub.text = "Battle Modes: choose a kind of battle"
+			# (Castle Defense is Classic, on its own card on the main menu.)
 			for t in Scenarios.TYPES:
+				if t == "castle":
+					continue
 				var ty: Dictionary = Scenarios.TYPES[t]
-				modes.append(["goto:classic" if t == "castle" else "goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
+				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
 			modes.append(back)
-			# Three rows of three (the kinds of battle, then Back in the middle of the last).
+			# Two rows of four along the bottom, clear of the castle (Back last).
+			narrow = true
 			for i in modes.size():
-				spots.append(Vector2([20, 225, 430][i % 3], [438, 636, 834][i / 3]))
+				spots.append(Vector2(8 + (i % 4) * (NARROW_W + 8), [636, 834][i / 4]))
 		"new":
 			mode_sub.text = "New campaign: choose your difficulty" + ("\n(this replaces your saved campaign)" if Campaign.has_save() else "")
 			for key in Data.DIFFICULTIES:
@@ -1163,7 +1182,10 @@ func _show_cards(set_name: String) -> void:
 		mode_sub.text = "%s: choose a battle" % Scenarios.TYPES[t]["name"]
 		for id in Scenarios.of_type(t):
 			var sc: Dictionary = Scenarios.SCENARIOS[id]
-			modes.append(["goto:bmd:" + id, sc["name"], "%d waves\n%s" % [sc["waves"], "on the meadow" if sc["map"] == "" else sc["map"]],
+			var where: String = "on the meadow" if sc["map"] == "" else Maps.get_map(sc["map"]).get("name", sc["map"])
+			if sc["type"] == "escort":
+				where = "from %s on" % where
+			modes.append(["goto:bmd:" + id, sc["name"], "Survive as\nmany waves\nas you can\n%s" % where,
 					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], "normal"])
 		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
 		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
@@ -1171,13 +1193,20 @@ func _show_cards(set_name: String) -> void:
 		# A scenario: its difficulty.
 		var id := set_name.substr(4)
 		mode_sub.text = "%s: choose your difficulty" % Scenarios.SCENARIOS[id]["name"]
+		var cfg := ConfigFile.new()
+		cfg.load(get_parent().records_path if get_parent().records_path != "" else "user://none.cfg")
 		for key in Data.DIFFICULTIES:
-			modes.append(_difficulty_card(key, "battle:%s:%s" % [id, key]))
+			var card := _difficulty_card(key, "battle:%s:%s" % [id, key])
+			# (No castle in these: its health would mean nothing. The best run instead.)
+			var best: int = cfg.get_value("survive", "%s@%s" % [id, key], 0)
+			card[2] = (card[2] as String).replace("Castle %d HP" % roundi(Data.CASTLE_HP * Data.DIFFICULTIES[key]["castle"]),
+					"Best: %d waves" % best if best > 0 else "No run yet")
+			modes.append(card)
 		modes.append(["goto:bm:" + Scenarios.SCENARIOS[id]["type"], "Back", "Back to the\nbattles", Color(0.8, 0.8, 0.8), "goblin", ""])
 		spots = top + [Vector2(225, 834)]
 	var cards := []
 	for i in modes.size():
-		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07))
+		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07, NARROW_W if narrow else 190.0))
 	mode_cards = cards.duplicate()
 	for i in cards.size():
 		var key: String = modes[i][0]
@@ -1216,6 +1245,7 @@ func show_battlefields(diff: String) -> void:
 	if battlefields != null:
 		return
 	var v := MapViewer.new()
+	v.records = get_parent().records_path
 	v.setup(diff, Campaign.open_maps(), classic_map)
 	battlefields = v
 	v.start.connect(func(map: String):
@@ -1256,15 +1286,20 @@ func _difficulty_card(diff: String, key: String) -> Array:
 	return [key, d["name"], "\n".join(lines), d["color"], d["icon"], diff]
 
 
-func _mode_card(m: Array, at: Vector2, delay: float) -> Button:
-	var b := _button(mode_screen, at + Vector2(0, 420), Vector2(190, 184), "")
+## Cards are 190 wide, three to a row; narrow ones (NARROW_W) go four to a row.
+const NARROW_W := 150.0
+const ModeVignette = preload("res://scripts/mode_vignette.gd")
+
+
+func _mode_card(m: Array, at: Vector2, delay: float, w := 190.0) -> Button:
+	var b := _button(mode_screen, at + Vector2(0, 420), Vector2(w, 184), "")
 	b.pivot_offset = b.size / 2
 	b.modulate.a = 0.0
-	var name := _label(b, Vector2(0, 10), Vector2(190, 36), m[3], 28)
+	var name := _label(b, Vector2(0, 10), Vector2(w, 36), m[3], 28)
 	name.text = m[1]
 	# Long names (the battlefields) shrink to fit the card.
 	var size := 28
-	while size > 16 and ThemeDB.fallback_font.get_string_size(m[1], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > 176.0:
+	while size > 14 and ThemeDB.fallback_font.get_string_size(m[1], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > w - 14.0:
 		size -= 1
 	name.add_theme_font_size_override("font_size", size)
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1275,16 +1310,30 @@ func _mode_card(m: Array, at: Vector2, delay: float) -> Button:
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.size = Vector2(48, 48)
-	icon.position = Vector2(71, 42)
+	icon.position = Vector2((w - 48.0) / 2.0, 42)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b.add_child(icon)
-	var desc := _label(b, Vector2(4, 90), Vector2(182, 86), Color(0.85, 0.85, 0.85), 13)   # room for four lines
+	var desc := _label(b, Vector2(4, 90), Vector2(w - 8.0, 86), Color(0.85, 0.85, 0.85), 13)   # room for four lines
 	desc.text = m[2]
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	# Fly in from below, settling with a little overshoot.
 	var t := create_tween().set_parallel()
 	t.tween_property(b, "position", at, 0.55).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(b, "modulate:a", 1.0, 0.3).set_delay(delay)
+	# A kind of battle (Battle Modes) has its own little scene playing on its card.
+	var key: String = m[0]
+	if key.begins_with("goto:bm:"):
+		var v := ModeVignette.new()
+		v.kind = key.substr(8)
+		v.look = m[4]
+		v.position = Vector2(4, 38)
+		v.size = Vector2(w - 8.0, 54)
+		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v.clip_contents = true
+		v.t = delay * 3.0   # (each a little out of step)
+		b.add_child(v)
+		icon.visible = false   # (the character's in the scene)
+		desc.position.y = 94.0
 	# The character on the card bobs up and down, each a little out of step.
 	var bob := create_tween().set_loops()
 	bob.tween_property(icon, "position:y", 37.0, 0.5 + delay * 0.3).set_trans(Tween.TRANS_SINE)
@@ -1438,7 +1487,7 @@ func _bleed(dim: ColorRect) -> ColorRect:
 	r.color = dim.color
 	r.position = Vector2(-2000, -2000)
 	r.size = Vector2(WIDTH + 4000, HEIGHT + 4000)
-	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	r.mouse_filter = Control.MOUSE_FILTER_STOP   # (nothing beyond the middle can be clicked through it either)
 	r.show_behind_parent = true
 	dim.add_child(r)
 	dim.color = Color(0, 0, 0, 0)   # the copy does the dimming, so the middle isn't darkened twice
@@ -1447,8 +1496,11 @@ func _bleed(dim: ColorRect) -> ColorRect:
 
 ## Pauses the game and asks before throwing the current run away.
 func show_menu_confirm() -> void:
+	if menu_dim != null and is_instance_valid(menu_dim):
+		return   # (already up)
 	get_tree().paused = true
 	var dim := ColorRect.new()
+	menu_dim = dim
 	dim.color = Color(0, 0, 0, 0.7)
 	dim.size = Vector2(WIDTH, HEIGHT)
 	add_child(dim)
@@ -1458,7 +1510,10 @@ func show_menu_confirm() -> void:
 	title.text = "Return to the menu?"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var sub := _label(dim, Vector2(0, 404), Vector2(WIDTH, 26), Color(0.8, 0.8, 0.8), 16)
+	var m = get_parent()
 	sub.text = "This game's progress will be lost."
+	if m.survival() and m.started and not m.game_over and m.waves_survived() > 0:
+		sub.text = "The %d wave%s survived so far still count toward your best." % [m.waves_survived(), "" if m.waves_survived() == 1 else "s"]
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var leave := _button(dim, Vector2(150, 460), Vector2(160, 50), "Leave game")
 	leave.pressed.connect(func():
@@ -1532,32 +1587,8 @@ func show_settings() -> void:
 	create_tween().tween_property(panel, "scale", Vector2.ONE, 0.15).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-## After the final wave: stop here with the win, or keep going for a record.
-func show_victory_choice(wave: int) -> void:
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
-	dim.size = Vector2(WIDTH, HEIGHT)
-	add_child(dim)
-	_center(dim)
-	_bleed(dim)
-	var title := _label(dim, Vector2(0, 300), Vector2(WIDTH, 60), Color(1, 0.85, 0.3), 44)
-	title.text = "Victory!"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var sub := _label(dim, Vector2(0, 370), Vector2(WIDTH, 60), Color.WHITE, 18)
-	sub.text = "You held out through all %d waves.\nKeep going? From here enemies toughen faster, and kills and\nwaves pay a little less each wave - see how far you can get." % wave
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var go := _button(dim, Vector2(110, 460), Vector2(200, 56), "Keep going")
-	go.pressed.connect(func():
-		dim.queue_free()
-		endless_chosen.emit())
-	var stop := _button(dim, Vector2(330, 460), Vector2(200, 56), "Finish")
-	stop.pressed.connect(func():
-		dim.queue_free()
-		finish_chosen.emit())
-
-
 ## survived = waves cleared this game; previous = this mode's record before it.
-func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
+func show_end(won: bool, survived: int, previous: int, endless: bool, why := "") -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.7)
 	dim.size = Vector2(WIDTH, HEIGHT)
@@ -1565,16 +1596,16 @@ func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
 	_center(dim)
 	_bleed(dim)
 	var title := _label(dim, Vector2(0, 320), Vector2(WIDTH, 60),
-			Color(1, 0.85, 0.3) if won or endless else Color(1, 0.4, 0.35), 44)
-	title.text = "Victory!" if won else ("Endless run over" if endless else "The castle has fallen")
+			Color(1, 0.85, 0.3) if won or survived > previous else Color(1, 0.4, 0.35), 44)
+	title.text = "Victory!" if won else (why if why != "" else "The castle has fallen")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var sub := _label(dim, Vector2(0, 390), Vector2(WIDTH, 30), Color.WHITE, 20)
 	if won:
 		sub.text = "You held out through all %d waves." % survived
 	elif endless:
-		sub.text = "You held out through %d waves, %d past the end." % [survived, survived - Data.FINAL_WAVE]
+		sub.text = "You survived %d waves, %d past wave %d." % [survived, survived - Data.FINAL_WAVE, Data.FINAL_WAVE]
 	else:
-		sub.text = "You survived %d waves." % survived
+		sub.text = "You survived %d wave%s." % [survived, "" if survived == 1 else "s"]
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var rec := _label(dim, Vector2(0, 424), Vector2(WIDTH, 26), Color(1, 0.85, 0.3), 16)
 	rec.text = "New best!" if survived > previous else "Best: %d waves" % previous
@@ -1584,17 +1615,21 @@ func show_end(won: bool, survived: int, previous: int, endless: bool) -> void:
 
 
 ## The end of a Battle Modes scenario: how it went, the best result, and Play again.
-func show_battle_end(won: bool, name: String, summary: String, record: String, again_key: String) -> void:
+func show_battle_end(won: bool, name: String, summary: String, record: String, again_key: String, survived := -1) -> void:
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.7)
 	dim.size = Vector2(WIDTH, HEIGHT)
 	add_child(dim)
 	_center(dim)
 	_bleed(dim)
-	var title := _label(dim, Vector2(0, 300), Vector2(WIDTH, 60), Color(1, 0.85, 0.3) if won else Color(1, 0.4, 0.35), 44)
+	var title := _label(dim, Vector2(0, 280), Vector2(WIDTH, 60), Color(1, 0.85, 0.3) if won or record == "New best!" else Color(1, 0.4, 0.35), 44)
 	title.text = "Victory!" if won else "The line has broken"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var sub := _label(dim, Vector2(40, 370), Vector2(WIDTH - 80, 50), Color.WHITE, 18)
+	if survived >= 0:
+		var held := _label(dim, Vector2(0, 340), Vector2(WIDTH, 30), Color.WHITE, 22)
+		held.text = "You survived %d wave%s" % [survived, "" if survived == 1 else "s"]
+		held.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := _label(dim, Vector2(40, 372), Vector2(WIDTH - 80, 50), Color(0.85, 0.85, 0.85), 16)
 	sub.text = name + (": " + summary if summary != "" else "")
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1782,9 +1817,19 @@ func orders_summary(w) -> String:
 ## What a unit's orders mean, in a sentence or three.
 func orders_meaning(w) -> String:
 	var out := ""
+	if w.is_mobile_healer():
+		match w.care():
+			"heal":
+				out += "Heals whoever's hurt worst first (villagers too), then revives the downed. "
+			"stay":
+				var who: String = (w.wards[0].label.to_lower() if w.wards.size() == 1 else "group of %d" % w.wards.size()) if not w.wards.is_empty() else "troop"
+				out += "Stays with the %s and looks after them first; anyone else only if it can reach them from there. " % who
+			_:
+				out += "Revives the downed first (they're on a clock), then heals whoever's hurt worst. "
 	if w.uses_targeting():
 		var pick: String = {"closest": "the nearest enemy", "first": "the enemy closest to the castle",
-				"strongest": "the toughest kind of enemy", "weakest": "the weakest kind of enemy"}[w.priority]
+				"strongest": "the toughest kind of enemy", "weakest": "the weakest kind of enemy",
+				"objective": "the enemy nearest to getting at what you're protecting"}[w.priority]
 		out += "Picks %s, " % pick
 		out += ("and sees it through: no switching until it falls, gets out of reach or leaves this unit's area. "
 				if w.commit == "focused" else "and switches whenever a better one comes along. ")
@@ -1845,7 +1890,7 @@ func _open_orders(main, w) -> void:
 	close.tooltip_text = "Close [O]"
 	close.pressed.connect(_close_orders)
 	var rows := [
-		["Target [T]", "priority", Warrior.PRIORITIES, {"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest"}],
+		["Focus [T]" if w.is_mobile_healer() else "Target [T]", "priority", Warrior.priorities_for_unit(w), Warrior.PRIORITY_NAMES],
 		["Commit [N]", "commit", Warrior.COMMITS, Warrior.COMMIT_NAMES],
 		["Movement [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "short": "Leash", "guard": "Guard", "free": "Free"}],
 	]
@@ -1856,7 +1901,11 @@ func _open_orders(main, w) -> void:
 			"guard": "Defends a wider area around its post (size below)",
 			"free": "Chases enemies anywhere on the field",
 			"closest": "The enemy nearest this unit", "first": "The enemy closest to the castle",
-			"strongest": "The toughest kind of enemy", "weakest": "The weakest kind of enemy"}
+			"strongest": "The toughest kind of enemy", "weakest": "The weakest kind of enemy",
+			"objective": "The enemy nearest to getting at what you're protecting (then the nearest)",
+			"revive": "Revives the downed first (they're on a clock), then heals the hurt",
+			"heal": "Heals the hurt first (villagers too), then revives the downed",
+			"stay": "Stays with a troop or a group and looks after them first: pick this, then click the troop (or right-click a troop with the Healer selected)"}
 	for r in rows.size():
 		var y := 42.0 + r * 36.0
 		var lab := _label(box, Vector2(12, y + 4), Vector2(104, 22), Color(0.85, 0.82, 0.76), 13)
@@ -1938,7 +1987,8 @@ func _refresh_orders(main, w) -> void:
 	var fixed: bool = w.is_emplacement() or w.wall_guard
 	var current := {"priority": w.priority, "commit": w.commit, "move_mode": w.move_mode}
 	for field in current:
-		var off: bool = (field == "move_mode" and fixed) or (field != "move_mode" and not w.uses_targeting())
+		var off: bool = (field == "move_mode" and fixed) or (field != "move_mode" and not w.uses_targeting()
+				and not (field == "priority" and w.is_mobile_healer()))
 		for key in orders_ui[field]:
 			var b: Button = orders_ui[field][key]
 			b.set_pressed_no_signal(key == current[field] and not off)
@@ -1956,9 +2006,9 @@ func _refresh_orders(main, w) -> void:
 	var size_label: Label = orders_ui["size"]
 	size_label.text = Data.ft(w.zone_radius()) if sized else ("at its post" if w.move_mode == "hold" and not fixed else "any distance" if not fixed else "-")
 	for b in orders_ui.get("follow", []):
-		var fo = b.get_meta("follow")
+		var fo = b.get_meta("follow") if b.has_meta("follow") else null
 		b.set_pressed_no_signal((fo == null and w.anchor == null) or (fo != null and w.anchor == fo))
 	var meaning: Label = orders_ui["meaning"]
 	meaning.text = orders_meaning(w)
-	if w.anchor != null:
+	if w.anchor != null and w.wards.is_empty():
 		meaning.text += " Follows the %s." % w.anchor.label.to_lower()

@@ -152,6 +152,9 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #   type         the battle's rules (scripts/mission/rules.gd): "castle" (the default),
 #                "pass" (Hold the Pass: no castle, at most "limit" enemies may get through),
 #                "positions" (Multiple Positions: "objectives" to keep standing)
+#   pace         {"auto": "forced"}: auto-play is locked on; "deploy": seconds to set up
+#                first; "window": seconds from the last of a wave arriving to the next wave
+#                (default 25: time to finish it off, rest and reset)
 #   requires     what has to happen in the campaign before it can be played (see TERRITORIES)
 const MISSIONS := {
 	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 240,
@@ -176,7 +179,7 @@ const MISSIONS := {
 		"objectives": [{"id": "west", "kind": "workshop", "name": "West Workshop", "at": Vector2(186, 664), "hp": 700},
 			{"id": "forge", "kind": "workshop", "name": "Forge", "at": Vector2(320, 612), "hp": 700},
 			{"id": "east", "kind": "workshop", "name": "East Workshop", "at": Vector2(454, 664), "hp": 700}],
-		"can_lose": 1, "castle_share": 0.1,
+		"can_lose": 1,
 		"waves": 5, "level": 4, "gold": 360, "count": [5, 2], "mood": "normal", "map": "stonehollow_quarry",
 		"pool": {1: ["goblin", "orc"], 2: ["wolf"], 3: ["sapper"], 4: ["orc"]},
 		"extra": {2: ["skeleton_archer"], 3: ["troll"], 4: ["skeleton_archer", "skeleton_archer"],

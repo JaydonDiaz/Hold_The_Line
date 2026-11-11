@@ -29,9 +29,11 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 	ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
-	draw_spawn(ci, w, tint)
-	for x in range(0, int(w), 16):
-		ci.draw_rect(Rect2(x, TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
+	var camp: bool = map.get("camp", true)
+	draw_spawn(ci, w, tint, camp)
+	if camp:
+		for x in range(0, int(w), 16):
+			ci.draw_rect(Rect2(x, TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
 	if not map.is_empty():
 		draw_battlefield(ci, w, tint, map)   # its own ground, trails and terrain
 
@@ -185,6 +187,24 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_grove(ci, poly, tint, rng)
 			"pit":
 				_pit(ci, poly, tint, rng)
+			"water":
+				_pond(ci, poly, tint, rng)
+			"ruin":
+				_ruin(ci, poly, tint, rng)
+			"house":
+				_house(ci, poly, tint, rng)
+			"hedge":
+				_hedge(ci, poly, tint, rng)
+			"shrine":
+				_shrine(ci, poly, tint, rng)
+	# Fords and bridges go over the water they cross.
+	for t in shapes:
+		var poly := PackedVector2Array(t["poly"])
+		match t["kind"]:
+			"ford":
+				_ford(ci, poly, tint, rng)
+			"bridge":
+				_bridge(ci, poly, tint, rng)
 
 
 static func _bottom(poly: Array) -> float:
@@ -340,6 +360,195 @@ static func _grove(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: R
 			ci.draw_rect(Rect2(leaf, Vector2(2, 2)), Color(0.26, 0.5, 0.24) * tint)
 
 
+## Water (a river, a pool in the fens): a muddy bank, deep water shading to the middle,
+## ripples catching the light and reeds along the edge. Nobody wades in.
+static func _pond(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(poly, Color(0.36, 0.3, 0.2) * tint)   # the bank
+	var water := [Color(0.22, 0.42, 0.55), Color(0.18, 0.35, 0.5), Color(0.15, 0.3, 0.44)]
+	for i in water.size():
+		for p in Geometry2D.offset_polygon(poly, -4.0 - i * 9.0):
+			ci.draw_colored_polygon(p, water[i] * tint)
+	for p in _inside(poly, 12.0, 14, rng):
+		var len := rng.randf_range(6, 16)
+		ci.draw_line(p, p + Vector2(len, 0), Color(0.55, 0.72, 0.82, 0.7) * tint, 1.5)
+	# Reeds and the odd lily pad round the edge.
+	for ring in Geometry2D.offset_polygon(poly, -5.0):
+		for i in ring.size():
+			var a: Vector2 = ring[i]
+			var b: Vector2 = ring[(i + 1) % ring.size()]
+			var n := int(a.distance_to(b) / 22.0)
+			for k in n:
+				var r: Vector2 = a.lerp(b, (k + rng.randf()) / maxf(n, 1))
+				if rng.randf() < 0.6:
+					for j in 3:
+						var top := r + Vector2(j * 2.0 - 2.0, -7.0 - rng.randf_range(0, 5))
+						ci.draw_line(r + Vector2(j * 2.0 - 2.0, 0), top, Color(0.32, 0.5, 0.22) * tint, 1.5)
+					ci.draw_rect(Rect2(r + Vector2(-1, -12), Vector2(2, 4)), Color(0.42, 0.28, 0.16) * tint)
+				else:
+					ci.draw_circle(r + Vector2(0, 6), 3.0, Color(0.3, 0.55, 0.28) * tint)
+
+
+## A hedgerow: a long bank of bushes, dense and dark at the foot, leafy on top, with the
+## odd hawthorn blossom. Nobody gets through but by its gaps.
+static func _hedge(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(_shifted(poly, Vector2(3, 6)), Color(0, 0, 0, 0.22))
+	ci.draw_colored_polygon(poly, OUTLINE)
+	for p in Geometry2D.offset_polygon(poly, -2.0):
+		ci.draw_colored_polygon(p, Color(0.16, 0.32, 0.14) * tint)
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	var x := box.position.x + 4.0
+	while x < box.end.x - 3.0:
+		var c := Vector2(x, box.get_center().y - 2.0 + rng.randf_range(-2, 2))
+		if Geometry2D.is_point_in_polygon(c, poly):
+			var r := minf(box.size.y * 0.55, rng.randf_range(7.0, 10.0))
+			ci.draw_circle(c, r, Color(0.24, 0.45, 0.2) * tint)
+			ci.draw_circle(c + Vector2(-r * 0.3, -r * 0.35), r * 0.55, Color(0.34, 0.58, 0.28) * tint)
+			if rng.randf() < 0.25:
+				ci.draw_rect(Rect2(c + Vector2(rng.randf_range(-4, 4), -r * 0.6), Vector2(2, 2)), Color(0.97, 0.93, 0.88))
+		x += rng.randf_range(8.0, 12.0)
+
+
+## Mercy Vale's shrine (its shape's bounding box): a little whitewashed chapel on a
+## paved square, a bell under the gable and candles at the door, flowers round about.
+static func _shrine(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	ci.draw_rect(box.grow(4), Color(0.62, 0.6, 0.55) * tint)   # the paving
+	for i in 6:
+		ci.draw_rect(Rect2(box.position.x - 4 + i * (box.size.x + 8) / 6.0, box.position.y - 4, 1, box.size.y + 8), Color(0.5, 0.48, 0.44) * tint)
+	ci.draw_rect(Rect2(box.position + Vector2(5, 8), box.size - Vector2(4, 4)), Color(0, 0, 0, 0.22))
+	var walls := Rect2(box.position.x + 8, box.position.y + box.size.y * 0.4, box.size.x - 16, box.size.y * 0.6 - 2)
+	ci.draw_rect(walls.grow(2), OUTLINE)
+	ci.draw_rect(walls, Color(0.95, 0.94, 0.9) * tint)
+	var cx := box.get_center().x
+	var roof := PackedVector2Array([Vector2(walls.position.x - 6, walls.position.y + 2), Vector2(cx, box.position.y + 2),
+			Vector2(walls.end.x + 6, walls.position.y + 2)])
+	ci.draw_colored_polygon(PackedVector2Array([roof[0] + Vector2(-2, 2), roof[1] + Vector2(0, -3), roof[2] + Vector2(2, 2)]), OUTLINE)
+	ci.draw_colored_polygon(roof, Color(0.3, 0.42, 0.72) * tint)
+	ci.draw_rect(Rect2(cx - 4, box.position.y + 12, 8, 8), OUTLINE)
+	ci.draw_rect(Rect2(cx - 3, box.position.y + 13, 6, 6), Color(0.85, 0.7, 0.3) * tint)   # the bell
+	ci.draw_rect(Rect2(cx - 7, walls.end.y - 18, 14, 18), OUTLINE)
+	ci.draw_rect(Rect2(cx - 6, walls.end.y - 17, 12, 17), Color(0.45, 0.3, 0.18) * tint)
+	for x in [cx - 12.0, cx + 10.0]:
+		ci.draw_rect(Rect2(x, walls.end.y - 6, 2, 6), Color(0.95, 0.92, 0.8))
+		ci.draw_rect(Rect2(x, walls.end.y - 8, 2, 2), Color(1.0, 0.8, 0.3))
+	for i in 10:
+		var p := Vector2(box.position.x - 2 + rng.randf() * (box.size.x + 4), box.end.y + 2 + rng.randf() * 4)
+		ci.draw_rect(Rect2(p, Vector2(2, 2)), [Color(0.95, 0.5, 0.6), Color(1, 0.9, 0.4), Color(0.7, 0.6, 1)][i % 3])
+
+
+## A ford: the river runs shallow here, pale over a stony bed, stepping stones across and
+## ripples where it runs over them.
+static func _ford(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(poly, Color(0.42, 0.6, 0.66) * tint)
+	for p in Geometry2D.offset_polygon(poly, -6.0):
+		ci.draw_colored_polygon(p, Color(0.5, 0.68, 0.72) * tint)
+	for p in _inside(poly, 6.0, 22, rng):
+		var s := rng.randf_range(3.0, 6.0)
+		ci.draw_circle(p, s + 1.0, Color(0.32, 0.4, 0.42) * tint)
+		ci.draw_circle(p + Vector2(-1, -1), s, Color(0.62, 0.62, 0.58) * tint)
+	for p in _inside(poly, 8.0, 10, rng):
+		ci.draw_line(p, p + Vector2(rng.randf_range(6, 12), 0), Color(0.85, 0.93, 0.95, 0.7) * tint, 1.5)
+
+
+## A bridge (its shape's bounding box, running up the field): planks across, a beam
+## along each side for a rail, and posts at the ends.
+static func _bridge(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	ci.draw_rect(Rect2(box.position + Vector2(4, 6), box.size), Color(0, 0, 0, 0.22))
+	ci.draw_rect(box.grow(2), OUTLINE)
+	var wood := Color(0.55, 0.38, 0.22) * tint
+	ci.draw_rect(box, wood)
+	var y := box.position.y + 2.0
+	while y < box.end.y:
+		ci.draw_rect(Rect2(box.position.x, y, box.size.x, 1.5), wood.darkened(0.3))
+		if rng.randf() < 0.3:
+			ci.draw_rect(Rect2(box.position.x + rng.randf_range(4, box.size.x - 8), y + 2, 3, 1), wood.lightened(0.15))
+		y += 7.0
+	for x in [box.position.x - 2.0, box.end.x - 3.0]:
+		ci.draw_rect(Rect2(x, box.position.y - 4, 5, box.size.y + 8), OUTLINE)
+		ci.draw_rect(Rect2(x + 1, box.position.y - 3, 3, box.size.y + 6), wood.lightened(0.12))
+		for py in [box.position.y - 6.0, box.end.y]:
+			ci.draw_rect(Rect2(x - 1, py, 7, 7), OUTLINE)
+			ci.draw_rect(Rect2(x, py + 1, 5, 5), wood.darkened(0.15))
+
+
+## A village cottage (its shape's bounding box): whitewashed walls under a thick thatch,
+## a door and a lit window facing the road, a chimney, and a little garden fence.
+static func _house(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for p in poly:
+		box = box.expand(p)
+	ci.draw_colored_polygon(_shifted(poly, Vector2(5, 7)), Color(0, 0, 0, 0.22))
+	var wall_top := box.position.y + box.size.y * 0.45
+	var walls := Rect2(box.position.x + 4, wall_top, box.size.x - 8, box.end.y - wall_top)
+	ci.draw_rect(walls.grow(2), OUTLINE)
+	ci.draw_rect(walls, Color(0.88, 0.84, 0.74) * tint)
+	ci.draw_rect(Rect2(walls.position.x, walls.end.y - 4, walls.size.x, 4), Color(0.6, 0.55, 0.48) * tint)   # the stone footing
+	for x in [walls.position.x, walls.end.x - 3]:
+		ci.draw_rect(Rect2(x, walls.position.y, 3, walls.size.y), Color(0.45, 0.3, 0.18) * tint)   # corner timbers
+	# The door, and a window lit from inside.
+	var mid := walls.position.x + walls.size.x * (0.3 + rng.randf() * 0.4)
+	ci.draw_rect(Rect2(mid - 6, walls.end.y - 18, 12, 18), OUTLINE)
+	ci.draw_rect(Rect2(mid - 5, walls.end.y - 17, 10, 17), Color(0.5, 0.32, 0.18) * tint)
+	var wx := walls.position.x + 8.0 if mid > walls.get_center().x else walls.end.x - 20.0
+	ci.draw_rect(Rect2(wx, walls.position.y + 8, 12, 10), OUTLINE)
+	ci.draw_rect(Rect2(wx + 1, walls.position.y + 9, 10, 8), Color(1.0, 0.78, 0.4) * tint)
+	ci.draw_rect(Rect2(wx + 5.5, walls.position.y + 9, 1, 8), OUTLINE)
+	# The thatch: a deep roof overhanging the walls, in layered straw.
+	var roof := PackedVector2Array([Vector2(box.position.x - 2, wall_top + 4), Vector2(box.position.x + 10, box.position.y),
+			Vector2(box.end.x - 10, box.position.y), Vector2(box.end.x + 2, wall_top + 4)])
+	var outline := PackedVector2Array()
+	for p in roof:
+		outline.append(p + (p - Vector2(box.get_center().x, wall_top)).normalized() * 2.0)
+	ci.draw_colored_polygon(outline, OUTLINE)
+	ci.draw_colored_polygon(roof, Color(0.78, 0.62, 0.32) * tint)
+	for i in 4:
+		var y := box.position.y + 4.0 + i * (wall_top - box.position.y) / 4.0
+		ci.draw_line(Vector2(box.position.x + 6 - i * 2, y), Vector2(box.end.x - 6 + i * 2, y), Color(0.62, 0.48, 0.22) * tint, 2.0)
+	# A chimney.
+	var cx := box.position.x + box.size.x * 0.72
+	ci.draw_rect(Rect2(cx - 1, box.position.y - 10, 10, 16), OUTLINE)
+	ci.draw_rect(Rect2(cx, box.position.y - 9, 8, 14), Color(0.55, 0.5, 0.46) * tint)
+
+
+## A burnt-out cottage: charred stone walls standing in a broken square, fallen roof
+## beams black across the floor, ash and the odd wisp of smoke-stained rubble.
+static func _ruin(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var stone := Color(0.52, 0.48, 0.45) * tint
+	ci.draw_colored_polygon(_shifted(poly, Vector2(4, 6)), Color(0, 0, 0, 0.2))
+	ci.draw_colored_polygon(poly, Color(0.22, 0.2, 0.19) * tint)   # the ash floor
+	for p in Geometry2D.offset_polygon(poly, -6.0):
+		ci.draw_colored_polygon(p, Color(0.3, 0.27, 0.25) * tint)
+	# Walls: the outline in thick broken stretches, with gaps where they've fallen.
+	for i in poly.size():
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % poly.size()]
+		var n := maxi(1, int(a.distance_to(b) / 10.0))
+		for k in n:
+			if rng.randf() < 0.18:
+				continue
+			var q: Vector2 = a.lerp(b, float(k) / n)
+			var h := rng.randf_range(5, 13)
+			ci.draw_rect(Rect2(q + Vector2(-5, -h), Vector2(11, h + 3)), OUTLINE)
+			ci.draw_rect(Rect2(q + Vector2(-4, -h + 1), Vector2(9, h + 1)), stone)
+			ci.draw_rect(Rect2(q + Vector2(-4, -h + 1), Vector2(9, 2)), stone.lightened(0.15))
+			ci.draw_rect(Rect2(q + Vector2(-4, -h + 3), Vector2(9, 2)), Color(0.15, 0.12, 0.1, 0.5))   # soot
+	# Fallen beams, and rubble.
+	for p in _inside(poly, 12.0, 4, rng):
+		var d := Vector2.from_angle(rng.randf_range(0, PI))
+		ci.draw_line(p - d * 12.0, p + d * 12.0, OUTLINE, 5.0)
+		ci.draw_line(p - d * 11.0, p + d * 11.0, Color(0.16, 0.12, 0.1) * tint, 3.0)
+	for p in _inside(poly, 10.0, 10, rng):
+		ci.draw_rect(Rect2(p, Vector2(4, 3)), stone.darkened(0.2))
+		ci.draw_rect(Rect2(p + Vector2(1, 0), Vector2(2, 1)), Color(1.0, 0.45, 0.15, 0.6) if rng.randf() < 0.2 else stone)
+
+
 ## The old quarry: a cut stone rim, terraces stepping down, and a dark floor with rubble
 ## and a wooden ladder.
 static func _pit(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
@@ -385,9 +594,13 @@ static func _crowded(p: Vector2, clear: Array) -> bool:
 	return false
 
 
-static func draw_spawn(ci: CanvasItem, w: float, tint: Color) -> void:
+## (Without the camp, just the trees along the top: the road goes on into them.)
+static func draw_spawn(ci: CanvasItem, w: float, tint: Color, camp := true) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 777
+	if not camp:
+		_treeline(ci, w, tint, rng)
+		return
 	# Trampled ruts in the dirt.
 	for i in int(w / 30.0):
 		var p := Vector2(rng.randf_range(0, w), rng.randf_range(34, TOP - 8))
@@ -421,8 +634,20 @@ static func draw_spawn(ci: CanvasItem, w: float, tint: Color) -> void:
 		var a := rng.randf_range(0, PI)
 		var d := Vector2.from_angle(a) * 4.0
 		ci.draw_line(b - d, b + d, Color(0.88, 0.86, 0.78) * tint, 2.0)
-	# The forest they march out of: two rows of dark pines along the top edge, on a
-	# band of deep shadow under the trees.
+	_treeline(ci, w, tint, rng)
+	# Sharpened stakes along the line your troops can't be posted past.
+	var sx := 12.0
+	while sx < w:
+		var base := Vector2(sx, TOP + 2)
+		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-3.5, 0), base + Vector2(3.5, 0), base + Vector2(0, -15)]), OUTLINE)
+		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-2, -1), base + Vector2(2, -1), base + Vector2(0, -12)]), Color(0.62, 0.44, 0.25) * tint)
+		sx += 40.0
+	ci.draw_line(Vector2(0, TOP - 4), Vector2(w, TOP - 4), Color(Color(0.5, 0.38, 0.22) * tint, 0.7), 1.5)
+
+
+## The forest they march out of: two rows of dark pines along the top edge, on a band of
+## deep shadow under the trees.
+static func _treeline(ci: CanvasItem, w: float, tint: Color, rng: RandomNumberGenerator) -> void:
 	ci.draw_rect(Rect2(0, 0, w, 20), Color(0.05, 0.09, 0.06) * tint)
 	for row in 2:
 		var x := -10.0 + row * 11.0
@@ -432,14 +657,6 @@ static func draw_spawn(ci: CanvasItem, w: float, tint: Color) -> void:
 			var base_y := 22.0 + row * 9.0 + rng.randf_range(-3, 3)
 			_pine(ci, Vector2(x, base_y), h, dark * tint)
 			x += rng.randf_range(16, 26)
-	# Sharpened stakes along the line your troops can't be posted past.
-	var sx := 12.0
-	while sx < w:
-		var base := Vector2(sx, TOP + 2)
-		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-3.5, 0), base + Vector2(3.5, 0), base + Vector2(0, -15)]), OUTLINE)
-		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-2, -1), base + Vector2(2, -1), base + Vector2(0, -12)]), Color(0.62, 0.44, 0.25) * tint)
-		sx += 40.0
-	ci.draw_line(Vector2(0, TOP - 4), Vector2(w, TOP - 4), Color(Color(0.5, 0.38, 0.22) * tint, 0.7), 1.5)
 
 
 static func _pine(ci: CanvasItem, base: Vector2, h: float, col: Color) -> void:

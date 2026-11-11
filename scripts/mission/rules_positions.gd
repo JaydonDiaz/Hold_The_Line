@@ -1,14 +1,16 @@
 extends "res://scripts/mission/rules.gd"
-## Multiple Positions: besides the castle (if the mission keeps one), several objectives
-## stand on the field (workshops, watchtowers...) and the enemy splits up to go for them.
-## Lose too many (more than "can_lose") and the battle is lost; the castle falling still
-## loses too. Clear the last wave with enough of them standing to win.
+## Multiple Positions: several objectives stand on the field (workshops, watchtowers...)
+## and the enemy splits up to go for them. There's no castle: the positions are what the
+## battle is about, and your camp is at the bottom. Lose too many (more than "can_lose")
+## and the battle is lost. Clear the last wave with enough of them standing to win.
 ##
 ## Mission data: "type": "positions",
 ##   "objectives": [{"id", "kind", "name", "at", "hp"}]   placed on the map as drawn up (640 wide)
 ##   "can_lose": n          how many may be destroyed (default 0: keep them all)
-##   "castle": false        no castle (default: keep it)
-##   "castle_share": 0.25   share of enemies that go for the castle instead
+##   "castle": true         keep a castle too (default: none)
+##   "castle_share": 0.25   with a castle: share of enemies that go for it instead
+##   "mend": 0.15           endless: share of its health each standing one gets back
+##                          when a wave is cleared (the crews patch them up)
 ## Each enemy picks its objective when it comes in: most go for the one nearest where they
 ## enter, the rest for any other still standing, so the attack spreads but has a weight.
 
@@ -20,7 +22,7 @@ var over := false
 
 
 func has_castle() -> bool:
-	return mission.get("castle", true)
+	return mission.get("castle", false)
 
 
 func can_lose() -> int:
@@ -45,6 +47,14 @@ func standing() -> Array:
 	return objs.filter(func(o): return not o.dead)
 
 
+func guards() -> bool:
+	return true
+
+
+func objective_only() -> bool:
+	return not has_castle()
+
+
 func enemy_goal(e):
 	var alive := standing()
 	if alive.is_empty():
@@ -58,6 +68,23 @@ func enemy_goal(e):
 				best = o
 		return best
 	return alive.pick_random()
+
+
+func wave_cleared(n: int) -> bool:
+	if endless():
+		var mended := false
+		for o in standing():
+			if o.hp < o.max_hp:
+				o.hp = minf(o.max_hp, o.hp + o.max_hp * float(mission.get("mend", 0.15)))
+				mended = true
+		if mended:
+			main.spawn_text(Vector2(main.FIELD_W / 2.0, 200), "The crews patch them up", Color(0.6, 1, 0.6))
+	return super.wave_cleared(n)
+
+
+## Without a castle, one that gets past the positions is off the field (it's them that matter).
+func on_reached_bottom(_e) -> bool:
+	return not has_castle()
 
 
 func on_objective_lost(o) -> void:
@@ -85,8 +112,12 @@ func status() -> String:
 	return text
 
 
+const SHORT := {"watchtower": "Towers", "workshop": "Shops", "beacon": "Beacon"}
+
+
 func panel_status() -> String:
-	return "%s %d/%d" % [_plural().left(4), standing().size(), objs.size()]
+	var kind: String = objs[0].kind if not objs.is_empty() else ""
+	return "%s %d/%d" % [SHORT.get(kind, _plural().left(6)), standing().size(), objs.size()]
 
 
 func score() -> int:

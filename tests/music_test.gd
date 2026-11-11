@@ -4,8 +4,8 @@ extends SceneTree
 ## The title music on the title screen and the campaign map; the story music in the
 ## prologue; the villain music in the Ogre King's and the Ash Marshal's cutscenes (and
 ## the dialogue around them back in its box); each stage's own peaceful music between
-## waves (the meadow's, the mountains'); the battle music during waves; and a part for
-## every Bard instrument in every stage's music. Exits 1 if anything failed.
+## waves (the meadow's, the mountains'); the battle music during waves, each map its own;
+## and a part for every Bard instrument in every stage's music. Exits 1 if anything failed.
 
 const TEST_SAVE := "user://music_test.cfg"
 
@@ -130,6 +130,31 @@ func _run() -> void:
 	if main.hud.story != null:
 		main.hud.story.skip()
 	check(await _playing() == "mountain", "Stonehollow between waves: the mountains' peaceful music")
+	# Each map's own battle music.
+	var Maps = load("res://scripts/maps.gd")
+	var styles := {"": main.Audio.battle_for({})}
+	for id in Maps.MAPS.keys() + Maps.ZONES.keys():
+		styles[id] = main.Audio.battle_for(Maps.get_map(id))
+	var distinct := {}
+	for id in styles:
+		distinct[styles[id]] = true
+	check(distinct.size() == styles.size(), "every map has its own battle music (%d maps, %d pieces)" % [styles.size(), distinct.size()])
+	check(main.battle_music == "battle_quarry", "...Stonehollow's is its own (%s)" % main.battle_music)
+	var t0 := Time.get_ticks_msec()
+	while not main.audio._music.has("battle_quarry") and Time.get_ticks_msec() - t0 < 150000:
+		await create_timer(0.2).timeout   # (composed while the battle's being set up)
+	main.start_wave()
+	await _frames(5)
+	check(await _playing() == "battle_quarry", "...made while the battle's set up, and playing in the wave (%s; wanted %d, thread %s, cached %s)" % [main.audio._playing_track,
+			main.audio._wanted_first.size(), main.audio._thread, main.audio._cache.has("battle_quarry")])
+	t0 = Time.get_ticks_msec()
+	var parts := 0
+	while parts < main.audio.INSTRUMENTS.size() + 1 and Time.get_ticks_msec() - t0 < 150000:
+		await create_timer(0.2).timeout
+		parts = (main.audio._music["battle_quarry"] as AudioStreamSynchronized).stream_count if main.audio._music.has("battle_quarry") else 0
+	check(parts == main.audio.INSTRUMENTS.size() + 1, "...with a part for every Bard instrument too")
+	check(main.audio._cache.has("battle_quarry") and (main.audio._cache["battle"] as AudioStreamWAV).data != (main.audio._cache["battle_quarry"] as AudioStreamWAV).data,
+			"...and it isn't the meadow's")
 	main.free()
 	main = null
 	for f in [TEST_SAVE, TEST_SAVE + ".tmp"]:

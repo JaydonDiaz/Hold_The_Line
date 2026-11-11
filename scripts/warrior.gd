@@ -29,8 +29,20 @@ const WINDUP := 0.18      # melee troops rear back over the last moment before a
 const ARCHER_LOOP := 5.6  # Archer idle: draw an arrow, twirl it, flip it, twirl, put it back, rest
 const PRIORITIES := ["closest", "first", "strongest", "weakest"]
 const PRIORITY_NAMES := {
-	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest",
+	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
+	"revive": "Revive", "heal": "Heal", "stay": "Stay with",
 }
+# A Healer's own priorities: who it looks after first. "revive": the downed first (they're
+# on a clock), then the hurt; "heal": the hurt first, then the downed; "stay": it keeps
+# with a troop (or a group: its wards) and looks after them first, and anyone else only
+# within reach without leaving them. Where there are villagers on the field, they're
+# among the hurt it heals.
+const HEAL_PRIORITIES := ["revive", "heal", "stay"]
+const WARD_GAP := Vector2(0, 34)   # where a Healer keeps itself from its ward (just behind it)
+# In a battle with something to protect (rules.guards()), one more: "objective", the enemy
+# nearest to getting at it. New troops start on it there.
+const OBJECTIVE_PRIORITY := "objective"
+const THREAT_RANGE := 320.0   # an enemy this far from its objective (or further) is the least urgent of those after one
 # Orders: how far a unit may go from its post (its anchor) to fight, and how firmly it
 # sticks to the enemy it picked. Incidental blows on the way (see _victim) never change either.
 const MOVE_MODES := ["hold", "short", "guard", "free"]
@@ -64,7 +76,8 @@ var leash := LEASH_DEFAULT.duplicate()   # each zone mode's size (px from the po
 var commit := "focused"        # Orders: see COMMITS
 var chase_best := INF          # nearest it has got to its target (for spotting a chase going nowhere)
 var chase_time := 0.0          # seconds since it last got closer
-var anchor = null              # Orders: an objective it follows (a wagon, civilians): its post goes where that goes
+var anchor = null              # Orders: an objective it follows (a wagon, civilians), or a Healer's ward: its post goes where that goes
+var wards: Array = []          # a Healer staying with troops ("stay"): who it keeps with and looks after first
 var anchor_off := Vector2.ZERO # where it keeps itself, from the anchor
 var anchor_check := 0.0
 var shun_id := 0               # an enemy it gave up on, not picked again until shun_left runs out
@@ -664,6 +677,28 @@ func is_active() -> bool:
 	return down_timer <= 0.0 and not is_queued_for_deletion()
 
 
+## Something a Healer can keep with (as an anchor): there to follow while it's on the
+## field, downed or not.
+func is_target() -> bool:
+	return not is_queued_for_deletion()
+
+
+## Its name, as a thing to follow or stay with.
+var label: String:
+	get:
+		return data.get("name", kind.capitalize()) if not data.is_empty() else kind
+
+
+## A Healer that walks the field (not a Medic Bay): it takes HEAL_PRIORITIES.
+func is_mobile_healer() -> bool:
+	return is_healer() and not is_emplacement() and not wall_guard
+
+
+## Who a Healer looks after first ("revive", "heal" or "stay"; anything else: "revive").
+func care() -> String:
+	return priority if priority in HEAL_PRIORITIES else "revive"
+
+
 func set_post(p: Vector2) -> void:
 	post = p
 	target = null
@@ -671,12 +706,51 @@ func set_post(p: Vector2) -> void:
 
 ## A player move order: walk to the new post without stopping to fight.
 func order_to(p: Vector2) -> void:
+	if care() == "stay" and is_mobile_healer():
+		stop_staying()   # sent somewhere: it leaves its ward
 	set_post(p)
 	ordered = true
 
 
+## A Healer stays with `troops` (its wards): keeps with them and looks after them first.
+func stay_with(troops: Array) -> void:
+	wards = troops.filter(func(t): return t != self and is_instance_valid(t))
+	if wards.is_empty():
+		return
+	priority = "stay"
+	anchor = null
+	_keep_wards()
+
+
+func stop_staying() -> void:
+	wards = []
+	if anchor != null and is_instance_valid(anchor) and anchor.has_method("stay_with"):   # (a ward, not a wagon)
+		anchor = null
+	if priority == "stay":
+		priority = "revive"
+
+
+## Its wards still on the field, and its post kept with the nearest of them.
+func _keep_wards() -> void:
+	wards = wards.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
+	if wards.is_empty():
+		stop_staying()
+		main.spawn_text(position + Vector2(0, -50), "Back to its post", Color(0.7, 0.95, 1.0))
+		return
+	if not wards.has(anchor):
+		var near = wards[0]
+		for t in wards:
+			if t.position.distance_to(position) < near.position.distance_to(position):
+				near = t
+		anchor = near
+		anchor_off = WARD_GAP
+		anchor_check = 0.0
+
+
 ## "ok", "max" (this path is at tier 4) or "full" (all six upgrades are used).
 func path_state(p: int) -> String:
+	if p >= data["paths"].size() or (data["paths"][p]["tiers"] as Array).is_empty():
+		return "none"   # (a raised Skeleton has no upgrades)
 	if tiers[p] >= MAX_TIER:
 		return "max"
 	if total_upgrades() >= MAX_UPGRADES:
@@ -1037,6 +1111,9 @@ func _process(delta: float) -> void:
 		_support_update(delta)
 		return
 	if is_healer():
+		if priority == "stay":
+			_keep_wards()
+		_follow_anchor(delta)   # (a wagon it follows, or its ward)
 		_healer_update(delta)
 		if absf(facing.x) > 0.2:
 			flip = signf(facing.x)
@@ -1552,6 +1629,10 @@ func _priority_score(e) -> float:
 	# Small distance term breaks ties (e.g. a row of full-health goblins) toward the nearest.
 	var near := -_gap_to(e) * 0.001
 	match priority:
+		"objective":
+			# Enemies after an objective first, the nearest to getting at it first of all; then
+			# the rest by distance. A little stickiness keeps it from flicking between two.
+			return threat(e) * 10000.0 - _gap_to(e) + (600.0 if e == target else 0.0)
 		"first":
 			return e.position.y + near
 		"strongest":
@@ -1562,6 +1643,29 @@ func _priority_score(e) -> float:
 			# Lowest enemy tier first (a goblin over a wolf), with the same stickiness.
 			return -e.tier * 10000.0 - _gap_to(e) + (1000.0 if e == target else 0.0)
 	return -_gap_to(e)
+
+
+## How urgently enemy `e` needs stopping for the objectives (the castle, where there is one,
+## among them): 0 if it isn't after one, 1 to 2
+## the nearer it is to getting at it (2: at it, or in the ground it's taking).
+static func threat(e) -> float:
+	var g = e.goal
+	if g == null and e.main.rules.has_castle() and e.main.rules.guards():
+		return 2.0 - clampf((e.main.CASTLE_Y - e.position.y - e.radius) / THREAT_RANGE, 0.0, 1.0)   # the castle's an objective too
+	if g == null or not is_instance_valid(g) or not g.is_target():
+		return 0.0
+	var gap: float = e.position.distance_to(g.position) - (g.zone_r if g.kind == "zone" else g.RADIUS) - e.radius
+	return 1.0 + 1.0 - clampf(gap / THREAT_RANGE, 0.0, 1.0)
+
+
+## The priorities `w` can be given: a Healer's own, or the target priorities on offer.
+static func priorities_for_unit(w) -> Array:
+	return HEAL_PRIORITIES if w.is_mobile_healer() else priorities_for(w.main)
+
+
+## The target priorities on offer in this battle.
+static func priorities_for(m) -> Array:
+	return PRIORITIES + [OBJECTIVE_PRIORITY] if m.rules != null and m.rules.guards() else PRIORITIES
 
 
 ## Takes on another unit's orders (a Multiform copy, its original's).
@@ -1575,7 +1679,8 @@ func copy_orders(w) -> void:
 
 
 func cycle_priority() -> void:
-	priority = PRIORITIES[(PRIORITIES.find(priority) + 1) % PRIORITIES.size()]
+	var list := priorities_for_unit(self)
+	priority = list[(list.find(priority) + 1) % list.size()]
 	target = null
 	retarget_timer = 0.0
 
@@ -1613,7 +1718,11 @@ func _way_blocked(stop: Vector2, delta: float) -> bool:
 ## A step to `to`: straight there on open ground; on terrain, slid along any rock it
 ## would have walked into (so it never walks into a cliff, only along it).
 func _step_to(to: Vector2) -> void:
-	position = to if main.paths.terrain.is_empty() else main.paths.slide(position, to, RADIUS)
+	if main.paths.terrain.is_empty():
+		position = to
+		return
+	to = position + (to - position) * main.paths.wade_factor(position)   # (slow through a ford)
+	position = main.paths.slide(position, to, RADIUS)
 
 
 ## Next waypoint on the way around the walls to p. The route is worked out again
@@ -2031,22 +2140,38 @@ func _healer_update(delta: float) -> void:
 				cd_timer = cooldown
 				_heal(hurt_near)
 		return
-	var downed = _pick_downed()
-	if downed != rez_target:
-		rez_target = downed
-		rez_progress = 0.0
-	if downed != null:
-		_go_within_reach(downed, delta)
-		if _ally_gap(downed) <= attack_range:
-			_rez_step(downed, delta)
-		return
-	var hurt = _pick_hurt()
-	if hurt != null:
-		_go_within_reach(hurt, delta)
-		if cd_timer <= 0.0 and _ally_gap(hurt) <= attack_range:
-			cd_timer = cooldown
-			_heal(hurt)
-		return
+	var c := care()
+	var downed = null
+	var hurt = null
+	if c == "stay":
+		# Its wards first; anyone else only once it's with them, and only if it can reach
+		# them from there.
+		downed = _pick_downed(wards)
+		hurt = _pick_hurt(wards)
+		var with_them := position.distance_to(post) <= attack_range * 0.5 + 20.0
+		if downed == null and with_them:
+			downed = _within_reach(_pick_downed())
+		if hurt == null and with_them:
+			hurt = _within_reach(_pick_hurt())
+	else:
+		downed = _pick_downed()
+		hurt = _pick_hurt()
+	var order := ["heal", "revive"] if c == "heal" else ["revive", "heal"]
+	for act in order:
+		if act == "revive" and downed != null:
+			if downed != rez_target:
+				rez_target = downed
+				rez_progress = 0.0
+			_go_within_reach(downed, delta)
+			if _ally_gap(downed) <= attack_range:
+				_rez_step(downed, delta)
+			return
+		if act == "heal" and hurt != null:
+			_go_within_reach(hurt, delta)
+			if cd_timer <= 0.0 and _ally_gap(hurt) <= attack_range:
+				cd_timer = cooldown
+				_heal(hurt)
+			return
 	var d := position.distance_to(post)
 	if d > 2.0:
 		facing = position.direction_to(post)
@@ -2191,6 +2316,7 @@ func _support_update(delta: float) -> void:
 					_rez_step(downed, delta)
 			if cd_timer <= 0.0:
 				var patients: Array = main.get_warriors().filter(func(w): return w != self and w.is_active() and _in_radius(w) and _best_bay(w) == self)
+				patients += _villagers().filter(func(v): return position.distance_to(v.position) <= attack_range + RADIUS)   # (villagers passing by too)
 				if patients.any(func(w): return w.hp < w.max_hp):
 					cd_timer = cooldown
 					swing = 0.15
@@ -2280,11 +2406,17 @@ func _revive_time() -> float:
 	return data["revive_time"] / revive.get("rez_speed", 1.0)
 
 
-## Downed ally to revive: the one closest to dying (Hard) or to this healer (Normal).
-func _pick_downed():
+## `who` if it's within this Healer's reach right now, else null.
+func _within_reach(who):
+	return who if who != null and _ally_gap(who) <= attack_range else null
+
+
+## Downed ally to revive: the one closest to dying (Hard) or to this healer (Normal);
+## among `pool` only, if one's given.
+func _pick_downed(pool: Array = []):
 	var best = null
 	var best_score := INF
-	for w in main.get_warriors():
+	for w in (pool if not pool.is_empty() else main.get_warriors()):
 		if w == self or w.is_active() or w.is_queued_for_deletion() or not _ally_in_zone(w):
 			continue
 		var score: float = w.down_timer * 100.0 if main.permadeath else position.distance_to(w.position)
@@ -2296,17 +2428,25 @@ func _pick_downed():
 	return best
 
 
-func _pick_hurt():
+## The ally (or villager) with the lowest share of its health left; among `pool` only, if
+## one's given.
+func _pick_hurt(pool: Array = []):
 	var best = null
 	var best_frac := 0.999
-	for w in main.get_warriors():
-		if not w.is_active() or not _ally_in_zone(w):
+	var who: Array = pool if not pool.is_empty() else main.get_warriors() + _villagers()
+	for w in who:
+		if not w.is_active() or not w.is_target() or not _ally_in_zone(w):
 			continue
 		var frac: float = w.hp / w.max_hp
 		if frac < best_frac:
 			best_frac = frac
 			best = w
 	return best
+
+
+## The villagers on the field (Evacuation): a Healer mends them too.
+func _villagers() -> Array:
+	return main.rules.objectives().filter(func(o): return o.kind == "civilian" and o.is_target()) if main.rules.guards() else []
 
 
 func _heal(w) -> void:
@@ -2317,7 +2457,7 @@ func _heal(w) -> void:
 	var healed: float = w.receive_heal(damage * _power(), regen_grant)
 	if not heal_area.is_empty():
 		var r: float = heal_area[0]
-		for x in main.get_warriors():
+		for x in main.get_warriors() + _villagers():
 			if x != w and x.is_active() and x.position.distance_to(w.position) <= r:
 				healed += x.receive_heal(damage * _power() * heal_area[1], regen_grant)
 		main.spawn_burst(w.position, r, Color(0.55, 1.0, 0.55))

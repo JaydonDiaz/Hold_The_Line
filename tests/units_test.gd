@@ -60,6 +60,61 @@ func _fresh(mode := "normal") -> void:
 	main.spawn_queue.clear()
 
 
+## A Healer's own priorities: revive first, heal first, or stay with a troop or group.
+func _care() -> void:
+	await _fresh()
+	var h = _hire("healer", Vector2(320, 620))
+	check(h.priority == "revive" and Warrior.priorities_for_unit(h) == Warrior.HEAL_PRIORITIES and Warrior.priorities_for_unit(_hire("archer", Vector2(100, 600))) == Warrior.PRIORITIES,
+			"Healers get their own priorities (Revive, Heal, Stay with), starting on Revive; other troops keep the target priorities")
+	main.selected = h
+	main.hud.refresh(main)
+	main.hud.toggle_orders(main)
+	var row: Dictionary = main.hud.orders_ui.get("priority", {})
+	check(row.keys() == Warrior.HEAL_PRIORITIES and not row["revive"].disabled and row["revive"].button_pressed, "...the orders panel shows them for a Healer (Focus), Revive picked")
+	main.hud.toggle_orders(main)
+	# Revive first vs Heal first: one troop downed, one hurt, both in reach.
+	var down = _hire("swordsman", Vector2(300, 560))
+	var hurt = _hire("swordsman", Vector2(340, 560))
+	main.wave_active = true
+	down.take_damage(1e9)
+	hurt.hp = hurt.max_hp * 0.3
+	var hp0: float = hurt.hp
+	await _frames(40)
+	check(h.rez_target == down and hurt.hp < hp0 + h.damage * 0.5, "Revive: it starts on the downed troop, not the hurt one (%s, %d -> %d)" % [h.rez_target, hp0, hurt.hp])
+	main.give_order("priority", "heal", [h])
+	h.cd_timer = 0.0
+	await _frames(40)
+	check(hurt.hp > hp0, "Heal: it mends the hurt one first")
+	# Stay with: a troop off on its own; the Healer keeps with it and looks after it first.
+	var lone = _hire("swordsman", Vector2(520, 420))
+	main.selected = h
+	main.give_order("priority", "stay", [h])
+	check(main.ward_pick == [h], "Stay with, on its own: it waits for a click on the troop")
+	main.ward_pick = []
+	main.selected = null
+	main.group = [h]
+	main.stay_with(main.order_units(), [lone])
+	main.group = []
+	await _frames(60 * 9)
+	check(h.priority == "stay" and h.wards == [lone] and h.anchor == lone and h.position.distance_to(lone.position) < 90.0,
+			"...told to stay with a troop, it goes and keeps with it (%dpx away; %s %s %s post %s)" % [roundi(h.position.distance_to(lone.position)), h.priority, h.wards, h.anchor, h.post])
+	lone.position += Vector2(-120, 0)
+	lone.post = lone.position
+	lone.hp = lone.max_hp * 0.5
+	await _frames(60 * 6)
+	check(h.position.distance_to(lone.position) < 90.0 and lone.hp > lone.max_hp * 0.5, "...follows it when it moves, and heals it")
+	main.selected = h
+	main.order_move(Vector2(320, 640))
+	main.selected = null
+	check(h.priority == "revive" and h.wards.is_empty() and h.anchor == null, "...sent somewhere else, it leaves its ward")
+	h.stay_with([lone])
+	lone.free()
+	main.warriors_changed()
+	await _frames(10)
+	check(h.priority == "revive" and h.wards.is_empty(), "...and with its ward gone it goes back to its post (%s %s)" % [h.priority, h.wards])
+	main.wave_active = false
+
+
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
 	main.hire_at(at)
@@ -86,7 +141,7 @@ func _wants(s: String) -> bool:
 
 
 func _run() -> void:
-	for s in ["upgrades", "statue", "horn", "heal", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group"]:
+	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group"]:
 		if _wants(s):
 			await call("_" + s)
 	if main != null:
@@ -113,6 +168,18 @@ func _upgrades() -> void:
 	check(w.tiers[1] == 0 and main.gold == gold, "...a full unit can't take more, and pays nothing")
 	check(w.max_hp > hp0, "Health tiers give more health (%.0f to %.0f)" % [hp0, w.max_hp])
 	check(w.spent > Warrior.new().spent and w.sell_value() > 0, "Upgrades add to what selling it gives back")
+	main.selected = null
+	# A Necromancer's raised Skeleton has no upgrades: selecting one and pressing Q/W/E/R
+	# does nothing (it used to fail looking up a tier that isn't there).
+	var m = _hire("mage", Vector2(260, 560))
+	m.summon = {"hp": 40.0, "damage": 5.0, "armor": 0.0, "max": 3}
+	m.raise_skeleton(Vector2(260, 500))
+	var sk = main.get_warriors().filter(func(x): return x.kind == "skeleton")[0]
+	gold = main.gold
+	main.selected = sk
+	for p in 4:
+		main.upgrade_selected(p)
+	check(sk.path_state(0) == "none" and sk.total_upgrades() == 0 and main.gold == gold, "A raised Skeleton can't be upgraded (and nothing breaks trying)")
 	main.selected = null
 
 

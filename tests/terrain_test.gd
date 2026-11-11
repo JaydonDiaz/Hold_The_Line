@@ -15,6 +15,12 @@ extends SceneTree
 ##                  never cross or enter terrain or back into a dead end; shoves into rock
 ##                  slide; a full battle (every troop kind, trained upgrades, Slimes, Skeleton
 ##                  Archers, knockback) never leaves a unit or Engineer inside terrain
+##   W  water       a river crossed by two bridges and a ford, and hedgerows: enemies take a
+##                  bridge when one's on their way, the ford down the middle, and the ford
+##                  when the bridges are walled off; wading is slow; nobody ever walks into
+##                  water or hedge; troops route over a bridge or the ford; same on a wide field
+##   Z  zones       the Battle Modes fields (convoy stretches, the village): every lane
+##                  reaches the bottom for every enemy size; the wagon's road is clear
 ##   L  placement   hires, emplacements, move orders, drags and group moves are refused on
 ##                  terrain, in no-build zones and out of reach (with a message), by click,
 ##                  hotkey or drag; barricades may rest their ends on rock to seal a gap
@@ -67,6 +73,10 @@ func _run() -> void:
 		await _placement()
 	if _wants("K"):
 		await _classic_maps()
+	if _wants("Z"):
+		await _zones()
+	if _wants("W"):
+		await _water()
 	print("%d checks, %d failed" % [checks, fails])
 	if main != null:
 		main.free()
@@ -74,6 +84,156 @@ func _run() -> void:
 		if FileAccess.file_exists(f):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
 	quit(1 if fails > 0 else 0)
+
+
+const RIVER := {
+	"name": "Test River", "biome": "meadow", "lanes": [[40, 600]],
+	"terrain": [
+		{"kind": "water", "poly": [Vector2(0, 340), Vector2(60, 340), Vector2(60, 410), Vector2(0, 410)]},
+		{"kind": "bridge", "poly": [Vector2(60, 336), Vector2(130, 336), Vector2(130, 414), Vector2(60, 414)]},
+		{"kind": "water", "poly": [Vector2(130, 340), Vector2(290, 340), Vector2(290, 410), Vector2(130, 410)]},
+		{"kind": "ford", "poly": [Vector2(290, 340), Vector2(360, 340), Vector2(360, 410), Vector2(290, 410)]},
+		{"kind": "water", "poly": [Vector2(360, 340), Vector2(510, 340), Vector2(510, 410), Vector2(360, 410)]},
+		{"kind": "bridge", "poly": [Vector2(510, 336), Vector2(580, 336), Vector2(580, 414), Vector2(510, 414)]},
+		{"kind": "water", "poly": [Vector2(580, 340), Vector2(640, 340), Vector2(640, 410), Vector2(580, 410)]},
+		{"kind": "hedge", "poly": [Vector2(0, 560), Vector2(200, 560), Vector2(200, 578), Vector2(0, 578)]},
+		{"kind": "hedge", "poly": [Vector2(270, 560), Vector2(370, 560), Vector2(370, 578), Vector2(270, 578)]},
+		{"kind": "hedge", "poly": [Vector2(440, 560), Vector2(640, 560), Vector2(640, 578), Vector2(440, 578)]},
+	],
+	"no_build": [], "trails": [],
+}
+
+
+## Follows an enemy's field from `from` down to the bottom: [crossed the ford, touched
+## terrain, got there].
+func _walk_down(from: Vector2, r: float) -> Array:
+	var paths = main.paths
+	var p := from
+	var forded := false
+	var touched := false
+	for step in 900:
+		var d: Vector2 = paths.direction(p, r)
+		p = paths.slide(p, p + d * 4.0, r)
+		forded = forded or paths.in_ford(p)
+		touched = touched or paths.blocked(p, r - 2.0)
+		if p.y >= main.CASTLE_Y - 30:
+			return [forded, touched, true]
+	return [forded, touched, false]
+
+
+func _water() -> void:
+	for wide in [false, true]:
+		await _fresh()
+		main._lock_portrait(not wide)
+		await _frames(2)
+		var paths = main.paths
+		paths.set_map(RIVER)
+		var k: float = main.FIELD_W / 640.0
+		var tag := "W  %s:" % ("wide (%dpx)" % main.FIELD_W if wide else "640")
+		check(not paths.in_ford(Vector2(150 * k, 375)) and paths.in_ford(Vector2(325 * k, 375)) and paths.blocked(Vector2(200 * k, 375), 4.0)
+				and not paths.blocked(Vector2(95 * k, 375), 14.0) and paths.blocked(Vector2(100 * k, 569), 4.0),
+				"%s water and hedges block, the bridges and the ford don't" % tag)
+		var by_bridge: Array = _walk_down(Vector2(95 * k, 120), 11.0)
+		check(by_bridge[2] and not by_bridge[0] and not by_bridge[1], "%s an enemy above a bridge crosses by it (%s)" % [tag, str(by_bridge)])
+		var mid: Array = _walk_down(Vector2(325 * k, 120), 11.0)
+		check(mid[2] and mid[0] and not mid[1], "%s one down the middle wades the ford rather than go round (%s)" % [tag, str(mid)])
+		var big: Array = _walk_down(Vector2(95 * k, 120), 24.0)
+		check(big[2] and not big[1], "%s a Warlord gets over a bridge too, without touching the water" % tag)
+		# Wall off both bridges: the ford it is.
+		for x in [95.0, 545.0]:
+			var w = main.Barricade.new()
+			w.half = Vector2(40 * k, 0)
+			w.setup("barricade", main.Data.WARRIORS["barricade"], main, Vector2(x * k, 430))
+			w.position = w.post
+			main.wall_layer.add_child(w)
+		main.walls_changed()
+		await _frames(2)
+		var walled: Array = _walk_down(Vector2(95 * k, 120), 11.0)
+		check(walled[2] and walled[0] and not walled[1], "%s with both bridges walled off, it goes by the ford instead (%s)" % [tag, str(walled)])
+		# Troops: over a bridge, or through the ford, never the water.
+		var route: PackedVector2Array = paths.troop_route(Vector2(95 * k, 480), Vector2(95 * k, 250))
+		var wet := false
+		for q in route:
+			wet = wet or paths.blocked(q, 10.0)
+		check(not route.is_empty() and not wet, "%s a troop sent across the river goes round by a crossing (%d steps)" % [tag, route.size()])
+	# Wading is slow.
+	await _fresh()
+	main._lock_portrait(true)
+	await _frames(2)
+	main.paths.set_map(RIVER)
+	main._spawn_enemy("orc", 1, Vector2(325, 300))
+	var orc = main.enemy_layer.get_children()[-1]
+	orc.position = Vector2(325, 300)
+	main._spawn_enemy("orc", 1, Vector2(200, 450))
+	var dry = main.enemy_layer.get_children()[-1]
+	dry.position = Vector2(200, 450)
+	await _frames(20)
+	var y0: float = orc.position.y
+	var d0: float = dry.position.y
+	orc.position = Vector2(325, 350)
+	y0 = orc.position.y
+	d0 = dry.position.y
+	await _frames(30)
+	var wet_step: float = orc.position.y - y0
+	var dry_step: float = dry.position.y - d0
+	check(main.paths.in_ford(orc.position) and wet_step > 0.0 and wet_step < dry_step * 0.65, "W  wading the ford is slow (%.0fpx against %.0fpx on dry ground)" % [wet_step, dry_step])
+	main.paths.set_map({})
+
+
+## The Battle Modes fields (maps.gd ZONES): every lane reaches the bottom for every enemy
+## size, and a wagon's road (where it has one) runs clear of the terrain all the way.
+func _zones() -> void:
+	for wide in [false, true]:
+		await _fresh()
+		main._lock_portrait(not wide)
+		await _frames(2)
+		var paths = main.paths
+		var tag := "Z  %s" % ("(wide) " if wide else "")
+		for id in Maps.MAPS.keys() + Maps.ZONES.keys():
+			paths.set_map(Maps.get_map(id))
+			var m: Dictionary = Maps.fitted(Maps.get_map(id), main.FIELD_W)
+			var stuck := []
+			for r in [11.0, 14.0, 19.0, 24.0]:
+				for l in m["lanes"]:
+					for x in range(int(l[0]) + int(r) + 2, int(l[1]) - int(r) - 1, 8):
+						if paths._field(r)["dist"][paths._index(paths._cell(Vector2(x, 4)))] > 1e9:
+							stuck.append([r, x])
+			var touched := 0
+			var arrived := 0
+			for l in m["lanes"]:
+				for x in range(int(l[0]) + 30, int(l[1]) - 29, 30):
+					var walk: Array = _walk_down(Vector2(x, 10), 24.0)
+					touched += 1 if walk[1] else 0
+					arrived += 1 if walk[2] else 0
+			check(stuck.is_empty() and touched == 0 and arrived > 0 and paths.troop_can_stand(Vector2(main.FIELD_W / 2.0, main.CASTLE_Y - 20)),
+					"%s%s: every size of enemy reaches the bottom from its lanes, Warlords from %d starts without grazing terrain, troops can stand at the gate%s" % [
+					tag, id, arrived, "" if stuck.is_empty() else " (stuck: %s)" % str(stuck.slice(0, 3))])
+	await _fresh()
+	main._lock_portrait(true)
+	await _frames(2)
+	var paths = main.paths
+	for id in Maps.ZONES:
+		var m: Dictionary = Maps.ZONES[id]
+		paths.set_map(m)
+		var stuck := []
+		for r in [11.0, 14.0, 19.0, 24.0]:
+			for l in m["lanes"]:
+				for x in range(int(l[0]) + int(r) + 2, int(l[1]) - int(r) - 1, 8):
+					if paths._field(r)["dist"][paths._index(paths._cell(Vector2(x, 4)))] > 1e9:
+						stuck.append([r, x])
+		check(stuck.is_empty(), "Z  %s: every size of enemy reaches the bottom from all along its lanes%s" % [id, "" if stuck.is_empty() else " (%s)" % str(stuck.slice(0, 3))])
+		if m.has("route"):
+			var road: Array = m["route"]
+			var hit := []
+			for i in road.size() - 1:
+				var a: Vector2 = road[i]
+				var b: Vector2 = road[i + 1]
+				for k in 20:
+					var p: Vector2 = a.lerp(b, k / 20.0)
+					if p.y < main.CASTLE_Y and paths.blocked(p, 16.0):
+						hit.append(p)
+			check(hit.is_empty(), "Z  %s: the wagon's road is clear of the terrain%s" % [id, "" if hit.is_empty() else " (at %s)" % str(hit[0])])
+	paths.set_map({})
 
 
 func _frames(n: int) -> void:
@@ -749,7 +909,7 @@ func _classic_maps() -> void:
 	await _frames(3)
 	var v = main.hud.battlefields
 	check(v != null and v.name_label.text == "The Meadow" and not v.start_button.disabled, "K  ...then the battlefield viewer, on the meadow")
-	check(v.maps == ["", "ashwatch_ridge", "stonehollow_quarry"], "K  ...with every battlefield to go through (%s)" % str(v.maps))
+	check(v.maps == [""] + Maps.MAPS.keys() and v.maps.slice(0, 3) == ["", "ashwatch_ridge", "stonehollow_quarry"], "K  ...with every battlefield to go through (%s)" % str(v.maps))
 	var key := InputEventKey.new()
 	key.keycode = KEY_RIGHT
 	key.pressed = true
@@ -763,7 +923,7 @@ func _classic_maps() -> void:
 	v._start()
 	await _frames(10)
 	check(picked.is_empty(), "K  ...and a locked battlefield can't be started")
-	v.show_map(v.at + 1)
+	v.show_map(v.maps.size())
 	check(v.name_label.text == "The Meadow", "K  ...and it goes round to the meadow again")
 	v.back.emit()
 	await process_frame

@@ -7,7 +7,11 @@ extends "res://scripts/mission/rules.gd"
 ## forced pace. No castle.
 ##
 ## Mission data: "type": "capture", "capture": {"at", "radius", "name",
-##   "time": seconds to take it, "hold": seconds to hold it, "limit": seconds in all}
+##   "time": seconds to take it, "hold": seconds to hold it, "limit": seconds in all,
+##   endless: "retake": seconds to take it back once they have (default 45)}
+## Endless: "limit" is the time to take it in the first place. Once it's yours, it's
+## held for good, and every "hold" seconds of it pays out; if they take it back, you
+## have "retake" seconds to retake it, or it's lost.
 
 const Objective = preload("res://scripts/mission/objective.gd")
 
@@ -17,6 +21,9 @@ var hold_left := 0.0
 var elapsed := 0.0
 var mine := 0           # your troops in it, last counted
 var theirs := 0
+var take_left := 0.0    # endless: seconds left to take (or retake) it
+var held := 0           # endless: hold periods done
+var taken := false      # endless: it's been yours at some point
 
 
 func has_castle() -> bool:
@@ -37,6 +44,7 @@ func start() -> void:
 			"radius": _c().get("radius", 80.0)})
 	main.add_objective(zone)
 	hold_left = float(_c().get("hold", 60.0))
+	take_left = limit()
 
 
 func objectives() -> Array:
@@ -65,6 +73,9 @@ func process(delta: float) -> void:
 		zone.progress = minf(zone.progress + delta / take, 1.0)
 	elif theirs > 0 and mine == 0:
 		zone.progress = maxf(zone.progress - delta / take * (1.0 if phase == "hold" else 0.5), 0.0)
+	if endless():
+		_endless(delta)
+		return
 	if phase == "take" and zone.progress >= 1.0:
 		phase = "hold"
 		main.hud.show_message("%s is yours! Hold it for %ds." % [zone.label.capitalize(), ceili(hold_left)])
@@ -85,9 +96,54 @@ func process(delta: float) -> void:
 		main.call_deferred("_finish", false)
 
 
-## Most of the enemy makes for the ground you're after; the rest come down the field.
+## Endless: take it, then hold it for good (each spell held pays), and retake it in time
+## whenever they win it back.
+func _endless(delta: float) -> void:
+	if phase == "take":
+		if zone.progress >= 1.0:
+			phase = "hold"
+			taken = true
+			hold_left = float(_c().get("hold", 60.0))
+			main.hud.show_message("%s is yours! Hold it." % zone.label.capitalize())
+			main.sfx("fanfare")
+			return
+		take_left -= delta
+		if take_left <= 0.0:
+			phase = "done"
+			main.hud.show_message("Out of time!")
+			main.call_deferred("_finish", false)
+		elif take_left <= 10.0 and take_left + delta > 10.0:
+			main.hud.show_message("10 seconds to take %s!" % zone.label)
+		return
+	if zone.progress <= 0.0:
+		phase = "take"
+		take_left = float(_c().get("retake", 45.0))
+		main.hud.show_message("They've taken %s back! Retake it within %ds." % [zone.label, ceili(take_left)])
+		main.sfx("horn")
+		return
+	if not (theirs > 0 and mine == 0):
+		hold_left -= delta
+		if hold_left <= 0.0:
+			held += 1
+			hold_left = float(_c().get("hold", 60.0))
+			var pay := 60 + 20 * held
+			main.gold += pay
+			main.spawn_text(zone.position + Vector2(0, -zone.zone_r - 10), "+%dg" % pay, Color(1, 0.85, 0.2))
+			main.hud.show_message("Held! +%d gold for holding %s." % [pay, zone.label])
+			main.sfx("coin")
+
+
+## The enemy makes for the ground you're after (fighting whoever's in the way).
 func enemy_goal(_e):
-	return zone if randf() < 0.75 else null
+	return zone
+
+
+func guards() -> bool:
+	return true
+
+
+func objective_only() -> bool:
+	return true
 
 
 func on_reached_bottom(_e) -> bool:
@@ -109,6 +165,12 @@ func time_left() -> int:
 func status() -> String:
 	var where: String = zone.label.capitalize() if zone != null else ""
 	var text := ""
+	if endless() and zone != null:
+		if phase == "hold":
+			text = "Holding %s  ·  control %d%%  ·  next pay in %ds" % [zone.label, roundi(zone.progress * 100.0), ceili(hold_left)]
+		else:
+			text = "%s %s: %d%%  ·  %ds left" % ["Retake" if taken else "Take", zone.label, roundi(zone.progress * 100.0), ceili(take_left)]
+		return text + ("  ·  contested" if zone.contested else "")
 	if phase == "hold":
 		text = "Hold %s: %ds  ·  control %d%%" % [where, ceili(hold_left), roundi(zone.progress * 100.0)]
 	else:
@@ -119,6 +181,8 @@ func status() -> String:
 
 
 func panel_status() -> String:
+	if endless():
+		return "Held %d%%" % roundi(zone.progress * 100.0) if phase == "hold" else "Take %ds" % ceili(take_left)
 	return "Time %d" % time_left()
 
 
@@ -131,4 +195,6 @@ func score_text(s: int) -> String:
 
 
 func summary(won: bool) -> String:
+	if endless():
+		return "%s was held for %d spell%s before it was lost." % [zone.label.capitalize(), held, "" if held == 1 else "s"]
 	return ("%s taken and held, with %ds to spare." % [zone.label.capitalize(), time_left()]) if won else "%s couldn't be taken and held in time." % zone.label.capitalize()

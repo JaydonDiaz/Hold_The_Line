@@ -5,6 +5,7 @@ extends SceneTree
 ## Uses a temporary campaign save. Exits 1 if anything failed.
 
 const TEST_SAVE := "user://missions_test.cfg"
+const Warrior = preload("res://scripts/warrior.gd")
 
 var main
 var campaign
@@ -56,6 +57,7 @@ func _run() -> void:
 	await _capture()
 	await _escort()
 	await _retreat()
+	await _targeting()
 	await _classic_unchanged()
 	if main != null:
 		main.free()
@@ -127,8 +129,8 @@ func _positions() -> void:
 	await _play("stonehollow_workshops")
 	var r = main.rules
 	var objs: Array = r.objectives()
-	check(r.get_script().resource_path.ends_with("rules_positions.gd") and objs.size() == 3 and r.has_castle() and main.castle.visible,
-			"Positions: Protect the Workshops has three workshops, and the guildhall")
+	check(r.get_script().resource_path.ends_with("rules_positions.gd") and objs.size() == 3 and not r.has_castle() and not main.castle.visible \
+			and main.camp != null and r.objective_only(), "Positions: Protect the Workshops has three workshops, no castle: they're what it's about")
 	check(objs.all(func(o): return o.is_inside_tree() and main.paths.troop_can_stand(o.position + Vector2(0, o.RADIUS + 22))),
 			"...each stands on open ground troops can reach")
 	main.hud.refresh(main)
@@ -145,7 +147,7 @@ func _positions() -> void:
 		var e = main.enemy_layer.get_children()[-1]
 		var key: String = e.goal.id if e.goal != null else "castle"
 		sent[key] = sent.get(key, 0) + 1
-	check(sent.get("castle", 0) < 20 and sent.size() >= 3, "...enemies split between the workshops and the guildhall (%s)" % str(sent))
+	check(not sent.has("castle") and sent.size() == 3, "...every enemy goes for a workshop, split between the three (%s)" % str(sent))
 	for e in main.get_enemies():
 		e.free()
 	main.enemies_changed()
@@ -215,8 +217,33 @@ func _battle_modes() -> void:
 	await create_timer(0.8).timeout
 	hud._show_cards("battle")
 	var names: Array = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
-	check(names == ["Castle Defense", "Multiple Positions", "Hold the Pass", "Protect the Objective", "Evacuation", "Capture and Hold",
-			"Convoy Escort", "Fighting Retreat", "Back"], "Battle Modes: all eight kinds of battle (%s)" % ", ".join(names))
+	check(names == ["Multiple Positions", "Hold the Pass", "Protect the Objective", "Evacuation", "Capture and Hold",
+			"Convoy Escort", "Fighting Retreat", "Back"], "Battle Modes: the seven kinds besides Classic's castle, and Back (%s)" % ", ".join(names))
+	# Two rows of four along the bottom: every card clear of the castle, inside the screen, and no
+	# character used twice.
+	await create_timer(1.0).timeout
+	var low := true
+	for c in hud.mode_cards:
+		low = low and c.position.y >= 630.0 and c.position.x >= 0.0 and c.position.x + c.size.x <= 640.0
+	check(low, "...laid out in two rows of four along the bottom of the screen")
+	var looks: Array = hud.mode_cards.map(func(c): return (c.get_child(1) as TextureRect).texture)
+	var seen := {}
+	for t in looks:
+		seen[t] = true
+	check(seen.size() == looks.size(), "...each with its own character")
+	var scenes := {}
+	for c in hud.mode_cards:
+		for n in c.get_children():
+			if n.get_script() == hud.ModeVignette:
+				scenes[n.kind] = n.look
+	check(scenes.size() == 7 and scenes.keys().all(func(k): return main.Scenarios.TYPES.has(k)),
+			"...and its own little scene playing on it (%s)" % ", ".join(scenes.keys()))
+	hud._show_cards("top")
+	looks = hud.mode_cards.map(func(c): return (c.get_child(1) as TextureRect).texture)
+	seen = {}
+	for t in looks:
+		seen[t] = true
+	check(seen.size() == looks.size(), "The main menu cards each have their own character too")
 	hud._show_cards("bm:positions")
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(names[0] == "The Three Watchtowers", "...each with a battle to play without a campaign (%s)" % names[0])
@@ -224,12 +251,14 @@ func _battle_modes() -> void:
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(names == ["Easy", "Normal", "Hard", "Back"], "...on any difficulty")
 	main.records_path = "user://missions_test_records.cfg"
+	if FileAccess.file_exists(main.records_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(main.records_path))
 	main._on_mode_chosen("battle:three_towers:hard")
 	await _frames(3)
 	main._lock_portrait(true)
 	await _frames(2)
-	check(not main.campaign and main.battle_id == "three_towers" and main.difficulty == "hard" and main.rules.objectives().size() == 3,
-			"The Three Watchtowers on Hard: three watchtowers to hold")
+	check(not main.campaign and main.battle_id == "three_towers" and main.difficulty == "hard" and main.rules.objectives().size() == 3 \
+			and not main.castle.visible and main.camp != null, "The Three Watchtowers on Hard: three watchtowers to hold, and no castle")
 	var all_open := true
 	for k in main.Data.WARRIORS:
 		all_open = all_open and main.allowed(k) and main.max_tier(k, 0) == 4
@@ -240,7 +269,24 @@ func _battle_modes() -> void:
 	main.placing_type = ""
 	main.earn_xp("swordsman", 500.0)
 	check(main.battle_xp.is_empty() and campaign.xp.is_empty(), "...and no campaign XP is earned")
-	main.wave = main.last_wave() - 1
+	main.hud.refresh(main)
+	check(main.survival() and main.hud.wave_label.text == "Wave 0" and main.hud.lives_label.text == "Towers 3/3",
+			"...a survival battle: no last wave (%s, %s)" % [main.hud.wave_label.text, main.hud.lives_label.text])
+	var towers: Array = main.rules.objectives()
+	# A watchtower stands over whoever's behind it: its top is drawn over the troops (and
+	# goes see-through while someone's back there).
+	var t0 = towers[0]
+	var behind = main.get_warriors()[-1]
+	var was: Vector2 = behind.position
+	behind.position = t0.position + Vector2(0, -90)
+	await _frames(8)
+	check(t0.roof_mask != null and t0.roof_mask.get_parent() == main.roof_layer and main.roof_layer.get_index() > main.warrior_layer.get_index() \
+			and t0.roof_mask.modulate.a < 1.0, "A troop behind a watchtower is behind its roof (drawn over the troops, see-through)")
+	behind.position = was
+	await _frames(8)
+	check(t0.roof_mask.modulate.a == 1.0, "...and it's solid again once nobody's there")
+	towers[0].hp = towers[0].max_hp * 0.5
+	main.wave = 7
 	main.start_wave()
 	await _frames(2)
 	main.spawn_queue.clear()
@@ -248,9 +294,31 @@ func _battle_modes() -> void:
 		e.free()
 	main.enemies_changed()
 	await _frames(10)
+	check(not main.game_over and main.waves_survived() == 8 and absf(towers[0].hp / towers[0].max_hp - 0.65) < 0.01,
+			"Wave 8 cleared: it goes on, and the crews patch the towers up (%d%%)" % roundi(towers[0].hp / towers[0].max_hp * 100.0))
+	towers[0].take_damage(1e9)
+	towers[1].take_damage(1e9)
+	await _frames(5)
 	var cfg := ConfigFile.new()
 	cfg.load(main.records_path)
-	check(main.game_over and main.victory and cfg.get_value("battle", "three_towers@hard", -1) == 3, "Won with all three towers: the best is kept (3 of 3, Hard)")
+	check(main.game_over and not main.victory and cfg.get_value("survive", "three_towers@hard", -1) == 8,
+			"Two towers down: the run's over, and its 8 waves kept as the best (Hard)")
+	var shown := []
+	for n in main.hud.get_children():
+		if n is ColorRect:
+			for l in n.get_children():
+				if l is Label:
+					shown.append(l.text)
+	check("You survived 8 waves" in shown and "New best!" in shown, "...the end screen says so (%s)" % ", ".join(shown))
+	main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main.records_path = "user://missions_test_records.cfg"
+	await create_timer(0.8).timeout
+	main.hud._show_cards("bmd:three_towers")
+	check("Best: 8 waves" in (main.hud.mode_cards[2].get_child(2) as Label).text and "No run yet" in (main.hud.mode_cards[0].get_child(2) as Label).text,
+			"...and so does Hard's card on the menu (Easy: no run yet)")
 	main.play_again("battle:three_towers:hard")
 	check(campaign.screen == "battle:three_towers:hard", "...and Play again starts the same battle")
 	campaign.screen = ""
@@ -259,6 +327,12 @@ func _battle_modes() -> void:
 	await _fresh_battle("battle:open_road:normal")
 	check(main.rules.get_script().resource_path.ends_with("rules_pass.gd") and not main.castle.visible and main.rules.limit() == 20,
 			"The Open Road: Hold the Pass on the meadow, no castle, 20 may get through")
+	# No army and no way to raise one ends a battle here too (and the run's best is kept).
+	await _go()
+	main.spawn_queue.clear()
+	main.gold = 0
+	await _frames(int(main.ROUT_GRACE * 60) + 20)
+	check(main.game_over and main.routed and "Every troop was lost" in main._summary(false), "No troops and no gold to hire any: the battle's lost here too")
 
 
 func _fresh_battle(key: String) -> void:
@@ -271,6 +345,15 @@ func _fresh_battle(key: String) -> void:
 	main.records_path = ""
 	main._on_mode_chosen(key)
 	await _frames(3)
+
+
+## The battle as a campaign mission would play it (not endless), with `changes` to its data.
+func _finite(changes := {}) -> void:
+	var m: Dictionary = main.mission.duplicate(true)
+	m["endless"] = false
+	m.merge(changes, true)
+	main.mission = m
+	main.rules.mission = m
 
 
 # --- Forced pace, and the timed and moving battles ----------------------------------------
@@ -295,7 +378,33 @@ func _forced_pace() -> void:
 		e.free()
 	main.enemies_changed()
 	await _frames(5)
-	check(not main.wave_active and main.auto_timer <= 5.0 and main.auto_timer > 0.0, "...with only a short break before the next (%.1fs)" % main.auto_timer)
+	check(not main.wave_active and main.auto_timer > 20.0 and main.auto_timer <= 25.0, "...beaten at once: most of the 25s window is a breather (%.1fs)" % main.auto_timer)
+	main.hud.refresh(main)
+	check("Rest" in main.hud.start_btn.text, "...the panel counts it down (%s)" % main.hud.start_btn.text)
+	main.gold = 999
+	main.placing_type = "swordsman"
+	main.hire_at(Vector2(320, 600))
+	main.placing_type = ""
+	var sw = main.get_warriors()[-1]
+	sw.hp = sw.max_hp * 0.5
+	await _frames(60 * 3)
+	check(sw.hp > sw.max_hp * 0.55, "...troops get some health back while they rest (%d%%)" % roundi(sw.hp / sw.max_hp * 100.0))
+	# A wave not beaten: the next still waits the window from the last of this one arriving.
+	main.auto_timer = 0.0
+	await _frames(3)
+	main.spawn_queue.clear()
+	main._spawn_enemy("orc", 1, Vector2(320, 100))
+	var holdout = main.enemy_layer.get_children()[-1]
+	holdout.speed = 0.0
+	holdout.max_hp = 1e6
+	holdout.hp = 1e6
+	var w0: int = main.wave
+	await _frames(60 * 20)
+	main.hud.refresh(main)
+	check(main.wave == w0 and main.wave_active and "Wave %d in" % (w0 + 1) in main.hud.start_btn.text,
+			"With enemies still on the field, 20s on: the next wave hasn't come yet (%s)" % main.hud.start_btn.text)
+	await _frames(60 * 6)
+	check(main.wave == w0 + 1, "...it comes once the 25s window is up, beaten or not")
 	check(Engine.time_scale == 1.0 and main.cycle_speed() == null and Engine.time_scale == 2.0, "...and the speed control still works")
 	Engine.time_scale = 1.0
 
@@ -326,9 +435,17 @@ func _protect() -> void:
 	check(beacon.contested and absf(beacon.progress - p0) < 0.01 and beacon.hp < beacon.max_hp, "...an enemy at it stops the charge, and hurts it")
 	orc.free()
 	main.enemies_changed()
+	var gold0: int = main.gold
+	var c0: float = beacon.charge
+	beacon.hp = beacon.max_hp * 0.5
 	beacon.progress = 0.999
 	await _frames(30)
-	check(main.game_over and main.victory, "Fully charged: the battle is won")
+	check(not main.game_over and r.lit == 1 and beacon.progress < 0.1 and main.gold > gold0 and beacon.charge > c0 and beacon.hp > beacon.max_hp * 0.7,
+			"Fully charged: it's lit, paid for and patched up, and starts again (longer: %ds)" % roundi(beacon.charge))
+	_finite()
+	beacon.progress = 0.999
+	await _frames(30)
+	check(main.game_over and main.victory, "...(as a campaign mission: fully charged wins the battle)")
 	await _fresh_battle("battle:signal_beacon:normal")
 	await _go()
 	main.rules.objectives()[0].take_damage(1e9)
@@ -342,6 +459,9 @@ func _evac() -> void:
 	await _frames(2)
 	var r = main.rules
 	check(r.get_script().resource_path.ends_with("rules_evac.gd") and main.forced_auto and not r.has_castle(), "Evacuation: forced pace, no castle")
+	var houses: Array = main.paths._map.get("terrain", []).filter(func(t): return t["kind"] == "house")
+	check(main.map_id == "village_fields" and houses.size() == 4 and main.paths._map["trails"].size() >= 2,
+			"...the villagers' cottages at the top of the field, and their two roads worn into it")
 	await _frames(30)
 	check(r.objectives().is_empty(), "...nobody sets out during the deployment")
 	await _go()
@@ -351,31 +471,90 @@ func _evac() -> void:
 	main.enemies_changed()
 	r.next_in = 0.0
 	await _frames(5)
+	var size := int(r._evac()["size"])
+	check(r.sent == 1 and r.objectives().size() == size, "...then the villagers set out, a family at a time (%d people)" % r.objectives().size())
 	var g = r.objectives()[0]
-	check(r.sent == 1 and g.kind == "civilians" and g.is_mover(), "...then the villagers set out, a group at a time")
+	check(g.kind == "civilian" and g.is_mover() and g.look in g.VILLAGERS and g.max_hp == r.objectives()[1].max_hp,
+			"...each their own villager (a sprite: %s), with their own health" % g.look)
+	var looks := {}
+	for v in r.objectives():
+		looks[v.look + str(v.variant)] = true
+	check(looks.size() > 1, "...not all alike (%d looks)" % looks.size())
 	var start: Vector2 = g.position
 	await _frames(60)
 	check(g.position.distance_to(start) > 20.0, "...walking their road")
 	main._spawn_enemy("goblin", 1, Vector2(g.position.x, 120))
 	var gob = main.enemy_layer.get_children()[-1]
-	check(gob.goal == g, "...enemies go after them")
+	var nearest = r.objectives()[0]
+	for v in r.objectives():
+		if v.position.distance_to(gob.position) < nearest.position.distance_to(gob.position):
+			nearest = v
+	check(gob.goal == nearest, "...enemies go after the nearest of them")
 	gob.free()
 	main.enemies_changed()
-	g.speed = 2000.0
+	g.take_damage(g.max_hp * 0.4)
+	check(not g.dead and g.panic > 0.0 and r.objectives()[1].hp == r.objectives()[1].max_hp, "A villager hit is hurt alone (and runs for it)")
+	main.gold = 9999
+	main.placing_type = "healer"
+	main.hire_at(Vector2(g.position.x + 40, 560))
+	main.placing_type = ""
+	var medic = main.get_warriors()[-1]
+	medic.position = g.position + Vector2(40, 10)
+	var vhp: float = g.hp
+	for v in r.objectives():
+		v.speed = 0.0   # (held still while it's checked)
+	await _frames(60 * 2)
+	check(g.hp > vhp and medic.priority == "revive", "A Healer mends a hurt villager too (%d to %d)" % [roundi(vhp), roundi(g.hp)])
+	medic.free()
+	main.warriors_changed()
+	for v in r.objectives():
+		v.speed = 30.0
+	for v in r.objectives():
+		v.speed = 2000.0
 	await _frames(30)
-	check(g.arrived and r.saved == 5, "A group that gets to the camp is saved (%d)" % r.saved)
+	check(r.saved == size, "Each villager who gets to the camp is saved (%d)" % r.saved)
 	r.next_in = 0.0
 	await _frames(3)
-	var g2 = r.objectives()[1]
-	g2.take_damage(1e9)
+	var fam: Array = r.objectives().slice(0, size)   # (the family that got there has left the field)
+	check(fam.size() == size and fam.all(func(v): return not v.arrived), "...the next family sets out, the last one done with")
+	fam[0].take_damage(1e9)
+	fam[1].take_damage(1e9)
 	await _frames(3)
-	check(r.lost == 5 and not main.game_over, "A group caught is lost (5), and the evacuation goes on")
-	r.lost = r.total() - r.need()
+	check(r.lost == 2 and not main.game_over, "Each one caught is lost (2), and the evacuation goes on")
+	# With nobody on the road, raiders wait mid-field for the next family.
+	for v in fam:
+		v.free()
+	r.people = r.people.filter(func(v): return is_instance_valid(v))
+	main._spawn_enemy("goblin", 1, Vector2(200, 200))
+	gob = main.enemy_layer.get_children()[-1]
+	gob.goal = null
+	await _frames(60 * 6)
+	check(gob.goal == null and not gob.dead and gob.position.y < r.wait_y() + 20.0, "...raiders with nobody to chase wait mid-field (y %d)" % gob.position.y)
+	r.next_in = 0.0
+	await _frames(70)
+	check(gob.goal != null and gob.goal.kind == "civilian", "...and go for the next family once it sets out")
+	gob.free()
+	main.enemies_changed()
+	var on_road: Array = r.objectives().duplicate()
+	for v in on_road:
+		v.arrived = true
 	r.next_in = 0.0
 	await _frames(3)
-	r.objectives()[2].take_damage(1e9)
+	check(on_road.all(func(v): return not r.people.has(v)) and r.people.size() == size, "Endless: the families keep coming, and the ones done with leave the field")
+	r.lost = r.can_lose()
+	r.objectives()[-1].take_damage(1e9)
 	await _frames(5)
-	check(main.game_over and not main.victory and "Only" in r.summary(false), "Losing so many that not enough can be saved: lost")
+	check(main.game_over and not main.victory and r.lost > r.can_lose(), "...losing more than %d: it's over" % r.can_lose())
+	await _fresh_battle("battle:village_road:normal")
+	_finite({"evac": {"routes": main.mission["evac"]["routes"], "groups": 8, "size": 5, "every": 11.0, "first": 2.0, "hp": 40, "speed": 30.0, "need": 28}})
+	await _go()
+	r = main.rules
+	r.next_in = 0.0
+	await _frames(3)
+	r.lost = r.total() - r.need()
+	r.objectives()[-1].take_damage(1e9)
+	await _frames(5)
+	check(main.game_over and not main.victory and "Only" in r.summary(false), "...(as a campaign mission: losing so many that not enough can be saved: lost)")
 
 
 func _capture() -> void:
@@ -414,14 +593,37 @@ func _capture() -> void:
 	zone.progress = 0.995
 	await _frames(10)
 	check(r.phase == "hold", "Full control: now hold it")
+	var gold0: int = main.gold
 	r.hold_left = 0.2
 	await _frames(30)
-	check(main.game_over and main.victory, "...held for the time: won")
+	check(not main.game_over and r.held == 1 and main.gold > gold0, "Endless: each spell it's held pays out, and it goes on")
+	w.free()
+	main.warriors_changed()
+	zone.progress = 0.0
+	await _frames(5)
+	check(r.phase == "take" and r.take_left > 40.0 and "Retake" in r.status(), "...they take it back: retake it in time (%s)" % r.status())
+	r.take_left = 0.05
+	await _frames(5)
+	check(main.game_over and not main.victory, "...or it's lost")
 	await _fresh_battle("battle:old_fort:normal")
+	_finite()
+	await _go()
+	main.rules.phase = "hold"
+	main.rules.zone.progress = 1.0
+	main.rules.hold_left = 0.2
+	main.gold = 9999
+	main.placing_type = "swordsman"
+	main.hire_at(main.rules.zone.position + Vector2(0, 30))
+	main.placing_type = ""
+	main.get_warriors()[-1].position = main.get_warriors()[-1].post
+	await _frames(30)
+	check(main.game_over and main.victory, "...(as a campaign mission: held for the time wins)")
+	await _fresh_battle("battle:old_fort:normal")
+	_finite()
 	await _go()
 	main.rules.elapsed = main.rules.limit() - 0.05
 	await _frames(10)
-	check(main.game_over and not main.victory, "Out of time before it's held: lost")
+	check(main.game_over and not main.victory, "...(and out of time before it's held loses)")
 
 
 func _escort() -> void:
@@ -477,7 +679,9 @@ func _escort() -> void:
 	await _frames(30)
 	var held: Vector2 = wagon.position
 	await _frames(30)
-	check(wagon.halted and wagon.position == held and wagon.hp < wagon.max_hp and orc.goal == wagon, "An enemy at the wagon holds it up and hurts it")
+	var crawl: float = wagon.position.distance_to(held)
+	check(wagon.halted and crawl > 0.0 and crawl < wagon.speed * 0.5 and wagon.hp < wagon.max_hp and orc.goal == wagon,
+			"An enemy at the wagon slows it to a crawl (%.1fpx in 0.5s) and hurts it" % crawl)
 	orc.free()
 	main.enemies_changed()
 	var before: int = main.get_enemies().size()
@@ -486,18 +690,134 @@ func _escort() -> void:
 	wagon.leg = wagon.route.size() - 1
 	await _frames(5)
 	check(r.sprung >= 2 and main.get_enemies().size() > before, "Ambushes break out as the wagon passes their places on the road")
+	check(r.zones().size() == 7 and main.map_id == "convoy_meadow" and r.zone_i == 0, "The road runs through seven zones, starting on %s" % main.map_id)
+	# Out of the top of the first zone: on into the next.
+	main.gold = 9999
+	main.placing_type = "swordsman"
+	main.hire_at(Vector2(main.FIELD_W / 2.0, 400))
+	main.placing_type = ""
+	var t1 = main.get_warriors()[-1]
+	t1.position = t1.post
+	main.placing_type = "tower"
+	main.hire_at(Vector2(main.FIELD_W / 2.0 - 80.0, 300))
+	main.placing_type = ""
+	var tower = main.get_warriors()[-1]
+	var gold0: int = main.gold
+	var left_by: int = main.get_enemies().size()
+	for e in main.get_enemies():
+		e.position = Vector2(e.position.x, 150.0)   # (away from the wagon: it isn't held up)
+		e.speed = 0.0
+	var off: Vector2 = t1.position - wagon.position
+	wagon.position = wagon.route[-1]
+	wagon.leg = wagon.route.size()
+	t1.position = wagon.position + off
+	await create_timer(1.2).timeout
+	check(r.zone_i == 1 and main.map_id == "convoy_forest" and main.paths.has_terrain() and not main.game_over,
+			"...out the top of the meadow, the field turns into the next zone (%s)" % main.map_id)
+	check(main.get_enemies().is_empty() and left_by > 0, "...the enemies are left behind (%d)" % left_by)
+	check(wagon.position.y > 600.0 and not wagon.arrived and r.settle > 0.0 and wagon.speed == 0.0, "...the wagon starts again at the bottom, and waits a moment")
+	check(t1.position.distance_to(wagon.position) < 140.0 and not main.paths.blocked(t1.position, 10.0), "...your troops come along, round the wagon")
+	check(is_instance_valid(tower) and tower.position.y > 400.0 and not main.paths.blocked(tower.position, 10.0), "...and so do emplacements")
+	r.settle = 0.05
+	await _frames(10)
+	check(wagon.speed > 0.0, "...then it rolls on")
+	wagon.position = wagon.route[-1]
+	wagon.leg = wagon.route.size()
+	await create_timer(1.2).timeout
+	check(r.zone_i == 2 and main.map_id == "convoy_ford" and "Old Ford" in r.status() and "stretch 3" in r.status(), "...and on into the next (%s)" % r.status())
+	r.zone_i = 6
 	for e in main.get_enemies():
 		e.free()
 	main.enemies_changed()
+	r.settle = 0.05
+	await _frames(5)
+	wagon.position = wagon.route[-1]
+	wagon.leg = wagon.route.size()
+	await create_timer(1.2).timeout
+	check(r.zone_i == 7 and r.loop() == 1 and main.map_id == "convoy_meadow" and not main.game_over,
+			"Endless: out of the last zone, the road goes round again (stretch %d, %s)" % [r.zone_i + 1, main.map_id])
+	var seen_maps := {}
+	for z in r.zones():
+		seen_maps[z["map"]] = true
+		check(main.Maps.get_map(z["map"]).has("route"), "...%s has a road for the wagon" % z["map"])
+	check(seen_maps.size() == 7, "...seven different stretches of road")
+	_finite({"convoy": {"name": "Wagon", "speed": 20.0, "hp": 1500, "zones": main.mission["convoy"]["zones"].slice(0, 3)}})
+	r.zone_i = 2
+	for e in main.get_enemies():
+		e.free()
+	main.enemies_changed()
+	r.settle = 0.05
+	await _frames(5)
 	wagon.position = wagon.route[-1]
 	wagon.leg = wagon.route.size()
 	await _frames(10)
-	check(main.game_over and main.victory, "The wagon reaches the end of the road: won")
+	check(main.game_over and main.victory, "...(as a campaign mission: out of the last zone wins)")
 	await _fresh_battle("battle:supply_wagon:normal")
 	await _go()
 	main.rules.wagon.take_damage(1e9)
 	await _frames(5)
 	check(main.game_over and not main.victory, "...destroyed on the way: lost")
+
+
+## Objective targeting: troops can be set to go for whatever's after the objectives first
+## (new ones start on it in these battles), and enemies make for the objectives rather
+## than the bottom of the field.
+func _targeting() -> void:
+	await _fresh_battle("battle:signal_beacon:normal")
+	main._lock_portrait(true)
+	await _frames(2)
+	var beacon = main.rules.objectives()[0]
+	check(Warrior.priorities_for(main).has("objective"), "Battles with something to protect offer the Objective target priority")
+	await _go()
+	main.spawn_queue.clear()
+	for e in main.get_enemies():
+		e.free()
+	main.enemies_changed()
+	main.gold = 9999
+	main.placing_type = "archer"
+	main.hire_at(beacon.position + Vector2(-150, 60))
+	main.placing_type = ""
+	var a = main.get_warriors()[-1]
+	a.position = a.post
+	a.move_mode = "hold"
+	check(a.priority == "objective", "...and new troops start on it")
+	# One enemy right by the archer but after nothing; one further off, at the beacon.
+	main._spawn_enemy("orc", 1, a.position + Vector2(40, -30))
+	var idle = main.enemy_layer.get_children()[-1]
+	idle.position = a.position + Vector2(50, -40)
+	idle.goal = null
+	idle.goal_check = 999.0
+	idle.speed = 0.0
+	main._spawn_enemy("orc", 1, beacon.position + Vector2(0, -40))
+	var raider = main.enemy_layer.get_children()[-1]
+	raider.position = beacon.position + Vector2(-30, -beacon.RADIUS - raider.radius)
+	raider.speed = 0.0
+	for e in [idle, raider]:
+		e.max_hp = 1e6
+		e.hp = 1e6
+	a.attack_range = 400.0
+	a.target = null
+	a.retarget_timer = 0.0
+	await _frames(20)
+	check(raider.goal == beacon and a.target == raider, "...an archer on it shoots the one at the beacon, not the nearer one")
+	main.give_order("priority", "closest", [a])
+	await _frames(20)
+	check(a.target == idle, "...on Closest it shoots the nearest, as ever")
+	for e in main.get_enemies():
+		e.free()
+	main.enemies_changed()
+	# Capture and Hold: everything makes for the fort.
+	await _fresh_battle("battle:old_fort:normal")
+	await _go()
+	await _frames(60 * 3)
+	var all_fort: bool = not main.get_enemies().is_empty()
+	for e in main.get_enemies():
+		all_fort = all_fort and e.goal == main.rules.zone
+	check(all_fort, "Capture and Hold: every enemy makes for the fort (%d)" % main.get_enemies().size())
+	# The meadow's Classic game has no objectives: the four priorities as ever.
+	await _fresh_battle("normal")
+	check(Warrior.priorities_for(main) == Warrior.PRIORITIES and not main.rules.guards() and not main.rules.objective_only(),
+			"Classic: no Objective priority, enemies go for the castle as ever")
 
 
 func _retreat() -> void:
@@ -535,7 +855,57 @@ func _retreat() -> void:
 	main.enemies_changed()
 	r.through = 0
 	await _frames(5)
-	check(main.game_over and not main.victory and r.extracted == 3, "Only 3 of the 8 needed get out: lost")
+	check(main.game_over and not main.victory and r.extracted == 3, "Only 3 of the 6 needed get out: lost")
+	# It eases in: no stragglers for the first waves, then a few, then more and more.
+	await _fresh_battle("battle:long_retreat:normal")
+	r = main.rules
+	var gaps := []
+	for n in [1, 3, 4, 6, 12]:
+		main.wave = n
+		gaps.append(r.stream_gap())
+	check(gaps[0] == INF and gaps[1] == INF and gaps[2] > 5.0 and gaps[3] < gaps[2] and gaps[4] == float(main.mission["stream"]),
+			"Stragglers join in from wave 4, few at first, then thicker (%s)" % str(gaps))
+	main.wave = 0
+	check(main._mission_wave(1).size() < 10, "...and the first waves are small (%d)" % main._mission_wave(1).size())
+	# Endless: enough out of the camp, and on to the next stretch.
+	main.gold = 9999
+	var out := []
+	for x in [160, 220, 280, 340, 400, 460, 520]:
+		main.placing_type = "swordsman"
+		main.hire_at(Vector2(x, 690))
+		main.placing_type = ""
+		out.append(main.get_warriors()[-1])
+	main.placing_type = "swordsman"
+	main.hire_at(Vector2(320, 300))
+	main.placing_type = ""
+	var behind = main.get_warriors()[-1]
+	main.placing_type = "tower"
+	main.hire_at(Vector2(200, 500))
+	main.placing_type = ""
+	for t in main.get_warriors():
+		t.position = t.post
+	await _go()
+	r.phase = 3
+	r.left = 0.01
+	r.called = true
+	var gold1: int = main.gold
+	await create_timer(1.5).timeout
+	check(r.stretch == 1 and main.map_id == "convoy_forest" and r.phase == 0 and r.settle > 0.0 and not main.game_over,
+			"Endless: 7 got out, so on to the next stretch (%s)" % r.status())
+	check(out.all(func(t): return is_instance_valid(t) and absf(t.post.y - 280.0) < 30.0) and not is_instance_valid(behind),
+			"...the ones that got out hold its first line; the one left behind is lost")
+	check(main.get_warriors().size() == out.size() and main.gold > gold1 and main.get_enemies().is_empty(), "...emplacements abandoned (half back), and the enemy left behind for now")
+	r.settle = 0.05
+	await _frames(5)
+	check(r.left > 0.0 and r.action_label() == "", "...then it all starts again")
+	r.through = 8
+	r.phase = 3
+	r.left = 0.01
+	r.called = true
+	for t in out:
+		t.position = Vector2(t.position.x, 700)
+	await create_timer(1.5).timeout
+	check(r.stretch == 2 and r.through == 3, "...each new stretch forgives a few of those that got past (8 to %d)" % r.through)
 	await _fresh_battle("battle:long_retreat:normal")
 	await _go()
 	main.rules.through = main.rules.limit()

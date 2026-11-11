@@ -7,8 +7,13 @@ extends RefCounted
 ##
 ## This base class is castle defense, the game as it always was: enemies head for the
 ## castle at the bottom of the field, the castle falling loses (main.damage_castle), and a
-## mission is won by clearing its last wave. Classic (no mission) goes on to wave 20 and
-## the endless offer, all handled in main.gd as before.
+## mission is won by clearing its last wave. Classic (no mission) goes on until the castle
+## falls (past wave 20 the enemy toughens faster), all handled in main.gd.
+##
+## Battle Modes scenarios are "endless": true. There's no last wave: the battle goes on
+## until it's lost, and the score is the waves survived. Each kind of battle keeps its
+## objective going round (a beacon lit again, more villagers on the road, the convoy on to
+## the next stretch...).
 
 var main
 var mission: Dictionary
@@ -66,6 +71,26 @@ func enemy_goal(_e):
 	return null
 
 
+## Whether every enemy is out for the objectives: one without any (none standing yet, or
+## its own gone) asks again every second rather than heading for the bottom line, and
+## one after something that moves looks again for the nearest. (Not with a castle to
+## besiege, nor where getting past is the point.)
+func objective_only() -> bool:
+	return false
+
+
+## Whether there's something on the field for your troops to protect: troops get the
+## Objective target priority (and start on it).
+func guards() -> bool:
+	return false
+
+
+## How far down the field an enemy with nothing to go for comes before it waits (INF: all
+## the way, as ever).
+func wait_y() -> float:
+	return INF
+
+
 ## Enemy `e` got to the bottom line. With a castle it lays siege as always (return false);
 ## rules without one take it off the field and count it (return true).
 func on_reached_bottom(_e) -> bool:
@@ -75,7 +100,12 @@ func on_reached_bottom(_e) -> bool:
 ## Wave `n` has been cleared: whether that wins the battle. A mission is won by clearing
 ## its last wave; Classic carries on (main.gd offers endless at wave 20).
 func wave_cleared(n: int) -> bool:
-	return main.scripted() and n >= main.last_wave()
+	return main.scripted() and not endless() and n >= main.last_wave()
+
+
+## Whether the battle goes on until it's lost (a Battle Modes scenario).
+func endless() -> bool:
+	return mission.get("endless", false)
 
 
 ## An objective was destroyed (rules with objectives decide whether that loses).
@@ -119,7 +149,7 @@ func entry_point(_post: Vector2) -> Vector2:
 
 ## The HUD's wave counter ("Wave 3/5" by default).
 func wave_text() -> String:
-	return "Wave %d/%d" % [main.wave, main.last_wave()]
+	return "Wave %d" % main.wave if main.survival() or endless() else "Wave %d/%d" % [main.wave, main.last_wave()]
 
 
 ## A battle-specific order the player can give (a button over the field, key Y): its
@@ -135,6 +165,31 @@ func action() -> void:
 ## The objectives troops can be told to follow (a wagon, a column of civilians).
 func followable() -> Array:
 	return objectives().filter(func(o): return o.is_mover() and o.is_target())
+
+
+## The battle moves on to new ground (a convoy's next stretch of road, a retreat's next
+## field): the enemy on the field (and anything in flight, and the fallen) are left
+## behind, and the field turns into map `map_id`. Engineers at work come along; the
+## rules move everything else of yours.
+func change_field(map_id: String) -> void:
+	for e in main.enemy_layer.get_children():
+		e.dead = true
+		e.queue_free()
+	main.spawn_queue.clear()
+	main.enemies_changed()
+	for n in main.fx_layer.get_children():
+		if not n.has_method("gate"):   # (Engineers come along)
+			n.queue_free()
+	for g in main.get_graves():
+		g.queue_free()
+	var maps = load("res://scripts/maps.gd")
+	main.map_id = map_id
+	main.paths.set_map(maps.get_map(map_id))
+	main._repaint_ground()
+	main.queue_redraw()
+	var m: Dictionary = maps.get_map(map_id)
+	main.stage_music = m.get("music", "mountain" if m.get("biome", "") == "mountain" else "calm")
+	main.set_battle_music(m)
 
 
 ## The objectives on the field (objective.gd nodes).

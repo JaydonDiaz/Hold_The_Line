@@ -187,10 +187,11 @@ func _soft_blob(at: Vector2, s: float, col: Color) -> void:
 func _draw_fires(w: float) -> void:
 	var props: Dictionary = FieldArt.props(w)
 	var g := glow()
-	_flame(props["fire"], 1.3, 0.25 + 0.3 * g)
-	for p in props["torches"]:
-		if not main.paths.blocked(p, 4.0):   # (a battlefield's cliffs can cover the camp's sides)
-			_flame(p + Vector2(0, -30), 0.7, 0.2 + 0.3 * g)
+	if main.paths._map.get("camp", true):   # (a convoy's road has no camp on it)
+		_flame(props["fire"], 1.3, 0.25 + 0.3 * g)
+		for p in props["torches"]:
+			if not main.paths.blocked(p, 4.0):   # (a battlefield's cliffs can cover the camp's sides)
+				_flame(p + Vector2(0, -30), 0.7, 0.2 + 0.3 * g)
 	# The castle's gate torches (their flames are drawn by the castle).
 	if g > 0.0:
 		for side in [-1.0, 1.0]:

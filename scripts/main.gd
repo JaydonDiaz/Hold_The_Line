@@ -56,9 +56,11 @@ var rules = null   # the battle's rules (scripts/mission/rules.gd): castle defen
 var camp: Node2D = null   # the work camp standing in for the castle, on a battlefield without one
 var battle_id := ""       # a Battle Modes scenario being played (scenarios.gd), "" otherwise
 var objective_layer: Node2D = null   # the mission's objectives (see rules_positions.gd), under the troops
+var roof_layer: Node2D = null        # ...and the tops of the tall ones, over everyone
 var classic_map := ""      # Classic on one of the campaign's battlefields ("" = the open meadow)
 var map_id := ""           # the battlefield this game is on (a maps.gd id, "" for the meadow)
 var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
+var battle_music := "battle"   # ...and its own battle music during waves (audio.gd BATTLES)
 var credit := ""             # campaign XP: the unit kind whose doing the damage dealt right now is
 var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
 const CD_XP_RATES = preload("res://scripts/campaign_data.gd").XP_RATES    # a story campaign battle (the Campaign autoload says which mission)
@@ -79,8 +81,12 @@ var wave_active := false
 var game_over := false
 var victory := false
 var endless := false     # carried on past the final wave; enemies keep scaling until the line falls
-var choosing := false    # the "keep going?" screen is up after the final wave
 var records_path := "user://records.cfg"   # best number of waves survived, per mode ("" = don't keep)
+var routed := false       # lost because the army was gone with no way to raise another
+var rout_time := 0.0      # seconds it's looked that way (it has to last a moment)
+var run_survived := 0     # the waves survived, as the battle ended
+var best_before := 0      # a survival battle's best (waves) before this one
+var beat_best := false    # ...and whether this one has gone past it yet
 
 var spawn_queue: Array = []   # [enemy kind, wave level] pairs waiting to enter
 var boss_spawned := false     # this wave's boss has come out
@@ -94,13 +100,14 @@ var auto_play := false         # start each wave by itself after the last one's 
 var auto_timer := 0.0          # seconds until auto-play starts the next wave
 var forced_auto := false       # this battle keeps coming (a mission's "pace": {"auto": "forced"}): auto-play can't be turned off
 var deploying := false         # forced pace: the opening seconds to set up, before the first wave
-var wave_clock := 0.0          # forced pace with an "interval": seconds since the last wave came (the next comes regardless)
+var wave_clock := 0.0          # forced pace: seconds since the last of the wave arrived (the next comes regardless, after pace_window())
 const AUTO_DELAY := 3.0
 var wall_start = null     # first click while placing a barricade (Vector2), or null
 var last_priority := {}   # unit kind -> target priority new hires start with
 var last_orders := {}     # unit kind -> {commit, move_mode, leash} new hires start with (the last given to that kind)
 var selected: Warrior = null
 var group := []             # several troops selected together (box or Shift+click); `selected` is null then
+var ward_pick := []         # Healers waiting for a click on the troop they're to stay with
 var box_start = null        # where a left-drag on open field started (Vector2), while the button's held
 var box_active := false     # it's been dragged far enough to be a selection box
 var box_add := false        # Shift was held: the box adds to the group
@@ -180,11 +187,12 @@ func _ready() -> void:
 	hud.restart_pressed.connect(_restart)
 	hud.battle_again.connect(play_again)
 	hud.action_pressed.connect(func(): rules.action())
-	hud.menu_confirmed.connect(func(): back_to_map() if campaign else _restart())
+	hud.menu_confirmed.connect(func():
+		if survival() and started and not game_over:
+			_keep_survival_record(waves_survived())   # a run left early still counts
+		back_to_map() if campaign else _restart())
 	hud.campaign_retry.connect(retry_mission)
 	hud.campaign_map.connect(back_to_map)
-	hud.endless_chosen.connect(continue_endless)
-	hud.finish_chosen.connect(func(): _finish(true))
 	hud.mode_chosen.connect(_on_mode_chosen)
 	hud.freeplay_level_changed.connect(change_freeplay_level)
 	hud.freeplay_spawn_pressed.connect(spawn_single)
@@ -258,7 +266,7 @@ func _fit_screen() -> void:
 				w.route = PackedVector2Array()
 		if objective_layer != null:
 			for o in objective_layer.get_children():
-				o.position.x *= k   # objectives keep their place across the field, like the map
+				o.refit(k)   # objectives keep their place across the field, like the map (and their roads)
 			paths.invalidate()
 		for b in wall_layer.get_children():
 			if b.post != b.fitted_post:
@@ -288,7 +296,7 @@ func choose_mode(mode: String) -> void:
 	rules.setup(self, mission)
 	_show_castle(rules.has_castle())
 	# The battle's pace: forced auto-play gives a few seconds to deploy, then sends the
-	# waves itself with short breaks. (Speed and pause work as ever.)
+	# waves itself, a window apart (see pace_window). (Speed and pause work as ever.)
 	var pace: Dictionary = mission.get("pace", {})
 	forced_auto = pace.get("auto", "free") == "forced"
 	if forced_auto:
@@ -307,6 +315,7 @@ func choose_mode(mode: String) -> void:
 		_repaint_ground()
 	var map: Dictionary = Maps.get_map(map_id)
 	stage_music = map.get("music", "mountain" if map.get("biome", "") == "mountain" else "calm")
+	set_battle_music(map)
 	castle.set_style(map.get("castle", "keep"))
 	freeplay = mode == "freeplay"
 	tutorial = mode == "tutorial"
@@ -332,6 +341,12 @@ func choose_mode(mode: String) -> void:
 	if scripted():
 		_begin_mission()
 	rules.start()
+	if survival():
+		best_before = _best_record()
+		if best_before > 0:
+			hud.show_message("Survive as many waves as you can. Your best here: %d" % best_before)
+		else:
+			hud.show_message("Survive as many waves as you can")
 	if tutorial:
 		var guide := Tutorial.new()
 		guide.main = self
@@ -356,6 +371,7 @@ func _process(delta: float) -> void:
 	if not game_over:
 		if started:
 			rules.process(delta)
+			_check_rout(delta)
 		if not spawn_queue.is_empty():
 			spawn_timer -= delta
 			if spawn_timer <= 0.0:
@@ -369,15 +385,21 @@ func _process(delta: float) -> void:
 			if not wave_active:
 				castle_hp = castle_max   # sandbox: patched up once the field is clear
 				gates_warned = false
-		elif forced_auto and wave_active and spawn_queue.is_empty() and mission.get("pace", {}).has("interval"):
-			# A relentless pace: the next wave comes on time whether this one's beaten or not.
+		elif forced_auto and wave_active and spawn_queue.is_empty():
+			# The last of the wave is on the field: the next comes a window later, whether
+			# this one's beaten or not. Beat it sooner and the rest of the window is a breather.
 			wave_clock += delta
-			if wave_clock >= float(mission["pace"]["interval"]):
+			if wave_clock >= pace_window():
 				start_wave(true)
 			elif get_enemies().is_empty():
 				_end_wave()
-		elif auto_play and started and not wave_active and not choosing:
-			auto_timer -= delta / maxf(Engine.time_scale, 1.0)   # real seconds, whatever the speed
+		elif auto_play and started and not wave_active:
+			if forced_auto:
+				auto_timer -= delta   # (a forced pace keeps the battle's own time)
+				if not deploying:
+					_rest(delta)
+			else:
+				auto_timer -= delta / maxf(Engine.time_scale, 1.0)   # real seconds, whatever the speed
 			if auto_timer <= 0.0:
 				start_wave()
 		elif wave_active and spawn_queue.is_empty() and get_enemies().is_empty():
@@ -398,7 +420,7 @@ func _process(delta: float) -> void:
 			audio.set_layers(bard_instruments)
 		# Between waves, a Bard on every instrument strikes up a song together.
 		var ensemble: bool = song_on and audio._music.has("ensemble") and all_bards_present()
-		audio.set_track("battle" if wave_active else ("ensemble" if ensemble else stage_music))
+		audio.set_track(battle_music if wave_active else ("ensemble" if ensemble else stage_music))
 		if audio._playing_track != last_track:
 			if audio._playing_track == "ensemble":
 				hud.show_message("The Bards strike up a song together!")
@@ -542,7 +564,7 @@ func start_wave(force := false) -> void:
 	if freeplay:
 		spawn_freeplay_wave()
 		return
-	if (wave_active and not force) or game_over or not started or choosing:
+	if (wave_active and not force) or game_over or not started:
 		return
 	wave_clock = 0.0
 	if dragging != null:
@@ -650,7 +672,7 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 	e.goal = rules.enemy_goal(e)   # an objective the rules send it for (null: the castle, as ever)
 	enemy_layer.add_child(e)
 	if e.boss:
-		hud.show_message("The Ogre King approaches!")
+		hud.show_message("%s approaches!" % d.get("name", kind.capitalize()))
 
 
 ## An enemy called in mid-fight (by the Ogre King).
@@ -734,7 +756,11 @@ func add_objective(o: Node2D) -> void:
 		objective_layer = Node2D.new()
 		add_child(objective_layer)
 		move_child(objective_layer, wall_layer.get_index())
+		roof_layer = Node2D.new()
+		add_child(roof_layer)
+		move_child(roof_layer, powers.get_index())
 	objective_layer.add_child(o)
+	o.make_roof(roof_layer)
 
 
 ## Enemies hitting the castle. In freeplay it can't fall.
@@ -901,9 +927,37 @@ func toggle_auto() -> void:
 	hud.show_message("Auto-play on" if auto_play else "Auto-play off")
 
 
-## Seconds between waves under auto-play (a forced pace sets its own short break).
+## Seconds between waves under auto-play. A forced pace: what's left of the window (at
+## least MIN_BREAK).
 func auto_delay() -> float:
-	return float(mission.get("pace", {}).get("break", 4.0)) if forced_auto else AUTO_DELAY
+	return maxf(MIN_BREAK, pace_window() - wave_clock) if forced_auto else AUTO_DELAY
+
+
+const PACE_WINDOW := 25.0   # forced pace: seconds from the last of a wave arriving to the next wave
+const MIN_BREAK := 8.0      # ...and the shortest breather once a wave's beaten
+const REST_HEAL := 0.04     # share of its health a troop gets back each second of a breather
+
+
+## A forced pace's window between waves: from the last of one wave arriving to the next
+## wave ("pace": {"window"}), time to finish it off, let the troops recover and reset.
+func pace_window() -> float:
+	return float(mission.get("pace", {}).get("window", PACE_WINDOW))
+
+
+## Seconds until the next wave under a forced pace (or auto-play), -1 if it isn't counting.
+func next_wave_in() -> float:
+	if forced_auto and wave_active and spawn_queue.is_empty():
+		return maxf(0.0, pace_window() - wave_clock)
+	if auto_play and not wave_active:
+		return maxf(0.0, auto_timer)
+	return -1.0
+
+
+## A breather between waves: the troops catch their breath and get some health back.
+func _rest(delta: float) -> void:
+	for w in get_warriors():
+		if w.is_active() and not w.is_emplacement() and w.hp < w.max_hp:
+			w.hp = minf(w.max_hp, w.hp + w.max_hp * REST_HEAL * delta)
 
 
 func _end_wave() -> void:
@@ -923,13 +977,93 @@ func _end_wave() -> void:
 	if rules.wave_cleared(wave):
 		_finish(true)   # the mission's last wave: it's won
 		return
-	if wave == Data.FINAL_WAVE and not endless:
-		choosing = true
-		Engine.time_scale = 1.0
-		_cancel()
-		hud.show_victory_choice(wave)
-	else:
+	_survived_wave()
+	if not scripted() and wave == Data.FINAL_WAVE and not endless:
+		# Classic goes on: from here the enemy toughens faster and pays less.
+		endless = true
+		hud.show_message("Wave %d held! From here they come harder, and pay less. How far can you go?" % wave)
+	elif not (survival() and beat_best and wave == best_before + 1):
 		hud.show_message("Wave %d cleared! +%d gold" % [wave, bonus])
+
+
+## Kinds that can't fight, sold off to pay for troops when it comes to it.
+const NON_FIGHTERS := ["mine", "statue", "medbay", "barricade"]
+const ROUT_GRACE := 3.0   # seconds with no army and no way to raise one before it's over
+
+
+## The army is gone (every troop dead, nothing on the wall either), and there's no way to
+## raise another: no Gold Mine to earn with, and not enough gold to hire anything, even
+## selling what can't fight. Lasting a moment (a wave's bonus about to come in still
+## counts), that's the battle lost. Not in Freeplay or the Tutorial.
+func _check_rout(delta: float) -> void:
+	if freeplay or tutorial or deploying:
+		rout_time = 0.0
+		return
+	if not _army_gone():
+		rout_time = 0.0
+		return
+	rout_time += delta
+	if rout_time >= ROUT_GRACE:
+		routed = true
+		hud.show_message("Your army is gone, and there's no gold to raise another")
+		_finish(false)
+
+
+func _army_gone() -> bool:
+	var funds := gold
+	for w in get_warriors():
+		if w.kind == "mine":
+			return false   # it'll earn more
+		if not NON_FIGHTERS.has(w.kind):
+			return false   # still someone fighting (or downed, and maybe revived)
+		funds += w.sell_value()
+	if rules.has_castle() and not powers.guards.is_empty():
+		return false   # the wall's own guards fight on
+	for b in get_barricades():
+		funds += int(b.spent * 0.6)
+	for k in Data.WARRIORS:
+		if k != "barricade" and allowed(k) and funds >= hire_cost(k):
+			return false
+	return true
+
+
+## This battlefield's own battle music (getting it composed now, ready for the first wave).
+func set_battle_music(map: Dictionary) -> void:
+	battle_music = Audio.battle_for(map)
+	audio.prepare(battle_music)
+
+
+## A survival battle (Classic, a Battle Modes scenario): the run goes on until it's
+## lost, and the score is the waves survived.
+func survival() -> bool:
+	if freeplay or tutorial or campaign:
+		return false
+	return not scripted() or mission.get("endless", false)
+
+
+## Waves survived so far this run (a forced pace sends the next before the last is beaten:
+## one counts once the next has come, or once it's been cleared).
+func waves_survived() -> int:
+	return wave if not wave_active else wave - 1
+
+
+## Wave `wave` is behind us: a word when that beats the best.
+func _survived_wave() -> void:
+	if survival() and not beat_best and best_before > 0 and waves_survived() > best_before:
+		beat_best = true
+		hud.show_message("New best: %d waves!" % waves_survived())
+		sfx("fanfare", 1.2)
+
+
+## This battle's best before (Classic: per difficulty and battlefield; a scenario: per difficulty).
+func _best_record() -> int:
+	if records_path == "":
+		return 0
+	var cfg := ConfigFile.new()
+	cfg.load(records_path)
+	if battle_id != "":
+		return cfg.get_value("survive", "%s@%s" % [battle_id, difficulty], 0)
+	return cfg.get_value("best", difficulty + ("@" + map_id if map_id != "" else ""), 0)
 
 
 # --- Campaign ------------------------------------------------------------
@@ -1040,6 +1174,15 @@ func _mission_wave(n: int) -> Array:
 		list.append(pool.pick_random())
 	for k in mission.get("extra", {}).get(n, []):
 		list.insert(randi_range(list.size() / 2, list.size()), k)
+	if mission.get("endless", false):
+		# On and on: Warlords lead every fifth wave from the tenth, Wyverns swoop in on the
+		# even waves between from the twelfth (one more of each every ten waves).
+		if n >= 10 and n % 5 == 0:
+			for i in 1 + (n - 10) / 10:
+				list.append("warlord")
+		elif n >= 12 and n % 2 == 0:
+			for i in 1 + (n - 12) / 10:
+				list.insert(randi_range(list.size() / 3, list.size()), "wyvern")
 	return list
 
 
@@ -1050,7 +1193,7 @@ func wave_level(n: int) -> int:
 
 ## The wave that ends the game (or, in Classic, offers endless).
 func last_wave() -> int:
-	return int(mission["waves"]) if scripted() else Data.FINAL_WAVE
+	return int(mission.get("waves", 0)) if scripted() else Data.FINAL_WAVE
 
 
 ## Whether this battle follows a mission (a campaign battle, or a Battle Modes scenario)
@@ -1160,56 +1303,60 @@ func clear_enemies() -> void:
 		e.queue_free()
 
 
-## After the final wave: carry on with ever-stronger waves.
-func continue_endless() -> void:
-	endless = true
-	choosing = false
-	hud.show_message("Endless: enemies grow stronger faster, and bounties shrink")
-
-
 func _finish(won: bool) -> void:
 	audio.set_track("")
 	sfx("victory" if won else "defeat")
-	choosing = false
 	game_over = true
 	victory = won
+	run_survived = wave if won else waves_survived()   # (counted while the wave being fought is still on)
 	wave_active = false
 	Engine.time_scale = 1.0
 	_cancel()
 	enemy_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	warrior_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	wall_layer.process_mode = Node.PROCESS_MODE_DISABLED
-	var survived := wave if won else wave - 1
+	var survived := run_survived
 	if campaign:
 		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
-		hud.show_campaign_end(won, mission, survived, rules.summary(won) if rules.has_method("summary") else "")
+		hud.show_campaign_end(won, mission, survived, _summary(won))
 		return
 	if battle_id != "":
 		_finish_battle_mode(won)
 		return
 	var previous := _save_record(survived)
-	hud.show_end(won, survived, previous, endless)
+	hud.show_end(won, survived, previous, endless, "Your army is gone" if routed else "")
 
 
-## A Battle Modes scenario over: its result, its best (kept per scenario and
-## difficulty, for wins), and the way to play it again.
-func _finish_battle_mode(won: bool) -> void:
+## How the battle went, for the end screen.
+func _summary(won: bool) -> String:
+	if routed:
+		return "Every troop was lost, with no gold left to raise more."
+	return rules.summary(won)
+
+
+## A survival run's waves, kept if they beat its best.
+func _keep_survival_record(survived: int) -> void:
+	if battle_id == "":
+		_save_record(survived)
+		return
+	if records_path == "":
+		return
+	var cfg := ConfigFile.new()
+	cfg.load(records_path)
 	var key := "%s@%s" % [battle_id, difficulty]
-	var score: int = rules.score() if won else -1
-	var best := -1
-	if records_path != "":
-		var cfg := ConfigFile.new()
-		cfg.load(records_path)
-		best = cfg.get_value("battle", key, -1)
-		if score > best:
-			cfg.set_value("battle", key, score)
-			cfg.save(records_path)
-	var record := ""
-	if won:
-		record = "New best!" if score > best else "Best: " + rules.score_text(best)
-	elif best >= 0:
-		record = "Best: " + rules.score_text(best)
-	hud.show_battle_end(won, mission["name"], rules.summary(won), record, "battle:%s:%s" % [battle_id, difficulty])
+	if survived > int(cfg.get_value("survive", key, 0)):
+		cfg.set_value("survive", key, survived)
+		cfg.save(records_path)
+
+
+## A Battle Modes scenario over: how long it lasted, its best (waves survived, kept per
+## scenario and difficulty), and the way to play it again.
+func _finish_battle_mode(won: bool) -> void:
+	var survived := run_survived
+	var best := _best_record() if records_path != "" else best_before
+	_keep_survival_record(survived)
+	var record := "New best!" if survived > best else "Best: %d waves" % best
+	hud.show_battle_end(won, mission["name"], _summary(won), record, "battle:%s:%s" % [battle_id, difficulty], survived)
 
 
 ## Plays a Battle Modes scenario again from the start (the scene reloads, as for any game).
@@ -1383,7 +1530,9 @@ func hire_at(p: Vector2) -> void:
 	var w := Warrior.new()
 	w.setup(placing_type, data, self, _clamp_post(p))
 	w.spent = cost
-	w.priority = last_priority.get(placing_type, "closest")
+	w.priority = last_priority.get(placing_type, Warrior.OBJECTIVE_PRIORITY if rules.guards() else "closest")
+	if w.is_mobile_healer():
+		w.priority = last_priority.get(placing_type, "revive")
 	if last_orders.has(placing_type):
 		var o: Dictionary = last_orders[placing_type]
 		w.commit = o["commit"]
@@ -1658,8 +1807,17 @@ func cycle_target_priority() -> void:
 	if selected == null:
 		return
 	selected.cycle_priority()
-	last_priority[selected.kind] = selected.priority
-	spawn_text(selected.position + Vector2(0, -50), "Target: " + Warrior.PRIORITY_NAMES[selected.priority], Color(1, 1, 0.6))
+	if selected.is_mobile_healer():
+		if selected.priority == "stay":
+			selected.priority = "revive" if selected.wards.is_empty() else "stay"
+			if selected.wards.is_empty():
+				give_order("priority", "stay", [selected])   # (waits for the troop to stay with)
+				return
+		else:
+			selected.stop_staying()
+	if selected.priority != "stay":
+		last_priority[selected.kind] = selected.priority
+	spawn_text(selected.position + Vector2(0, -50), ("Focus: " if selected.is_mobile_healer() else "Target: ") + Warrior.PRIORITY_NAMES[selected.priority], Color(1, 1, 0.6))
 
 
 # --- Orders: priority, commitment, movement zone ----------------------------------------
@@ -1680,7 +1838,13 @@ func give_order(field: String, value, units: Array = []) -> void:
 	for w in units:
 		match field:
 			"priority":
-				if not w.uses_targeting():
+				if not Warrior.priorities_for_unit(w).has(value):
+					continue   # (a Healer takes its own; the rest, target priorities)
+				if w.is_mobile_healer():
+					if value == "stay":
+						continue   # (who to stay with: see below)
+					w.stop_staying()
+				elif not w.uses_targeting():
 					continue
 				w.priority = value
 				w.target = null
@@ -1698,6 +1862,27 @@ func give_order(field: String, value, units: Array = []) -> void:
 				w.set_leash(value)
 		if field != "priority":
 			last_orders[w.kind] = {"commit": w.commit, "move_mode": w.move_mode, "leash": w.leash.duplicate()}
+	if field == "priority" and value == "stay":
+		# Healers stay with the troops given the order with them; on their own, they wait
+		# for a click on the troop (or right-click one).
+		var healers := units.filter(func(w): return w.is_mobile_healer())
+		var others := units.filter(func(w): return not w.is_mobile_healer() and w.kind != "barricade")
+		if healers.is_empty():
+			return
+		if others.is_empty():
+			ward_pick = healers
+			hud.show_message("Click the troop for the Healer to stay with (Esc: cancel)")
+		else:
+			stay_with(healers, others)
+
+
+## `healers` keep with `troops` (a troop, or a group) and look after them first.
+func stay_with(healers: Array, troops: Array) -> void:
+	ward_pick = []
+	for h in healers:
+		h.stay_with(troops)
+	if not healers.is_empty() and not troops.is_empty():
+		spawn_text(healers[0].position + Vector2(0, -50), "Staying with the %s" % (troops[0].label.to_lower() if troops.size() == 1 else "group"), Color(0.6, 1.0, 0.6))
 
 
 ## M: the next movement mode for the selection (Hold, Short Leash, Guard Area, Free Roam).
@@ -1789,6 +1974,7 @@ func switch_tab(tab: String) -> void:
 
 func _cancel() -> void:
 	powers.aiming = ""
+	ward_pick = []
 	group.clear()
 	box_start = null
 	castle_selected = false
@@ -1834,7 +2020,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
 				powers.aiming = ""
 			return
+		if not ward_pick.is_empty():
+			# Healers waiting to be told who to stay with: that troop (anything else cancels).
+			var ward := _warrior_at(p)
+			var healers := ward_pick.filter(func(h): return is_instance_valid(h))
+			ward_pick = []
+			if ward != null and not healers.has(ward) and ward.kind != "barricade":
+				stay_with(healers, [ward])
+			else:
+				hud.show_message("No troop there: the Healer keeps to what it was doing")
+			return
 		if event.button_index == MOUSE_BUTTON_RIGHT:
+			# Healers alone, right-clicking one of your troops: stay with it.
+			var sel := order_units()
+			var ally := _warrior_at(p)
+			if ally != null and not sel.is_empty() and not sel.has(ally) and ally.kind != "barricade" \
+					and sel.all(func(w): return w.is_mobile_healer()):
+				stay_with(sel, [ally])
+				return
 			var mover = null
 			for o in rules.followable():
 				if o.position.distance_to(p) < o.RADIUS + 10.0:
@@ -2098,7 +2301,8 @@ func _repaint_ground() -> void:
 ## Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
 ## lit for the mode's mood; then the scenery on it (see field_art.gd).
 func _paint_ground(ci: CanvasItem) -> void:
-	FieldArt.paint_field(ci, FIELD_W, FIELD_H, ambience.ground_tint(), Maps.get_map(map_id))
+	var map: Dictionary = Maps.get_map(map_id)
+	FieldArt.paint_field(ci, FIELD_W, FIELD_H, ambience.ground_tint() * map.get("tint", Color.WHITE), map)
 
 
 ## The panel's colour carried on under the field across the whole width (the

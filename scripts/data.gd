@@ -850,8 +850,18 @@ const ENEMIES := {
 			"wall_damage": 30.0, "cc": 0.5, "knock": 0.3,
 			"breath": {"damage": 16.0, "radius": 34.0, "range": 120.0, "cooldown": 2.2},
 			"bounty": 100, "radius": 20.0, "scale": 3.75, "color": Color(0.3, 0.55, 0.45)},
+	# The Ash Marshal, the Ogre King's herald (Sable Crossing): a war banner that drives on the
+	# enemies round him (until enough damage knocks it down for a while), a charge at a
+	# troop in his way (never through rock, water or a wall), and a sweeping cleave.
+	"ash_marshal": {"tier": 6, "name": "The Ash Marshal", "hp": 1300, "speed": 20.0, "damage": 40.0, "cooldown": 1.5, "fights": true,
+			"cc": 0.3, "knock": 0.0, "wall_damage": 80.0, "boss": true,
+			"cleave": {"reach": 30.0, "arc": 1.8},
+			"banner": {"radius": 150.0, "damage": 0.25, "speed": 0.2, "break": 0.08, "down": 12.0},
+			"charge": {"cooldown": 10.0, "min": 60.0, "range": 210.0, "speed": 230.0, "damage": 40.0, "push": 60.0, "stun": 1.0},
+			"enrage": 0.35,
+			"bounty": 400, "radius": 26.0, "scale": 5.0, "color": Color(0.6, 0.25, 0.15)},
 	# Final boss: comes for the line once wave 20 (and every 10th wave after) is beaten.
-	"ogre_king": {"tier": 6, "hp": 10000, "speed": 15.0, "damage": 60.0, "cooldown": 1.8, "fights": true, "cc": 0.3, "knock": 0.0,
+	"ogre_king": {"tier": 6, "name": "The Ogre King", "hp": 10000, "speed": 15.0, "damage": 60.0, "cooldown": 1.8, "fights": true, "cc": 0.3, "knock": 0.0,
 			"wall_damage": 120.0, "boss": true,
 			"stomp": {"damage": 50.0, "radius": 100.0, "cooldown": 6.0, "push": 70.0, "stun": 1.5},
 			"cleave": {"reach": 34.0, "arc": 2.1},

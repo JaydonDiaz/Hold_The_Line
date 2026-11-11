@@ -20,6 +20,7 @@ var maps: Array = []        # "" (the meadow) and every campaign map, in order
 var open_maps: Array = []   # the ones the campaign has reached
 var at := 0
 var difficulty := ""
+var records := ""          # where the best runs are kept (main.records_path; "" for none)
 var vp: SubViewport
 var painter: Node2D
 var picture: TextureRect
@@ -152,6 +153,13 @@ func show_map(i: int) -> void:
 	name_label.text = "The Meadow" if id == "" else Maps.MAPS[id].get("name", id)
 	blurb.text = "Open fields with no terrain: the classic game." if id == "" else Maps.MAPS[id].get("blurb", "").replace("\n", " ") + "."
 	count_label.text = "%d of %d" % [at + 1, maps.size()]
+	var best := 0
+	if records != "":
+		var cfg := ConfigFile.new()
+		cfg.load(records)
+		best = cfg.get_value("best", difficulty + ("@" + id if id != "" else ""), 0)
+	if best > 0:
+		count_label.text += "  ·  your best here: %d waves" % best
 	lock_band.visible = not opened
 	lock_label.visible = not opened
 	lock_label.text = "Locked\nReach %s in the campaign" % _territory(id)

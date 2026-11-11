@@ -8,7 +8,9 @@ extends Node
 ##   villain   the Ogre King's and his heralds' cutscenes: drums and dread
 ##   calm      the meadow's peaceful music, between waves (Classic, Ashwatch...)
 ##   mountain  the mountains' peaceful music, between waves (Stonehollow)
-##   battle    during waves, everywhere
+##   battle    during waves on the open meadow (Classic, and battlefields without their own)
+##   battle_*  during waves on each other map: its own battle piece (BATTLES, by the map's
+##             "battle" style), composed when that map is first fought on (see prepare)
 ## Every stage track (STAGE_TRACKS: the peaceful ones and the battle) also gets a part
 ## for each Bard instrument, played in sync and faded in while a Bard with that
 ## instrument is on the field, so Bards play along with any stage's music. Music and effects have their own volume (saved between games).
@@ -90,9 +92,49 @@ var _layers := []      # Bard instruments playing along with the music right now
 var _stop := false     # the scene is going: the composer thread stops after its current piece
 var _picked := 0       # how many cached pieces this player has taken up so far
 static var _cache := {}             # piece -> AudioStreamWAV: "fx:<effect>", a track, "<track>:<instrument>", "ensemble"
-const STAGE_TRACKS := ["calm", "mountain", "battle"]   # the music Bards play along with
+const STAGE_TRACKS := ["calm", "mountain", "battle"]   # the music Bards play along with (and every battle_*)
+# Each map's own battle music: a style for the battle composer. "bpm", "chords" (root MIDI
+# note, "maj"/"min"), "seed" (the lead's turns), "lead" (its wave), "bass" ("eighths",
+# "gallop", "offbeat", "pedal"), "drums" ("rock", "march", "tribal", "halftime"), "arp"
+# ("pendulum", "up", "triplet", "none"), "range" (the lead's lowest and highest notes).
+const BATTLES := {
+	"ridge": {"bpm": 132, "chords": [[50, "min"], [46, "maj"], [48, "maj"], [45, "maj"], [50, "min"], [46, "maj"], [43, "min"], [45, "maj"],
+			[46, "maj"], [48, "maj"], [50, "min"], [45, "maj"], [43, "min"], [46, "maj"], [45, "maj"], [50, "min"]],
+		"seed": 11, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "up", "range": [62, 81]},
+	"quarry": {"bpm": 118, "chords": [[52, "min"], [53, "maj"], [52, "min"], [50, "min"], [52, "min"], [53, "maj"], [55, "maj"], [53, "maj"]],
+		"seed": 23, "lead": "square", "bass": "pedal", "drums": "halftime", "arp": "pendulum", "range": [60, 76]},
+	"village": {"bpm": 146, "chords": [[55, "maj"], [52, "min"], [48, "maj"], [50, "maj"], [55, "maj"], [52, "min"], [48, "maj"], [50, "maj"],
+			[52, "min"], [48, "maj"], [55, "maj"], [50, "maj"], [52, "min"], [50, "maj"], [48, "maj"], [50, "maj"]],
+		"seed": 37, "lead": "tri", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [66, 86]},
+	"road": {"bpm": 140, "chords": [[48, "maj"], [55, "maj"], [57, "min"], [53, "maj"], [48, "maj"], [55, "maj"], [53, "maj"], [55, "maj"]],
+		"seed": 41, "lead": "square", "bass": "eighths", "drums": "rock", "arp": "up", "range": [64, 84]},
+	"darkwood": {"bpm": 124, "chords": [[47, "min"], [43, "maj"], [45, "maj"], [42, "min"], [47, "min"], [43, "maj"], [40, "min"], [42, "maj"]],
+		"seed": 53, "lead": "tri", "bass": "offbeat", "drums": "tribal", "arp": "pendulum", "range": [59, 76]},
+	"ford": {"bpm": 136, "chords": [[50, "min"], [53, "maj"], [48, "maj"], [45, "min"], [46, "maj"], [53, "maj"], [48, "maj"], [45, "maj"]],
+		"seed": 67, "lead": "square", "bass": "eighths", "drums": "rock", "arp": "triplet", "range": [62, 81]},
+	"fens": {"bpm": 112, "chords": [[49, "min"], [45, "maj"], [49, "min"], [44, "maj"], [42, "min"], [45, "maj"], [44, "maj"], [44, "maj"]],
+		"seed": 71, "lead": "tri", "bass": "pedal", "drums": "halftime", "arp": "pendulum", "range": [61, 78]},
+	"embers": {"bpm": 152, "chords": [[52, "min"], [48, "maj"], [50, "maj"], [47, "min"], [52, "min"], [48, "maj"], [45, "min"], [47, "maj"]],
+		"seed": 83, "lead": "saw", "bass": "eighths", "drums": "rock", "arp": "up", "range": [64, 83]},
+	"ashen": {"bpm": 128, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
+		"seed": 97, "lead": "square", "bass": "gallop", "drums": "march", "arp": "none", "range": [61, 80]},
+	"greenwood": {"bpm": 128, "chords": [[52, "min"], [50, "maj"], [48, "maj"], [50, "maj"], [52, "min"], [55, "maj"], [50, "maj"], [47, "min"],
+			[48, "maj"], [50, "maj"], [52, "min"], [47, "min"], [45, "min"], [48, "maj"], [50, "maj"], [52, "min"]],
+		"seed": 113, "lead": "tri", "bass": "offbeat", "drums": "tribal", "arp": "triplet", "range": [64, 86]},
+	"deepdelve": {"bpm": 122, "chords": [[45, "min"], [46, "maj"], [45, "min"], [43, "maj"], [41, "maj"], [43, "maj"], [44, "maj"], [45, "min"]],
+		"seed": 127, "lead": "square", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [57, 76]},
+	"mercy": {"bpm": 138, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [50, "min"], [45, "min"], [48, "maj"],
+			[46, "maj"], [48, "maj"], [50, "min"], [45, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [53, "maj"]],
+		"seed": 131, "lead": "square", "bass": "gallop", "drums": "rock", "arp": "up", "range": [65, 84]},
+	"sable": {"bpm": 144, "chords": [[50, "min"], [48, "maj"], [46, "maj"], [45, "maj"], [50, "min"], [53, "maj"], [55, "min"], [45, "maj"],
+			[46, "maj"], [45, "maj"], [50, "min"], [48, "maj"], [46, "maj"], [43, "min"], [45, "maj"], [45, "maj"]],
+		"seed": 149, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "up", "range": [62, 84]},
+	"highpass": {"bpm": 134, "chords": [[50, "min"], [55, "maj"], [50, "min"], [48, "maj"], [50, "min"], [55, "maj"], [53, "maj"], [48, "maj"]],
+		"seed": 101, "lead": "saw", "bass": "offbeat", "drums": "tribal", "arp": "up", "range": [62, 82]},
+}
 const SCENE_TRACKS := ["title", "map", "story", "villain"]    # the rest (menus, the campaign map, cutscenes)
 static var _cache_lock := Mutex.new()
+static var _wanted_first: Array = []   # pieces to make before anything else (a map's battle music, asked for by prepare)
 const INSTRUMENTS := ["note", "pluck", "reed", "flute", "drum", "violin", "cello", "harp"]   # lute, pipa, mouth instrument, flute, hand drum, and the special three
 const LAYER_OFF := -60.0
 var _playing_track := ""
@@ -176,14 +218,39 @@ func set_track(track: String) -> void:
 	_wanted_track = track
 
 
-func _process(_delta: float) -> void:
-	if _picked < _piece_count():
-		_pick_up()
-	if _wanted_track == _playing_track:
+## The battle music for map `m` (maps.gd): its own piece, or the meadow's.
+static func battle_for(m: Dictionary) -> String:
+	return "battle_" + m["battle"] if BATTLES.has(m.get("battle", "")) else "battle"
+
+
+## Gets `track` (a map's battle music) composed next, with its Bard parts, if it isn't yet.
+func prepare(track: String) -> void:
+	if not track.begins_with("battle_") or not BATTLES.has(track.substr(7)):
 		return
-	if _wanted_track != "" and not _music.has(_wanted_track):
+	_cache_lock.lock()
+	var missing := not _cache.has(track)
+	for piece in [track] + INSTRUMENTS.map(func(i): return track + ":" + i):
+		if not _cache.has(piece) and not _wanted_first.has(piece):
+			_wanted_first.append(piece)
+			missing = true
+	_cache_lock.unlock()
+	if missing and (_thread == null or not _thread.is_alive()):
+		if _thread != null and _thread.is_started():
+			_thread.wait_to_finish()
+		_thread = Thread.new()
+		_thread.start(_compose_all)
+
+
+func _process(_delta: float) -> void:
+	_pick_up()
+	var want := _wanted_track
+	if want.begins_with("battle_") and not _music.has(want):
+		want = "battle"   # (its own piece is still being composed: the usual one till then)
+	if want == _playing_track:
+		return
+	if want != "" and not _music.has(want):
 		return   # still being composed
-	_playing_track = _wanted_track
+	_playing_track = want
 	var out: AudioStreamPlayer = _music_players[0]
 	var into: AudioStreamPlayer = _music_players[1]
 	_music_players.reverse()
@@ -340,14 +407,28 @@ static func _piece_count() -> int:
 
 ## The composer thread: makes each piece not already cached, and caches it.
 func _compose_all() -> void:
-	for piece in _pieces():
+	var queue := _pieces()
+	while true:
 		if _stop:
 			return
+		# A battle piece asked for (the map about to be fought on) goes first.
 		_cache_lock.lock()
-		var have := _cache.has(piece)
+		var piece := ""
+		while not _wanted_first.is_empty() and piece == "":
+			var w: String = _wanted_first.pop_front()
+			if not _cache.has(w):
+				piece = w
 		_cache_lock.unlock()
-		if have:
-			continue
+		if piece == "":
+			while not queue.is_empty() and piece == "":
+				var q: String = queue.pop_front()
+				_cache_lock.lock()
+				var done := _cache.has(q)
+				_cache_lock.unlock()
+				if not done:
+					piece = q
+		if piece == "":
+			return   # everything's made
 		var made: AudioStreamWAV
 		if piece.begins_with("fx:"):
 			made = _render_effect(SOUNDS[piece.substr(3)])
@@ -355,6 +436,8 @@ func _compose_all() -> void:
 			made = _compose_calm()
 		elif piece == "battle":
 			made = _compose_battle()
+		elif piece.begins_with("battle_") and not ":" in piece:
+			made = _compose_battle_style(piece.substr(7))
 		elif piece == "title":
 			made = _compose_title()
 		elif piece == "story":
@@ -381,7 +464,7 @@ func _pick_up() -> void:
 	var cache := _cache.duplicate()
 	_cache_lock.unlock()
 	if cache.size() == _picked:
-		return
+		return   # (nothing new)
 	_picked = cache.size()
 	var effects := {}
 	for sound_name in SOUNDS:
@@ -389,15 +472,18 @@ func _pick_up() -> void:
 			effects[sound_name] = cache["fx:" + sound_name]
 	if not effects.is_empty():
 		_effects_ready(effects)
-	for track in STAGE_TRACKS + SCENE_TRACKS:
+	var battles := []
+	for style in BATTLES:
+		battles.append("battle_" + style)
+	for track in STAGE_TRACKS + battles + SCENE_TRACKS:
 		if not cache.has(track):
 			continue
 		var parts := [cache[track]]
-		if track in STAGE_TRACKS:
+		if track in STAGE_TRACKS or track.begins_with("battle"):
 			for instrument in INSTRUMENTS:
 				if cache.has(track + ":" + instrument):
 					parts.append(cache[track + ":" + instrument])
-		var full := parts.size() == (INSTRUMENTS.size() + 1 if track in STAGE_TRACKS else 1)
+		var full := parts.size() == (INSTRUMENTS.size() + 1 if track in STAGE_TRACKS or track.begins_with("battle") else 1)
 		var shown: int = (_music[track] as AudioStreamSynchronized).stream_count if _music.has(track) else 0
 		if shown == 0 or (full and shown < parts.size()):
 			_music_ready({track: parts if full else [parts[0]]})
@@ -465,6 +551,12 @@ static func _track_info(track: String) -> Dictionary:
 					[38, mn], [46, maj], [41, maj], [48, maj], [38, mn], [43, mn], [48, maj], [41, maj]]}
 		"mountain":
 			return {"step": 60.0 / 92.0 / 4.0, "chords": [[43, maj], [41, maj], [48, maj], [43, maj], [43, maj], [41, maj], [45, mn], [50, maj]]}
+	if track.begins_with("battle_"):
+		var st: Dictionary = BATTLES[track.substr(7)]
+		var ch: Array = st["chords"].map(func(c): return [c[0], maj if c[1] == "maj" else mn])
+		if ch.size() < 16:
+			ch = ch + ch   # (round twice, the lead finding a new line the second time)
+		return {"step": 60.0 / float(st["bpm"]) / 4.0, "chords": ch}
 	if track == "calm":
 		return {"step": 60.0 / 84.0 / 4.0, "chords": [[48, [0, 4, 7]], [45, [0, 3, 7]], [41, [0, 4, 7]], [43, [0, 4, 7]],
 				[48, [0, 4, 7]], [45, [0, 3, 7]], [41, [0, 4, 7]], [43, [0, 4, 7, 10]]]}
@@ -488,7 +580,7 @@ static func _compose_part(track: String, instrument: String) -> AudioStreamWAV:
 	var step: float = info["step"]
 	var chords: Array = info["chords"]
 	var buf := _track_buffer(info)
-	var busy := track == "battle"
+	var busy := track.begins_with("battle")
 	for b in chords.size():
 		var root: int = chords[b][0]
 		var tones: Array = chords[b][1]
@@ -884,4 +976,114 @@ static func _compose_battle() -> AudioStreamWAV:
 			phrase[b] = notes
 		for nt in notes:
 			_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.95, _hz(nt[2]), _hz(nt[2]), "square", 0.07, 0.9, 0.5)
+	return _to_stream(buf, true)
+
+
+## A map's own battle music, from its style (BATTLES): the same build as the meadow's
+## (bass, arpeggio, drums and a lead finding its way through the chords, its first phrase
+## echoed), each part in the style's own pattern, tempo, key and sound.
+static func _compose_battle_style(name: String) -> AudioStreamWAV:
+	var st: Dictionary = BATTLES[name]
+	var info := _track_info("battle_" + name)
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(st["seed"])
+	var lo: int = st["range"][0]
+	var hi: int = st["range"][1]
+	var lead: String = st["lead"]
+	var rhythms := [[[0, 3], [3, 1], [4, 2], [6, 2], [8, 4], [12, 2], [14, 2]], [[0, 2], [2, 2], [4, 4], [8, 3], [11, 1], [12, 4]],
+			[[0, 4], [4, 2], [6, 2], [8, 2], [10, 2], [12, 4]], [[0, 1], [1, 1], [2, 2], [4, 2], [6, 2], [8, 6], [14, 2]]]
+	var ra: Array = rhythms[int(st["seed"]) % rhythms.size()]
+	var rb: Array = rhythms[(int(st["seed"]) / 3 + 1) % rhythms.size()]
+	var last := (lo + hi) / 2
+	var phrase := {}
+	var n := chords.size()
+	for b in n:
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0 := b * 16 * step
+		# Bass.
+		match st["bass"]:
+			"gallop":
+				for beat in 4:
+					for k in [0, 2, 3]:
+						var midi: int = root - 12 + (7 if k == 3 and beat % 2 == 1 else 0)
+						_voice(buf, int((t0 + (beat * 4 + k) * step) * RATE), step * (1.8 if k == 0 else 0.9), _hz(midi), _hz(midi), "square", 0.09, 1.4, 0.5)
+			"offbeat":
+				for i in 8:
+					var midi: int = root - 12 + (12 if i % 2 == 1 else 0)
+					_voice(buf, int((t0 + (i * 2 + (1 if i % 2 == 1 else 0)) * step) * RATE), step * 1.6, _hz(midi), _hz(midi), "square", 0.1, 1.2, 0.5)
+			"pedal":
+				for i in 4:
+					var midi: int = root - 12
+					_voice(buf, int((t0 + i * 4 * step) * RATE), step * 3.8, _hz(midi), _hz(midi), "saw", 0.08, 0.8, 0.5)
+					_voice(buf, int((t0 + i * 4 * step) * RATE), step * 3.8, _hz(midi - 12), _hz(midi - 12), "tri", 0.12, 0.8, 0.5)
+			_:
+				for i in 8:
+					var midi: int = root - 12 + (12 if i % 4 == 2 else 0)
+					_voice(buf, int((t0 + i * 2 * step) * RATE), step * 1.8, _hz(midi), _hz(midi), "square", 0.1, 1.2, 0.5)
+		# Arpeggio.
+		match st["arp"]:
+			"up":
+				for i in 16:
+					var midi: int = root + 12 + tones[i % tones.size()] + 12 * ((i / tones.size()) % 2)
+					_voice(buf, int((t0 + i * step) * RATE), step * 0.9, _hz(midi), _hz(midi), "square", 0.03, 2.0, 0.125)
+			"triplet":
+				for i in 12:
+					var midi: int = root + 12 + tones[i % tones.size()]
+					_voice(buf, int((t0 + i * step * 16.0 / 12.0) * RATE), step, _hz(midi), _hz(midi), "tri", 0.05, 2.0)
+			"pendulum":
+				for i in 16:
+					var k: int = [0, 1, 2, 1][i % 4]
+					var midi: int = root + 12 + tones[k]
+					_voice(buf, int((t0 + i * step) * RATE), step * 0.9, _hz(midi), _hz(midi), "square", 0.035, 2.0, 0.125)
+		# Drums.
+		for i in 16:
+			var at := int((t0 + i * step) * RATE)
+			match st["drums"]:
+				"march":
+					if i % 4 == 0:
+						_voice(buf, at, 0.14, 120.0, 40.0, "sine", 0.45, 2.0)
+					if i in [4, 12] or (i in [13, 14, 15] and b % 2 == 1):
+						_voice(buf, at, 0.08, 3800.0, 1500.0, "noise", 0.18, 3.0, 0.5, [], 77 + i)
+				"tribal":
+					if i in [0, 3, 6, 10, 12] :
+						_voice(buf, at, 0.16, 160.0 if i % 2 == 0 else 220.0, 60.0, "sine", 0.4, 2.0)
+					if i in [8, 14]:
+						_voice(buf, at, 0.1, 2500.0, 900.0, "noise", 0.16, 2.5, 0.5, [], 55 + i)
+				"halftime":
+					if i == 0 or (i == 10 and b % 2 == 0):
+						_voice(buf, at, 0.18, 110.0, 35.0, "sine", 0.5, 1.8)
+					if i == 8:
+						_voice(buf, at, 0.16, 3000.0, 900.0, "noise", 0.24, 2.0, 0.5, [], 66)
+					if i % 4 == 2:
+						_voice(buf, at, 0.04, 7000.0, 7000.0, "noise", 0.04, 3.0, 0.5, [], 88 + i)
+				_:
+					if i == 0 or i == 8 or (i == 10 and b % 2 == 1):
+						_voice(buf, at, 0.14, 130.0, 40.0, "sine", 0.45, 2.0)
+					if i == 4 or i == 12:
+						_voice(buf, at, 0.12, 3500.0, 1200.0, "noise", 0.2, 2.5, 0.5, [], 77 + i)
+					if i % 2 == 0:
+						_voice(buf, at, 0.03, 9000.0, 9000.0, "noise", 0.05, 3.0, 0.5, [], 99 + i)
+		# Lead: chord tones, each near the last; the first phrase comes back once.
+		var notes := []
+		var half := n / 2
+		if b >= half / 2 and b < half and phrase.has(b - half / 2) and b != half - 1:
+			notes = phrase[b - half / 2]
+		else:
+			for r in (ra if b < half else rb):
+				var options := []
+				for oct in [12, 24]:
+					for tone in tones:
+						options.append(root + oct + tone)
+				options.sort_custom(func(x, y): return absi(x - last) < absi(y - last))
+				var pick: int = clampi(options[rng.randi_range(0, mini(2, options.size() - 1))], lo, hi)
+				notes.append([r[0], r[1], pick])
+				last = pick
+			phrase[b] = notes
+		for nt in notes:
+			_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.95, _hz(nt[2]), _hz(nt[2]), lead,
+					0.075 if lead == "tri" else (0.05 if lead == "saw" else 0.07), 0.9, 0.5)
 	return _to_stream(buf, true)
