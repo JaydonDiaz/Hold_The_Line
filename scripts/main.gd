@@ -582,6 +582,7 @@ func start_wave(force := false) -> void:
 		hud.show_message("They're coming!")
 	wave += 1
 	sfx("horn")
+	boss_down = ""
 	wave_active = true
 	boss_spawned = false
 	gates_warned = false
@@ -664,6 +665,7 @@ const FOE_HINTS := {
 	"wyvern": ["Wyvern", "Flying elite that breathes fire on whatever's below."],
 }
 var _foes_seen := {}
+var boss_down := ""   # "<a boss> is defeated!" until the wave it fell in is over (its message leads the wave's)
 
 
 func _spawn_enemy(kind: String, level: int, at = null) -> void:
@@ -732,6 +734,15 @@ func _on_enemy_died(e) -> void:
 	enemies_changed()
 	sfx("die", 1.3 if e.radius < 14.0 else (0.7 if e.radius > 20.0 else 1.0))
 	spawn_corpse(e)
+	if e.boss:
+		# A boss brought down: a blinding flash, a boom, and word of it.
+		spawn_flash(e.position, 90.0)
+		sfx("boom")
+		boss_down = "%s is defeated!" % Data.ENEMIES[e.kind].get("name", e.kind.capitalize())
+		hud.show_message(boss_down)
+	elif e.kind == "warlord" or e.kind == "wyvern":
+		spawn_burst(e.position, 50.0, Color(1.0, 0.85, 0.35))   # an elite down
+		sfx("crumble")
 	var bounty := late_gold(e.bounty)
 	gold += bounty
 	spawn_text(e.position, "+%d" % bounty, Color(1, 0.85, 0.2))
@@ -1019,7 +1030,8 @@ func _end_wave() -> void:
 		endless = true
 		hud.show_message("Wave %d held! From here they come harder, and pay less. How far can you go?" % wave)
 	elif not (survival() and beat_best and wave == best_before + 1):
-		hud.show_message("Wave %d cleared! +%d gold" % [wave, bonus])
+		hud.show_message("%sWave %d cleared! +%d gold" % [boss_down + " " if boss_down != "" else "", wave, bonus])
+	boss_down = ""
 
 
 ## Kinds that can't fight, sold off to pay for troops when it comes to it.
@@ -1610,6 +1622,7 @@ func hire_at(p: Vector2) -> void:
 		return
 	gold -= cost
 	sfx("place")
+	spawn_burst(_clamp_post(p) + Vector2(0, 10), 26.0, Color(0.9, 0.82, 0.62))   # a puff of dust where it lands
 	var w := Warrior.new()
 	w.setup(placing_type, data, self, _clamp_post(p))
 	w.spent = cost

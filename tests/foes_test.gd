@@ -294,6 +294,10 @@ func _marshal() -> void:
 	main.spawn_queue.clear()
 	for e in main.get_enemies():
 		e.free()
+	var doomed = _spawn("ash_marshal", Vector2(200, 200))
+	doomed.take_damage(1e9)
+	await process_frame
+	check("The Ash Marshal is defeated!" in main.hud.message_label.text, "M  a boss brought down is announced (%s)" % main.hud.message_label.text)
 	var m = _spawn("ash_marshal", Vector2(320, 200))
 	m.position = Vector2(320, 200)
 	m.speed = 0.0
