@@ -921,6 +921,8 @@ func _retreat() -> void:
 	for t in main.get_warriors():
 		t.position = t.post
 	await _go()
+	out[0].priority = "strongest"
+	out[0].chase_time = 2.0
 	r.phase = 3
 	r.left = 0.01
 	r.called = true
@@ -931,6 +933,8 @@ func _retreat() -> void:
 	check(out.all(func(t): return is_instance_valid(t) and absf(t.post.y - 280.0) < 30.0) and not is_instance_valid(behind),
 			"...the ones that got out hold its first line; the one left behind is lost")
 	check(main.get_warriors().size() == out.size() and main.gold > gold1 and main.get_enemies().is_empty(), "...emplacements abandoned (half back), and the enemy left behind for now")
+	check(out[0].priority == "strongest" and out[0].chase_time == 0.0 and out[0].target == null,
+			"...nothing left in their sights from the old ground, but their target orders stand")
 	r.settle = 0.05
 	await _frames(5)
 	check(r.left > 0.0 and r.action_label() == "", "...then it all starts again")

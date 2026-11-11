@@ -173,7 +173,7 @@ func enter_next() -> void:
 		w.post = p
 		w.fitted_post = Vector2.INF
 		w.route = PackedVector2Array()
-		w.target = null
+		w.reset_targeting(true)   # (nothing left over from the old ground: their orders stand)
 		w.anchor = null
 		if w.move_mode == "short":
 			w.move_mode = "guard"

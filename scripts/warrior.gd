@@ -735,8 +735,10 @@ func stop_staying() -> void:
 ## Back to the battle's default targeting, with nothing in its sights (a convoy entering a
 ## new stretch): the Objective priority (or Closest with nothing to guard), a mobile
 ## Healer's Revive, and no target, chase, volley, beam, dash or revive carried over.
-func reset_targeting() -> void:
-	if is_mobile_healer():
+func reset_targeting(keep_priority := false) -> void:
+	if keep_priority:
+		pass   # (only what it was aiming at and in the middle of goes)
+	elif is_mobile_healer():
 		stop_staying()
 		priority = "revive"
 	else:
