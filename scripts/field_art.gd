@@ -27,6 +27,8 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 				variant = 3 if hh % 11 == 0 else absi(hh) % 3
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * tile, y * tile, tile, tile), false, tint)
 	ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
+	if map.get("biome", "") == "snow":
+		ci.draw_rect(Rect2(0, 0, w, TOP), Color(Color(0.88, 0.91, 0.95) * tint, 0.78))   # the enemy's ground snowed over too
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
 	var camp: bool = map.get("camp", true)
@@ -159,10 +161,16 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 		clear.append({"pts": t["poly"], "poly": true})
 	for tr in m.get("trails", []):
 		clear.append({"pts": tr, "poly": false})
-	if m.get("biome", "meadow") == "mountain":
-		draw_mountain(ci, w, tint)
-	else:
-		draw_meadow(ci, w, tint, false, clear)
+	snowy = m.get("biome", "meadow") == "snow"
+	match m.get("biome", "meadow"):
+		"mountain":
+			draw_mountain(ci, w, tint)
+		"snow":
+			draw_snow(ci, w, tint)
+		"city":
+			draw_city(ci, w, tint)
+		_:
+			draw_meadow(ci, w, tint, false, clear)
 	for tr in m.get("trails", []):
 		var pts := PackedVector2Array()
 		var src := PackedVector2Array(tr)
@@ -173,6 +181,13 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 		pts.append(src[src.size() - 1])
 		_worn_trail(ci, pts, tint, rng)
 	var shapes: Array = m.get("terrain", [])
+	# Ice lies flat on the ground: under everything else, thin ice over the lake it's in.
+	for t in shapes:
+		if t["kind"] == "ice":
+			_ice(ci, PackedVector2Array(t["poly"]), tint, rng, false)
+	for t in shapes:
+		if t["kind"] == "thin_ice":
+			_ice(ci, PackedVector2Array(t["poly"]), tint, rng, true)
 	# Back to front, so lower shapes overlap the ones behind them.
 	shapes = shapes.duplicate()
 	shapes.sort_custom(func(a, b): return _bottom(a["poly"]) < _bottom(b["poly"]))
@@ -197,7 +212,13 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_hedge(ci, poly, tint, rng)
 			"shrine":
 				_shrine(ci, poly, tint, rng)
-	# Fords and bridges go over the water they cross.
+			"chasm":
+				_chasm(ci, poly, tint, rng)
+			"building":
+				_building(ci, poly, tint, rng)
+			"canal":
+				_canal(ci, poly, tint, rng)
+	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
 		match t["kind"]:
@@ -205,6 +226,11 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_ford(ci, poly, tint, rng)
 			"bridge":
 				_bridge(ci, poly, tint, rng)
+			"rope_bridge":
+				_rope_bridge(ci, poly, tint, rng)
+			"stairs":
+				_stairs(ci, poly, tint, rng)
+	snowy = false
 
 
 static func _bottom(poly: Array) -> float:
@@ -212,6 +238,211 @@ static func _bottom(poly: Array) -> float:
 	for p in poly:
 		y = maxf(y, p.y)
 	return y
+
+
+static var snowy := false   # painting a snow battlefield: trees and rocks wear snow
+
+
+## Snowfields: blue-white drifts in light and shadow, wind ripples, the odd frozen tuft
+## and stone poking through, sparkles of frost.
+static func draw_snow(ci: CanvasItem, w: float, tint: Color) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7272
+	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.88, 0.91, 0.95) * tint)
+	var y := TOP
+	while y < 736.0:
+		var x := 0.0
+		while x < w:
+			var v := sin(x * 0.011 + 0.4) * sin(y * 0.015 + 0.9) + sin(x * 0.027 - y * 0.019) * 0.5
+			if absf(v) > 0.2:
+				var c := Color(1.0, 1.0, 1.0) if v > 0.0 else Color(0.66, 0.74, 0.86)
+				ci.draw_rect(Rect2(x, y, 32, 32), Color(c * tint, minf(absf(v) * 0.2, 0.22)))
+			x += 32.0
+		y += 32.0
+	# Wind ripples: long shallow curves of shadow across the drifts.
+	for i in int(70 * w / 640.0):
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 6, 730))
+		var len := rng.randf_range(18, 46)
+		ci.draw_line(p, p + Vector2(len, rng.randf_range(-3, 3)), Color(0.7, 0.78, 0.9, 0.55) * tint, 1.5)
+		ci.draw_line(p + Vector2(2, 1.5), p + Vector2(len - 2, 1.5), Color(1, 1, 1, 0.5) * tint, 1.0)
+	for i in int(40 * w / 640.0):
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 10, 728))
+		var s := rng.randf_range(2.0, 4.0)
+		ci.draw_rect(Rect2(p, Vector2(s, s * 0.7)), Color(0.45, 0.48, 0.55) * tint)
+		ci.draw_rect(Rect2(p - Vector2(0, 1), Vector2(s, 1)), Color(1, 1, 1) * tint)
+	for i in int(30 * w / 640.0):
+		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 20, BOTTOM))
+		for k in 3:
+			ci.draw_line(p + Vector2(k * 2 - 2, 0), p + Vector2(k * 3 - 3, -5), Color(0.5, 0.56, 0.44) * tint, 1.0)
+	for i in int(120 * w / 640.0):
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 4, 730))
+		ci.draw_rect(Rect2(p, Vector2(1, 1)), Color(1, 1, 1))
+
+
+## A city's ground: cobbles laid in rows, worn paler down the middle of the streets,
+## gutters and the odd drain grate.
+static func draw_city(ci: CanvasItem, w: float, tint: Color) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6363
+	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.52, 0.48, 0.44) * tint)
+	var y := TOP
+	var row := 0
+	while y < 736.0:
+		var x := -float(row % 2) * 7.0
+		while x < w:
+			var c := Color(0.6, 0.56, 0.5) if rng.randf() < 0.5 else Color(0.56, 0.52, 0.47)
+			if rng.randf() < 0.08:
+				c = Color(0.48, 0.44, 0.4)
+			ci.draw_rect(Rect2(x + 1, y + 1, 12, 7), c * tint)
+			ci.draw_rect(Rect2(x + 1, y + 1, 12, 1), Color(0.68, 0.64, 0.58) * tint)
+			x += 14.0
+		y += 9.0
+		row += 1
+	for i in int(10 * w / 640.0):
+		var p := Vector2(rng.randf_range(20, w - 20), rng.randf_range(TOP + 30, BOTTOM))
+		ci.draw_rect(Rect2(p, Vector2(10, 8)), OUTLINE)
+		for k in 3:
+			ci.draw_rect(Rect2(p + Vector2(2 + k * 3, 1), Vector2(1, 6)), Color(0.32, 0.3, 0.3) * tint)
+
+
+## A chasm: the ground falls away to a blue-grey depth, mist in it, a rim of broken rock.
+static func _chasm(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(poly, Color(0.28, 0.26, 0.26) * tint)
+	var depth := [Color(0.2, 0.2, 0.24), Color(0.14, 0.15, 0.2), Color(0.1, 0.11, 0.16)]
+	for i in depth.size():
+		for p in Geometry2D.offset_polygon(poly, -4.0 - i * 7.0):
+			ci.draw_colored_polygon(p, depth[i] * tint)
+	for p in _inside(poly, 10.0, 10, rng):
+		ci.draw_circle(p, rng.randf_range(5, 10), Color(0.75, 0.8, 0.88, 0.12))
+	for i in poly.size():
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % poly.size()]
+		var n := int(a.distance_to(b) / 10.0)
+		for k in n:
+			var q: Vector2 = a.lerp(b, (k + rng.randf()) / maxf(n, 1))
+			ci.draw_rect(Rect2(q - Vector2(2, 2), Vector2(rng.randf_range(3, 6), rng.randf_range(3, 5))), (Color(0.92, 0.94, 0.98) if snowy else Color(0.5, 0.46, 0.42)) * tint)
+
+
+## A city building (its shape's bounding box): plastered walls under a tiled roof, seen
+## from above at an angle, windows, a door onto the street, a chimney.
+static func _building(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	ci.draw_colored_polygon(_shifted(poly, Vector2(5, 7)), Color(0, 0, 0, 0.25))
+	var plaster: Color = [Color(0.9, 0.84, 0.72), Color(0.86, 0.74, 0.62), Color(0.8, 0.82, 0.78), Color(0.92, 0.8, 0.7)][rng.randi() % 4]
+	var roof_c: Color = [Color(0.66, 0.3, 0.22), Color(0.4, 0.36, 0.5), Color(0.55, 0.42, 0.3)][rng.randi() % 3]
+	var wall_top := box.position.y + box.size.y * 0.5
+	var walls := Rect2(box.position.x, wall_top, box.size.x, box.end.y - wall_top)
+	ci.draw_rect(walls.grow(1.5), OUTLINE)
+	ci.draw_rect(walls, plaster * tint)
+	for x in range(int(walls.position.x) + 6, int(walls.end.x) - 8, 14):
+		ci.draw_rect(Rect2(x, walls.position.y + 5, 7, 8), OUTLINE)
+		ci.draw_rect(Rect2(x + 1, walls.position.y + 6, 5, 6), (Color(1.0, 0.82, 0.45) if rng.randf() < 0.4 else Color(0.32, 0.38, 0.48)) * tint)
+	var door := walls.position.x + walls.size.x * rng.randf_range(0.3, 0.7)
+	ci.draw_rect(Rect2(door - 5, walls.end.y - 14, 10, 14), OUTLINE)
+	ci.draw_rect(Rect2(door - 4, walls.end.y - 13, 8, 13), Color(0.45, 0.28, 0.16) * tint)
+	var roof := Rect2(box.position.x - 2, box.position.y, box.size.x + 4, wall_top - box.position.y + 3)
+	ci.draw_rect(roof.grow(1.5), OUTLINE)
+	ci.draw_rect(roof, roof_c * tint)
+	var ty := roof.position.y + 4
+	while ty < roof.end.y - 1:
+		ci.draw_line(Vector2(roof.position.x, ty), Vector2(roof.end.x, ty), roof_c.darkened(0.25) * tint, 1.0)
+		ty += 5
+	ci.draw_line(Vector2(roof.position.x, roof.get_center().y), Vector2(roof.end.x, roof.get_center().y), roof_c.lightened(0.2) * tint, 2.0)
+	if rng.randf() < 0.7:
+		var cx := roof.position.x + roof.size.x * rng.randf_range(0.15, 0.85)
+		ci.draw_rect(Rect2(cx - 4, roof.position.y - 6, 8, 10), OUTLINE)
+		ci.draw_rect(Rect2(cx - 3, roof.position.y - 5, 6, 8), Color(0.55, 0.5, 0.46) * tint)
+
+
+## A canal: water between stone embankments.
+static func _canal(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_colored_polygon(poly, Color(0.6, 0.56, 0.5) * tint)   # the embankment
+	for p in Geometry2D.offset_polygon(poly, -5.0):
+		ci.draw_colored_polygon(p, Color(0.2, 0.36, 0.46) * tint)
+	for p in Geometry2D.offset_polygon(poly, -12.0):
+		ci.draw_colored_polygon(p, Color(0.17, 0.32, 0.42) * tint)
+	for p in _inside(poly, 10.0, 16, rng):
+		ci.draw_line(p, p + Vector2(rng.randf_range(6, 14), 0), Color(0.55, 0.72, 0.82, 0.6) * tint, 1.5)
+
+
+## Ice: a frozen lake, pale blue and glassy, with bands of light across it and snow
+## blown along its edges. Thin ice is darker (water shows through) and crazed with fine
+## cracks, ringed with warning stakes, so it's plain where it can give way.
+static func _ice(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator, thin: bool) -> void:
+	ci.draw_colored_polygon(poly, Color(0.82, 0.9, 0.96) * tint)
+	var body := Color(0.55, 0.72, 0.85) if thin else Color(0.7, 0.84, 0.94)
+	for p in Geometry2D.offset_polygon(poly, -4.0):
+		ci.draw_colored_polygon(p, body * tint)
+	if thin:
+		for p in Geometry2D.offset_polygon(poly, -12.0):
+			ci.draw_colored_polygon(p, Color(0.42, 0.6, 0.76) * tint)
+		for c in _inside(poly, 10.0, 8, rng):
+			var q: Vector2 = c
+			for k in 4:
+				var nq: Vector2 = q + Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(6, 12)
+				ci.draw_line(q, nq, Color(0.9, 0.96, 1.0, 0.8) * tint, 1.0)
+				q = nq
+	for p in _inside(poly, 10.0, 10, rng):
+		ci.draw_line(p, p + Vector2(rng.randf_range(10, 22), -rng.randf_range(2, 6)), Color(1, 1, 1, 0.6) * tint, 1.5)
+	if thin:
+		# Warning stakes round the edge, each with a red rag.
+		for ring in Geometry2D.offset_polygon(poly, 6.0):
+			for i in ring.size():
+				var a: Vector2 = ring[i]
+				var b: Vector2 = ring[(i + 1) % ring.size()]
+				var n := int(a.distance_to(b) / 40.0)
+				for k in n:
+					var q: Vector2 = a.lerp(b, (k + 0.5) / maxf(n, 1))
+					ci.draw_rect(Rect2(q + Vector2(-1, -10), Vector2(3, 11)), OUTLINE)
+					ci.draw_rect(Rect2(q + Vector2(0, -9), Vector2(1, 9)), Color(0.5, 0.36, 0.22) * tint)
+					ci.draw_rect(Rect2(q + Vector2(1, -10), Vector2(4, 3)), Color(0.85, 0.2, 0.18) * tint)
+
+
+## Stairs cut into the slope (the shape's bounding box, climbing up the field): stone
+## treads with dark risers between.
+static func _stairs(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	ci.draw_colored_polygon(poly, Color(0.5, 0.47, 0.42) * tint)
+	var y := box.position.y
+	var i := 0
+	while y < box.end.y:
+		ci.draw_rect(Rect2(box.position.x + 2, y, box.size.x - 4, 6), Color(0.72, 0.68, 0.6) * tint)
+		ci.draw_rect(Rect2(box.position.x + 2, y, box.size.x - 4, 1), Color(0.84, 0.8, 0.72) * tint)
+		ci.draw_rect(Rect2(box.position.x + 2, y + 6, box.size.x - 4, 3), Color(0.32, 0.29, 0.26) * tint)
+		if snowy and i % 2 == 0:
+			ci.draw_rect(Rect2(box.position.x + 4 + rng.randf_range(0, 6), y, rng.randf_range(8, 18), 2), Color(0.95, 0.97, 1.0) * tint)
+		y += 9.0
+		i += 1
+	for x in [box.position.x, box.end.x - 3.0]:
+		ci.draw_rect(Rect2(x, box.position.y, 3, box.size.y), Color(0.38, 0.35, 0.32) * tint)
+
+
+## A rope bridge across a chasm (its bounding box, running up the field): plank slats on
+## two ropes, posts at each end, sagging a little in the middle.
+static func _rope_bridge(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	var y := box.position.y
+	while y < box.end.y:
+		var sag := sin((y - box.position.y) / box.size.y * PI) * 3.0
+		var plank := Color(0.58, 0.42, 0.25) if rng.randf() < 0.7 else Color(0.48, 0.34, 0.2)
+		ci.draw_rect(Rect2(box.position.x + 3 + sag * 0.3, y, box.size.x - 6, 5), OUTLINE)
+		ci.draw_rect(Rect2(box.position.x + 4 + sag * 0.3, y + 0.5, box.size.x - 8, 4), plank * tint)
+		y += 7.0
+	for x in [box.position.x + 2.0, box.end.x - 3.0]:
+		var pts := PackedVector2Array()
+		for k in 9:
+			var t := k / 8.0
+			pts.append(Vector2(x + sin(t * PI) * 1.5, box.position.y + t * box.size.y))
+		ci.draw_polyline(pts, Color(0.75, 0.62, 0.4) * tint, 2.0)
+	for p in [box.position, Vector2(box.end.x - 6, box.position.y), Vector2(box.position.x, box.end.y - 8), box.end - Vector2(6, 8)]:
+		ci.draw_rect(Rect2(p, Vector2(6, 8)), OUTLINE)
+		ci.draw_rect(Rect2(p + Vector2(1, 1), Vector2(4, 6)), Color(0.45, 0.32, 0.2) * tint)
 
 
 ## Rocky mountain ground: grey-brown scree in light and dark patches, stones and the odd
@@ -286,6 +517,12 @@ static func _crag(ci: CanvasItem, poly: PackedVector2Array, tint: Color, cliff: 
 		ci.draw_colored_polygon(_shifted(p, Vector2(0, -5)), base)
 	for p in Geometry2D.offset_polygon(poly, -16.0):
 		ci.draw_colored_polygon(_shifted(p, Vector2(-2, -9)), base.lightened(0.1))
+	if snowy:
+		# Snow lying on top, thickest on the upper ledges.
+		for p in Geometry2D.offset_polygon(poly, -12.0):
+			ci.draw_colored_polygon(_shifted(p, Vector2(-1, -8)), Color(0.9, 0.93, 0.98) * tint)
+		for p in Geometry2D.offset_polygon(poly, -20.0):
+			ci.draw_colored_polygon(_shifted(p, Vector2(-3, -11)), Color(1, 1, 1) * tint)
 	var area := 1.0
 	for q in poly:
 		area += 1.0
@@ -313,7 +550,7 @@ static func _crag(ci: CanvasItem, poly: PackedVector2Array, tint: Color, cliff: 
 			_pine(ci, p, h, Color(0.16, 0.3, 0.2) * tint)
 	# Moss (rock) or loose stones (cliff) on top.
 	for p in _inside(poly, 14.0, 5 + int(area * 0.6), rng):
-		if cliff:
+		if cliff or snowy:
 			ci.draw_rect(Rect2(p, Vector2(4, 3)), base.lightened(0.2))
 			ci.draw_rect(Rect2(p + Vector2(0, 3), Vector2(4, 1)), base.darkened(0.4))
 		else:
@@ -358,6 +595,10 @@ static func _grove(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: R
 		for k in 3:
 			var leaf := c + Vector2.from_angle(rng.randf_range(0, TAU)) * r * rng.randf_range(0.2, 0.75)
 			ci.draw_rect(Rect2(leaf, Vector2(2, 2)), Color(0.26, 0.5, 0.24) * tint)
+		if snowy:
+			# Snow on the crown, heaped up top-left where it settles.
+			ci.draw_circle(c + Vector2(-r * 0.2, -r * 0.35), r * 0.62, Color(0.9, 0.93, 0.98) * tint)
+			ci.draw_circle(c + Vector2(-r * 0.35, -r * 0.5), r * 0.32, Color(1, 1, 1) * tint)
 
 
 ## Water (a river, a pool in the fens): a muddy bank, deep water shading to the middle,

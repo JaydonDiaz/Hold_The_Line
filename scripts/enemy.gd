@@ -426,7 +426,7 @@ func _process(delta: float) -> void:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
 		var was_at := position
-		_step_to(position + dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
+		_step_to(position + dir * speed * (main.hazards.speed_factor(kind) if main.gust > 0.0 else 1.0) * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
 		if flying:
@@ -706,7 +706,7 @@ func _shoot_from_range() -> bool:
 	if absf(lunge_dir.x) > 0.2:
 		flip = signf(lunge_dir.x)
 	if cd_timer <= 0.0:
-		cd_timer = attack_cd
+		cd_timer = attack_cd / (main.hazards.rate_factor(kind) if main.gust > 0.0 else 1.0)   # (slower in a blizzard)
 		lunge = 0.15
 		shots += 1
 		last_shot_from = position

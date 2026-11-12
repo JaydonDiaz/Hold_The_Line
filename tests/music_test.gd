@@ -170,6 +170,17 @@ func _run() -> void:
 				pair[0], pair[1], ms / 1000.0])
 	check(main.audio._cache.has("battle_quarry") and (main.audio._cache["battle"] as AudioStreamWAV).data != (main.audio._cache["battle_quarry"] as AudioStreamWAV).data,
 			"...and it isn't the meadow's")
+	# The North's peaceful music (Phase 4): Frostmarch's and the Free Cities', made on
+	# demand like the others, each with a part for every Bard instrument.
+	for track in ["snow", "city"]:
+		var c1 := Time.get_ticks_msec()
+		main.audio.prepare(track)
+		var n := 0
+		while n < main.audio.INSTRUMENTS.size() + 1 and Time.get_ticks_msec() - c1 < 120000:
+			await create_timer(0.2).timeout
+			n = (main.audio._music[track] as AudioStreamSynchronized).stream_count if main.audio._music.has(track) else 0
+		check(n == main.audio.INSTRUMENTS.size() + 1 and (main.audio._cache[track] as AudioStreamWAV).data != (main.audio._cache["calm"] as AudioStreamWAV).data,
+				"%s: composed in the background (%.1fs), its own piece, with every Bard part" % [track, (Time.get_ticks_msec() - c1) / 1000.0])
 	main.free()
 	main = null
 	for f in [TEST_SAVE, TEST_SAVE + ".tmp"]:

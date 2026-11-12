@@ -14,6 +14,11 @@ extends RefCounted
 ##   capture, protect, retreat  a ring in the zone / round the beacon / along the line
 ## Healers stay with the troops they're posted among. Spare gold goes on upgrades (as far
 ## as training allows), after the army's filled out.
+## The North's units (Phase 4): with Archers locked, Frost Witches (then Alchemists) take
+## their places and Frost Towers the Archer Towers', so Slimes and Wyverns can still be
+## hurt; with Martial Artists to be had, every other melee slot is one (their first path,
+## Spirit, gives them ki blasts that reach fliers); and a Frost Witch, a Bard, a War Statue
+## and an Alchemist join the support behind the line when they're allowed.
 ##
 ## `style` changes the plan to test other strategies against the mixed army:
 ##   "mixed" (the default), "knights" (melee only), "ranged" (archers and towers first),
@@ -82,15 +87,31 @@ func _restyle(out: Array) -> Array:
 			"ranged":
 				if kind == MELEE and res.filter(func(r): return r[0] == MELEE).size() >= 2:
 					kind = RANGED
+		if kind == MELEE and can("martial") and style != "ranged" and res.filter(func(r): return r[0] in [MELEE, "martial"]).size() % 2 == 1:
+			kind = "martial"   # every other melee slot
 		if not can(kind):
 			match kind:
-				"archer", "tower", "cannon":
-					kind = MELEE if can(MELEE) else ""
+				"archer":
+					kind = _first(["frost", "alchemist", MELEE])
+				"tower":
+					kind = _first(["frosttower", "magetower", MELEE])
+				"cannon":
+					kind = _first([MELEE])
+				"frost", "bard", "statue", "alchemist", "frosttower":
+					kind = ""   # (the North's extras: only when they're allowed)
 				_:
 					kind = ""   # (no Healer, Mine or Medic Bay to be had: just leave it out)
 		if kind != "":
 			res.append([kind, item[1]])
 	return res
+
+
+## The first of `kinds` the battle allows ("" if none).
+func _first(kinds: Array) -> String:
+	for k in kinds:
+		if can(k):
+			return k
+	return ""
 
 
 func _posts() -> Array:
@@ -144,6 +165,11 @@ func _plan_line() -> Array:
 	for i in range(n - 2, n):
 		out.append([RANGED, _back(posts[i])])
 	out.append(["medbay", _back(mid + Vector2(90, 0), 140.0)])
+	# The North's support, when it's to be had (left out otherwise: see _restyle).
+	out.append(["frost", _back(mid + Vector2(40, 0), 80.0)])
+	out.append(["bard", _back(mid, 120.0)])
+	out.append(["statue", _back(mid + Vector2(-40, 0), 150.0)])
+	out.append(["alchemist", _back(posts[mini(2, n - 1)], 70.0)])
 	return out
 
 
@@ -293,7 +319,7 @@ func _fill() -> void:
 		if _filled(i):
 			continue
 		if main.gold < main.hire_cost(kind):
-			if kind == MELEE or kind == RANGED:
+			if _core(kind):
 				return   # (the line comes first: save for it rather than skip ahead)
 			continue     # (support and buildings: buy them when there's gold to spare)
 		if not main.can_post_at(at):
@@ -325,7 +351,7 @@ func _orders() -> void:
 			continue
 		if type == "escort":
 			continue
-		if w.kind == RANGED or w.kind == "alchemist" or w.kind == "mage":
+		if w.kind in [RANGED, "alchemist", "mage", "frost", "bard"]:
 			_guard([w], 80.0)
 		elif bridgeheads.any(func(p): return p.distance_to(w.post) < 30.0):
 			main.give_order("move_mode", "hold", [w])
@@ -404,7 +430,7 @@ func _upgrade() -> void:
 	for i in items.size():
 		if _filled(i):
 			continue
-		var core: bool = items[i][0] in [MELEE, RANGED]
+		var core: bool = _core(items[i][0])
 		if core:
 			keep = maxi(keep, main.hire_cost(items[i][0]))   # always save for the line
 			break
@@ -451,3 +477,8 @@ func army() -> String:
 func _guard(units: Array, half: float) -> void:
 	for w in units:
 		main.give_order("area", Rect2(w.post - Vector2.ONE * half, Vector2.ONE * half * 2.0), [w])
+
+
+## The line itself (bought before support): melee and ranged troops, the North's included.
+func _core(kind: String) -> bool:
+	return kind in [MELEE, RANGED, "martial", "frost"]

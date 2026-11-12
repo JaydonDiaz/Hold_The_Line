@@ -45,6 +45,8 @@ var _warriors_frame := -1
 var started := false     # set once the player picks a mode
 var selected_grave = null   # a grave clicked to see who fell there
 var grave_layer := Node2D.new()
+var hazards := preload("res://scripts/hazards.gd").new()   # thin ice and blizzards (the North), over the ground
+var gust := 0.0                    # how hard a blizzard is blowing now (0-1; see hazards.gd)
 var corpse_layer := Node2D.new()   # enemies falling as they die (see spawn_corpse), on the ground under the troops
 var ambience := Ambience.new()   # the mood over the field (light, weather, critters), by mode
 var powers := CastlePowers.new()   # the Castle tab: abilities, Stone Walls, Ballistae
@@ -177,7 +179,7 @@ func _ready() -> void:
 	ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # smooth when shown smaller than painted
 	add_child(ground_sprite)
 	castle.top_part.castle = castle
-	for layer in [grave_layer, corpse_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
+	for layer in [hazards, grave_layer, corpse_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	for sig in [enemy_layer.child_entered_tree, enemy_layer.child_exiting_tree]:
@@ -328,6 +330,7 @@ func choose_mode(mode: String) -> void:
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
 	_lock_portrait(false)
 	paths.set_map(Maps.get_map(map_id))
+	hazards.setup(self, Maps.get_map(map_id), mission)
 	if paths.has_terrain():
 		_repaint_ground()
 	var map: Dictionary = Maps.get_map(map_id)

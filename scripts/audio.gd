@@ -10,6 +10,8 @@ extends Node
 ##   mountain  the mountains' peaceful music, between waves (Stonehollow)
 ##   forest    Greenwood's peaceful music between waves: a woodland air   } composed when
 ##   river     Sable Crossing's between waves: a march by the river      } first needed
+##   snow      Frostmarch's between waves: a cold, glassy air              }
+##   city      the Free Cities' between waves: a market dance              }
 ##   battle    during waves on the open meadow (Classic, and battlefields without their own)
 ##   battle_*  during waves on each other map: its own battle piece (BATTLES, by the map's
 ##             "battle" style), composed when that map is first fought on (see prepare)
@@ -222,7 +224,7 @@ func set_track(track: String) -> void:
 	_wanted_track = track
 
 
-const ON_DEMAND_CALM := ["forest", "river"]   # stage tracks made only once a map needs them
+const ON_DEMAND_CALM := ["forest", "river", "snow", "city"]   # stage tracks made only once a map needs them
 
 
 ## Whether `track` is made when it's first needed (prepare) rather than at startup.
@@ -454,6 +456,10 @@ func _compose_all() -> void:
 			made = _compose_forest()
 		elif piece == "river":
 			made = _compose_river()
+		elif piece == "snow":
+			made = _compose_snow()
+		elif piece == "city":
+			made = _compose_city()
 		elif piece == "title":
 			made = _compose_title()
 		elif piece == "story":
@@ -573,6 +579,12 @@ static func _track_info(track: String) -> Dictionary:
 					[50, maj], [55, maj], [52, mn], [57, maj], [55, maj], [57, maj], [50, maj], [50, maj]]}
 		"mountain":
 			return {"step": 60.0 / 92.0 / 4.0, "chords": [[43, maj], [41, maj], [48, maj], [43, maj], [43, maj], [41, maj], [45, mn], [50, maj]]}
+		"snow":
+			return {"step": 60.0 / 70.0 / 4.0, "chords": [[50, mn], [46, maj], [41, maj], [45, mn], [50, mn], [46, maj], [43, mn], [45, maj],
+					[46, maj], [41, maj], [48, maj], [45, mn], [43, mn], [46, maj], [45, maj], [50, mn]]}
+		"city":
+			return {"step": 60.0 / 120.0 / 4.0, "chords": [[55, maj], [48, maj], [50, maj], [55, maj], [52, mn], [48, maj], [50, maj], [50, maj],
+					[55, maj], [52, mn], [48, maj], [50, maj], [47, mn], [48, maj], [50, maj], [55, maj]]}
 	if track.begins_with("battle_"):
 		var st: Dictionary = BATTLES[track.substr(7)]
 		var ch: Array = st["chords"].map(func(c): return [c[0], maj if c[1] == "maj" else mn])
@@ -1140,6 +1152,65 @@ static func _compose_forest() -> AudioStreamWAV:
 		if b % 4 == 3:
 			for k in 3:
 				_voice(buf, int((t0 + (8 + k) * step) * RATE), 0.06, 2600.0 + k * 300.0, 3200.0, "sine", 0.03, 2.0)
+	return _to_stream(buf, true)
+
+
+## Frostmarch between waves: a cold air in D minor. A slow, glassy tune on bell-like sines
+## high over a hollow drone, sparse ringing chimes, and the wind gusting through.
+static func _compose_snow() -> AudioStreamWAV:
+	var info := _track_info("snow")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[74, 8], [77, 4], [76, 4]], [[74, 12], [70, 4]], [[72, 8], [69, 8]], [[69, 16]],
+		[[74, 6], [77, 2], [81, 8]], [[79, 8], [77, 8]], [[74, 6], [72, 2], [70, 8]], [[73, 16]],
+		[[77, 8], [74, 4], [72, 4]], [[69, 12], [72, 4]], [[74, 6], [76, 2], [77, 8]], [[76, 16]],
+		[[74, 4], [77, 4], [79, 4], [77, 4]], [[74, 8], [72, 8]], [[73, 6], [76, 2], [73, 8]], [[74, 16]],
+	]
+	_melody(buf, step, tune, "sine", 0.1, 0.7, 0.5, 1.6)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 12), _hz(root - 12), "tri", 0.09, 0.25)
+		_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 5), _hz(root - 5), "sine", 0.04, 0.25)
+		for i in [0, 6, 11]:
+			var midi: int = root + 24 + tones[(i / 5) % tones.size()]
+			_voice(buf, int((t0 + i * step) * RATE), step * 8.0, _hz(midi), _hz(midi), "sine", 0.035, 3.0)
+		if b % 2 == 1:
+			# The wind: a long soft hiss that swells and falls.
+			_voice(buf, int((t0 + 4 * step) * RATE), step * 10.0, 900.0, 500.0, "noise", 0.025, 0.6, 0.5, [], 40 + b)
+	return _to_stream(buf, true)
+
+
+## The Free Cities between waves: a market dance in G. A bright fiddle-like tune, plucked
+## chords on the off-beats, a bouncing bass and a tambourine.
+static func _compose_city() -> AudioStreamWAV:
+	var info := _track_info("city")
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var tune := [
+		[[79, 2], [81, 2], [83, 4], [79, 4], [74, 4]], [[76, 4], [79, 4], [84, 8]], [[81, 2], [83, 2], [81, 4], [78, 4], [74, 4]], [[79, 12], [74, 4]],
+		[[76, 4], [79, 4], [83, 4], [81, 4]], [[79, 4], [76, 4], [72, 8]], [[74, 4], [78, 4], [81, 4], [78, 4]], [[74, 16]],
+		[[83, 2], [84, 2], [86, 4], [83, 4], [79, 4]], [[79, 4], [83, 4], [88, 8]], [[84, 4], [83, 4], [81, 4], [79, 4]], [[78, 12], [81, 4]],
+		[[83, 4], [79, 4], [76, 4], [79, 4]], [[76, 4], [72, 4], [76, 8]], [[78, 2], [79, 2], [81, 4], [78, 8]], [[79, 16]],
+	]
+	_melody(buf, step, tune, "saw", 0.045, 0.85, 0.5, 0.8)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		for beat in 4:
+			var at := t0 + beat * 4 * step
+			var bass: int = root - 12 + (7 if beat % 2 == 1 else 0)
+			_voice(buf, int(at * RATE), step * 2.5, _hz(bass), _hz(bass), "tri", 0.11, 1.4)
+			for tone in tones:
+				var midi: int = root + 12 + tone
+				_voice(buf, int((at + 2 * step) * RATE), step * 1.5, _hz(midi), _hz(midi), "square", 0.025, 2.5, 0.25)
+			_voice(buf, int((at + 2 * step) * RATE), 0.07, 7000.0, 5000.0, "noise", 0.06, 3.0, 0.5, [], 60 + beat)
+		_voice(buf, int((t0 + 15 * step) * RATE), 0.05, 7500.0, 6000.0, "noise", 0.05, 3.0, 0.5, [], 70 + b)
 	return _to_stream(buf, true)
 
 

@@ -662,7 +662,8 @@ func _clones() -> Array:
 
 
 func _rate() -> float:
-	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"]) * (1.0 - (1.0 - _goo_factor()) * 0.5)
+	var weather: float = 1.0 if is_melee() or main.gust <= 0.0 else main.hazards.rate_factor(kind)   # a blizzard slows ranged fire
+	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"]) * (1.0 - (1.0 - _goo_factor()) * 0.5) * weather
 
 
 ## Martial Artist Discipline path: what Iron Will, the crimson aura and the golden form
@@ -1796,7 +1797,8 @@ func cycle_priority() -> void:
 
 
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
-	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * delta, max_dist)
+	var weather: float = 1.0 if main.gust <= 0.0 else main.hazards.speed_factor(kind)   # wading through a blizzard
+	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * weather * delta, max_dist)
 	if wall_guard:
 		return   # wall guards hold their posts
 	var aim := p
