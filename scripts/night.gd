@@ -18,6 +18,7 @@ const CELL := 8.0           # the darkness is worked out in cells this big (once
 const DARK := 0.62          # how dark it is away from any light
 const TOP_BAND := 170.0     # enemies above this, in the dark, get a chevron at the top edge
 const CALL_GAP := 6.0       # seconds between "coming from..." messages
+const CHEVRON := 24.0       # the top edge's columns: one chevron each at most
 
 var main
 var spec := {}
@@ -33,6 +34,7 @@ var _dim := []               # enemies drawn as eyes this frame
 
 func setup(m, mission: Dictionary) -> void:
 	main = m
+	_vis.clear()
 	spec = mission.get("night", {})
 	light = float(spec.get("light", 120.0))
 	fitted_w = -1.0
@@ -93,25 +95,40 @@ func visibility(p: Vector2) -> float:
 	return clampf(1.0 - (d - SEE_CLEAR) / (SEE_FAR - SEE_CLEAR), 0.12, 1.0)
 
 
+const SLICES := 10           # each enemy's visibility is worked out again every this many frames
+
+var _slice := 0
+var _vis := {}               # enemy instance id -> its visibility, last worked out
+
+
 func _process(delta: float) -> void:
 	if main == null or not active():
 		return
 	t += delta
 	_refit()
+	_slice = (_slice + 1) % SLICES
 	_dim.clear()
 	var fresh := {"west": 0, "centre": 0, "east": 0}
-	for e in main.get_enemies():
+	var enemies: Array = main.get_enemies()
+	for i in enemies.size():
+		var e = enemies[i]
 		if e.dead:
 			continue
-		var v := visibility(e.position)
-		e.modulate.a = v
+		var id: int = e.get_instance_id()
+		var v: float = _vis.get(id, -1.0)
+		if v < 0.0 or i % SLICES == _slice:
+			v = visibility(e.position)
+			_vis[id] = v
+		if absf(e.modulate.a - v) > 0.02:
+			e.modulate.a = v
 		if v < 0.5:
 			_dim.append(e)
-		var id: int = e.get_instance_id()
 		if not _called.has(id) and e.position.y < TOP_BAND:
 			_called[id] = true
 			var third: float = e.position.x / main.FIELD_W
 			fresh["west" if third < 0.36 else ("east" if third > 0.64 else "centre")] += 1
+	if _vis.size() > enemies.size() * 2 + 50:
+		_vis.clear()   # (the dead's entries, now and then)
 	call_in -= delta
 	var sides := fresh.keys().filter(func(k): return fresh[k] > 0)
 	if not sides.is_empty() and call_in <= 0.0 and main.wave_active:
@@ -136,21 +153,24 @@ func _draw() -> void:
 		draw_rect(Rect2(l + Vector2(-7, -36), Vector2(14, 14)), OUTLINE)
 		draw_rect(Rect2(l + Vector2(-6, -35), Vector2(12, 12)), col.lerp(Color(1, 0.95, 0.7), 0.3 * glow))
 		draw_line(l + Vector2(-6, -29), l + Vector2(6, -29), col.darkened(0.3), 1.0)
-	# Eyes in the dark, so nothing's ever truly hidden.
+	# Eyes in the dark, so nothing's ever truly hidden (two little squares each: cheap
+	# enough for a whole horde).
+	var eye_c := Color(1.0, 0.25, 0.2, 0.9)
+	var cols := {}   # top-edge column (CHEVRON px wide) -> an enemy coming down in it
 	for e in _dim:
 		if not is_instance_valid(e):
 			continue
-		var eye: Vector2 = e.position + Vector2(0, -e.radius * 1.1)
-		var blink := 1.0 if fmod(t + e.get_instance_id() % 7, 3.5) > 0.15 else 0.0
-		if blink > 0.0:
-			draw_circle(eye + Vector2(-3, 0), 1.8, Color(1.0, 0.25, 0.2, 0.9))
-			draw_circle(eye + Vector2(3, 0), 1.8, Color(1.0, 0.25, 0.2, 0.9))
-	# Chevrons at the top edge over each one coming down in the dark.
-	for e in _dim:
-		if not is_instance_valid(e) or e.position.y > TOP_BAND:
-			continue
-		var x: float = clampf(e.position.x, 12.0, main.FIELD_W - 12.0)
-		var bob := 3.0 * sin(t * 6.0)
+		if fmod(t + e.get_instance_id() % 7, 3.5) > 0.15:   # (a blink now and then)
+			var eye: Vector2 = e.position + Vector2(0, -e.radius * 1.1)
+			draw_rect(Rect2(eye + Vector2(-4.5, -1.5), Vector2(3, 3)), eye_c)
+			draw_rect(Rect2(eye + Vector2(1.5, -1.5), Vector2(3, 3)), eye_c)
+		if e.position.y <= TOP_BAND:
+			cols[int(clampf(e.position.x, 0.0, main.FIELD_W - 1.0) / CHEVRON)] = true
+	# A chevron at the top edge over each stretch where they're coming down in the dark
+	# (one a column, however many are in it).
+	var bob := 3.0 * sin(t * 6.0)
+	for c in cols:
+		var x: float = (c + 0.5) * CHEVRON
 		var pts := PackedVector2Array([Vector2(x - 9, 34 + bob), Vector2(x + 9, 34 + bob), Vector2(x, 46 + bob)])
 		draw_colored_polygon(PackedVector2Array([pts[0] + Vector2(-2, -1), pts[1] + Vector2(2, -1), pts[2] + Vector2(0, 2)]), OUTLINE)
 		draw_colored_polygon(pts, Color(1.0, 0.3, 0.25, 0.9))
