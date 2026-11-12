@@ -410,34 +410,136 @@ static func _hedge(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: R
 		x += rng.randf_range(8.0, 12.0)
 
 
-## Mercy Vale's shrine (its shape's bounding box): a little whitewashed chapel on a
-## paved square, a bell under the gable and candles at the door, flowers round about.
+## Mercy Vale's shrine (its shape's bounding box): a little whitewashed chapel in a paved
+## court ringed with flowering herb beds. Four columns carry a pediment (a gold sun in
+## it) before the door, arched windows glow between them, and a gold dome rises behind
+## with the shrine's lamp burning on top (the one the vale's beacon is lit from). Steps
+## and a path lead down, a lantern either side.
 static func _shrine(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
 	var box := Rect2(poly[0], Vector2.ZERO)
 	for q in poly:
 		box = box.expand(q)
-	ci.draw_rect(box.grow(4), Color(0.62, 0.6, 0.55) * tint)   # the paving
-	for i in 6:
-		ci.draw_rect(Rect2(box.position.x - 4 + i * (box.size.x + 8) / 6.0, box.position.y - 4, 1, box.size.y + 8), Color(0.5, 0.48, 0.44) * tint)
-	ci.draw_rect(Rect2(box.position + Vector2(5, 8), box.size - Vector2(4, 4)), Color(0, 0, 0, 0.22))
-	var walls := Rect2(box.position.x + 8, box.position.y + box.size.y * 0.4, box.size.x - 16, box.size.y * 0.6 - 2)
-	ci.draw_rect(walls.grow(2), OUTLINE)
-	ci.draw_rect(walls, Color(0.95, 0.94, 0.9) * tint)
+	var L := box.position.x
+	var T := box.position.y
+	var W := box.size.x
+	var H := box.size.y
 	var cx := box.get_center().x
-	var roof := PackedVector2Array([Vector2(walls.position.x - 6, walls.position.y + 2), Vector2(cx, box.position.y + 2),
-			Vector2(walls.end.x + 6, walls.position.y + 2)])
-	ci.draw_colored_polygon(PackedVector2Array([roof[0] + Vector2(-2, 2), roof[1] + Vector2(0, -3), roof[2] + Vector2(2, 2)]), OUTLINE)
-	ci.draw_colored_polygon(roof, Color(0.3, 0.42, 0.72) * tint)
-	ci.draw_rect(Rect2(cx - 4, box.position.y + 12, 8, 8), OUTLINE)
-	ci.draw_rect(Rect2(cx - 3, box.position.y + 13, 6, 6), Color(0.85, 0.7, 0.3) * tint)   # the bell
-	ci.draw_rect(Rect2(cx - 7, walls.end.y - 18, 14, 18), OUTLINE)
-	ci.draw_rect(Rect2(cx - 6, walls.end.y - 17, 12, 17), Color(0.45, 0.3, 0.18) * tint)
-	for x in [cx - 12.0, cx + 10.0]:
-		ci.draw_rect(Rect2(x, walls.end.y - 6, 2, 6), Color(0.95, 0.92, 0.8))
-		ci.draw_rect(Rect2(x, walls.end.y - 8, 2, 2), Color(1.0, 0.8, 0.3))
-	for i in 10:
-		var p := Vector2(box.position.x - 2 + rng.randf() * (box.size.x + 4), box.end.y + 2 + rng.randf() * 4)
-		ci.draw_rect(Rect2(p, Vector2(2, 2)), [Color(0.95, 0.5, 0.6), Color(1, 0.9, 0.4), Color(0.7, 0.6, 1)][i % 3])
+	var white := Color(0.95, 0.94, 0.9) * tint
+	var shade := Color(0.82, 0.8, 0.76) * tint
+	var gold := Color(0.95, 0.76, 0.28) * tint
+	var gold_hi := Color(1.0, 0.9, 0.55) * tint
+	var warm := Color(1.0, 0.8, 0.42) * tint
+	var stone := Color(0.74, 0.71, 0.64) * tint
+	# The court: an octagon of pale paving, ringed by herb beds in flower (open at the
+	# front, where the path runs out).
+	var court := PackedVector2Array()
+	var mid := Vector2(cx, T + H * 0.6)
+	for i in 8:
+		court.append(mid + Vector2.from_angle(PI / 8.0 + i * TAU / 8.0) * Vector2(W * 0.74, H * 0.6))
+	ci.draw_colored_polygon(_shifted(court, Vector2(0, 2)), Color(0, 0, 0, 0.18))
+	ci.draw_colored_polygon(court, Color(0.6, 0.57, 0.5) * tint)
+	for p in Geometry2D.offset_polygon(court, -3.0):
+		ci.draw_colored_polygon(p, stone)
+	for i in 26:
+		var q := mid + Vector2.from_angle(rng.randf() * TAU) * Vector2(W * 0.66, H * 0.52) * sqrt(rng.randf())
+		ci.draw_rect(Rect2(q, Vector2(rng.randf_range(4, 8), 1)), Color(0.64, 0.61, 0.55) * tint)
+	for i in 18:
+		var ang := -PI / 2.0 + (i + 0.5) * TAU / 18.0
+		if absf(wrapf(ang - PI / 2.0, -PI, PI)) < 0.45:
+			continue   # the gap for the path
+		var q := mid + Vector2.from_angle(ang) * Vector2(W * 0.82, H * 0.68)
+		ci.draw_circle(q + Vector2(0, 1.5), 5.5, Color(0.16, 0.28, 0.14) * tint)
+		ci.draw_circle(q, 5.0, Color(0.3, 0.5, 0.26) * tint)
+		ci.draw_circle(q + Vector2(-1.5, -1.5), 2.5, Color(0.42, 0.62, 0.34) * tint)
+		var bloom: Color = [Color(0.95, 0.5, 0.6), Color(1, 0.9, 0.4), Color(0.72, 0.62, 1.0), Color(1, 1, 1)][i % 4]
+		ci.draw_rect(Rect2(q + Vector2(rng.randf_range(-3, 2), rng.randf_range(-3, 1)), Vector2(2, 2)), bloom)
+	# The path out of the court, and the shadow the chapel throws.
+	var path := Rect2(cx - 9, T + H - 2, 18, H * 0.3)
+	ci.draw_rect(path, Color(0.6, 0.57, 0.5) * tint)
+	ci.draw_rect(path.grow_individual(-2, 0, -2, 0), stone)
+	for y in range(int(path.position.y) + 4, int(path.end.y), 6):
+		ci.draw_line(Vector2(path.position.x + 2, y), Vector2(path.end.x - 2, y), Color(0.62, 0.59, 0.53) * tint, 1.0)
+	ci.draw_rect(Rect2(L + 12, T + 22, W - 18, H - 22), Color(0, 0, 0, 0.2))
+	# The dome on its drum, behind the portico: gold, lit from the left, the lamp on top.
+	var drum := Rect2(cx - 15, T + 6, 30, 14)
+	ci.draw_rect(drum.grow(1.5), OUTLINE)
+	ci.draw_rect(drum, white)
+	ci.draw_rect(Rect2(drum.end.x - 6, drum.position.y, 6, drum.size.y), shade)
+	for x in [cx - 9.0, cx - 1.0, cx + 7.0]:
+		ci.draw_rect(Rect2(x, drum.position.y + 4, 3, 7), OUTLINE)
+		ci.draw_rect(Rect2(x + 0.5, drum.position.y + 4.5, 2, 6), warm)
+	var dome := PackedVector2Array()
+	var dome_out := PackedVector2Array()
+	for i in 17:
+		var ang := PI + i * PI / 16.0
+		dome.append(Vector2(cx, T + 7) + Vector2(cos(ang) * 14.0, sin(ang) * 13.0))
+		dome_out.append(Vector2(cx, T + 7) + Vector2(cos(ang) * 16.0, sin(ang) * 15.0))
+	ci.draw_colored_polygon(dome_out, OUTLINE)
+	ci.draw_colored_polygon(dome, gold)
+	for i in 4:
+		var ang := PI + 0.35 + i * 0.22
+		ci.draw_line(Vector2(cx, T + 7) + Vector2(cos(ang), sin(ang)) * 10.0, Vector2(cx, T + 7) + Vector2(cos(ang), sin(ang)) * 12.5, gold_hi, 2.0)
+	ci.draw_line(Vector2(cx, T - 6), Vector2(cx, T + 6), Color(0.85, 0.66, 0.22) * tint, 1.0)   # a rib
+	ci.draw_rect(Rect2(cx - 3, T - 13, 6, 7), OUTLINE)
+	ci.draw_rect(Rect2(cx - 2, T - 12, 4, 5), warm)
+	ci.draw_circle(Vector2(cx, T - 10), 9.0, Color(1.0, 0.85, 0.45, 0.18))
+	ci.draw_circle(Vector2(cx, T - 10), 5.0, Color(1.0, 0.9, 0.55, 0.3))
+	ci.draw_rect(Rect2(cx - 4, T - 14, 8, 2), OUTLINE)
+	# The walls behind the columns: whitewash over a stone footing, the right side in shade.
+	var walls := Rect2(L + 8, T + 30, W - 16, H - 40)
+	ci.draw_rect(walls.grow(2), OUTLINE)
+	ci.draw_rect(walls, white)
+	ci.draw_rect(Rect2(walls.end.x - 6, walls.position.y, 6, walls.size.y), shade)
+	ci.draw_rect(Rect2(walls.position.x, walls.end.y - 5, walls.size.x, 5), Color(0.66, 0.62, 0.56) * tint)
+	# Arched windows between the outer columns, lit from inside.
+	for wx in [L + 15.0, L + W - 21.0]:
+		ci.draw_rect(Rect2(wx - 1, walls.position.y + 9, 8, 13), OUTLINE)
+		ci.draw_circle(Vector2(wx + 3, walls.position.y + 9), 4.0, OUTLINE)
+		ci.draw_rect(Rect2(wx, walls.position.y + 10, 6, 11), warm)
+		ci.draw_circle(Vector2(wx + 3, walls.position.y + 10), 3.0, warm)
+		ci.draw_rect(Rect2(wx + 2.5, walls.position.y + 8, 1, 13), Color(0.55, 0.4, 0.25) * tint)
+	# The door: arched, of dark wood, standing ajar on a warm light.
+	var door := Rect2(cx - 7, walls.end.y - 21, 14, 21)
+	ci.draw_rect(door.grow_individual(1, 0, 1, 0), OUTLINE)
+	ci.draw_circle(Vector2(cx, door.position.y), 8.0, OUTLINE)
+	ci.draw_rect(door.grow_individual(0, -1, 0, 0), Color(0.42, 0.28, 0.16) * tint)
+	ci.draw_circle(Vector2(cx, door.position.y + 1), 7.0, Color(0.42, 0.28, 0.16) * tint)
+	ci.draw_rect(Rect2(cx - 1, door.position.y - 4, 3, door.size.y + 4), warm)
+	ci.draw_rect(Rect2(cx + 3, door.position.y + 11, 2, 2), gold)
+	# The portico: four columns, an architrave with a gold band, and the pediment.
+	for x in [L + 10.0, L + 23.0, L + W - 27.0, L + W - 14.0]:
+		ci.draw_rect(Rect2(x - 1, T + 31, 6, H - 40), OUTLINE)
+		ci.draw_rect(Rect2(x, T + 32, 4, H - 42), white)
+		ci.draw_rect(Rect2(x + 3, T + 32, 1, H - 42), shade)
+		ci.draw_rect(Rect2(x - 2, T + 30, 8, 3), Color(0.88, 0.86, 0.8) * tint)
+		ci.draw_rect(Rect2(x - 2, T + H - 12, 8, 3), Color(0.88, 0.86, 0.8) * tint)
+	var arch := Rect2(L + 4, T + 24, W - 8, 7)
+	ci.draw_rect(arch.grow(1.5), OUTLINE)
+	ci.draw_rect(arch, Color(0.92, 0.9, 0.84) * tint)
+	ci.draw_rect(Rect2(arch.position.x, arch.position.y + 3, arch.size.x, 2), gold)
+	var ped := PackedVector2Array([Vector2(L + 2, T + 24), Vector2(cx, T + 12), Vector2(L + W - 2, T + 24)])
+	ci.draw_colored_polygon(PackedVector2Array([ped[0] + Vector2(-2, 1.5), ped[1] + Vector2(0, -2.5), ped[2] + Vector2(2, 1.5)]), OUTLINE)
+	ci.draw_colored_polygon(ped, Color(0.93, 0.91, 0.86) * tint)
+	ci.draw_line(ped[0] + Vector2(3, -1), ped[1] + Vector2(0, 2), shade, 1.0)
+	ci.draw_line(ped[1] + Vector2(0, 2), ped[2] + Vector2(-3, -1), shade, 1.0)
+	ci.draw_circle(Vector2(cx, T + 19), 3.5, OUTLINE)
+	ci.draw_circle(Vector2(cx, T + 19), 2.5, gold)   # the sun of the Sanctuary
+	for i in 8:
+		var ang := i * TAU / 8.0
+		ci.draw_line(Vector2(cx, T + 19) + Vector2.from_angle(ang) * 3.5, Vector2(cx, T + 19) + Vector2.from_angle(ang) * 5.0, gold, 1.0)
+	# Steps down to the court, widening.
+	for i in 3:
+		var st := Rect2(L + 15 - i * 3, T + H - 10 + i * 3, W - 30 + i * 6, 3)
+		ci.draw_rect(st.grow(0.5), Color(0.5, 0.47, 0.42) * tint)
+		ci.draw_rect(st.grow_individual(0, 0, 0, -1), Color(0.86, 0.84, 0.78) * tint)
+	# A lantern on a post either side of the steps.
+	for x in [L - 4.0, L + W + 2.0]:
+		ci.draw_rect(Rect2(x, T + H - 22, 3, 22), OUTLINE)
+		ci.draw_rect(Rect2(x + 1, T + H - 21, 1, 20), Color(0.4, 0.3, 0.2) * tint)
+		ci.draw_circle(Vector2(x + 1.5, T + H - 25), 8.0, Color(1.0, 0.85, 0.45, 0.16))
+		ci.draw_rect(Rect2(x - 2, T + H - 29, 7, 8), OUTLINE)
+		ci.draw_rect(Rect2(x - 1, T + H - 28, 5, 6), warm)
+		ci.draw_rect(Rect2(x - 3, T + H - 30, 9, 2), OUTLINE)
 
 
 ## A ford: the river runs shallow here, pale over a stony bed, stepping stones across and

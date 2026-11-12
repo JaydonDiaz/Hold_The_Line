@@ -909,8 +909,8 @@ func _cutscene() -> void:
 	for id in CD.SPEAKERS:
 		var img: Image = Portraits.image(CD.SPEAKERS[id]["look"])
 		hashes[img.get_data().hex_encode().md5_text()] = id
-		if img.get_width() != 32:
-			check(false, "C  %s's portrait is 32x32" % id)
+		if img.get_width() != Portraits.OUT or img.get_height() != Portraits.OUT:
+			check(false, "C  %s's portrait is %dx%d" % [id, Portraits.OUT, Portraits.OUT])
 	check(hashes.size() == CD.SPEAKERS.size(), "C  all %d named characters have distinct portraits" % CD.SPEAKERS.size())
 	var leaders := []
 	for f in CD.FACTIONS:
