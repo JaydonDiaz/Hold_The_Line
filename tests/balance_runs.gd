@@ -145,7 +145,7 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 						print("      E %s at %s goal %s" % [e.kind, str(e.position.round()), e.goal.label if e.goal != null else "castle"])
 					for w in main.get_warriors():
 						print("      W %s at %s post %s %s/%d target %s %s" % [w.kind, str(w.position.round()), str(w.post.round()), w.move_mode,
-								roundi(w.leash.get(w.move_mode, 0)), (w.target.kind + str(w.target.position.round())) if is_instance_valid(w.target) and w.target != null else "-",
+								roundi(w.zone_rect().size.x / 2.0), (w.target.kind + str(w.target.position.round())) if is_instance_valid(w.target) and w.target != null else "-",
 								"downed" if not w.is_active() else ""])
 		await process_frame
 		frames += 1
@@ -160,9 +160,9 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 				if w.is_active() and (near == null or w.position.distance_to(e.position) < near.position.distance_to(e.position)):
 					near = w
 			if near != null:
-				print("      fighting %s shots %d goal %s | nearest troop %s at %d px, %s leash %d, post %s, hp %.0f/%.0f, can reach %s" % [str(e.fighting), e.shots,
+				print("      fighting %s shots %d goal %s | nearest troop %s at %d px, %s area %d, post %s, hp %.0f/%.0f, can reach %s" % [str(e.fighting), e.shots,
 						e.goal.label if e.goal != null else "-", near.kind, roundi(near.position.distance_to(e.position)), near.move_mode,
-						roundi(near.leash.get(near.move_mode, 0)), str(near.post.round()), near.hp, near.max_hp, str(main.paths.melee_can_reach(e.position))])
+						roundi(near.zone_rect().size.x / 2.0), str(near.post.round()), near.hp, near.max_hp, str(main.paths.melee_can_reach(e.position))])
 		print("   STUCK queue %d wave_active %s" % [main.spawn_queue.size(), str(main.wave_active)])
 	var result := ("WON" if main.victory else "lost") if main.game_over else "unfinished"
 	print("BR mission=%s diff=%s setup=%s trained=%d style=%s seed=%d width=%d result=%s wave=%d margin=%.2f low=%.2f quiet=%d gametime=%d field=%d army=[%s] status=[%s]" % [

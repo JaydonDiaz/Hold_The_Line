@@ -10,7 +10,7 @@ extends RefCounted
 ##                 first; when one falls its defenders go to the weakest one standing
 ##   evac          guards along the villagers' roads (Guard Area, objective first), Healers
 ##                 on Heal so they mend villagers too
-##   escort        everyone follows the wagon, Knights on a short leash round it
+##   escort        everyone follows the wagon, Knights guarding a small area round it
 ##   capture, protect, retreat  a ring in the zone / round the beacon / along the line
 ## Healers stay with the troops they're posted among. Spare gold goes on upgrades (as far
 ## as training allows), after the army's filled out.
@@ -326,19 +326,16 @@ func _orders() -> void:
 		if type == "escort":
 			continue
 		if w.kind == RANGED or w.kind == "alchemist" or w.kind == "mage":
-			main.give_order("move_mode", "short", [w])
-			main.give_order("leash", 80.0, [w])
+			_guard([w], 80.0)
 		elif bridgeheads.any(func(p): return p.distance_to(w.post) < 30.0):
 			main.give_order("move_mode", "hold", [w])
 		else:
-			main.give_order("move_mode", "guard", [w])
-			main.give_order("leash", 170.0 if type == "evac" else 130.0, [w])
+			_guard([w], 170.0 if type == "evac" else 130.0)
 	if type == "escort":
 		var loose := troops.filter(func(w): return w.anchor == null and not w.is_mobile_healer())
 		if not loose.is_empty():
 			main.set_follow(main.rules.wagon, loose)
-			main.give_order("move_mode", "short", loose)
-			main.give_order("leash", 70.0, loose)
+			_guard(loose, 70.0)
 	# Healers: on Heal in an evacuation (villagers too), else staying with the troops near them.
 	for h in fresh.filter(func(w): return w.is_mobile_healer()):
 		if type == "evac":
@@ -448,3 +445,9 @@ func army() -> String:
 	for k in counts:
 		parts.append("%s %d" % [k, counts[k]])
 	return ", ".join(parts) + " | %d upgrades" % upgrades
+
+
+## Guard Area: a square `half` out each way from each unit's post (as the old circle was).
+func _guard(units: Array, half: float) -> void:
+	for w in units:
+		main.give_order("area", Rect2(w.post - Vector2.ONE * half, Vector2.ONE * half * 2.0), [w])

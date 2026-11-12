@@ -31,25 +31,44 @@ const ARCHER_LOOP := 5.6  # Archer idle: draw an arrow, twirl it, flip it, twirl
 const PRIORITIES := ["closest", "first", "strongest", "weakest"]
 const PRIORITY_NAMES := {
 	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
-	"revive": "Revive", "heal": "Heal", "stay": "Stay with",
+	"revive": "Revive", "heal": "Heal", "stay": "Stay with", "danger": "In danger",
 }
 # A Healer's own priorities: who it looks after first. "revive": the downed first (they're
 # on a clock), then the hurt; "heal": the hurt first, then the downed; "stay": it keeps
 # with a troop (or a group: its wards) and looks after them first, and anyone else only
-# within reach without leaving them. Where there are villagers on the field, they're
-# among the hurt it heals.
-const HEAL_PRIORITIES := ["revive", "heal", "stay"]
+# within reach without leaving them; "danger": allies in danger (see in_danger) first,
+# wherever they are on the field, then the downed, then the hurt. Where there are
+# villagers on the field, they're among the hurt it heals.
+const HEAL_PRIORITIES := ["revive", "heal", "stay", "danger"]
 const WARD_GAP := Vector2(0, 34)   # where a Healer keeps itself from its ward (just behind it)
 # In a battle with something to protect (rules.guards()), one more: "objective", the enemy
 # nearest to getting at it. New troops start on it there.
 const OBJECTIVE_PRIORITY := "objective"
 const THREAT_RANGE := 320.0   # an enemy this far from its objective (or further) is the least urgent of those after one
-# Orders: how far a unit may go from its post (its anchor) to fight, and how firmly it
-# sticks to the enemy it picked. Incidental blows on the way (see _victim) never change either.
-const MOVE_MODES := ["hold", "short", "guard", "free"]
-const MOVE_NAMES := {"hold": "Hold Position", "short": "Short Leash", "guard": "Guard Area", "free": "Free Roam"}
-const LEASH_LIMITS := {"short": [40.0, 160.0], "guard": [120.0, 400.0]}   # each zone's size range, px from the post
-const LEASH_DEFAULT := {"short": 90.0, "guard": 200.0}
+# Orders: where a unit may go to fight (Hold: only at its post; Guard Area: anywhere in a
+# rectangle the player drew, any size, which needn't even hold its post; Free Roam:
+# anywhere), and how firmly it sticks to the enemy it picked. Incidental blows on the
+# way (see _victim) never change either.
+const MOVE_MODES := ["hold", "guard", "free"]
+const MOVE_NAMES := {"hold": "Hold Position", "guard": "Guard Area", "free": "Free Roam"}
+const GUARD_DEFAULT := 200.0   # Guard Area with none drawn yet: a square this far out from the post each way
+const MIN_AREA := 24.0         # a drawn area smaller than this (each way) is taken for a slip of the mouse
+# In danger: low on health (under DANGER_HP of its most) and hit in the last DANGER_HIT
+# seconds. What it does about it (its own orders): fights on, or falls back (to a Healer
+# or a Medic Bay, else its post or the castle) till it's patched up or out of the fight
+# for a moment; and, either way, calls for help or not. Others answer the call by their
+# orders: never, once their own enemy's dealt with, or at once, leaving their area and
+# their target priority for it (then back to their post).
+const DANGER_HP := 0.35
+const DANGER_HIT := 2.5
+const RECOVER_HP := 0.65     # falling back: back in the fight once mended to this
+const SAFE_GAP := 130.0      # ...or once no enemy has come this close for SAFE_TIME
+const SAFE_TIME := 2.0
+const CALL_REACH := 150.0    # answering: the enemies this close to the caller are the ones it goes for
+const DANGER_MODES := ["fight", "fall_back"]
+const DANGER_NAMES := {"fight": "Fight on", "fall_back": "Fall back"}
+const ANSWERS := ["ignore", "after", "now"]
+const ANSWER_NAMES := {"ignore": "Ignore", "after": "After target", "now": "At once"}
 const COMMITS := ["focused", "reactive"]
 const COMMIT_NAMES := {"focused": "Focused", "reactive": "Reactive"}
 const ZONE_SLACK := 16.0   # a target already picked is let go only this far past where it could be picked (no flicker at the edge)
@@ -73,7 +92,15 @@ var multiform_timer := 0.0
 var spent := 0
 var priority := "closest"
 var move_mode := "free"        # Orders: see MOVE_MODES
-var leash := LEASH_DEFAULT.duplicate()   # each zone mode's size (px from the post)
+var guard_area := Rect2()      # Guard Area: where it fights, on the field (empty: none drawn yet; see zone_rect)
+var danger_mode := "fight"     # Orders: in danger, it fights on or falls back (DANGER_MODES)
+var call_help := true          # Orders: in danger, it calls for help
+var answer := "ignore"         # Orders: how it answers others' calls for help (ANSWERS)
+var danger_t := 0.0            # seconds since it was last hit, counting down from DANGER_HIT
+var retreating := false        # falling back, in danger
+var safe_t := 0.0              # falling back: how long no enemy has come near
+var answering = null           # the ally whose call for help it's answering
+var free_run := false          # answering a call (or a Healer going to an ally in danger): its area doesn't hold it
 var commit := "focused"        # Orders: see COMMITS
 var chase_best := INF          # nearest it has got to its target (for spotting a chase going nowhere)
 var chase_time := 0.0          # seconds since it last got closer
@@ -251,6 +278,29 @@ const KITE_GAP := 45.0     # ranged troops back off from enemies closer than thi
 const KITE_CLEAR := 70.0   # ...until they're this far off again
 var facing := Vector2.UP
 var flip := 1.0
+var turn := 1.0           # the facing it's drawn with: swings over to flip in a quick turn, never snaps
+var turn_hold := 0.0
+var held := false         # being carried by the player's click-and-drag (main sets it)
+var lift := 0.0           # 0-1: how far off the ground it's been lifted
+var sway := 0.0           # carried: the dangling tilt, swinging behind the drag like a pendulum
+var sway_v := 0.0
+var carry_t := 0.0        # seconds since it was picked up
+var down_for := 0.0       # seconds since it was knocked out (it topples over)
+var land_dust := false    # the bump is a real landing (dust flies), not just a springy squash
+var land_t := 0.0         # > 0 just after being set down: the bump and the dust
+var _carried_from := Vector2.ZERO   # last frame's position while carried
+var _carry_vel := Vector2.ZERO
+var cheer_t := 0.0        # > 0 while it cheers (a wave held, an upgrade): hopping on the spot
+var cheer_len := 0.0
+const CHEER_HOP := 0.42   # seconds a cheering hop takes
+var perk := 0.0           # 0-1: the mouse is over it between waves and it perks up, ready to be picked up
+var hop_from := Vector2.ZERO   # dropped where it can't stand: it hops back from here (offset from its post)
+var hop_t := 0.0
+const HOP_TIME := 0.32
+const LAND_TIME := 0.45
+const LIFT_HEIGHT := 16.0
+const GLANCERS := ["swordsman", "martial", "bard"]   # idle troops that look about (the rest have idle props drawn facing one way)
+const TURN_RATE := 11.0   # turns a full about-face in under a fifth of a second
 var target = null
 var anim_t := 0.0         # running clock for idle loops
 var idle_t := 0.0         # how long it has had nothing to do
@@ -1044,6 +1094,7 @@ func take_damage(amount: float) -> void:
 		return
 	hp -= amount * (1.0 - armor) * (1.0 - buff["defense"])
 	hurt = 0.1
+	danger_t = DANGER_HIT
 	if hp <= 0.0 and summoned:
 		_crumble()
 		return
@@ -1135,6 +1186,14 @@ func _process(delta: float) -> void:
 	if buff_timer <= 0.0:
 		buff_timer = 0.25
 		_update_buffs()
+	danger_t = maxf(danger_t - delta, 0.0)
+	if call_help and in_danger() and not summoned:
+		main.call_for_help(self)
+	if _fall_back(delta):
+		if absf(facing.x) > 0.2:
+			flip = signf(facing.x)
+		_separate()
+		return
 	if is_support():
 		_support_update(delta)
 		return
@@ -1182,10 +1241,16 @@ func _process(delta: float) -> void:
 	retarget_timer -= delta
 	shun_left = maxf(shun_left - delta, 0.0)
 	_follow_anchor(delta)
+	if not ordered:
+		_update_answer()
 	if ordered:
 		target = null
 		if position.distance_to(post) <= RADIUS:
 			ordered = false
+	elif answering != null:
+		var t = _answer_target()
+		if t != target:
+			_set_target(t)   # answering a call: its target priority and area wait
 	elif not _keep_target() or (commit == "reactive" and retarget_timer <= 0.0):
 		_set_target(_find_target())
 		retarget_timer = 0.3
@@ -1452,6 +1517,8 @@ func _follow_anchor(delta: float) -> void:
 	var p: Vector2 = main._clamp_post(anchor.position + anchor_off)
 	p = main.paths.open_spot(p)
 	if p.distance_to(post) > 6.0:
+		if guard_area.has_area():
+			guard_area.position += p - post   # its area goes along with what it follows
 		post = p
 		lost_time = 0.0
 
@@ -1584,33 +1651,42 @@ func _watch_chase(gap: float, delta: float) -> void:
 
 # --- Orders: the zone around the post --------------------------------------------------
 
-## Whether its movement is limited to a zone around its post (troops on Hold, Short
-## Leash or Guard Area; emplacements and wall guards never move anyway).
+## Whether its movement is limited to a zone (troops on Hold or Guard Area; emplacements
+## and wall guards never move anyway). Not while it answers a call for help.
 func zoned() -> bool:
-	return move_mode != "free" and not is_emplacement() and not wall_guard
+	return move_mode != "free" and not is_emplacement() and not wall_guard and not free_run
 
 
-## How far from its post it may go: 0 on Hold, the zone's size otherwise.
-func zone_radius() -> float:
+## Where it may go to fight: just its post on Hold; its Guard Area otherwise (a square
+## round its post if none's been drawn).
+func zone_rect() -> Rect2:
 	if move_mode == "hold":
-		return 0.0
-	return leash.get(move_mode, INF)
+		return Rect2(post, Vector2.ZERO)
+	if not guard_area.has_area():
+		return Rect2(post - Vector2.ONE * GUARD_DEFAULT, Vector2.ONE * GUARD_DEFAULT * 2.0)
+	return guard_area
 
 
-func set_leash(r: float) -> void:
-	if LEASH_LIMITS.has(move_mode):
-		leash[move_mode] = clampf(r, LEASH_LIMITS[move_mode][0], LEASH_LIMITS[move_mode][1])
+## Its Guard Area: a square `half` out from its post each way (for orders given in code).
+func guard_around(half: float) -> void:
+	guard_area = Rect2(post - Vector2.ONE * half, Vector2.ONE * half * 2.0)
+
+
+## How far `p` is from rectangle `r` (0 inside it).
+static func rect_gap(r: Rect2, p: Vector2) -> float:
+	return p.distance_to(Vector2(clampf(p.x, r.position.x, r.end.x), clampf(p.y, r.position.y, r.end.y)))
 
 
 func _in_zone(p: Vector2, slack := 0.0) -> bool:
-	return not zoned() or p.distance_to(post) <= zone_radius() + slack
+	return not zoned() or rect_gap(zone_rect(), p) <= slack
 
 
 ## The nearest point to `p` it may stand on.
 func _zone_clamp(p: Vector2) -> Vector2:
 	if not zoned():
 		return p
-	return post + (p - post).limit_length(zone_radius())
+	var r := zone_rect()
+	return Vector2(clampf(p.x, r.position.x, r.end.x), clampf(p.y, r.position.y, r.end.y))
 
 
 ## How far it can reach out from where it stands to fight: its weapon, or its ki blasts.
@@ -1622,7 +1698,7 @@ func _engage_reach() -> float:
 func _engageable(e, slack := 0.0) -> bool:
 	if not zoned():
 		return true
-	return post.distance_to(e.position) - zone_radius() - RADIUS - e.radius <= _engage_reach() + slack
+	return rect_gap(zone_rect(), e.position) - RADIUS - e.radius <= _engage_reach() + slack
 
 
 ## Moves toward `p` (at most `max_dist`) to fight, but never out of its zone: the stop
@@ -1704,7 +1780,10 @@ func copy_orders(w) -> void:
 	priority = w.priority
 	commit = w.commit
 	move_mode = w.move_mode
-	leash = w.leash.duplicate()
+	guard_area = w.guard_area
+	danger_mode = w.danger_mode
+	call_help = w.call_help
+	answer = w.answer
 	anchor = w.anchor
 	anchor_off = w.anchor_off
 
@@ -2159,21 +2238,21 @@ func _healer_update(delta: float) -> void:
 			facing = position.direction_to(post)
 			_move_toward(post, position.distance_to(post), delta)
 			return
-	if _kite(delta):
-		# Backing off from an enemy, like the other ranged troops; still heals (or keeps
-		# channelling a revive) on anyone already within reach, but won't close in.
-		var downed_near = _pick_downed()
-		if downed_near != null and downed_near == rez_target and _ally_gap(downed_near) <= attack_range:
-			_rez_step(downed_near, delta)
-		else:
-			var hurt_near = _pick_hurt()
-			if hurt_near != null and cd_timer <= 0.0 and _ally_gap(hurt_near) <= attack_range:
-				cd_timer = cooldown
-				_heal(hurt_near)
-		return
 	var c := care()
 	var downed = null
 	var hurt = null
+	free_run = false
+	if c == "danger":
+		# Allies in danger first, wherever they are (its area doesn't hold it for them).
+		var urgent = _pick_in_danger()
+		if urgent != null:
+			free_run = true
+			rez_target = null
+			_go_within_reach(urgent, delta)
+			if cd_timer <= 0.0 and _ally_gap(urgent) <= attack_range:
+				cd_timer = cooldown
+				_heal(urgent)
+			return
 	if c == "stay":
 		# Its wards first; anyone else only once it's with them, and only if it can reach
 		# them from there.
@@ -2187,6 +2266,8 @@ func _healer_update(delta: float) -> void:
 	else:
 		downed = _pick_downed()
 		hurt = _pick_hurt()
+	# Someone to see to: it goes to them, enemies about or not (it only keeps its distance
+	# from enemies when there's nobody to look after).
 	var order := ["heal", "revive"] if c == "heal" else ["revive", "heal"]
 	for act in order:
 		if act == "revive" and downed != null:
@@ -2203,12 +2284,28 @@ func _healer_update(delta: float) -> void:
 				cd_timer = cooldown
 				_heal(hurt)
 			return
+	if _kite(delta):
+		return   # nobody to see to: backing off from an enemy, like the other ranged troops
 	var d := position.distance_to(post)
 	if d > 2.0:
 		facing = position.direction_to(post)
 		_move_toward(post, d, delta)
 	else:
 		_mend(max_hp * REGEN * delta)
+
+
+## The ally in the worst danger (in danger, or calling for help), or null.
+func _pick_in_danger():
+	var best = null
+	var best_frac := INF
+	for w in main.get_warriors():
+		if w == self or not w.is_active() or not (w.in_danger() or main.calling(w)):
+			continue
+		var frac: float = w.hp / w.max_hp
+		if frac < best_frac:
+			best_frac = frac
+			best = w
+	return best
 
 
 ## Channels a revival on a downed ally; it gets up once the revive time is done.
@@ -2425,12 +2522,37 @@ func _go_within_reach(w, delta: float) -> void:
 		facing = position.direction_to(w.position)
 	var gap := _ally_gap(w)
 	if gap > attack_range:
-		_chase_move(w.position, gap - attack_range + 1.0, delta)
+		var aim := _around_enemies(w.position)
+		_chase_move(aim, minf(gap - attack_range + 1.0, position.distance_to(aim)), delta)
+
+
+## A way toward `dest` that steps round any enemy standing in the way (rather than
+## walking into it): `dest` itself if the way's clear.
+func _around_enemies(dest: Vector2) -> Vector2:
+	var dir := position.direction_to(dest)
+	var dist := position.distance_to(dest)
+	var steer := Vector2.ZERO
+	for e in main.enemies_near(position, 90.0):
+		if e.dead or e.flying:
+			continue
+		var to_e: Vector2 = e.position - position
+		var ahead := to_e.dot(dir)
+		if ahead <= 0.0 or ahead > minf(dist, 90.0):
+			continue   # behind it, or past where it's going
+		var lateral := to_e - dir * ahead
+		var clear: float = RADIUS + e.radius + 12.0
+		if lateral.length() >= clear:
+			continue
+		var side := -lateral.normalized() if lateral.length() > 0.5 else dir.orthogonal()
+		steer += side * (clear - lateral.length()) / clear
+	if steer == Vector2.ZERO:
+		return dest
+	return position + (dir + steer * 1.4).normalized() * minf(dist, 60.0)
 
 
 ## Whether a Healer may go to `w`: it can reach it from its zone (always, roaming free).
 func _ally_in_zone(w) -> bool:
-	return not zoned() or post.distance_to(w.position) - zone_radius() - RADIUS * 2.0 <= attack_range
+	return not zoned() or rect_gap(zone_rect(), w.position) - RADIUS * 2.0 <= attack_range
 
 
 func _revive_time() -> float:
@@ -2855,8 +2977,26 @@ func _readying() -> float:
 ## Idle tracking (using last frame's state) and the little things troops do with it.
 func _animate(delta: float) -> void:
 	anim_t += delta
+	var was_down := down_for > 0.0
+	down_for = down_for + delta if not is_active() else 0.0
+	if was_down and is_active() and not is_emplacement():
+		land_t = LAND_TIME   # back on its feet (revived or recovered): a springy bounce up
+	var want := flip
+	if _idling() and GLANCERS.has(kind) and lift <= 0.0:
+		# Stood about for a while: now and then it glances back over its shoulder.
+		var c := fmod(idle_t + absf(position.x) * 0.013, 7.0)
+		if c > 5.4 and c < 6.5:
+			want = -flip
+	if want != 0.0 and signf(turn) != want:
+		turn_hold += delta   # a turn starts once the new facing has held a moment (no twitching)
+		if turn_hold >= 0.08:
+			turn = move_toward(turn, want, delta * TURN_RATE)
+	else:
+		turn_hold = 0.0
+		turn = move_toward(turn, want, delta * TURN_RATE)
+	_carry(delta)
 	var busy: bool = moving or swing > 0.0 or pose_left > 0.0 or rez_target != null or not is_active() \
-			or (target != null and _is_valid(target))
+			or (target != null and _is_valid(target)) or lift > 0.0
 	idle_t = 0.0 if busy else idle_t + delta
 	if kind == "bard" and _idling():
 		# Hums to itself: a note every so often.
@@ -2864,6 +3004,185 @@ func _animate(delta: float) -> void:
 		if note_timer <= 0.0:
 			note_timer = randf_range(0.9, 1.6)
 			main.spawn_note(position + Vector2(randf_range(4, 14), -28), Color(1.0, 0.9, 0.55))
+
+
+## Picked up and carried by a click-and-drag: it's lifted off the ground and dangles,
+## swinging behind the way it's dragged (a damped pendulum) and kicking its legs; set
+## down, it lands with a squash and a puff of dust.
+func _carry(delta: float) -> void:
+	land_t = maxf(land_t - delta, 0.0)
+	cheer_t = maxf(cheer_t - delta, 0.0)
+	perk = move_toward(perk, 1.0 if main.hovered == self and not held else 0.0, delta * 8.0)
+	if land_t <= 0.0:
+		land_dust = false
+	if hop_t > 0.0:
+		hop_t = maxf(hop_t - delta, 0.0)
+		if hop_t <= 0.0:
+			land_t = LAND_TIME
+			land_dust = true
+			_jostle()
+	if held:
+		if lift <= 0.0:
+			carry_t = 0.0
+			_carried_from = position
+			_carry_vel = Vector2.ZERO
+			sway_v = -1.5 * turn   # a little jolt as it's grabbed
+			if kind == "bard":
+				main.spawn_note(position + Vector2(8, -34), Color(0.75, 0.45, 0.95))   # a startled, sour note
+		carry_t += delta
+		lift = minf(lift + delta * 7.0, 1.0)
+		if delta > 0.0:
+			_carry_vel = _carry_vel.lerp((position - _carried_from) / delta, minf(1.0, delta * 12.0))
+		_carried_from = position
+		var aim := clampf(_carry_vel.x * 0.0022, -0.7, 0.7) + sin(carry_t * 4.5) * 0.06   # head first, feet trailing
+		sway_v += ((aim - sway) * 140.0 - sway_v * 9.0) * delta
+		sway += sway_v * delta
+	elif lift > 0.0:
+		lift = maxf(lift - delta * 9.0, 0.0)
+		sway = lerpf(sway, 0.0, minf(1.0, delta * 14.0))
+		if lift <= 0.0:
+			land_t = LAND_TIME if hop_t <= 0.0 else 0.0
+			land_dust = land_t > 0.0
+			if land_dust:
+				_jostle()
+			sway = 0.0
+			sway_v = 0.0
+
+
+## Cheers: hops on the spot for `time` seconds, starting after `delay` (so a whole line
+## doesn't bounce in step). Emplacements and downed troops don't.
+func cheer(time := CHEER_HOP * 3.0, delay := 0.0) -> void:
+	if is_emplacement() or not is_active():
+		return
+	cheer_len = time
+	cheer_t = time + delay
+
+
+## Dropped somewhere it can't stand and put back at its old post (main): rather than
+## blink there, it hops back from where it was let go.
+func hop_back(from: Vector2) -> void:
+	hop_from = from - position
+	if hop_from.length() > 2.0:
+		hop_t = HOP_TIME
+
+
+## Blinks every few seconds (each at its own moment), now and then twice.
+func _blinking() -> bool:
+	var c := fmod(anim_t + float(get_instance_id() % 997) * 0.37, 4.3)
+	return c < 0.11 or (get_instance_id() % 3 == 0 and c > 0.25 and c < 0.36)
+
+
+## Set down next to others: they're jostled (a little springy bump, no dust).
+func _jostle() -> void:
+	for o in main.warriors_near(position, RADIUS * 3.0):
+		if o != self and o.is_active() and not o.is_emplacement() and o.lift <= 0.0 and o.land_t <= 0.0:
+			o.land_t = LAND_TIME * 0.5
+
+
+# --- Danger: falling back, calling for help, answering calls -----------------------------
+
+## In danger: low on health and still being hit (see DANGER_HP).
+func in_danger() -> bool:
+	return is_active() and hp < max_hp * DANGER_HP and danger_t > 0.0
+
+
+## Falling back (its orders say so, and it's in danger): breaks off and makes for a
+## Healer or a Medic Bay (else its post, or the castle if its post is where the fight
+## is), till it's mended or no enemy has come near for a moment. Returns whether it's
+## falling back this frame (it does nothing else then).
+func _fall_back(delta: float) -> bool:
+	if danger_mode != "fall_back" or is_emplacement() or wall_guard or summoned or clone_of != null:
+		retreating = false
+		return false
+	if not retreating:
+		if not in_danger():
+			return false
+		retreating = true
+		safe_t = 0.0
+		_set_target(null)
+		answering = null
+		free_run = false
+		rez_target = null
+		main.spawn_text(position + Vector2(0, -44), "Falling back!", Color(1.0, 0.75, 0.35))
+	var near: Array = main.enemies_near(position, SAFE_GAP).filter(func(e): return not e.dead)
+	safe_t = 0.0 if not near.is_empty() else safe_t + delta
+	if hp >= max_hp * RECOVER_HP or safe_t >= SAFE_TIME:
+		retreating = false
+		return false
+	var dest := _fall_back_spot(near)
+	var d := position.distance_to(dest)
+	if d > 6.0:
+		facing = position.direction_to(dest)
+		_move_toward(dest, d, delta)
+	elif not near.is_empty():
+		facing = position.direction_to(near[0].position)
+	return true
+
+
+## Where to fall back to: beside the nearest Healer on its feet or Medic Bay (on the
+## castle side of it); else its post, unless the fight's there, then back toward the castle.
+func _fall_back_spot(near: Array) -> Vector2:
+	var best = null
+	for w in main.get_warriors():
+		if w == self or not w.is_active() or w.build_left > 0.0 or w.retreating:
+			continue
+		if not (w.is_mobile_healer() or (w.data["attack"] == "pulse")):
+			continue
+		if best == null or position.distance_to(w.position) < position.distance_to(best.position):
+			best = w
+	if best != null:
+		return main._clamp_post(best.position + Vector2(0, RADIUS * 2.0))
+	var threat_at_post: bool = main.enemies_near(post, SAFE_GAP).any(func(e): return not e.dead)
+	if position.distance_to(post) > RADIUS and not threat_at_post:
+		return post
+	if main.rules.has_castle():
+		return main._clamp_post(Vector2(position.x, main.CASTLE_Y - RADIUS * 3.0))
+	return main._clamp_post(post + (post - (near[0].position if not near.is_empty() else post)).normalized() * 120.0)
+
+
+## Answering calls for help (its orders say how): takes up the nearest call, at once or
+## once its own enemy's dealt with, and keeps on it till the caller's safe (or there's
+## no enemy left by them). While answering its area doesn't hold it (free_run).
+func _update_answer() -> void:
+	if answer == "ignore" or is_emplacement() or wall_guard or summoned or retreating:
+		answering = null
+		free_run = false
+		return
+	if answering != null and (not is_instance_valid(answering) or not main.calling(answering) or _answer_target() == null):
+		answering = null
+	if answering == null:
+		if answer == "after" and target != null and _keep_target():
+			free_run = false
+			return   # its own enemy first
+		var best = null
+		for c in main.callers():
+			if c == self:
+				continue
+			if best == null or position.distance_to(c.position) < position.distance_to(best.position):
+				best = c
+		answering = best
+		if answering != null and _answer_target() == null:
+			answering = null
+	free_run = answering != null
+
+
+## The enemy to go for, answering a call: the nearest to the caller of those on it.
+func _answer_target():
+	var best = null
+	var best_d := INF
+	for e in main.enemies_near(answering.position, CALL_REACH):
+		if not _is_valid(e):
+			continue
+		var d: float = e.position.distance_to(answering.position) - (40.0 if e.aggro == answering else 0.0)
+		if d < best_d:
+			best_d = d
+			best = e
+	return best
+
+
+## The x scale it's drawn with: its facing, squeezed thin for a moment as it turns about.
+func _drawn_flip() -> float:
+	return signf(turn if turn != 0.0 else flip) * maxf(absf(turn), 0.5)
 
 
 func _idling() -> bool:
@@ -2894,11 +3213,16 @@ func _body_motion() -> Array:
 	var rot := 0.0
 	var sc := Vector2.ONE
 	if is_emplacement():
-		return [off, rot, sc]
+		return _carried_motion(off, rot, sc)
 	var lean := signf(facing.x) if absf(facing.x) > 0.2 else 0.0
 	if moving:
-		off.y -= absf(sin(walk * PI)) * 3.0
-		rot = 0.08 * lean
+		# The walk cycle (Sprites.step) goes plant, left foot up, plant, right foot up: the
+		# body rises as a foot lifts and settles into each footfall with a little squash,
+		# rocking over onto the planted foot.
+		var step := cos(PI * (walk - 0.5))   # 1 on a footfall, -1 passing
+		off.y -= 1.6 * (1.0 - step)
+		sc = Vector2(1.0 + 0.025 * step, 1.0 - 0.04 * step)
+		rot = 0.08 * lean + 0.04 * sin(PI * walk * 0.5)
 	elif _idling():
 		var b := sin(anim_t * 2.4)
 		sc = Vector2(1.0 - 0.012 * b, 1.0 + 0.025 * b)   # breathing
@@ -2931,6 +3255,63 @@ func _body_motion() -> Array:
 			sc *= Vector2(1.0 + 0.12 * a, 1.0 - 0.1 * a)   # squash into the blow
 		else:
 			sc *= Vector2(1.0 - 0.05 * a, 1.0 + 0.08 * a)   # stretch up into the cast or shot
+	if rez_target != null and is_instance_valid(rez_target) and not moving:
+		# Reviving someone: kneeling over them, leaning in, rocking gently as it prays.
+		var lean_in := signf(rez_target.position.x - position.x) if absf(rez_target.position.x - position.x) > 4.0 else turn
+		rot += (0.12 + 0.03 * sin(anim_t * 3.0)) * lean_in
+		sc *= Vector2(1.05, 0.88)
+	if hurt > 0.0:
+		# Struck: knocked back a step and squashed by the blow.
+		var k := hurt / 0.1
+		off -= facing * 2.5 * k
+		sc *= Vector2(1.0 + 0.1 * k, 1.0 - 0.09 * k)
+	return _carried_motion(off, rot, sc)
+
+
+## Adds being carried (lifted, dangling, stretched from the scruff) and being set down
+## (a springy squash that settles) to a body motion.
+func _carried_motion(off: Vector2, rot: float, sc: Vector2) -> Array:
+	if cheer_t > 0.0 and cheer_t < cheer_len and lift <= 0.0:
+		# Cheering: hop, hop, hop, squashing a little into each landing.
+		var ph := fmod((cheer_len - cheer_t) / CHEER_HOP, 1.0)
+		var h := sin(PI * ph)
+		off.y -= 9.0 * h
+		if kind == "martial" and cheer_len > CHEER_HOP and (cheer_len - cheer_t) >= CHEER_HOP and (cheer_len - cheer_t) < CHEER_HOP * 2.0:
+			# The Martial Artist's second hop is a backflip, turning about its middle.
+			rot = TAU * ph * turn
+			var mid := Sprites.SIZE * SCALE * 0.5
+			off += Vector2(-mid * sin(rot), mid * (cos(rot) - 1.0)) + Vector2(0, -8.0 * h)
+		sc *= Vector2(1.0 - 0.06 * h, 1.0 + 0.1 * h) if h > 0.25 else Vector2(1.12 - 0.48 * h, 0.9 + 0.4 * h)
+	if perk > 0.0 and lift <= 0.0:
+		# Hovered: up on its toes, a little taller, bobbing as if to say "pick me".
+		var e := perk * perk * (3.0 - 2.0 * perk)
+		off.y -= (2.0 + absf(sin(anim_t * 6.0)) * 1.5) * e
+		sc *= Vector2(1.0 - 0.03 * e, 1.0 + 0.05 * e)
+	if lift > 0.0:
+		var e := lift * lift * (3.0 - 2.0 * lift)   # eased
+		var heavy := 0.45 if is_emplacement() else 1.0   # emplacements only come up a little
+		off.y -= LIFT_HEIGHT * heavy * e + sin(carry_t * 9.0) * 1.2 * e * heavy
+		rot = sway * heavy
+		# It hangs from where it's held, near the top: swing about that point, not the feet.
+		var grip := Sprites.SIZE * SCALE * 0.8
+		off += Vector2(-grip * sin(rot), grip * (cos(rot) - 1.0))
+		sc = Vector2(1.0 - 0.06 * e * heavy, 1.0 + 0.08 * e * heavy)
+	if hop_t > 0.0:
+		var k := hop_t / HOP_TIME   # 1 where it was let go, 0 back at its post
+		off += hop_from * (k * k * (3.0 - 2.0 * k))
+		off.y -= sin(PI * k) * (10.0 + hop_from.length() * 0.08)
+		sc = Vector2(0.94, 1.08)
+	if land_t > 0.0:
+		var k := land_t / LAND_TIME
+		var bounce := cos((1.0 - k) * PI * 3.0) * k
+		sc *= Vector2(1.0 + 0.22 * bounce, 1.0 - 0.2 * bounce)
+		if kind == "martial" and k > 0.55:
+			# Set down, the Martial Artist lands it with a flip (turning about its middle).
+			var f := (k - 0.55) / 0.45
+			rot = -TAU * (1.0 - f) * turn
+			var mid := Sprites.SIZE * SCALE * 0.5
+			off += Vector2(-mid * sin(rot), mid * (cos(rot) - 1.0)) + Vector2(0, -12.0 * sin(PI * f))
+			sc = Vector2.ONE
 	return [off, rot, sc]
 
 
@@ -3250,8 +3631,19 @@ func _draw() -> void:
 	xray_tex = null
 	# The shadow, sprite, pips and health bar all come from the sprite atlas, so the
 	# renderer can batch the whole army together.
-	var sr := RADIUS * (1.35 if MOUNTS.has(kind) else 1.0)
-	draw_texture_rect(Sprites.shadow(), Rect2(-sr, feet - sr * 0.35, sr * 2.0, sr * 0.7), false, Color(0, 0, 0, 0.3))
+	var motion := _body_motion() if is_active() else [Vector2.ZERO, 0.0, Vector2.ONE]
+	# Off the ground (carried, hopping, cheering), the shadow shrinks and fades under it.
+	var up := clampf(-(motion[0] as Vector2).y / 40.0, 0.0, 0.45)
+	var sr := RADIUS * (1.35 if MOUNTS.has(kind) else 1.0) * (1.0 - up)
+	draw_texture_rect(Sprites.shadow(), Rect2(-sr, feet - sr * 0.35, sr * 2.0, sr * 0.7), false, Color(0, 0, 0, 0.3 - 0.25 * up))
+	if land_t > 0.0 and land_dust:
+		# Set down: a puff of dust out to either side.
+		var k := 1.0 - land_t / LAND_TIME
+		var big := 1.6 if is_emplacement() else 1.0
+		for side in [-1.0, 1.0]:
+			for j in 2:
+				var p := Vector2(side * (6.0 + (14.0 + 7.0 * j) * k) * big, feet - 1.0 - (3.0 + 3.0 * j) * k)
+				Sprites.disc(self, p, (3.5 + 4.0 * k) * big * (1.0 - 0.25 * j), Color(0.86, 0.8, 0.68, 0.8 * (1.0 - k * k)))
 	if not is_active():
 		# Knocked out: lying on the ground (or a wrecked emplacement) with a recovery ring.
 		if is_emplacement():
@@ -3259,9 +3651,20 @@ func _draw() -> void:
 			draw_texture_rect(frames[0], _tex_rect(frames[0]), false, Color(0.4, 0.38, 0.38, 0.85))
 			_remember_body(frames[0], Transform2D(0, Vector2(flip, 0.85), 0, Vector2(0, feet - size.y / 2 + 4)), _tex_rect(frames[0]))
 		else:
-			draw_set_transform(Vector2(0, 4), PI / 2 * flip, Vector2(flip, 1))
-			draw_texture_rect(frames[0], _tex_rect(frames[0]), false, Color(0.5, 0.5, 0.55, 0.85))
-			_remember_body(frames[0], Transform2D(PI / 2 * flip, Vector2(flip, 1), 0, Vector2(0, 4)), _tex_rect(frames[0]))
+			# Toppling over: it tips onto its back (pivoting on its feet), hits the ground
+			# with a little bounce, and greys out as it lies there.
+			var k := clampf(down_for / 0.35, 0.0, 1.0)
+			var tip := k * k * (3.0 - 2.0 * k)
+			var bounce := sin(clampf((down_for - 0.35) / 0.2, 0.0, 1.0) * PI) * 0.12
+			var ang := (PI / 2 * tip - bounce) * flip
+			var half := size.y / 2
+			# The feet slide back as it goes over, so it ends up lying where it stood.
+			var feet_at := Vector2(0, feet).lerp(Vector2(-half * flip, 4), tip)
+			var lying := Transform2D(ang, Vector2(flip, 1), 0, feet_at) * Transform2D(0, Vector2(0, -half))
+			var grey := Color.WHITE.lerp(Color(0.5, 0.5, 0.55, 0.85), tip)
+			draw_set_transform_matrix(lying)
+			draw_texture_rect(frames[0], _tex_rect(frames[0]), false, grey)
+			_remember_body(frames[0], lying, _tex_rect(frames[0]))
 		draw_set_transform(Vector2.ZERO)
 		if main.permadeath:
 			# Bleeding out: a red ring that drains away.
@@ -3339,8 +3742,16 @@ func _draw() -> void:
 		# A Mirror Self copy: see-through, tinted blue and flickering, so it's never taken for the real one.
 		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))
 	var charging := beam_charge > 0.0
-	var tex: Texture2D = frames[int(walk) % 2 if moving else 0]
-	var pose_name := _pose_name()
+	var tex: Texture2D = Sprites.step(frames, int(walk)) if moving else frames[0]
+	if lift > 0.5 and not is_emplacement():
+		tex = frames[int(carry_t * 7.0) % 2]   # carried: legs kicking in the air
+	elif tex == frames[0] and not is_emplacement() and _blinking():
+		var shut = Sprites.blink(tex)
+		if shut != null:
+			tex = shut
+	var pose_name := _pose_name() if lift <= 0.0 else ""
+	if kind == "martial" and lift > 0.5:
+		pose_name = ["punch", "kick"][int(carry_t * 5.0) % 2]   # carried: fighting the air
 	var pose_tex = _pose_tex(look, pose_name) if pose_name != "" else null
 	if pose_tex != null:
 		tex = pose_tex
@@ -3360,7 +3771,6 @@ func _draw() -> void:
 		var back := Vector2(-signf(facing.x) if absf(facing.x) > 0.2 else 0.0, 0.0)
 		var puff := Vector2(0, feet - 2) + back * (6.0 + 8.0 * k)
 		Sprites.disc(self, puff, 3.0 + 3.0 * k, Color(0.75, 0.68, 0.55, 0.45 * (1.0 - k)))
-	var motion := _body_motion()
 	var origin: Vector2 = Vector2(0, feet - size.y / 2) + lunge + motion[0]
 	var arrow := _archer_arrow(origin) if kind == "archer" and _idling() and _readying() <= 0.0 else {}
 	if not arrow.is_empty() and arrow["behind"]:
@@ -3375,16 +3785,49 @@ func _draw() -> void:
 			draw_texture_rect(tex, body, false, Color(1, 1, 1, 0.12 * (4 - i)))
 	# Tilt and squash pivot on the feet, so it leans and squashes without lifting off.
 	if MOUNTS.has(kind):
-		_draw_mounted(look, origin + Vector2(0, size.y / 2), Vector2(0, feet), tint)
+		# The crew goes where the tower goes (carried, set down) but not with the cannon's recoil.
+		_draw_mounted(look, origin + Vector2(0, size.y / 2), Vector2(0, feet) + motion[0], tint)
 	else:
-		draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(flip * motion[2].x, motion[2].y))
+		var fx := _drawn_flip()
+		draw_set_transform(origin + Vector2(0, size.y / 2), motion[1], Vector2(fx * motion[2].x, motion[2].y))
 		var slung := back_weapon()
 		if slung != "":
 			_draw_back_weapon(slung, body.position)
 		draw_texture_rect(tex, body, false, tint)
-		_remember_body(tex, Transform2D(motion[1], Vector2(flip * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
+		_remember_body(tex, Transform2D(motion[1], Vector2(fx * motion[2].x, motion[2].y), 0, origin + Vector2(0, size.y / 2)), body)
 	draw_set_transform(Vector2.ZERO)
 	_draw_idle_props(origin, size)
+	if (kind == "mine" or kind == "statue") and build_left <= 0.0:
+		_draw_glint(origin, size)
+	if main.calling(self):
+		# Calling for help: a red speech bubble with a "!", pulsing.
+		var pulse := 1.0 + 0.12 * sin(anim_t * 10.0)
+		var at := origin + Vector2(size.x * 0.34, -size.y * 0.62)
+		var r := 10.0 * pulse
+		Sprites.disc(self, at, r + 1.5, OUTLINE_COLOR)
+		draw_colored_polygon(PackedVector2Array([at + Vector2(-3, r - 1), at + Vector2(-7, r + 6), at + Vector2(2, r - 1)]), OUTLINE_COLOR)
+		Sprites.disc(self, at, r, Color(0.92, 0.25, 0.22))
+		draw_colored_polygon(PackedVector2Array([at + Vector2(-2.5, r - 2), at + Vector2(-5.5, r + 4), at + Vector2(1, r - 2)]), Color(0.92, 0.25, 0.22))
+		draw_texture_rect(Sprites.white(), Rect2(at + Vector2(-2, -6.5), Vector2(4, 8)), false, Color.WHITE)
+		draw_texture_rect(Sprites.white(), Rect2(at + Vector2(-2, 3.5), Vector2(4, 3.5)), false, Color.WHITE)
+	if held and lift > 0.5 and not is_emplacement() and main.dragging == self and not main.can_post_at(post, self):
+		# Held over somewhere it can't stand: a nervous bead of sweat.
+		var drip := fmod(carry_t * 1.4, 1.0)
+		var at := origin + Vector2(size.x * 0.32, -size.y * 0.42 + 6.0 * drip)
+		var a := 1.0 - drip * 0.6
+		Sprites.disc(self, at + Vector2(0, 1.5), 3.2, Color(OUTLINE_COLOR, a))
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -5), at + Vector2(2.6, 0.5), at + Vector2(-2.6, 0.5)]), Color(OUTLINE_COLOR, a))
+		Sprites.disc(self, at + Vector2(0, 1.5), 2.2, Color(0.6, 0.85, 1.0, a))
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -3.6), at + Vector2(1.6, 0.6), at + Vector2(-1.6, 0.6)]), Color(0.6, 0.85, 1.0, a))
+	if lift > 0.0 and carry_t < 0.7 and (not is_emplacement() or MOUNTS.has(kind)):   # (a tower's crew is startled too)
+		# Picked up: a startled "!" pops up over its head.
+		var pop := minf(carry_t / 0.12, 1.0)
+		var at := origin + Vector2(-3, -size.y * 0.55 - 6.0 - 4.0 * pop)
+		if MOUNTS.has(kind):
+			at += Vector2((Sprites.mount_layout(kind, SCALE)["crew"] as Vector2).x * flip, (Sprites.mount_layout(kind, SCALE)["crew"] as Vector2).y)   # over the crew's head
+		var a := clampf((0.7 - carry_t) / 0.2, 0.0, 1.0)
+		draw_string_outline(ThemeDB.fallback_font, at, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, int(10 + 6 * pop), 3, Color(0, 0, 0, a))
+		draw_string(ThemeDB.fallback_font, at, "!", HORIZONTAL_ALIGNMENT_LEFT, -1, int(10 + 6 * pop), Color(1.0, 0.92, 0.45, a))
 	if dazed > 0.0:
 		# Stunned by the Ogre King's stomp: stars circling the head.
 		var spin := Time.get_ticks_msec() / 200.0
@@ -3455,6 +3898,26 @@ func _remember_body(tex: Texture2D, xform: Transform2D, rect: Rect2) -> void:
 	xray_tex = tex
 	xray_xform = xform
 	xray_rect = rect
+
+
+## Now and then a glint: gold catching the light at a Gold Mine's mouth, the sun on a
+## War Statue. A four-pointed twinkle that grows and fades, somewhere new each time.
+func _draw_glint(origin: Vector2, size: Vector2) -> void:
+	var every := 1.6 if kind == "mine" else 2.8
+	var c := fmod(anim_t + float(get_instance_id() % 101) * 0.05, every)
+	if c > 0.45:
+		return
+	var n := int((anim_t + float(get_instance_id() % 101) * 0.05) / every)
+	var k := sin(PI * c / 0.45)
+	var spot := Vector2(fmod(n * 0.618, 1.0) - 0.5, fmod(n * 0.382, 1.0) * 0.6 - 0.25)
+	if kind == "mine":
+		spot = Vector2(spot.x * 0.5, 0.15 + spot.y * 0.3)   # in the mine's mouth, on the gold
+	var at := origin + spot * size * Vector2(0.9, 0.9)
+	var col := Color(1.0, 0.95, 0.6, 0.95) if kind == "mine" else Color(1, 1, 1, 0.9)
+	var r := 2.0 + 5.0 * k
+	draw_texture_rect(Sprites.white(), Rect2(at - Vector2(r, 1), Vector2(r * 2, 2)), false, Color(col, col.a * k))
+	draw_texture_rect(Sprites.white(), Rect2(at - Vector2(1, r), Vector2(2, r * 2)), false, Color(col, col.a * k))
+	draw_texture_rect(Sprites.white(), Rect2(at - Vector2(2, 2), Vector2(4, 4)), false, Color(1, 1, 1, k))
 
 
 ## Little props for idle animations, drawn over the sprite.

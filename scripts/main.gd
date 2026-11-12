@@ -106,7 +106,11 @@ var wave_clock := 0.0          # forced pace: seconds since the last of the wave
 const AUTO_DELAY := 3.0
 var wall_start = null     # first click while placing a barricade (Vector2), or null
 var last_priority := {}   # unit kind -> target priority new hires start with
-var last_orders := {}     # unit kind -> {commit, move_mode, leash} new hires start with (the last given to that kind)
+var last_orders := {}     # unit kind -> {commit, move_mode, guard_area, danger_mode, call_help, answer} new hires start with (the last given to that kind)
+var help_calls := {}      # troop calling for help (in danger) -> seconds the call lasts if it isn't renewed
+const CALL_LINGER := 1.2
+var area_pick := []       # troops waiting for a Guard Area to be drawn on the field (see start_area_pick)
+var area_start = null     # where the area being drawn was started (Vector2), while the button's held
 var selected: Warrior = null
 var group := []             # several troops selected together (box or Shift+click); `selected` is null then
 var ward_pick := []         # Healers waiting for a click on the troop they're to stay with
@@ -116,9 +120,12 @@ var box_add := false        # Shift was held: the box adds to the group
 var group_drag := false     # dragging the whole group to new posts (between waves)
 var group_from := {}        # warrior -> its post when the group drag started
 var mouse := Vector2.ZERO
+var mouse_stand_in := Vector2.INF   # tests: where the mouse is taken to be (INF: the real one)
 var dragging: Warrior = null     # unit being repositioned between waves
+var hovered: Warrior = null      # the troop under the mouse between waves (it perks up: see Warrior._carry)
 var drag_origin := Vector2.ZERO
 var drag_offset := Vector2.ZERO
+const LIFT_AFTER := 4.0          # a dragged troop is lifted off its feet once it's moved this far (a click doesn't)
 
 const GROUND_OVERSAMPLE := 2
 var ground_vp := SubViewport.new()     # the ground, painted once (see _repaint_ground)
@@ -264,6 +271,8 @@ func _fit_screen() -> void:
 				w.post_u = w.post.x / old_w   # placed or moved since the last resize
 			w.post.x = w.post_u * FIELD_W
 			w.fitted_post = w.post
+			if w.guard_area.has_area():
+				w.guard_area = Rect2(w.guard_area.position.x * k, w.guard_area.position.y, w.guard_area.size.x * k, w.guard_area.size.y)
 			if w.is_emplacement():
 				w.position = w.post
 			else:
@@ -363,7 +372,11 @@ func choose_mode(mode: String) -> void:
 
 
 func _process(delta: float) -> void:
-	mouse = get_local_mouse_position()
+	mouse = get_local_mouse_position() if mouse_stand_in == Vector2.INF else mouse_stand_in
+	# Between waves, the troop under the mouse perks up (it can be picked up and moved).
+	hovered = _warrior_at(mouse) if started and not wave_active and dragging == null and not group_drag \
+			and placing_type == "" and mouse.y <= FIELD_H else null
+	_update_calls(delta)
 	if dragging != null:
 		_update_drag()
 	if group_drag:
@@ -1011,6 +1024,10 @@ func _end_wave() -> void:
 	auto_timer = auto_delay()
 	wave_active = false
 	sfx("fanfare")
+	for w in get_warriors():
+		# The wave's held: they cheer, each starting at its own moment (from its id, not
+		# randf: a cheer mustn't change the game's random rolls).
+		w.cheer(Warrior.CHEER_HOP * 3.0, float(w.get_instance_id() % 7) * 0.05)
 	var bonus := late_gold(20 + wave * 5)
 	gold += bonus
 	# Gold Mines pay their end-of-wave bonus on top, and every Treasury pays interest
@@ -1633,7 +1650,12 @@ func hire_at(p: Vector2) -> void:
 		var o: Dictionary = last_orders[placing_type]
 		w.commit = o["commit"]
 		w.move_mode = o["move_mode"]
-		w.leash = o["leash"].duplicate()
+		var area: Rect2 = o["guard_area"]
+		if area.has_point(w.post):
+			w.guard_area = area   # hired into the area its kind was last given: it guards it too
+		w.danger_mode = o["danger_mode"]
+		w.call_help = o["call_help"]
+		w.answer = o["answer"]
 	# New hires march in from whichever side of the field is nearer their post;
 	# emplacements are built on the spot.
 	w.position = w.post if w.is_emplacement() else _entry_point(w.post)
@@ -1799,6 +1821,8 @@ func _update_group_drag() -> void:
 	var shift := mouse - drag_origin
 	for w in group_from:
 		if is_instance_valid(w):
+			if shift.length() > LIFT_AFTER:
+				w.held = true   # picked up: they dangle as they're carried (see Warrior._carry)
 			var p := _clamp_post(group_from[w] + shift)
 			w.post = p
 			w.position = p
@@ -1808,9 +1832,14 @@ func _update_group_drag() -> void:
 func _end_group_drag() -> void:
 	group_drag = false
 	var taken := []
+	var thud := false
 	for w in group_from:
 		if not is_instance_valid(w):
 			continue
+		if w.held and not thud:
+			sfx("place")   # the group set down (one thud)
+			thud = true
+		w.held = false
 		var p: Vector2 = w.post
 		var ok := p.y >= DEPLOY_TOP and p.y <= CASTLE_Y and ground_problem(p) == ""
 		for o in get_warriors():
@@ -1821,8 +1850,11 @@ func _end_group_drag() -> void:
 				ok = false
 		if not ok:
 			p = group_from[w]
+		var let_go: Vector2 = w.position
 		w.set_post(p)
 		w.position = p
+		if not ok:
+			w.hop_back(let_go)
 	group_from.clear()
 
 
@@ -1851,6 +1883,7 @@ func upgrade_selected(path: int) -> void:
 	var tier_name: String = selected.next_tier(path)["name"]
 	gold -= cost
 	selected.upgrade(path)
+	selected.cheer(Warrior.CHEER_HOP)   # a hop of delight
 	sfx("upgrade")
 	spawn_text(selected.position + Vector2(0, -50), tier_name, Warrior.PATH_COLORS[path])
 	spawn_sparkle(selected.position, Warrior.PATH_COLORS[path])
@@ -1877,6 +1910,8 @@ func _update_drag() -> void:
 		p = _clamp_wall_center(dragging, mouse + drag_offset)
 	dragging.post = p
 	dragging.position = p
+	if not dragging is Barricade and p.distance_to(drag_origin) > LIFT_AFTER:
+		dragging.held = true   # picked up (not just clicked): it dangles as it's carried (see Warrior._carry)
 
 
 func _end_drag() -> void:
@@ -1884,12 +1919,18 @@ func _end_drag() -> void:
 	dragging = null
 	if not is_instance_valid(w):
 		return
+	if w.held:
+		sfx("place")   # set down with a thud
+	w.held = false
 	var ok := can_post_at(w.post, w)
 	if w is Barricade:
 		ok = wall_problem(w.seg_a(), w.seg_b()) == ""
 	var p := w.post if ok else drag_origin
+	var let_go := w.position
 	w.set_post(p)
 	w.position = p
+	if not ok and not w is Barricade:
+		w.hop_back(let_go)
 	if w is Barricade:
 		walls_changed()
 
@@ -1926,9 +1967,10 @@ func order_units() -> Array:
 	return out.filter(func(w): return is_instance_valid(w) and w is Warrior)
 
 
-## Gives `units` an order: "priority", "commit", "move_mode" or "leash" (a size for the
-## current zone mode). Emplacements, wall guards and Healers skip what doesn't apply to
-## them. Remembered per kind for the next hire; kept through waves and upgrades.
+## Gives `units` an order: "priority", "commit", "move_mode", "area" (a Guard Area drawn on
+## the field: they go on Guard Area there), "danger_mode", "call_help" (true/false) or
+## "answer". Emplacements, wall guards and Healers skip what doesn't apply to them.
+## Remembered per kind for the next hire; kept through waves and upgrades.
 func give_order(field: String, value, units: Array = []) -> void:
 	if units.is_empty():
 		units = order_units()
@@ -1955,10 +1997,26 @@ func give_order(field: String, value, units: Array = []) -> void:
 				if w.is_emplacement() or w.wall_guard:
 					continue
 				w.move_mode = value
-			"leash":
-				w.set_leash(value)
+			"area":
+				if w.is_emplacement() or w.wall_guard:
+					continue
+				w.guard_area = value
+				w.move_mode = "guard"
+			"danger_mode":
+				if w.is_emplacement() or w.wall_guard:
+					continue
+				w.danger_mode = value
+				if value == "fight":
+					w.retreating = false
+			"call_help":
+				w.call_help = value
+			"answer":
+				if w.is_emplacement() or w.wall_guard or w.is_mobile_healer():
+					continue   # (a Healer answers by its focus: In danger)
+				w.answer = value
 		if field != "priority":
-			last_orders[w.kind] = {"commit": w.commit, "move_mode": w.move_mode, "leash": w.leash.duplicate()}
+			last_orders[w.kind] = {"commit": w.commit, "move_mode": w.move_mode, "guard_area": w.guard_area,
+					"danger_mode": w.danger_mode, "call_help": w.call_help, "answer": w.answer}
 	if field == "priority" and value == "stay":
 		# Healers stay with the troops given the order with them; on their own, they wait
 		# for a click on the troop (or right-click one).
@@ -1973,6 +2031,95 @@ func give_order(field: String, value, units: Array = []) -> void:
 			stay_with(healers, others)
 
 
+## A troop in danger calls for help (renewed each frame it's still in danger; a call
+## lingers a moment after). Others answer by their orders (Warrior._update_answer).
+func call_for_help(w) -> void:
+	if not help_calls.has(w):
+		spawn_text(w.position + Vector2(0, -52), "Help!", Color(1.0, 0.45, 0.35))
+	help_calls[w] = CALL_LINGER
+
+
+## Whether `w` is calling for help.
+func calling(w) -> bool:
+	return help_calls.has(w)
+
+
+## Everyone calling for help right now.
+func callers() -> Array:
+	return help_calls.keys()
+
+
+func _update_calls(delta: float) -> void:
+	for w in help_calls.keys():
+		help_calls[w] -= delta
+		if help_calls[w] <= 0.0 or not is_instance_valid(w) or w.is_queued_for_deletion() or not w.is_active():
+			help_calls.erase(w)
+
+
+## D (or the orders panel): the next drag on the field draws a Guard Area for the selected
+## troop or the group (any size, anywhere); Esc cancels.
+func start_area_pick(units: Array = []) -> void:
+	if units.is_empty():
+		units = order_units()
+	units = units.filter(func(w): return not w.is_emplacement() and not w.wall_guard and w.kind != "barricade")
+	if units.is_empty():
+		return
+	area_pick = units
+	area_start = null
+	hud.show_message("Drag out an area to guard (Esc: cancel)")
+
+
+## Ready-made Guard Areas, as shares of the ground troops stand on (across the field, and
+## from the top of it down to the castle): the front half, either flank (with a little of
+## the middle), the middle (overlapping both flanks a little) and the back half.
+const AREA_PRESETS := {
+	"front": Rect2(0.0, 0.0, 1.0, 0.5),
+	"left": Rect2(0.0, 0.0, 0.45, 1.0),
+	"center": Rect2(0.28, 0.0, 0.44, 1.0),
+	"right": Rect2(0.55, 0.0, 0.45, 1.0),
+	"back": Rect2(0.0, 0.5, 1.0, 0.5),
+}
+const AREA_PRESET_NAMES := {"front": "Front", "left": "Left flank", "center": "Centre", "right": "Right flank", "back": "Back"}
+
+
+## A ready-made Guard Area (see AREA_PRESETS) on this battlefield.
+func area_preset(key: String) -> Rect2:
+	var k: Rect2 = AREA_PRESETS[key]
+	var top := float(DEPLOY_TOP)
+	var depth := float(CASTLE_Y) - top
+	return Rect2(k.position.x * FIELD_W, top + k.position.y * depth, k.size.x * FIELD_W, k.size.y * depth)
+
+
+## The preset `r` matches, or "" (one drawn by hand).
+func area_preset_of(r: Rect2) -> String:
+	for key in AREA_PRESETS:
+		if area_preset(key).is_equal_approx(r):
+			return key
+	return ""
+
+
+## The area being drawn, in field coordinates (while the button's held).
+func area_box() -> Rect2:
+	if area_start == null:
+		return Rect2()
+	var a: Vector2 = area_start
+	var b := Vector2(clampf(mouse.x, 0.0, FIELD_W), clampf(mouse.y, 0.0, FIELD_H))
+	return Rect2(a.min(b), (b - a).abs())
+
+
+func _finish_area() -> void:
+	var r := area_box()
+	area_start = null
+	if r.size.x < Warrior.MIN_AREA and r.size.y < Warrior.MIN_AREA:
+		return   # a click, not a drag: still waiting for the area
+	var units := area_pick.filter(func(w): return is_instance_valid(w))
+	area_pick = []
+	give_order("area", r, units)
+	if not units.is_empty():
+		spawn_text(r.get_center(), "Guarding here", Color(0.7, 0.95, 1.0))
+	hud.refresh(self)
+
+
 ## `healers` keep with `troops` (a troop, or a group) and look after them first.
 func stay_with(healers: Array, troops: Array) -> void:
 	ward_pick = []
@@ -1982,7 +2129,7 @@ func stay_with(healers: Array, troops: Array) -> void:
 		spawn_text(healers[0].position + Vector2(0, -50), "Staying with the %s" % (troops[0].label.to_lower() if troops.size() == 1 else "group"), Color(0.6, 1.0, 0.6))
 
 
-## M: the next movement mode for the selection (Hold, Short Leash, Guard Area, Free Roam).
+## M: the next movement mode for the selection (Hold, Guard Area, Free Roam).
 func cycle_move_mode() -> void:
 	var units := order_units().filter(func(w): return not w.is_emplacement() and not w.wall_guard)
 	if units.is_empty():
@@ -2072,6 +2219,8 @@ func switch_tab(tab: String) -> void:
 func _cancel() -> void:
 	powers.aiming = ""
 	ward_pick = []
+	area_pick = []
+	area_start = null
 	group.clear()
 	box_start = null
 	castle_selected = false
@@ -2116,6 +2265,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				powers.aim_click(p)
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
 				powers.aiming = ""
+			return
+		if not area_pick.is_empty():
+			# Drawing a Guard Area: left-drag it out; right-click cancels.
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				area_start = p
+			else:
+				area_pick = []
+				area_start = null
 			return
 		if not ward_pick.is_empty():
 			# Healers waiting to be told who to stay with: that troop (anything else cancels).
@@ -2165,13 +2322,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				box_add = event.shift_pressed
 				return
 			group.clear()
+			if w != null and w != selected and not w is Barricade and w.lift <= 0.0:
+				w.land_t = Warrior.LAND_TIME * 0.6   # picked out: a little springy "yes?"
 			selected = w
 			selected_grave = _grave_at(p) if selected == null else null
 			castle_selected = selected == null and selected_grave == null and on_castle(p)
 			if selected != null and not wave_active:
 				_start_drag(selected)
 	elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if box_start != null:
+		if area_start != null:
+			_finish_area()
+		elif box_start != null:
 			_finish_box()
 	elif event is InputEventKey and event.pressed and not event.echo:
 		match event.keycode:
@@ -2239,6 +2400,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				hud.toggle_orders(self)
 			KEY_G:
 				toggle_song()
+			KEY_D:
+				start_area_pick()
 			KEY_F:
 				cycle_speed()
 			KEY_ESCAPE:
@@ -2447,6 +2610,14 @@ func _draw_surroundings() -> void:
 
 func _draw_overlay() -> void:
 	# The selection box being dragged, and a ring under every troop in the group.
+	var zones_drawn := []
+	if not area_pick.is_empty():
+		var ab := area_box()
+		if ab.size != Vector2.ZERO:
+			_draw_area(ab, Color(1.0, 0.9, 0.5), 1.6)   # the Guard Area being drawn
+			_overlay_text(ab.end + Vector2(6, 2), "%s × %s" % [Data.ft(ab.size.x), Data.ft(ab.size.y)], Color(1.0, 0.92, 0.6))
+		else:
+			_overlay_text(mouse + Vector2(14, -8), "Drag out the area to guard", Color(1.0, 0.92, 0.6))
 	var box := selection_box()
 	if box.size != Vector2.ZERO:
 		overlay.draw_rect(box, Color(0.6, 0.9, 1.0, 0.12))
@@ -2458,7 +2629,7 @@ func _draw_overlay() -> void:
 		overlay.draw_set_transform(Vector2.ZERO)
 		if w.ordered:
 			overlay.draw_line(w.position, w.post, Color(0.7, 0.95, 1.0, 0.3), 1.5, true)
-		_draw_zone(w, 0.5)
+		_draw_zone(w, 0.6, zones_drawn)
 	if castle_selected or _castle_hovered():
 		# The castle outlined in gold: solid while selected, faint while hovered.
 		var col := Color(1.0, 0.85, 0.35, 0.95 if castle_selected else 0.45)
@@ -2516,19 +2687,31 @@ func _draw_overlay() -> void:
 
 ## A unit's movement zone: the ground around its post it may fight from (a ring at the
 ## post on Hold). Nothing for units roaming free or that never move.
-func _draw_zone(w, strength: float) -> void:
-	if not (w is Warrior) or not w.zoned():
+func _draw_zone(w, strength: float, drawn: Array = []) -> void:
+	if not (w is Warrior) or w.move_mode == "free" or w.is_emplacement() or w.wall_guard:
 		return
 	var col := Color(0.55, 0.85, 1.0)
-	var r: float = w.zone_radius()
-	if r <= 0.0:
+	if w.move_mode == "hold":
 		overlay.draw_arc(w.post, Warrior.RADIUS + 3.0, 0, TAU, 32, Color(col, 0.8 * strength), 2.5, true)
 		return
-	overlay.draw_circle(w.post, r, Color(col, 0.07 * strength), true, -1.0, true)
-	var n := 48
-	for i in n:
-		if i % 2 == 0:
-			overlay.draw_arc(w.post, r, i * TAU / n, (i + 1) * TAU / n, 4, Color(col, 0.75 * strength), 2.0, true)
+	var r: Rect2 = w.zone_rect()
+	if drawn.has(r):
+		return   # (a group sharing one area: drawn once)
+	drawn.append(r)
+	_draw_area(r, col, strength)
+
+
+## A Guard Area: a pale fill inside a dashed outline.
+func _draw_area(r: Rect2, col: Color, strength: float) -> void:
+	overlay.draw_rect(r, Color(col, 0.07 * strength))
+	var corners := [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
+	for i in 4:
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[(i + 1) % 4]
+		var n := maxi(1, int(a.distance_to(b) / 12.0))
+		for j in n:
+			if j % 2 == 0:
+				overlay.draw_line(a.lerp(b, float(j) / n), a.lerp(b, float(j + 1) / n), Color(col, 0.75 * strength), 2.0)
 
 
 ## Placing a barricade: a marker before the first click, then the wall-to-be with

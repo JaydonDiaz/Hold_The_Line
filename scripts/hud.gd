@@ -294,6 +294,8 @@ func layout(w: float) -> void:
 	for p in path_cards.size():
 		_layout_card(path_cards[p], p)
 	_layout_hire()
+	if orders_box != null and orders_box.size.x != ui_w:
+		_open_orders(orders_main, orders_units)   # laid out afresh for the new width
 	message_label.size.x = ui_w
 	boss_bar.position.x = (ui_w - 400.0) / 2.0
 	hard_label.position.x = ui_w - 340
@@ -664,7 +666,7 @@ func refresh(main) -> void:
 	for card in path_cards:
 		card["button"].visible = w != null or grave != null
 	sell_btn.visible = w != null
-	target_btn.visible = _takes_orders(w)
+	target_btn.visible = _takes_orders(w) or (in_group and main.group.any(_takes_orders))
 	_refresh_orders(main, w)
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
 	if grave != null:
@@ -677,10 +679,11 @@ func refresh(main) -> void:
 		return
 	if in_group:
 		info_label.position = Vector2(14, CONTENT_Y + CONTENT_H + 8.0)
-		info_label.size = Vector2(ui_w - 26, HEIGHT - TOP - CONTENT_Y - CONTENT_H - 12.0)
+		info_label.size = Vector2(ui_w - (26 if not target_btn.visible else ui_w - target_btn.position.x + 8.0), HEIGHT - TOP - CONTENT_Y - CONTENT_H - 12.0)
 		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
 		info_label.text = "%d troops selected. Right-click to move them together (they keep their formation)%s. Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them." % [
 				main.group.size(), "" if main.wave_active else "; or drag one of them to move the group"]
+		target_btn.text = "Orders [O]\n%d troops" % main.group.filter(_takes_orders).size()
 		return
 	if castle_sel:
 		info_label.position = Vector2(14, 162)
@@ -1877,19 +1880,21 @@ func _button(parent: Node, pos: Vector2, size: Vector2, text: String) -> Button:
 	return b
 
 
-# --- Orders: the selected unit's target priority, commitment and movement zone ----------
+# --- Orders: the selected unit's (or group's) target priority, commitment, movement
+# zone, danger reactions and answering calls for help ----------------------------------
 
 var orders_box: Panel = null
-var orders_for = null          # the unit the box was built for
+var orders_for = null          # the first of the units the box was built for (for a group, any one of them)
+var orders_units := []         # the units the box gives orders to (one, or the group)
 var orders_main = null
 var orders_ui := {}            # the box's controls, by name
-var orders_syncing := false    # set while the box is brought in step with its unit (its controls' own signals are ignored then)
+var orders_syncing := false    # set while the box is brought in step with its units (its controls' own signals are ignored then)
 
 
 ## A unit's orders in a few words, for the panel's button.
 func _orders_short(w) -> String:
-	var mode: String = {"hold": "Hold", "short": "Leash", "guard": "Guard", "free": "Free"}[w.move_mode] if not w.is_emplacement() and not w.wall_guard else "Fixed"
-	if not w.uses_targeting():
+	var mode: String = {"hold": "Hold", "guard": "Guard", "free": "Free"}[w.move_mode] if not w.is_emplacement() and not w.wall_guard else "Fixed"
+	if not w.uses_targeting() and not w.is_mobile_healer():
 		return mode
 	return "%s · %s" % [Warrior.PRIORITY_NAMES[w.priority], mode]
 
@@ -1902,9 +1907,14 @@ func orders_summary(w) -> String:
 		parts.append(Warrior.COMMIT_NAMES[w.commit])
 	if not w.is_emplacement() and not w.wall_guard:
 		var mode: String = Warrior.MOVE_NAMES[w.move_mode]
-		if w.move_mode in ["short", "guard"]:
-			mode += " (%s)" % Data.ft(w.zone_radius())
+		if w.move_mode == "guard":
+			var r: Rect2 = w.zone_rect()
+			var preset: String = w.main.area_preset_of(r)
+			mode += " (%s)" % (w.main.AREA_PRESET_NAMES[preset] if preset != "" else "%s × %s" % [Data.ft(r.size.x), Data.ft(r.size.y)])
 		parts.append(mode)
+		parts.append(Warrior.DANGER_NAMES[w.danger_mode] + (", calls for help" if w.call_help else ""))
+		if not w.is_mobile_healer() and w.answer != "ignore":
+			parts.append("answers calls " + Warrior.ANSWER_NAMES[w.answer].to_lower())
 	return "  ·  ".join(parts)
 
 
@@ -1918,6 +1928,8 @@ func orders_meaning(w) -> String:
 			"stay":
 				var who: String = (w.wards[0].label.to_lower() if w.wards.size() == 1 else "group of %d" % w.wards.size()) if not w.wards.is_empty() else "troop"
 				out += "Stays with the %s and looks after them first; anyone else only if it can reach them from there. " % who
+			"danger":
+				out += "Goes to allies in danger first, wherever they are; then revives the downed and heals the hurt. "
 			_:
 				out += "Revives the downed first (they're on a clock), then heals whoever's hurt worst. "
 	if w.uses_targeting():
@@ -1933,12 +1945,17 @@ func orders_meaning(w) -> String:
 		match w.move_mode:
 			"hold":
 				out += "Stands at its post and fights only what it can reach from there."
-			"short", "guard":
-				out += "Goes no further than %s from its post to fight, then comes back." % Data.ft(w.zone_radius())
+			"guard":
+				out += "Fights anywhere in its area (outlined on the field), then comes back to its post."
 			_:
 				out += "Chases enemies anywhere on the field."
 		if w.uses_targeting() and w.move_mode != "hold":
 			out += " Strikes anything it passes on the way."
+		out += " In danger (badly hurt and under attack) it %s%s." % ["falls back to a Healer, its post or the castle" if w.danger_mode == "fall_back" else "fights on",
+				" and calls for help" if w.call_help else ""]
+		if not w.is_mobile_healer():
+			out += {"ignore": " Doesn't answer calls for help.", "after": " Answers calls for help once its own enemy's dealt with, going wherever it's needed.",
+					"now": " Answers calls for help at once, dropping its enemy and going wherever it's needed."}[w.answer]
 	return out
 
 
@@ -1947,11 +1964,20 @@ func _takes_orders(w) -> bool:
 	return w != null and is_instance_valid(w) and w.kind != "barricade" and (w.uses_targeting() or (not w.is_emplacement() and not w.wall_guard))
 
 
+## The units the panel is for now: the selected one, or the group's that take orders.
+func _orders_targets(main) -> Array:
+	if main.selected != null:
+		return [main.selected] if _takes_orders(main.selected) else []
+	return main.group.filter(_takes_orders)
+
+
 func toggle_orders(main) -> void:
 	if orders_box != null:
 		_close_orders()
-	elif _takes_orders(main.selected):
-		_open_orders(main, main.selected)
+	else:
+		var units := _orders_targets(main)
+		if not units.is_empty():
+			_open_orders(main, units)
 
 
 func _close_orders() -> void:
@@ -1959,150 +1985,223 @@ func _close_orders() -> void:
 		orders_box.queue_free()
 	orders_box = null
 	orders_for = null
+	orders_units = []
 	orders_ui = {}
 
 
-func _open_orders(main, w) -> void:
+## The orders window's layout: it takes the place of the upgrade cards in the bottom
+## panel (under its top bar), in compact rows, a close button at the top right.
+const ORDERS_TOP := 46.0      # below the panel's gold / wave / buttons bar
+const ORDER_ROW := 26.0       # one row of buttons (24 high, 2 apart)
+const ORDER_X0 := 104.0       # where the buttons start, right of the row's label
+const ORDER_RIGHT := 44.0     # room kept clear on the right for the close button
+
+
+## A row of toggle buttons: `keys` labelled by `names`, giving order `field`.
+func _order_row(box: Panel, y: float, label: String, field: String, keys: Array, names: Dictionary, tips: Dictionary, x0 := ORDER_X0, width := -1.0) -> void:
+	if label != "":
+		var lab := _label(box, Vector2(10, y + 2), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
+		lab.text = label
+	var span := (box.size.x - x0 - ORDER_RIGHT) if width < 0.0 else width
+	var bw := span / keys.size() - 4.0
+	var btns := {}
+	for i in keys.size():
+		var key = keys[i]
+		var b := _button(box, Vector2(x0 + i * (bw + 4.0), y), Vector2(bw, ORDER_ROW - 2.0), names[key])
+		b.toggle_mode = true
+		b.add_theme_font_size_override("font_size", 11 if bw < 70.0 else 12)
+		b.tooltip_text = tips.get(key, "")
+		b.pressed.connect(func(): _order_from_box(field, key))
+		btns[key] = b
+	orders_ui[field] = btns
+
+
+func _open_orders(main, units: Array) -> void:
 	_close_orders()
 	orders_main = main
-	orders_for = w
+	orders_units = units.duplicate()
+	orders_for = units[0]
+	var fighters := units.filter(func(w): return w.uses_targeting())
+	var healers := units.filter(func(w): return w.is_mobile_healer())
+	var movers := units.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	# In the bottom panel, over the upgrade cards (and a group's make-up): the field stays clear.
 	var box := Panel.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.13, 0.11, 0.1, 0.96)
+	style.bg_color = Color(0.13, 0.11, 0.1)
 	style.border_color = Color(0.45, 0.35, 0.2)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(4)
+	style.border_width_top = 1
 	box.add_theme_stylebox_override("panel", style)
-	box.mouse_filter = Control.MOUSE_FILTER_STOP   # clicks on it never reach the field
-	box.size = Vector2(456, 272)
-	box.position = Vector2(ui_w - box.size.x - 8.0, TOP - box.size.y - 8.0)
-	add_child(box)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing under it can be clicked while it's open
+	box.position = Vector2(0, ORDERS_TOP)
+	box.size = Vector2(ui_w, HEIGHT - TOP - ORDERS_TOP)
+	panel.add_child(box)
 	orders_box = box
-	var title := _label(box, Vector2(12, 8), Vector2(330, 24), Color(1, 0.85, 0.3), 17)
-	title.text = "Orders  ·  " + w.data["name"]
-	var close := _button(box, Vector2(box.size.x - 40, 8), Vector2(30, 26), "X")
-	close.tooltip_text = "Close [O]"
+	var close := _button(box, Vector2(box.size.x - 36, 4), Vector2(28, 24), "X")
+	close.tooltip_text = "Close the orders, back to the upgrades [O]"
 	close.pressed.connect(_close_orders)
-	var rows := [
-		["Focus [T]" if w.is_mobile_healer() else "Target [T]", "priority", Warrior.priorities_for_unit(w), Warrior.PRIORITY_NAMES],
-		["Commit [N]", "commit", Warrior.COMMITS, Warrior.COMMIT_NAMES],
-		["Movement [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "short": "Leash", "guard": "Guard", "free": "Free"}],
-	]
+	var who := _label(box, Vector2(box.size.x - 40, 30), Vector2(36, 40), Color(1, 0.85, 0.3), 11)
+	who.text = str(units.size()) if units.size() > 1 else ""
+	who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	who.tooltip_text = "%d troops get these orders" % units.size()
 	var tips := {"focused": "Sticks to the enemy it picked until it falls, gets out of reach or leaves this unit's area (recommended)",
 			"reactive": "Looks again a few times a second and switches to whichever enemy is now the best pick",
 			"hold": "Stays at its post and fights only what it can reach from there",
-			"short": "Goes a short way from its post to fight (size below)",
-			"guard": "Defends a wider area around its post (size below)",
+			"guard": "Fights anywhere in its area: pick one below, or draw your own on the field",
 			"free": "Chases enemies anywhere on the field",
 			"closest": "The enemy nearest this unit", "first": "The enemy closest to the castle",
 			"strongest": "The toughest kind of enemy", "weakest": "The weakest kind of enemy",
 			"objective": "The enemy nearest to getting at what you're protecting (then the nearest)",
 			"revive": "Revives the downed first (they're on a clock), then heals the hurt",
 			"heal": "Heals the hurt first (villagers too), then revives the downed",
-			"stay": "Stays with a troop or a group and looks after them first: pick this, then click the troop (or right-click a troop with the Healer selected)"}
-	for r in rows.size():
-		var y := 42.0 + r * 36.0
-		var lab := _label(box, Vector2(12, y + 4), Vector2(104, 22), Color(0.85, 0.82, 0.76), 13)
-		lab.text = rows[r][0]
-		var keys: Array = rows[r][2]
-		var bw := (box.size.x - 120.0 - 12.0) / keys.size() - 4.0
-		var btns := {}
-		for i in keys.size():
-			var key: String = keys[i]
-			var b := _button(box, Vector2(120.0 + i * (bw + 4.0), y), Vector2(bw, 30), rows[r][3][key])
-			b.toggle_mode = true
-			b.add_theme_font_size_override("font_size", 13)
-			b.tooltip_text = tips.get(key, "")
-			var field: String = rows[r][1]
-			b.pressed.connect(func(): _order_from_box(field, key))
-			btns[key] = b
-		orders_ui[rows[r][1]] = btns
-	var size_lab := _label(box, Vector2(12, 154), Vector2(96, 22), Color(0.85, 0.82, 0.76), 13)
-	size_lab.text = "Area size"
-	var slider := HSlider.new()
-	slider.position = Vector2(120, 156)
-	slider.size = Vector2(230, 20)
-	slider.step = 5.0
-	slider.focus_mode = Control.FOCUS_NONE
-	slider.value_changed.connect(func(v): _order_from_box("leash", v))
-	box.add_child(slider)
-	orders_ui["slider"] = slider
-	orders_ui["size"] = _label(box, Vector2(362, 154), Vector2(84, 22), Color(0.7, 0.95, 1.0), 13)
-	var meaning_y := 186.0
-	# Something on the field to follow (a wagon, villagers): a row to follow it, or not.
-	var movers: Array = main.rules.followable() if not w.is_emplacement() and not w.wall_guard else []
+			"stay": "Stays with a troop or a group and looks after them first: pick this, then click the troop (or right-click a troop with the Healer selected)",
+			"danger": "Goes to allies in danger (badly hurt and under attack, or calling for help) first, wherever they are",
+			"fight": "Badly hurt and under attack, it keeps fighting",
+			"fall_back": "Badly hurt and under attack, it breaks off and falls back to a Healer or Medic Bay (else its post or the castle) until it's patched up or out of the fight",
+			"ignore": "Doesn't answer calls for help",
+			"after": "Answers a call for help once its own enemy's dealt with: leaves its area and its target priority to go, then comes back",
+			"now": "Answers a call for help at once, dropping its enemy: leaves its area and its target priority to go, then comes back",
+			"front": "The front half of the field", "left": "The left side, and a little of the middle", "center": "The middle, overlapping both flanks a little",
+			"right": "The right side, and a little of the middle", "back": "The back half of the field, in front of the castle",
+			"draw": "Drag out an area of your own on the field, any size [D]"}
+	var y := 4.0
+	if not fighters.is_empty():
+		_order_row(box, y, "Target [T]", "priority", Warrior.priorities_for(main), Warrior.PRIORITY_NAMES, tips)
+		y += ORDER_ROW
+	if not healers.is_empty():
+		_order_row(box, y, "Focus [T]" if fighters.is_empty() else "Healers", "care", Warrior.HEAL_PRIORITIES, Warrior.PRIORITY_NAMES, tips)
+		y += ORDER_ROW
+	if not fighters.is_empty():
+		_order_row(box, y, "Commit [N]", "commit", Warrior.COMMITS, Warrior.COMMIT_NAMES, tips)
+		y += ORDER_ROW
 	if not movers.is_empty():
-		box.size.y += 36.0
-		box.position.y -= 36.0
-		var fl := _label(box, Vector2(12, 190), Vector2(104, 22), Color(0.85, 0.82, 0.76), 13)
+		_order_row(box, y, "Movement [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "guard": "Guard area", "free": "Free"}, tips)
+		y += ORDER_ROW
+		var keys: Array = main.AREA_PRESETS.keys() + ["draw"]
+		var names: Dictionary = {"front": "Front", "left": "Left", "center": "Centre", "right": "Right", "back": "Back", "draw": "Draw…"}
+		_order_row(box, y, "Area [D]", "area", keys, names, tips)
+		y += ORDER_ROW
+		var span := box.size.x - ORDER_X0 - ORDER_RIGHT
+		_order_row(box, y, "In danger", "danger_mode", Warrior.DANGER_MODES, Warrior.DANGER_NAMES, tips, ORDER_X0, span * 0.62)
+		var call := _button(box, Vector2(ORDER_X0 + span * 0.62, y), Vector2(span * 0.38 - 4.0, ORDER_ROW - 2.0), "Call for help")
+		call.toggle_mode = true
+		call.add_theme_font_size_override("font_size", 12)
+		call.tooltip_text = "In danger, it calls for help: the troops set to answer calls come to its aid (and Healers on In danger)"
+		call.pressed.connect(func(): _order_from_box("call_help", call.button_pressed))
+		orders_ui["call_help"] = call
+		y += ORDER_ROW
+	if not fighters.is_empty():
+		_order_row(box, y, "Answer calls", "answer", Warrior.ANSWERS, Warrior.ANSWER_NAMES, tips)
+		y += ORDER_ROW
+	# Something on the field to follow (a wagon, villagers): a row to follow it, or not.
+	var to_follow: Array = main.rules.followable() if not movers.is_empty() else []
+	if not to_follow.is_empty():
+		var fl := _label(box, Vector2(10, y + 2), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
 		fl.text = "Follow [J]"
-		var opts: Array = [null] + movers.slice(0, 2)
-		var bw := (box.size.x - 120.0 - 12.0) / opts.size() - 4.0
+		var opts: Array = [null] + to_follow.slice(0, 2)
+		var bw := (box.size.x - ORDER_X0 - ORDER_RIGHT) / opts.size() - 4.0
 		var fbtns := []
 		for i in opts.size():
 			var o = opts[i]
-			var b := _button(box, Vector2(120.0 + i * (bw + 4.0), 186), Vector2(bw, 30), "Its post" if o == null else o.label)
+			var b := _button(box, Vector2(ORDER_X0 + i * (bw + 4.0), y), Vector2(bw, ORDER_ROW - 2.0), "Its post" if o == null else o.label)
 			b.toggle_mode = true
-			b.add_theme_font_size_override("font_size", 13)
+			b.add_theme_font_size_override("font_size", 12)
 			b.tooltip_text = "Keeps to the post you gave it" if o == null else "Its post moves with the %s, and it keeps its place around it" % o.label.to_lower()
 			b.pressed.connect(func():
-				main.set_follow(o, [orders_for])
-				_refresh_orders(main, orders_for))
+				main.set_follow(o, orders_units.filter(func(w): return is_instance_valid(w) and not w.is_emplacement() and not w.wall_guard))
+				_refresh_orders(main, null))
 			b.set_meta("follow", o)
 			fbtns.append(b)
 		orders_ui["follow"] = fbtns
-		meaning_y += 36.0
-	var meaning := _label(box, Vector2(12, meaning_y), Vector2(box.size.x - 24, 80), Color(0.9, 0.9, 0.85), 12)
+		y += ORDER_ROW
+	# What the orders mean, in whatever room is left under the rows (all of it in a tooltip).
+	var meaning := _label(box, Vector2(10, y + 2), Vector2(box.size.x - 20, maxf(box.size.y - y - 4.0, 0.0)), Color(0.9, 0.9, 0.85), 11)
 	meaning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	meaning.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	meaning.mouse_filter = Control.MOUSE_FILTER_PASS
 	orders_ui["meaning"] = meaning
-	_refresh_orders(main, w)
+	_refresh_orders(main, null)
 
 
 func _order_from_box(field: String, value) -> void:
-	if orders_syncing or orders_main == null or orders_for == null or not is_instance_valid(orders_for):
+	if orders_syncing or orders_main == null:
 		return
-	if field == "leash" and not orders_for.zoned():
+	var units := orders_units.filter(func(w): return is_instance_valid(w) and not w.is_queued_for_deletion())
+	if units.is_empty():
 		return
-	orders_main.give_order(field, value, [orders_for])
-	_refresh_orders(orders_main, orders_for)
+	match field:
+		"care":
+			orders_main.give_order("priority", value, units.filter(func(w): return w.is_mobile_healer()))
+		"priority":
+			orders_main.give_order("priority", value, units.filter(func(w): return not w.is_mobile_healer()))
+		"area":
+			if value == "draw":
+				orders_main.start_area_pick(units)
+			else:
+				orders_main.give_order("area", orders_main.area_preset(value), units)
+		_:
+			orders_main.give_order(field, value, units)
+	_refresh_orders(orders_main, null)
 
 
-## Keeps the box in step with its unit (and with orders given by hotkey); follows the
-## selection to another unit, and closes when nothing that takes orders is selected.
-func _refresh_orders(main, w) -> void:
+## The one value `field` has across `units`, or null if they differ (no button lit then).
+func _common(units: Array, getter: Callable):
+	var vals := []
+	for w in units:
+		var v = getter.call(w)
+		if not vals.has(v):
+			vals.append(v)
+	return vals[0] if vals.size() == 1 else null
+
+
+## Keeps the box in step with its units (and with orders given by hotkey); follows the
+## selection to another unit or group, and closes when nothing that takes orders is selected.
+func _refresh_orders(main, _w) -> void:
 	if orders_box == null:
 		return
-	if not _takes_orders(w):
+	var now := _orders_targets(main)
+	if now.is_empty():
 		_close_orders()
 		return
-	if w != orders_for:
-		_open_orders(main, w)
+	if now != orders_units:
+		_open_orders(main, now)
 		return
-	var fixed: bool = w.is_emplacement() or w.wall_guard
-	var current := {"priority": w.priority, "commit": w.commit, "move_mode": w.move_mode}
+	var fighters := now.filter(func(w): return w.uses_targeting())
+	var healers := now.filter(func(w): return w.is_mobile_healer())
+	var movers := now.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	var answering := fighters.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	var current := {
+		"priority": _common(fighters.filter(func(w): return not w.is_mobile_healer()), func(w): return w.priority),
+		"care": _common(healers, func(w): return w.care()),
+		"commit": _common(fighters, func(w): return w.commit),
+		"move_mode": _common(movers, func(w): return w.move_mode),
+		"area": _common(movers, func(w): return main.area_preset_of(w.zone_rect()) if w.move_mode == "guard" else ""),
+		"danger_mode": _common(movers, func(w): return w.danger_mode),
+		"answer": _common(answering, func(w): return w.answer),
+	}
 	for field in current:
-		var off: bool = (field == "move_mode" and fixed) or (field != "move_mode" and not w.uses_targeting()
-				and not (field == "priority" and w.is_mobile_healer()))
+		if not orders_ui.has(field):
+			continue
 		for key in orders_ui[field]:
 			var b: Button = orders_ui[field][key]
-			b.set_pressed_no_signal(key == current[field] and not off)
-			b.disabled = off
-	var slider: HSlider = orders_ui["slider"]
-	var lim: Array = Warrior.LEASH_LIMITS.get(w.move_mode, [0.0, 1.0])
-	var sized: bool = Warrior.LEASH_LIMITS.has(w.move_mode) and not fixed
-	slider.editable = sized
-	slider.modulate.a = 1.0 if sized else 0.4
-	orders_syncing = true   # (a new range moves the handle, which would otherwise count as an order)
-	slider.min_value = lim[0]
-	slider.max_value = lim[1]
-	slider.set_value_no_signal(w.zone_radius() if sized else lim[0])
-	orders_syncing = false
-	var size_label: Label = orders_ui["size"]
-	size_label.text = Data.ft(w.zone_radius()) if sized else ("at its post" if w.move_mode == "hold" and not fixed else "any distance" if not fixed else "-")
+			b.set_pressed_no_signal(current[field] != null and key == current[field])
+			if field == "answer":
+				b.disabled = answering.is_empty()
+	if orders_ui.has("area"):
+		var drawing: bool = not main.area_pick.is_empty()
+		orders_ui["area"]["draw"].set_pressed_no_signal(drawing or (current["area"] == "" and current["move_mode"] == "guard"))
+	if orders_ui.has("call_help"):
+		var c = _common(now, func(w): return w.call_help)
+		orders_ui["call_help"].set_pressed_no_signal(c == true)
+		orders_ui["call_help"].text = "Call for help" + (": on" if c == true else ": off" if c == false else ": mixed")
 	for b in orders_ui.get("follow", []):
 		var fo = b.get_meta("follow") if b.has_meta("follow") else null
-		b.set_pressed_no_signal((fo == null and w.anchor == null) or (fo != null and w.anchor == fo))
+		var a = _common(movers, func(w): return w.anchor)
+		b.set_pressed_no_signal(a != null and a == fo or (fo == null and a == null and _common(movers, func(w): return w.anchor == null) == true))
 	var meaning: Label = orders_ui["meaning"]
-	meaning.text = orders_meaning(w)
-	if w.anchor != null and w.wards.is_empty():
-		meaning.text += " Follows the %s." % w.anchor.label.to_lower()
+	if now.size() == 1:
+		meaning.text = orders_meaning(now[0])
+		if now[0].anchor != null and now[0].wards.is_empty():
+			meaning.text += " Follows the %s." % now[0].anchor.label.to_lower()
+	else:
+		meaning.text = "Orders here go to all %d. A row with nothing lit: they differ. Their areas are outlined on the field." % now.size()
+	meaning.tooltip_text = meaning.text

@@ -1,6 +1,8 @@
 extends SceneTree
-## Unit orders: target commitment (Focused / Reactive), movement zones (Hold, Short
-## Leash, Guard Area, Free Roam) around each unit's post, and blows struck in passing.
+## Unit orders: target commitment (Focused / Reactive), movement zones (Hold, Guard Area:
+## a rectangle drawn on the field or picked from the presets, Free Roam), blows struck in
+## passing, danger reactions (falling back, calling for help), answering calls, Healers
+## getting to the hurt past enemies, and the orders panel for one troop or a group.
 ## Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/orders_test.gd
 ## Classic on the open meadow, the field held at 640 wide. Exits 1 if anything failed.
@@ -44,8 +46,9 @@ func _fresh() -> void:
 	main.spawn_queue.clear()
 
 
-## A troop posted at `at`, standing there already (no march in from the side).
-func _hire(kind: String, at: Vector2, mode := "free", leash := 0.0, commit := "focused", priority := "closest"):
+## A troop posted at `at`, standing there already (no march in from the side). On Guard
+## Area with a `size`, its area is a square that far out from its post each way.
+func _hire(kind: String, at: Vector2, mode := "free", size := 0.0, commit := "focused", priority := "closest"):
 	main.placing_type = kind
 	main.hire_at(at)
 	main.placing_type = ""
@@ -54,8 +57,8 @@ func _hire(kind: String, at: Vector2, mode := "free", leash := 0.0, commit := "f
 	w.max_hp = 1e6
 	w.hp = 1e6
 	main.give_order("move_mode", mode, [w])
-	if leash > 0.0:
-		w.leash[mode] = leash
+	if size > 0.0:
+		main.give_order("area", Rect2(w.post - Vector2.ONE * size, Vector2.ONE * size * 2.0), [w])
 	main.give_order("commit", commit, [w])
 	main.give_order("priority", priority, [w])
 	return w
@@ -83,6 +86,11 @@ func _run() -> void:
 	await _ranged()
 	await _specials()
 	await _persistence()
+	await _areas()
+	await _danger()
+	await _answers()
+	await _healers()
+	await _group_panel()
 	main.free()
 	print("%d checks, %d failed" % [checks, fails])
 	quit(1 if fails > 0 else 0)
@@ -202,15 +210,20 @@ func _zones() -> void:
 	b.position = Vector2(320, 600 - Warrior.RADIUS - 14 - 4)
 	await _frames(60)
 	check(w.target == b and b.hp < b.max_hp and w.position.distance_to(post) <= 2.0, "...and fights one that comes within reach, without moving")
-	# Short Leash, with a size of its own.
+	# A small area of its own (what Short Leash was).
 	await _fresh()
-	w = _hire("swordsman", post, "short", 60.0)
+	w = _hire("swordsman", post, "guard", 60.0)
 	var c = _foe("orc", Vector2(320, 600 - 60 - Warrior.RADIUS - 14 - 4))
 	far = 0.0
 	for f in 90:
 		await process_frame
 		far = maxf(far, w.position.distance_to(post))
-	check(w.target == c and c.hp < c.max_hp and far <= 62.0, "Short Leash at 60px: fights at the end of its leash and no further (%d px)" % roundi(far))
+	check(w.target == c and c.hp < c.max_hp and far <= 62.0, "A small area (60px each way): fights at its edge and no further (%d px)" % roundi(far))
+
+
+## How far `w` stands outside its area (0 inside).
+func _out(w) -> float:
+	return Warrior.rect_gap(w.zone_rect(), w.position)
 
 
 ## Two units on Guard Area at either side of the field: all the enemies are on the right.
@@ -318,9 +331,9 @@ func _specials() -> void:
 	var dashed := false
 	for f in 60 * 10:
 		await process_frame
-		far = maxf(far, sw.position.distance_to(post))
+		far = maxf(far, _out(sw))
 		dashed = dashed or sw.dash_left > 0.0
-	check(not sw.dash.is_empty() and far <= 114.0, "Swordsman with Unstoppable on Guard Area: its dashes stay in the area (furthest %d of 110px%s)" % [roundi(far), ", dashed" if dashed else ""])
+	check(not sw.dash.is_empty() and far <= 4.0, "Swordsman with Unstoppable on Guard Area: its dashes stay in the area (at most %dpx out%s)" % [roundi(far), ", dashed" if dashed else ""])
 	await _fresh()
 	var ma = _hire("martial", post, "guard", 110.0)
 	main.selected = ma
@@ -335,10 +348,10 @@ func _specials() -> void:
 		await process_frame
 		for w in main.get_warriors():
 			if w.kind == "martial":
-				far = maxf(far, w.position.distance_to(post))
+				far = maxf(far, Warrior.rect_gap(ma.zone_rect(), w.position))
 				if w.clone_of != null:
 					copies = maxi(copies, 1)
-	check(not ma.teleport.is_empty() and far <= 114.0, "Martial Artist with Shadow Step on Guard Area: never blinks out of it (furthest %d of 110px%s)" % [roundi(far), ", its Mirror Self copy too" if copies > 0 else ""])
+	check(not ma.teleport.is_empty() and far <= 4.0, "Martial Artist with Shadow Step on Guard Area: never blinks out of it (at most %dpx out%s)" % [roundi(far), ", its Mirror Self copy too" if copies > 0 else ""])
 	await _fresh()
 	var healer = _hire("healer", post, "guard", 80.0)
 	var near_ally = _hire("swordsman", post + Vector2(60, -70))
@@ -348,10 +361,10 @@ func _specials() -> void:
 	far = 0.0
 	for f in 60 * 4:
 		await process_frame
-		far = maxf(far, healer.position.distance_to(post))
+		far = maxf(far, _out(healer))
 	# (Both mend a little on their own while idle; only the near one is healed on top.)
-	check(near_ally.hp > far_ally.hp + 20.0 and far <= 82.0,
-			"Healer on Guard Area: heals the ally it can reach from its area, not one across the field (furthest %dpx)" % roundi(far))
+	check(near_ally.hp > far_ally.hp + 20.0 and far <= 4.0,
+			"Healer on Guard Area: heals the ally it can reach from its area, not one across the field (at most %dpx out)" % roundi(far))
 
 
 # --- Kept between waves ---------------------------------------------------------------
@@ -364,8 +377,8 @@ func _persistence() -> void:
 	main.upgrade_selected(0)
 	main.upgrade_selected(2)
 	main.selected = null
-	var keep := [w.move_mode, w.zone_radius(), w.commit, w.priority]
-	check(keep == ["guard", 150.0, "reactive", "weakest"] and w.total_upgrades() == 2, "Orders stay through upgrades")
+	var keep := [w.move_mode, w.zone_rect(), w.commit, w.priority, w.danger_mode, w.call_help, w.answer]
+	check(keep == ["guard", Rect2(170, 450, 300, 300), "reactive", "weakest", "fight", true, "ignore"] and w.total_upgrades() == 2, "Orders stay through upgrades")
 	for i in 2:
 		main.start_wave()
 		await _frames(5)
@@ -373,7 +386,7 @@ func _persistence() -> void:
 		for e in main.get_enemies():
 			e.free()
 		await _frames(90)
-	check(main.wave >= 2 and [w.move_mode, w.zone_radius(), w.commit, w.priority] == keep, "...and from wave to wave (now wave %d)" % main.wave)
+	check(main.wave >= 2 and [w.move_mode, w.zone_rect(), w.commit, w.priority, w.danger_mode, w.call_help, w.answer] == keep, "...and from wave to wave (now wave %d)" % main.wave)
 	var w2 = _hire("swordsman", Vector2(200, 600))
 	main.give_order("priority", "weakest", [w2])
 	main.give_order("commit", "reactive", [w2])
@@ -383,14 +396,254 @@ func _persistence() -> void:
 	main.placing_type = ""
 	var w3 = main.get_warriors()[-1]
 	check(w3.priority == "weakest" and w3.commit == "reactive", "A new hire starts with the orders last given to its kind")
-	# The panel: the slider changes the area size, and the box never resets it on opening.
+	# The panel: it opens without changing anything, and its buttons give orders.
 	main.selected = w
 	main.hud.refresh(main)
 	main.hud.toggle_orders(main)
-	check(main.hud.orders_box != null and w.zone_radius() == 150.0, "The orders panel opens on the selected unit without changing its area")
-	main.hud.orders_ui["slider"].value = 220.0
-	check(w.zone_radius() == 220.0, "...its slider sets the area size (220px)")
+	check(main.hud.orders_box != null and w.zone_rect() == Rect2(170, 450, 300, 300), "The orders panel opens on the selected unit without changing its area")
+	main.hud.orders_ui["area"]["left"].emit_signal("pressed")
+	check(w.move_mode == "guard" and w.zone_rect() == main.area_preset("left") and main.hud.orders_ui["area"]["left"].button_pressed,
+			"...a preset area (Left flank) is given and shown lit")
 	main.hud.orders_ui["move_mode"]["hold"].emit_signal("pressed")
-	check(w.move_mode == "hold" and not main.hud.orders_ui["slider"].editable, "...its buttons give orders (Hold: no area to size)")
+	check(w.move_mode == "hold" and not main.hud.orders_ui["area"]["left"].button_pressed, "...Hold: no area lit")
 	main.hud.toggle_orders(main)
 	check(main.hud.orders_box == null, "...and O closes it")
+
+
+# --- Guard Areas: drawn on the field, or picked from the presets ---------------------------
+
+func _areas() -> void:
+	await _fresh()
+	var a = _hire("swordsman", Vector2(120, 650))
+	var b = _hire("swordsman", Vector2(180, 650))
+	main.group = [a, b]
+	main.start_area_pick()
+	check(main.area_pick.size() == 2, "Draw area [D]: the group waits for an area to be drawn")
+	main.mouse_stand_in = Vector2(300, 300)
+	await _frames(2)
+	main.area_start = Vector2(300, 300)
+	main.mouse_stand_in = Vector2(560, 520)
+	await _frames(2)
+	main._finish_area()
+	main.mouse_stand_in = Vector2.INF
+	var drawn := Rect2(300, 300, 260, 220)
+	check(a.move_mode == "guard" and b.move_mode == "guard" and a.zone_rect() == drawn and b.zone_rect() == drawn and main.area_pick.is_empty(),
+			"...dragging out a rectangle gives them all that area (any size, away from their posts)")
+	main.group = []
+	# Its post is outside the area: it goes out to fight in the area, and only there.
+	var inside = _foe("orc", Vector2(430, 400))
+	var by_post = _foe("orc", Vector2(150, 560))
+	await _frames(60 * 7)
+	check(a.target == inside and inside.hp < inside.max_hp, "It fights an enemy in its area though its post is outside it")
+	check(by_post.hp == by_post.max_hp, "...and leaves one by its post alone (not in its area)")
+	inside.free()
+	await _frames(60 * 7)
+	check(a.position.distance_to(a.post) < 6.0, "...then goes back to its post")
+	# A small slip of the mouse isn't an area: still waiting.
+	main.start_area_pick([a])
+	main.mouse_stand_in = Vector2(200, 200)
+	await _frames(2)
+	main.area_start = Vector2(200, 200)
+	main.mouse_stand_in = Vector2(205, 204)
+	await _frames(2)
+	main._finish_area()
+	main.mouse_stand_in = Vector2.INF
+	check(a.zone_rect() == drawn and main.area_pick == [a], "A click without a drag doesn't change its area (it's still waiting for one)")
+	main._cancel()
+	check(main.area_pick.is_empty(), "...Esc stops waiting")
+	# Presets cover the field: the flanks overlap the centre, front and back halves meet.
+	var l: Rect2 = main.area_preset("left")
+	var c: Rect2 = main.area_preset("center")
+	var r: Rect2 = main.area_preset("right")
+	var front: Rect2 = main.area_preset("front")
+	var back: Rect2 = main.area_preset("back")
+	check(l.intersects(c) and r.intersects(c) and not l.intersects(r) and l.position.x == 0.0 and is_equal_approx(r.end.x, main.FIELD_W),
+			"Preset areas: the left and right flanks reach the edges and overlap the centre, not each other")
+	check(is_equal_approx(front.end.y, back.position.y) and front.position.y == main.DEPLOY_TOP and back.end.y == main.CASTLE_Y,
+			"...front and back halves split the field from the top down to the castle")
+	check(main.area_preset_of(l) == "left" and main.area_preset_of(drawn) == "", "...a preset is recognised as one; a drawn area isn't")
+
+
+# --- In danger: falling back, calling for help -------------------------------------------
+
+func _danger() -> void:
+	await _fresh()
+	var w = _hire("swordsman", Vector2(320, 640))
+	w.max_hp = 200.0
+	w.hp = 200.0
+	var e = _foe("orc", Vector2(320, 420))
+	await _frames(60 * 2)
+	check(not w.in_danger() and not main.calling(w), "Not in danger at full health")
+	w.hp = 50.0
+	w.take_damage(1.0)
+	await _frames(2)
+	check(w.in_danger() and main.calling(w), "Badly hurt and hit: in danger, and calling for help (on by default)")
+	main.give_order("call_help", false, [w])
+	await _frames(int(60 * (main.CALL_LINGER + 0.2)))
+	w.take_damage(1.0)
+	await _frames(2)
+	check(w.in_danger() and not main.calling(w), "...with Call for help off, it doesn't call")
+	# Fight on (the default): it keeps fighting.
+	check(w.target == e and not w.retreating, "Fight on: it keeps at its enemy")
+	# Fall back: it breaks off and makes for the Healer.
+	var h = _hire("healer", Vector2(120, 690))
+	main.give_order("priority", "heal", [h])
+	h.damage = 0.0   # (so it can't mend the swordsman before we've seen it fall back)
+	main.give_order("danger_mode", "fall_back", [w])
+	w.take_damage(1.0)
+	await _frames(60 * 2)
+	check(w.retreating and w.target == null and w.position.distance_to(h.position) < 70.0,
+			"Fall back: it breaks off and goes to the Healer (%dpx from it)" % roundi(w.position.distance_to(h.position)))
+	var e_hp: float = e.hp
+	await _frames(60)
+	check(e.hp == e_hp, "...and doesn't fight while it's falling back")
+	w.hp = w.max_hp * 0.7
+	await _frames(10)
+	check(not w.retreating, "...mended, it's back in the fight")
+	await _frames(60 * 3)
+	check(w.target == e, "...and goes back for the enemy")
+	# No Healer: it falls back to its post, then rejoins once nothing's come near for a moment.
+	h.free()
+	main.warriors_changed()
+	e.position = Vector2(320, 300)
+	w.position = Vector2(320, 340)
+	w.hp = 40.0
+	w.take_damage(1.0)
+	await _frames(5)
+	check(w.retreating, "With no Healer about: it falls back")
+	var closest := INF
+	for f in int(60 * (Warrior.SAFE_TIME + 4.0)):
+		await process_frame
+		closest = minf(closest, w.position.distance_to(w.post))
+	check(not w.retreating and closest < 20.0, "...to its post, and rejoins once no enemy has come near for a moment (got within %dpx of its post)" % roundi(closest))
+
+
+# --- Answering calls for help ------------------------------------------------------------
+
+func _answers() -> void:
+	for how in ["ignore", "now", "after"]:
+		await _fresh()
+		var caller = _hire("swordsman", Vector2(100, 600))
+		caller.max_hp = 200.0
+		caller.hp = 200.0
+		var attacker = _foe("orc", caller.position + Vector2(0, -Warrior.RADIUS - 16.0))
+		var helper = _hire("swordsman", Vector2(520, 600), "guard")
+		main.give_order("area", main.area_preset("right"), [helper])
+		main.give_order("answer", how, [helper])
+		var own = null
+		if how == "after":
+			own = _foe("orc", Vector2(520, 520), 100.0)   # its own enemy, in its area
+		await _frames(60)
+		caller.hp = 40.0
+		caller.take_damage(1.0)
+		var reached := false
+		var hit_own_first := false
+		for f in 60 * 10:
+			await process_frame
+			if caller.is_active() and caller.hp < 60.0:
+				caller.danger_t = Warrior.DANGER_HIT   # (still under attack: the call stands)
+			if own != null and is_instance_valid(own) and not own.dead and helper.target == attacker:
+				hit_own_first = true
+			if helper.position.distance_to(attacker.position) < 60.0:
+				reached = true
+		match how:
+			"ignore":
+				check(not reached and helper.answering == null, "Answer calls: Ignore: it stays in its area")
+			"now":
+				check(reached and attacker.hp < attacker.max_hp, "Answer calls: At once: it leaves its area (the right flank) to fight the caller's attacker")
+			"after":
+				check(how == "after" and (not is_instance_valid(own) or own.dead) and not hit_own_first and reached,
+						"Answer calls: After target: it finishes its own enemy first, then goes")
+	# The call over (no enemy left at the caller): back to its post and its area.
+	await _fresh()
+	var c2 = _hire("swordsman", Vector2(100, 600))
+	c2.max_hp = 200.0
+	var att = _foe("orc", c2.position + Vector2(0, -Warrior.RADIUS - 16.0), 60.0)
+	var hl = _hire("swordsman", Vector2(520, 600), "guard")
+	main.give_order("area", main.area_preset("right"), [hl])
+	main.give_order("answer", "now", [hl])
+	c2.hp = 40.0
+	c2.take_damage(1.0)
+	for f in 60 * 8:
+		await process_frame
+		if is_instance_valid(att) and not att.dead:
+			c2.danger_t = Warrior.DANGER_HIT
+	await _frames(60 * 5)
+	check((not is_instance_valid(att) or att.dead) and hl.answering == null and hl.position.distance_to(hl.post) < 8.0,
+			"...the call answered (its attacker down), it goes back to its post")
+
+
+# --- Healers: past enemies to the hurt; Allies in danger -------------------------------------
+
+func _healers() -> void:
+	# An enemy standing between a Healer and a downed ally: it goes round and revives them
+	# (it used to back away from the enemy and never get there).
+	await _fresh()
+	var h = _hire("healer", Vector2(320, 700))
+	var down = _hire("swordsman", Vector2(320, 450))
+	var blocker = _foe("orc", Vector2(320, 580))
+	down.take_damage(1e9)
+	var revived := false
+	for f in 60 * 14:
+		await process_frame
+		if down.is_active():
+			revived = true
+			break
+	check(revived, "Healer: an enemy in the way doesn't stop it reaching and reviving a downed ally")
+	# Allies in danger: it crosses the field (out of its area) to the one in danger first.
+	await _fresh()
+	h = _hire("healer", Vector2(520, 650), "guard", 60.0)
+	main.give_order("priority", "danger", [h])
+	var hurt = _hire("swordsman", Vector2(560, 600))
+	hurt.hp = hurt.max_hp * 0.5
+	var danger = _hire("swordsman", Vector2(100, 450))
+	danger.max_hp = 300.0
+	danger.hp = 80.0
+	danger.take_damage(1.0)
+	var got_there := false
+	for f in 60 * 12:
+		await process_frame
+		danger.danger_t = Warrior.DANGER_HIT
+		if h.position.distance_to(danger.position) < h.attack_range + Warrior.RADIUS * 2.0:
+			got_there = true
+			break
+	check(got_there and h.position.distance_to(danger.position) < h.attack_range + 50.0,
+			"Healer on In danger: crosses the field, out of its area, to heal the ally in danger first")
+
+
+# --- The orders panel for a group ----------------------------------------------------------
+
+func _group_panel() -> void:
+	await _fresh()
+	main.wave_active = false
+	var a = _hire("swordsman", Vector2(200, 600))
+	var b = _hire("archer", Vector2(260, 600))
+	var h = _hire("healer", Vector2(320, 640))
+	main.give_order("priority", "weakest", [a])
+	main.selected = null
+	main.group = [a, b, h]
+	main.hud.refresh(main)
+	check(main.hud.target_btn.visible, "A group has an Orders button")
+	main.hud.toggle_orders(main)
+	var ui: Dictionary = main.hud.orders_ui
+	check(main.hud.orders_box != null and main.hud.orders_units.size() == 3 and ui.has("priority") and ui.has("care"),
+			"...the panel opens for all three, with a Target row and a Healers row")
+	check(not ui["priority"]["weakest"].button_pressed and not ui["priority"]["closest"].button_pressed, "...differing targets: nothing lit in that row")
+	ui["priority"]["strongest"].emit_signal("pressed")
+	check(a.priority == "strongest" and b.priority == "strongest" and h.priority == "revive" and ui["priority"]["strongest"].button_pressed,
+			"...Target goes to the fighters at once (not the Healer)")
+	ui["care"]["danger"].emit_signal("pressed")
+	check(h.priority == "danger", "...the Healers row goes to the Healer")
+	ui["danger_mode"]["fall_back"].emit_signal("pressed")
+	ui["answer"]["now"].emit_signal("pressed")
+	ui["call_help"].button_pressed = false
+	ui["call_help"].emit_signal("pressed")
+	check([a, b, h].all(func(w): return w.danger_mode == "fall_back" and not w.call_help) and a.answer == "now" and b.answer == "now",
+			"...In danger, Call for help and Answer calls go to them all")
+	ui["area"]["center"].emit_signal("pressed")
+	check([a, b, h].all(func(w): return w.move_mode == "guard" and w.zone_rect() == main.area_preset("center")), "...and a preset area")
+	ui["area"]["draw"].emit_signal("pressed")
+	check(main.area_pick.size() == 3, "...Draw waits for an area to be drawn for all three")
+	main._cancel()
+	main.hud.refresh(main)
+	check(main.hud.orders_box == null, "...and with nothing selected the panel closes")

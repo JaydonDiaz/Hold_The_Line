@@ -169,15 +169,14 @@ func enter_next() -> void:
 	var y: float = float(lines()[0]["y"]) + 30.0 if not lines().is_empty() else 400.0
 	for w in out:
 		var p: Vector2 = main.paths.open_spot(main._clamp_post(Vector2(w.position.x, y + randf_range(-10.0, 10.0))))
+		if w.guard_area.has_area():
+			w.guard_area.position += p - w.post   # its area comes down the road with it
 		w.position = p
 		w.post = p
 		w.fitted_post = Vector2.INF
 		w.route = PackedVector2Array()
 		w.reset_targeting(true)   # (nothing left over from the old ground: their orders stand)
 		w.anchor = null
-		if w.move_mode == "short":
-			w.move_mode = "guard"
-			w.set_leash(140.0)
 	var pay := 100 + 25 * stretch
 	main.gold += pay + back
 	var forgiven := mini(through, REGROUP)
@@ -210,13 +209,15 @@ func action() -> void:
 	for w in main.get_warriors():
 		if w.is_active() and not w.is_emplacement() and not w.wall_guard and not w.summoned:
 			w.anchor = null
-			var p: Vector2 = main._clamp_post(Vector2(w.post.x, y + randf_range(-10.0, 10.0)))
-			w.order_to(main.paths.open_spot(p))
+			var p: Vector2 = main.paths.open_spot(main._clamp_post(Vector2(w.post.x, y + randf_range(-10.0, 10.0))))
+			if w.guard_area.has_area():
+				w.guard_area.position += p - w.post   # its area falls back with it
+			w.order_to(p)
 			# Troops roaming free hold the new line once they're on it (in the camp, close
 			# in); orders the player gave them otherwise stand.
 			if w.move_mode == "free" or camp:
-				w.move_mode = "short" if camp else "guard"
-				w.set_leash(40.0 if camp else 140.0)
+				w.move_mode = "guard"
+				w.guard_around(40.0 if camp else 140.0)
 	main.hud.show_message("Falling back: hold the camp!" if camp else "Falling back: hold the %s!" % lines()[phase]["name"].to_lower())
 
 

@@ -14,6 +14,10 @@ extends SceneTree
 ##   engineer     an emplacement waits for an Engineer to build it
 ##   route        a troop walks round a wall to get where it's going
 ##   group        box-style groups: select all, keep only a kind, move together
+##   motion       how units move on screen: the walk cycle, blinking, turning about,
+##                toppling when knocked out, being carried by a drag (lifted, swinging,
+##                set down with a bump; dropped where it can't stand, it hops back),
+##                and enemies' attack poses
 ##   knight       the Knight: Charge at tier III is a spear knight; with an axe or two swords
 ##                as well, the spear's on his back till he charges, then they swap
 ## Run from the project folder:
@@ -73,7 +77,7 @@ func _care() -> void:
 	main.selected = h
 	main.hud.refresh(main)
 	main.hud.toggle_orders(main)
-	var row: Dictionary = main.hud.orders_ui.get("priority", {})
+	var row: Dictionary = main.hud.orders_ui.get("care", {})
 	check(row.keys() == Warrior.HEAL_PRIORITIES and not row["revive"].disabled and row["revive"].button_pressed, "...the orders panel shows them for a Healer (Focus), Revive picked")
 	main.hud.toggle_orders(main)
 	# Revive first vs Heal first: one troop downed, one hurt, both in reach.
@@ -145,7 +149,7 @@ func _wants(s: String) -> bool:
 
 
 func _run() -> void:
-	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group", "knight", "martial"]:
+	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group", "knight", "martial", "motion"]:
 		if _wants(s):
 			await call("_" + s)
 	if main != null:
@@ -501,3 +505,105 @@ func _martial() -> void:
 	Sprites.skin["martial"] = "nothing"
 	check(Sprites.look_kind("martial") == "martial", "...an unknown skin is ignored")
 	Sprites.skin.erase("martial")
+
+
+func _motion() -> void:
+	# The walk cycle: two feet, so a foot lifts on each step; a robe keeps its two frames.
+	var sw: Array = Sprites.frames("swordsman")
+	var step := [Sprites.step(sw, 0), Sprites.step(sw, 1), Sprites.step(sw, 2), Sprites.step(sw, 3)]
+	check(step[0] == sw[0] and step[2] == sw[0] and step[1] != sw[0] and step[3] != sw[0] and step[1] != step[3],
+			"Walk cycle: plant, left foot up, plant, right foot up (a Swordsman)")
+	var fr: Array = Sprites.frames("frost")
+	var sl: Array = Sprites.frames("slime")
+	check(Sprites.step(fr, 1) == fr[1] and Sprites.step(fr, 3) == fr[1] and Sprites.step(fr, 2) == fr[0] and Sprites.step(sl, 1) == sl[1],
+			"...a robe to the ground (the Frost Witch) or a slime keeps alternating its own two frames")
+	check(Sprites.blink(Sprites.frames("archer")[0]) != null and Sprites.blink(Sprites.frames("slime")[0]) == null,
+			"Blinking: an Archer has eyes to shut; a slime doesn't")
+	var orc = Sprites.pose("orc", "strike")
+	check(orc != null and orc.get_width() > Sprites.SIZE and Sprites.pose("orc", "raise") != null and Sprites.pose("troll", "strike") != null
+			and Sprites.pose("ogre_king", "strike") != null and Sprites.pose("wolf", "strike") != null and Sprites.pose("slime", "strike") == null,
+			"Enemy attack poses: the Orc, Troll and Ogre King raise their weapons and strike (reaching out past the sprite), a Wolf bites; a slime has none")
+
+	await _fresh()
+	var w = _hire("swordsman", Vector2(320, 600))
+	await _frames(5)
+	# Turning about: it waits a moment (no twitching), then swings round quickly.
+	w.flip = -w.flip
+	await _frames(3)
+	var held_on: bool = signf(w.turn) == -w.flip
+	await _frames(20)
+	check(held_on and w.turn == w.flip, "Turning: the drawn facing holds for a moment, then turns all the way (%.2f)" % w.turn)
+	# Carried by a drag: lifted, swinging behind the way it's dragged, set down with a bump.
+	w.held = true
+	for i in 12:
+		w.position.x += 5.0
+		w.post = w.position
+		await _frames(1)
+	check(w.lift > 0.9 and w.sway > 0.05, "Carried: it's lifted off its feet and swings head-first after the drag (lift %.2f sway %.2f)" % [w.lift, w.sway])
+	var motion: Array = w._body_motion()
+	check(motion[0].y < -10.0, "...drawn up off the ground (%.1fpx)" % motion[0].y)
+	w.held = false
+	await _frames(20)
+	check(w.lift == 0.0 and w.land_t > 0.0, "...let go, it comes down and lands with a bump")
+	await _frames(40)
+	check(w.land_t == 0.0 and w._body_motion()[0] == Vector2.ZERO or not w._idling(), "...then settles")
+	# Through the real drag: a click picks it out without lifting it; dragging it lifts it.
+	main.mouse_stand_in = w.post
+	await _frames(3)
+	check(main.hovered == w and w.perk > 0.0, "Hovered between waves, it perks up")
+	Input.parse_input_event(_press(true))
+	await _frames(1)
+	main._start_drag(w)   # (as a left click on it does: the press itself lands at the real mouse)
+	await _frames(4)
+	check(main.dragging == w and not w.held and w.lift == 0.0, "...a click (no drag) picks it out without lifting it")
+	for i in 10:
+		main.mouse_stand_in += Vector2(5, 0)
+		await _frames(1)
+	check(w.held and w.lift > 0.5 and w.position.x > main.drag_origin.x + 30.0, "...dragged, it's lifted and carried (%.0fpx)" % (w.position.x - main.drag_origin.x))
+	Input.parse_input_event(_press(false))
+	await _frames(20)
+	check(main.dragging == null and not w.held and w.lift == 0.0 and w.post.x > main.drag_origin.x + 30.0, "...let go, it's set down at its new post")
+	main.mouse_stand_in = Vector2.INF
+	await _frames(40)
+	# Dropped where it can't stand: put back at its old post, it hops back from where it was let go.
+	main.dragging = w
+	main.drag_origin = w.post
+	w.held = true
+	w.post = Vector2(w.post.x, main.CASTLE_Y + 40.0)
+	w.position = w.post
+	var let_go: Vector2 = w.position
+	main._end_drag()
+	check(not w.held and w.position == main.drag_origin and w.hop_t > 0.0 and w.position + w.hop_from == let_go,
+			"Dropped where it can't stand: it goes back to its old post, hopping back from where it was let go")
+	await _frames(30)
+	check(w.hop_t == 0.0 and w.land_t > 0.0, "...and lands there")
+	# Knocked out: it topples over (not there in one frame), and bounces up when it recovers.
+	main.wave_active = true
+	w.take_damage(1e9)
+	await _frames(2)
+	var early: float = w.down_for
+	await _frames(30)
+	check(early > 0.0 and early < 0.1 and w.down_for > 0.4, "Knocked out: it topples over over a moment (%.2fs in)" % w.down_for)
+	w.down_timer = 0.0
+	w.hp = w.max_hp
+	await _frames(2)
+	check(w.is_active() and w.land_t > 0.0 and w.down_for == 0.0, "...back on its feet, it bounces up")
+	# A wave held: everyone cheers, hopping on the spot (each starting at its own moment).
+	var b = _hire("archer", Vector2(200, 600))
+	main._end_wave()
+	check(w.cheer_t > 0.0 and b.cheer_t > 0.0 and main.get_warriors().all(func(x): return x.is_emplacement() or x.cheer_t > 0.0),
+			"Wave held: the troops cheer")
+	var high := 0.0
+	for i in 60:
+		await _frames(1)
+		high = minf(high, w._body_motion()[0].y)
+	check(high < -6.0, "...hopping up and down (%.1fpx)" % high)
+	main.wave_active = false
+
+
+func _press(down: bool) -> InputEventMouseButton:
+	var b := InputEventMouseButton.new()
+	b.button_index = MOUSE_BUTTON_LEFT
+	b.pressed = down
+	b.button_mask = MOUSE_BUTTON_MASK_LEFT if down else 0
+	return b
