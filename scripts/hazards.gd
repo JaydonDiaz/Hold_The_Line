@@ -18,6 +18,11 @@ extends Node2D
 ## Maps keep objectives, lanes and the castle reachable with every patch broken
 ## (tests/terrain_test.gd checks).
 ##
+## Whiteout (the blizzard's "whiteout": true): a haze hangs over the field all the while,
+## and an enemy fades into the snow the further it is from any of your troops (and any
+## mover you're escorting): plain within SEE_CLEAR, faint beyond SEE_FAR, nearer still in
+## a gust. Only the drawing changes; your troops fight what's in reach as ever.
+##
 ## Blizzards (mission "weather": {"blizzard": {"first", "every", "length", "warn"}}): while
 ## a wave is on, a gust blows in every so often, announced WARN seconds ahead. In a gust
 ## everyone moves GUST_SLOW slower and ranged attacks come GUST_RATE slower (troops and
@@ -34,6 +39,8 @@ const IMMUNE := ["frost", "frosttower"]
 const FROST_POWER := 0.3   # Frost Witches and Frost Towers in a gust: this much more damage...
 const FROST_RATE := 0.2    # ...and this much faster
 const OUTLINE := Color(0.1, 0.07, 0.1)
+const SEE_CLEAR := 150.0
+const SEE_FAR := 230.0
 
 var main
 var raw := {}              # the map as given (thin ice still whole)
@@ -97,6 +104,9 @@ func _process(delta: float) -> void:
 	_refit()
 	_update_ice(delta)
 	_update_blizzard(delta)
+	if blizzard.get("whiteout", false):
+		for e in main.get_enemies():
+			e.modulate.a = visibility(e.position)
 	queue_redraw()
 	sky.queue_redraw()
 
@@ -282,6 +292,22 @@ func gust_warning() -> float:
 	return gust_in if gust_in <= float(blizzard.get("warn", 4.0)) else -1.0
 
 
+## How plainly an enemy at p can be seen in a whiteout (1: plainly; at least 0.1).
+func visibility(p: Vector2) -> float:
+	if not blizzard.get("whiteout", false):
+		return 1.0
+	var far: float = SEE_FAR - 60.0 * main.gust
+	var clear: float = SEE_CLEAR - 50.0 * main.gust
+	var d: float = far + 1.0
+	for w in main.warriors_near(p, far):
+		if w.is_active():
+			d = minf(d, p.distance_to(w.position))
+	for o in main.rules.objectives():
+		if o.is_mover() and o.is_target():
+			d = minf(d, p.distance_to(o.position))
+	return clampf(1.0 - (d - clear) / maxf(far - clear, 1.0), 0.1, 1.0)
+
+
 ## How much a unit of `kind` is slowed by the weather now (1: not at all).
 func speed_factor(kind: String) -> float:
 	return 1.0 if IMMUNE.has(kind) else 1.0 - GUST_SLOW * main.gust
@@ -350,6 +376,8 @@ func _draw_sky() -> void:
 	var w: float = main.FIELD_W
 	var h: float = main.FIELD_H
 	var g: float = main.gust
+	if blizzard.get("whiteout", false):
+		sky.draw_rect(Rect2(0, 0, w, h), Color(0.92, 0.95, 1.0, 0.1))   # the haze that never lifts
 	if g > 0.0:
 		sky.draw_rect(Rect2(0, 0, w, h), Color(0.92, 0.95, 1.0, 0.22 * g))
 		var n := int(160 * g * w / 640.0)
@@ -367,6 +395,6 @@ func _draw_sky() -> void:
 	if msg != "":
 		var font := ThemeDB.fallback_font
 		var size := font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
-		var at := Vector2((w - size.x) / 2.0, 118.0)
+		var at := Vector2((w - size.x) / 2.0, 176.0)   # (below the foe cards and the mission's status line)
 		sky.draw_rect(Rect2(at - Vector2(10, 18), size + Vector2(20, 10)), Color(0.08, 0.12, 0.2, 0.75))
 		sky.draw_string(font, at, msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.85, 0.95, 1.0))

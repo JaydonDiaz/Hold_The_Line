@@ -7,7 +7,8 @@ extends "res://tests/campaign_test.gd"
 ##     diffs=easy,normal,hard   seeds=3   trained=0,1   style=mixed   width=640
 ##     prior=min,all   (a first southern mission played with no other southern people
 ##                      joined yet, or with the other two regions already secured)
-##     sets=gw+dd,gw+mv,dd+mv,gw+dd+mv     (Sable Crossing's southern beacons)
+##     sets=gw+dd,gw+mv,dd+mv,gw+dd+mv     (Sable Crossing's southern beacons; for a northern
+##                      mission, which southern peoples came north with you)
 ## Width 640 is the campaign's portrait field; 1040 plays it stretched wide.
 
 const ArmyBot = preload("res://tests/army_bot.gd")
@@ -15,6 +16,7 @@ const SOUTH := ["gw_exodus", "gw_watchfires", "gw_trail", "mv_wounded", "mv_sanc
 const REGION := {"gw": "greenwood", "mv": "mercyvale", "dd": "deepdelve"}
 const REGION_MISSIONS := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
 const ACT1 := ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops"]
+const NORTH_MISSIONS := {"frostmarch": ["fm_pass", "fm_vigil"]}   # (Phase 4: grows region by region)
 ## Trained: what a player has typically spent on each kind by the south (a few points on
 ## the Knights, a couple on each people's units). Untrained: nothing (tier I only).
 const TRAINED := {"swordsman": [3, 2, 3, 1], "archer": [2, 1, 2, 1], "tower": [2, 1, 2, 1], "healer": [2, 1, 2, 1],
@@ -44,7 +46,22 @@ func _run() -> void:
 		return
 	for id in opts["missions"].split(","):
 		var setups := []   # [label, completed, allies]
-		if id == "sable_crossing":
+		var region: String = CD.MISSIONS[id]["territory"]
+		if NORTH_MISSIONS.has(region):
+			# The North: Sable won with one of the southern sets; the region's first mission
+			# too for its later ones.
+			for s in opts["sets"].split(","):
+				var regions: Array = Array(s.split("+")).map(func(r): return REGION[r])
+				var done := ACT1.duplicate()
+				for r in regions:
+					done += REGION_MISSIONS[r]
+				done.append("sable_crossing")
+				var allies := ["stonehollow"] + regions
+				if (NORTH_MISSIONS[region] as Array)[0] != id:
+					done.append(NORTH_MISSIONS[region][0])
+					allies.append(region)
+				setups.append([s, done, allies])
+		elif id == "sable_crossing":
 			for s in opts["sets"].split(","):
 				var regions: Array = Array(s.split("+")).map(func(r): return REGION[r])
 				var done := ACT1.duplicate()

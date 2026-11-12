@@ -9,6 +9,11 @@ extends SceneTree
 ##                 that can't (stunned) falls through, goes down and is hauled ashore; it's
 ##                 open water after, every lane still reaching the castle; nothing can be
 ##                 built on thin ice
+##   F  Frostmarch the Frozen Pass is fair whatever came north: two Frost Witches lent, more
+##                 to be hired if they fall, so Slimes can always be hurt; blizzards blow;
+##                 the Vigil's stones stay reachable with every patch of thin ice broken;
+##                 Whiteout's sled road keeps well clear of thin ice, and enemies far from
+##                 your troops fade into the snow
 ##   B  blizzard   gusts are announced before they blow, then slow everyone's movement and
 ##                 ranged fire for a while; Frost Witches aren't slowed and get stronger;
 ##                 Classic has none
@@ -92,6 +97,7 @@ func _run() -> void:
 	await _ground()
 	await _ice()
 	await _blizzard()
+	await _frostmarch()
 	if main != null:
 		main.free()
 	if FileAccess.file_exists(TEST_SAVE):
@@ -212,3 +218,100 @@ func _blizzard() -> void:
 	main.wave_active = true
 	await _frames(60 * 3)
 	check(not main.hazards.active() and main.gust == 0.0, "B  Classic: no ice, no weather")
+
+
+# --- Frostmarch's missions -------------------------------------------------------------------
+
+const CD = preload("res://scripts/campaign_data.gd")
+const Maps = preload("res://scripts/maps.gd")
+
+## Straight into a northern mission, with the south behind you (Sable won with `south`).
+func _mission(mid: String, south: Array, extra_done := [], extra_allies := []) -> void:
+	var c = root.get_node("Campaign")
+	c.new_campaign("normal")
+	var done := ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops", "sable_crossing"]
+	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
+	for r in south:
+		done += chains[r]
+	c.completed = done + extra_done
+	c.allies = ["stonehollow"] + south + extra_allies
+	if main != null:
+		main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main.hud.hide_mode_select()
+	main.start_mission(mid)
+	await process_frame
+	if main.hud.story != null:
+		main.hud.story.skip()
+	main._lock_portrait(true)
+	await _frames(3)
+
+
+func _frostmarch() -> void:
+	# The Frozen Pass, coming north with Mercy Vale and Deepdelve (no Archers, no magic).
+	await _mission("fm_pass", ["mercyvale", "deepdelve"])
+	var lent: Array = main.get_warriors().filter(func(w): return w.kind == "frost")
+	check(main.map_id == "frostmarch_pass" and lent.size() == 2 and not main.hazards.blizzard.is_empty(),
+			"F  the Frozen Pass: its map, two Frost Witches lent, blizzards blowing")
+	var m: Dictionary = CD.MISSIONS["fm_pass"]
+	var slimes := 0
+	for w in m["pool"]:
+		slimes += (m["pool"][w] as Array).count("slime")
+	check(slimes > 0 and main.allowed("frost") and not main.allowed("mage") and not main.allowed("martial"),
+			"F  ...Slimes come, and with no magic or ki of its own this army can hire Frost Witches here")
+	for w in lent:
+		w.free()
+	main.warriors_changed()
+	main.gold = 999
+	main.placing_type = "frost"
+	main.hire_at(Vector2(320, 600))
+	main.placing_type = ""
+	var fresh = main.get_warriors().filter(func(w): return w.kind == "frost")
+	check(fresh.size() == 1, "F  ...the two lent fallen, another Frost Witch can still be hired")
+	main.wave_active = true
+	var slime = _foe("slime", fresh[0].position + Vector2(0, -60), 70.0)
+	var hp0: float = slime.hp
+	await _frames(60 * 3)
+	check(not is_instance_valid(slime) or slime.dead or slime.hp < hp0, "F  ...and it hurts a Slime")
+	# The Vigil: every stone reachable by your troops with all the thin ice broken.
+	await _mission("fm_vigil", ["greenwood", "deepdelve"], ["fm_pass"], ["frostmarch"])
+	var hz = main.hazards
+	for n in hz.ice.size():
+		hz._break(n)
+	await _frames(3)
+	var unreached := []
+	for o in main.rules.objectives():
+		var ok := false
+		for d in [Vector2(0, 50), Vector2(0, -50), Vector2(50, 0), Vector2(-50, 0)]:
+			if main.paths.troop_can_stand(o.position + d) and not main.paths.blocked(o.position + d, 18.0):
+				ok = true
+		if not ok:
+			unreached.append(o.label)
+	check(hz.ice.all(func(p): return p["state"] == "broken") and unreached.is_empty(),
+			"F  the Vigil: every stone still reachable with all the thin ice broken%s" % ("" if unreached.is_empty() else " (not: %s)" % ", ".join(unreached)))
+	# Whiteout: the sled's road keeps clear of thin ice (by more than the sled's size).
+	var map: Dictionary = Maps.get_map("frostmarch_crossing")
+	var route: Array = map["route"]
+	var nearest := INF
+	for t in map["terrain"]:
+		if t["kind"] != "thin_ice":
+			continue
+		var poly := PackedVector2Array(t["poly"])
+		for i in route.size() - 1:
+			for k in 20:
+				var q: Vector2 = (route[i] as Vector2).lerp(route[i + 1], k / 20.0)
+				var d := INF
+				for j in poly.size():
+					d = minf(d, q.distance_to(Geometry2D.get_closest_point_to_segment(q, poly[j], poly[(j + 1) % poly.size()])))
+				if Geometry2D.is_point_in_polygon(q, poly):
+					d = 0.0
+				nearest = minf(nearest, d)
+	check(nearest > 40.0, "F  Whiteout: the sled's road keeps %dpx clear of any thin ice" % roundi(nearest))
+	await _mission("fm_whiteout", ["greenwood", "mercyvale"], ["fm_pass"], ["frostmarch"])
+	main.wave_active = true
+	var near = _foe("orc", main.rules.wagon.position + Vector2(0, -80))
+	var far = _foe("orc", Vector2(560, 150))
+	await _frames(5)
+	check(near.modulate.a > 0.95 and far.modulate.a < 0.3, "F  ...in the whiteout an enemy far from your troops fades into the snow (%.2f), one near the sled is plain (%.2f)" % [far.modulate.a, near.modulate.a])

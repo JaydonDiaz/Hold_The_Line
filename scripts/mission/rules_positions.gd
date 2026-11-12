@@ -112,7 +112,7 @@ func status() -> String:
 	return text
 
 
-const SHORT := {"watchtower": "Towers", "workshop": "Shops", "beacon": "Beacon"}
+const SHORT := {"watchtower": "Towers", "workshop": "Shops", "beacon": "Beacon", "stone": "Stones"}
 
 
 func panel_status() -> String:

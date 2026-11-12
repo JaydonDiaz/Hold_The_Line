@@ -372,7 +372,8 @@ func _replay_xp() -> void:
 func _south_training() -> void:
 	campaign.territories = CD.TERRITORIES
 	campaign.missions = CD.MISSIONS
-	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
+	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"],
+			"frostmarch": ["fm_pass", "fm_vigil"]}   # (and the North, region by region in Phase 4)
 	for f in chains:
 		campaign.new_campaign("normal")
 		_win("ashwatch")
@@ -417,6 +418,17 @@ func _south_training() -> void:
 	for i in 5:
 		_win("gw_trail")
 	check(campaign.bonus_points("archer") == 1 and campaign.completed.count("gw_trail") == 1, "The Hunter's Trail won five times: still one bonus point (%d)" % campaign.bonus_points("archer"))
+	# Whiteout (Frostmarch's optional mission): a Frost Witch point, the first win only, and
+	# only once the Covenant has joined.
+	campaign.new_campaign("normal")
+	for m in ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops", "gw_exodus", "gw_watchfires", "mv_wounded", "mv_sanctuary", "sable_crossing"]:
+		_win(m)
+	check(not campaign.optional_missions("frostmarch").has("fm_whiteout"), "Whiteout isn't open before the Covenant joins")
+	_win("fm_pass")
+	check(campaign.optional_missions("frostmarch").has("fm_whiteout"), "...it is once they have")
+	for i in 3:
+		_win("fm_whiteout")
+	check(campaign.bonus_points("frost") == 1, "...won three times: one Frost Witch point (%d)" % campaign.bonus_points("frost"))
 
 
 ## Three campaigns side by side, one in each save: each keeps its own missions, peoples,

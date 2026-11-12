@@ -35,7 +35,7 @@ const HELD_SPEED := 0.35   # a wagon with an enemy at it crawls on at this share
 
 var main
 var id := ""
-var kind := "workshop"     # "workshop", "watchtower", "beacon", "civilian", "wagon", "zone", "line"
+var kind := "workshop"     # "workshop", "watchtower", "beacon", "stone", "civilian", "wagon", "zone", "line"
 var RADIUS := 26.0         # its size, for reaching it (a villager is a person's size)
 var label := "Workshop"    # its name in messages
 var max_hp := 400.0
@@ -170,7 +170,7 @@ func take_damage(amount: float) -> void:
 		main.spawn_burst(position, 40.0, Color(0.7, 0.6, 0.5))
 		main.spawn_text(position + Vector2(0, -40), "%s %s!" % [label, "lost" if is_mover() else "destroyed"], Color(1, 0.4, 0.3))
 		main.sfx("boom", 0.8)
-		if is_solid() or kind in ["workshop", "watchtower", "beacon"]:
+		if is_solid() or kind in ["workshop", "watchtower", "beacon", "stone"]:
 			main.paths.invalidate()   # rubble: the way through is open again
 		destroyed.emit(self)
 
@@ -276,6 +276,8 @@ func _draw_body() -> void:
 			_draw_beacon()
 		"wagon":
 			_draw_wagon()
+		"stone":
+			_draw_stone()
 		_:
 			_draw_workshop()
 	cv.draw_set_transform(Vector2.ZERO)
@@ -299,6 +301,8 @@ func _top() -> float:
 			return -168.0
 		"wagon":
 			return -66.0
+		"stone":
+			return -72.0
 	return -62.0
 
 
@@ -359,6 +363,41 @@ func _draw_workshop() -> void:
 	_b(-1, -3, 2, 4, Color(1.0, 0.55, 0.2) * glow)
 	_b(-6, -6, 3, 2, Color(0.85, 0.62, 0.32))
 	_b(-5, -4, 1, 2, Color(0.45, 0.3, 0.2))
+
+
+## A standing stone of the Covenant (Frostmarch): a tall grey menhir, snow on its crown and
+## heaped at its foot, frost runes cut down its face glowing blue (brighter during a rite),
+## cracks opening as it's worn down.
+func _draw_stone() -> void:
+	var grey := Color(0.56, 0.58, 0.62)
+	var dark := Color(0.4, 0.42, 0.48)
+	var lit := Color(0.7, 0.72, 0.76)
+	_b(-7, 0, 14, 2, Color(0.92, 0.95, 1.0))   # snow round the foot
+	_b(-5, -20, 10, 21, OUTLINE)
+	_b(-6, -16, 12, 17, OUTLINE)
+	_b(-4, -19, 8, 20, grey)
+	_b(-5, -15, 10, 16, grey)
+	_b(2, -15, 3, 16, dark)          # its shadowed side
+	_b(-4, -19, 2, 18, lit)          # lit edge
+	_b(-4, -20, 8, 2, Color(0.95, 0.97, 1.0))   # snow on its crown
+	_b(-5, -17, 2, 1, Color(0.95, 0.97, 1.0))
+	var glow := 0.7 + 0.3 * sin(t * 2.5) if main != null and main.wave_active else 0.55
+	var rune := Color(0.45, 0.85, 1.0) * glow
+	for y in [-16, -12, -8, -4]:
+		_b(-1, y, 2, 1, rune)
+		_b(-2, y + 1, 1, 1, rune)
+		_b(1, y + 1, 1, 1, rune)
+	if main != null and main.wave_active:
+		cv.draw_circle(Vector2(0, -30), 22.0, Color(0.5, 0.85, 1.0, 0.08 + 0.05 * sin(t * 2.5)))
+	# Cracks as it's worn down.
+	var worn := 1.0 - hp / max_hp
+	if worn > 0.33:
+		_b(-2, -14, 1, 4, OUTLINE)
+		_b(-1, -10, 1, 3, OUTLINE)
+	if worn > 0.66:
+		_b(2, -7, 1, 4, OUTLINE)
+		_b(1, -3, 1, 3, OUTLINE)
+		_b(-4, -18, 2, 1, OUTLINE)
 
 
 ## A timber watchtower: stone footings, two stout legs braced crosswise with a ladder up
@@ -526,6 +565,16 @@ func _draw_wagon() -> void:
 		_b(lx, -5, 2, 4 - lift, OUTLINE)
 		_b(lx + 1, -5, 1, 3 - lift, ox.darkened(0.25))
 	_b(7, -10, 1, 3, OUTLINE)   # its tail
+	if cargo == "sled":
+		# A sled: runners curling up at the front instead of wheels, barrels of oil lashed on.
+		_b(-16, -3, 22, 2, OUTLINE)
+		_b(-15, -3, 20, 1, Color(0.7, 0.72, 0.76))
+		_b(5, -6, 2, 3, OUTLINE)
+		_b(5, -5, 1, 2, Color(0.7, 0.72, 0.76))
+		for sx in [-12, -2]:
+			_b(sx, -4, 1, 2, dark_wood)
+		cv.draw_set_transform(Vector2.ZERO)
+		return
 	# The wheels (drawn round, the spokes turning while it rolls).
 	for wx in [-11.0, 1.0]:
 		var c := Vector2(wx * PX, -2.0 * PX)

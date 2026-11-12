@@ -144,6 +144,61 @@ const MAPS := {
 		"bot_posts": [Vector2(215, 330), Vector2(425, 330), Vector2(40, 470), Vector2(600, 470), Vector2(200, 560),
 			Vector2(440, 560), Vector2(320, 600), Vector2(260, 640), Vector2(380, 640)],
 	},
+	# --- The North (Phase 4) ---------------------------------------------------------------
+	# Frostmarch, the Frozen Pass: ice cliffs close in on both sides; a rock splits the way in;
+	# a frozen lake fills the pass, its middle solid (130px) and thin ice either side. A Troll
+	# that strays onto the thin ice takes it down with it, and then only the middle is left.
+	# The pass narrows to 180px above the camp.
+	"frostmarch_pass": {
+		"name": "The Frozen Pass", "battle": "frostpass", "music": "snow",
+		"blurb": "Ice cliffs and a\nfrozen lake in\nthe pass",
+		"biome": "snow",
+		"lanes": [[180, 460]],
+		"terrain": [
+			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(160, -120), Vector2(150, 180), Vector2(166, 300), Vector2(152, 480),
+				Vector2(200, 600), Vector2(230, 660), Vector2(206, 736), Vector2(0, 736)]},
+			{"kind": "cliff", "poly": [Vector2(640, -120), Vector2(480, -120), Vector2(490, 180), Vector2(474, 300), Vector2(488, 480),
+				Vector2(440, 600), Vector2(410, 660), Vector2(434, 736), Vector2(640, 736)]},
+			{"kind": "rock", "poly": [Vector2(292, 196), Vector2(330, 186), Vector2(352, 204), Vector2(348, 236), Vector2(318, 248),
+				Vector2(290, 232)]},
+			{"kind": "ice", "poly": [Vector2(172, 318), Vector2(468, 318), Vector2(474, 470), Vector2(168, 470)]},
+			{"kind": "thin_ice", "poly": [Vector2(180, 330), Vector2(255, 330), Vector2(255, 460), Vector2(180, 460)]},
+			{"kind": "thin_ice", "poly": [Vector2(385, 330), Vector2(460, 330), Vector2(460, 460), Vector2(385, 460)]},
+		],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(320, 96), Vector2(320, 170), Vector2(270, 270), Vector2(320, 400), Vector2(320, 560), Vector2(320, 736)]],
+		"castle": "fort",
+		"bot_posts": [Vector2(320, 500), Vector2(260, 540), Vector2(380, 540), Vector2(320, 600), Vector2(250, 600),
+			Vector2(390, 600), Vector2(320, 650)],
+	},
+	# Frostmarch, the Covenant's Vigil: a frozen lake with the middle standing stone out on it
+	# (on solid ice), thin ice to the north of it and either side; the other two stones on
+	# the shores. Every stone stays reachable with all the thin ice gone (from the south).
+	"frostmarch_lake": {
+		"name": "The Stone Lake", "battle": "frostlake", "music": "snow",
+		"blurb": "Three standing\nstones round a\nfrozen lake",
+		"biome": "snow",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "trees", "poly": [Vector2(0, 150), Vector2(80, 140), Vector2(140, 170), Vector2(150, 230), Vector2(110, 270),
+				Vector2(40, 280), Vector2(0, 276)]},
+			{"kind": "trees", "poly": [Vector2(640, 140), Vector2(560, 136), Vector2(500, 166), Vector2(496, 222), Vector2(540, 256),
+				Vector2(610, 262), Vector2(640, 258)]},
+			{"kind": "rock", "poly": [Vector2(560, 330), Vector2(600, 318), Vector2(630, 340), Vector2(626, 390), Vector2(584, 400),
+				Vector2(556, 372)]},
+			{"kind": "ice", "poly": [Vector2(200, 356), Vector2(440, 356), Vector2(472, 470), Vector2(432, 566), Vector2(208, 566),
+				Vector2(168, 470)]},
+			{"kind": "thin_ice", "poly": [Vector2(248, 366), Vector2(392, 366), Vector2(392, 420), Vector2(248, 420)]},
+			{"kind": "thin_ice", "poly": [Vector2(184, 440), Vector2(262, 440), Vector2(262, 530), Vector2(196, 530)]},
+			{"kind": "thin_ice", "poly": [Vector2(378, 440), Vector2(456, 440), Vector2(444, 530), Vector2(378, 530)]},
+		],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(150, 96), Vector2(130, 330), Vector2(150, 560)], [Vector2(500, 96), Vector2(510, 330), Vector2(490, 560)],
+			[Vector2(320, 736), Vector2(320, 600), Vector2(320, 520)]],
+		"castle": "keep",
+		"bot_posts": [Vector2(150, 500), Vector2(320, 600), Vector2(490, 500), Vector2(110, 420), Vector2(530, 440),
+			Vector2(240, 610), Vector2(400, 610)],
+	},
 	# Sable Crossing: a river across the field, two bridges (80px, room for the Marshal) and
 	# a shallow ford between them that slows anyone wading it.
 	"sable_crossing": {
@@ -173,6 +228,28 @@ const MAPS := {
 ## bottom and leaves at the treeline along the top (its "route" ends there, short of the
 ## enemy's way in), and the field turns into the next.
 const ZONES := {
+	# Frostmarch, Whiteout: a long frozen lake the sled crosses on solid ice, thin ice well off
+	# its road on both sides, pinewoods along the shores.
+	"frostmarch_crossing": {
+		"name": "The Long Lake", "battle": "whiteout", "music": "snow", "camp": false,
+		"blurb": "A frozen lake\nin the snow",
+		"biome": "snow",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "ice", "poly": [Vector2(150, 150), Vector2(500, 140), Vector2(560, 300), Vector2(520, 520), Vector2(420, 670),
+				Vector2(220, 676), Vector2(120, 520), Vector2(110, 300)]},
+			{"kind": "thin_ice", "poly": [Vector2(140, 300), Vector2(250, 300), Vector2(250, 420), Vector2(140, 420)]},
+			{"kind": "thin_ice", "poly": [Vector2(410, 380), Vector2(510, 380), Vector2(505, 500), Vector2(410, 500)]},
+			{"kind": "thin_ice", "poly": [Vector2(400, 570), Vector2(470, 570), Vector2(440, 640), Vector2(400, 640)]},
+			{"kind": "trees", "poly": [Vector2(0, 120), Vector2(70, 130), Vector2(96, 260), Vector2(80, 400), Vector2(0, 410)]},
+			{"kind": "trees", "poly": [Vector2(640, 200), Vector2(590, 210), Vector2(574, 340), Vector2(590, 480), Vector2(640, 500)]},
+			{"kind": "trees", "poly": [Vector2(0, 560), Vector2(100, 570), Vector2(140, 650), Vector2(110, 736), Vector2(0, 736)]},
+			{"kind": "rock", "poly": [Vector2(540, 620), Vector2(590, 606), Vector2(626, 640), Vector2(610, 690), Vector2(556, 694)]},
+		],
+		"no_build": [],
+		"trails": [],
+		"route": [Vector2(320, 760), Vector2(330, 600), Vector2(300, 470), Vector2(340, 330), Vector2(320, 200), Vector2(330, 104)],
+	},
 	# Open farmland: a few copses, the road winding up the middle.
 	"convoy_meadow": {
 		"name": "The Meadow Road", "battle": "road", "biome": "meadow", "camp": false,

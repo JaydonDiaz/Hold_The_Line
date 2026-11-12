@@ -116,7 +116,7 @@ const TERRITORIES := {
 		"requires": {"all": ["ashwatch", "stonehollow"], "any": ["greenwood", "mercyvale", "deepdelve"], "count": 2}, "missions": ["sable_crossing"],
 		"blurb": "The only bridge over the Sable river. Whoever holds it decides whether the south and north ever meet."},
 	"frostmarch": {"name": "Frostmarch", "pos": Vector2(112, 214), "faction": "frostmarch", "act": 3,
-		"requires": {"all": ["sable"]}, "missions": [],
+		"requires": {"all": ["sable"]}, "missions": ["fm_pass", "fm_vigil"], "optional": ["fm_whiteout"],
 		"blurb": "Snowbound passes where the Northern Covenant's frost witches have kept to themselves for generations."},
 	"monastery": {"name": "The High Monastery", "pos": Vector2(300, 236), "faction": "monastery", "act": 3,
 		"requires": {"all": ["sable"]}, "missions": [],
@@ -293,6 +293,48 @@ const MISSIONS := {
 		"allies": [], "lend": [], "reward": "", "track": {},
 		"intro": "dd_orerun_intro", "outro": "dd_orerun_outro"},
 	# --- Sable Crossing: the Ash Marshal -----------------------------------------------------
+	# --- Frostmarch: the Northern Covenant (Phase 4) ------------------------------------------
+	# The first northern mission is meant to be fair whatever the south gave you: the Covenant
+	# lends two Frost Witches, and Frost Witches can be hired for this battle, so Slimes can
+	# always be hurt even if the two lent fall.
+	"fm_pass": {"name": "The Frozen Pass", "territory": "frostmarch", "type": "pass", "limit": 12, "waves": 6, "level": 7, "gold": 420,
+		"count": [8, 3], "mood": "normal", "map": "frostmarch_pass",
+		"weather": {"blizzard": {"first": 30.0, "every": 45.0, "length": 10.0, "warn": 5.0}},
+		"pool": {1: ["goblin", "wolf"], 2: ["orc", "skeleton_archer"], 3: ["slime", "slime"], 4: ["troll"], 5: ["orc"]},
+		"extra": {3: ["slime", "slime", "slime"], 5: ["troll", "slime", "slime"], 6: ["troll", "troll", "orc", "slime"]},
+		"notes": {1: "Hold the pass: no more than 12 of them may get through. Blizzards blow in off the peaks.",
+			3: "Slimes! Blades and arrows sink into them: only frost, magic or ki hurts them (or ice them first).",
+			4: "A Troll! Thin ice won't hold it: lure it out onto the edges of the lake."},
+		"allies": [{"kind": "frost", "at": Vector2(280, 560)}, {"kind": "frost", "at": Vector2(360, 560)}],
+		"lend": ["frost"], "reward": "frostmarch", "track": {"witches_stood": "frost"},
+		"intro": "fm_pass_intro", "outro": "fm_pass_outro"},
+	"fm_vigil": {"name": "The Covenant's Vigil", "territory": "frostmarch", "type": "positions", "waves": 6, "level": 8, "gold": 440,
+		"objectives": [{"id": "west", "kind": "stone", "name": "West Stone", "at": Vector2(140, 520), "hp": 900},
+			{"id": "lake", "kind": "stone", "name": "Lake Stone", "at": Vector2(320, 486), "hp": 900},
+			{"id": "east", "kind": "stone", "name": "East Stone", "at": Vector2(500, 520), "hp": 900}],
+		"can_lose": 1,
+		"count": [7, 3], "mood": "normal", "map": "frostmarch_lake",
+		"weather": {"blizzard": {"first": 35.0, "every": 50.0, "length": 10.0, "warn": 5.0}},
+		"pool": {1: ["goblin", "orc"], 2: ["wolf", "skeleton_archer"], 3: ["slime"], 4: ["troll"], 5: ["orc", "slime"]},
+		"extra": {4: ["troll", "troll"], 6: ["troll", "troll", "orc", "slime", "slime"]},
+		"notes": {1: "Keep the standing stones up through the rite: lose two and it fails.",
+			4: "Trolls on the lake! The thin ice round the Lake Stone won't take their weight.",
+			6: "The last of them, all at the stones!"},
+		"allies": [], "lend": [], "reward": "", "track": {},
+		"intro": "fm_vigil_intro", "outro": "fm_vigil_outro"},
+	"fm_whiteout": {"name": "Whiteout", "territory": "frostmarch", "type": "escort", "waves": 99, "level": 8, "gold": 400,
+		"convoy": {"name": "Lamp-oil sled", "cargo": "sled", "speed": 18.0, "hp": 1000, "patch": 0.15,
+			"zones": [
+				{"map": "frostmarch_crossing", "name": "The Long Lake", "ambushes": [
+					{"at": 0.3, "note": "Out of the snow! Wolves and Slimes on the ice!", "group": [["wolf", Vector2(160, 470)], ["wolf", Vector2(480, 420)], ["slime", Vector2(200, 380)], ["slime", Vector2(460, 520)], ["orc", Vector2(330, 260)]]},
+					{"at": 0.65, "note": "A Troll on the lake: mind the thin ice!", "group": [["troll", Vector2(450, 300)], ["orc", Vector2(200, 260)], ["slime", Vector2(260, 200)], ["skeleton_archer", Vector2(420, 150)]]}]}]},
+		"pace": {"auto": "forced", "deploy": 20},
+		"count": [6, 2], "mood": "normal", "map": "frostmarch_crossing", "bonus_points": {"frost": 1},
+		"weather": {"blizzard": {"first": 15.0, "every": 30.0, "length": 14.0, "warn": 4.0, "whiteout": true}},
+		"pool": {1: ["wolf", "goblin"], 2: ["slime", "orc"], 3: ["skeleton_archer"], 4: ["troll"]},
+		"notes": {1: "Get the lamp oil across the lake to the witches' hall. In the whiteout you'll see them late: keep troops round the sled."},
+		"allies": [], "lend": [], "reward": "", "track": {},
+		"intro": "fm_whiteout_intro", "outro": "fm_whiteout_outro"},
 	"sable_crossing": {"name": "Sable Crossing", "territory": "sable", "type": "pass", "limit": 14, "waves": 7, "level": 6, "gold": 400,
 		"count": [8, 3], "mood": "normal", "map": "sable_crossing",
 		"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf"], 3: ["skeleton_archer"], 4: ["sapper"], 5: ["troll"]},
@@ -447,6 +489,32 @@ const STORY := {
 	"gw_watchfires_outro": [
 		{"who": "thorne", "text": "The watchfires held, and the beacon on the great oak burns. Greenwood answers the Line."},
 		{"who": "thorne", "text": "Your archers have earned the Watch's oldest arts. Train them, and they'll shoot like the elders."},
+	],
+	"fm_pass_intro": [
+		{"who": "ysra", "text": "So the south remembers the north at last. You've come a long way to stand in the snow, Commander."},
+		{"who": "ysra", "text": "The King's army is coming up the Frozen Pass. If it gets through, the Covenant's halls burn. Hold it, and we will talk."},
+		{"who": "ysra", "text": "Two of my sisters will stand with you, and more will answer if you call. Mind the lake: the ice at its edges is thin."},
+	],
+	"fm_pass_outro": [
+		{"who": "ysra", "text": "The pass held. My sisters say you fought like someone who meant to keep a promise."},
+		{"who": "ysra", "text": "Two still stand who stood beside you. The Covenant will not forget it.", "if": {"flag": "witches_stood"}},
+		{"who": "ysra", "text": "The Northern Covenant stands with the Line. Our witches will freeze your enemies, and our towers will hold your walls."},
+		{"who": "marshal", "text": "Witches. Ice melts, old woman, and so will you."},
+	],
+	"fm_vigil_intro": [
+		{"who": "ysra", "text": "Frostmarch's beacon has never been lit by fire. It is lit by the rite of the stones, three of them, round the frozen lake."},
+		{"who": "ysra", "text": "Keep them standing until the rite is done. Lose two and it fails. The stone on the lake is the hardest to hold."},
+	],
+	"fm_vigil_outro": [
+		{"who": "ysra", "text": "The rite is done, and the beacon burns blue over the lake. Frostmarch answers the Line."},
+		{"who": "ysra", "text": "Our oldest arts are yours now. Train your witches, and winter itself will fight for you."},
+	],
+	"fm_whiteout_intro": [
+		{"who": "ysra", "text": "The witches' hall on the far shore is down to its last lamps. A sled of oil must cross the lake tonight, in the whiteout."},
+		{"who": "ysra", "text": "You won't see them coming until they're on you. Keep your troops close to the sled."},
+	],
+	"fm_whiteout_outro": [
+		{"who": "ysra", "text": "The lamps are lit again across the lake. My sisters will teach your witches something for that."},
 	],
 	"gw_trail_intro": [
 		{"who": "thorne", "text": "A wolf pack has been running our hunting trails, and the King's goblins follow it like crows."},

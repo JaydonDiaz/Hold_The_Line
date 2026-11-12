@@ -29,6 +29,7 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 	ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
 	if map.get("biome", "") == "snow":
 		ci.draw_rect(Rect2(0, 0, w, TOP), Color(Color(0.88, 0.91, 0.95) * tint, 0.78))   # the enemy's ground snowed over too
+		ci.draw_rect(Rect2(0, 736.0, w, h - 736.0), Color(0.88, 0.91, 0.95) * tint)        # ...and the strip behind your line
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
 	var camp: bool = map.get("camp", true)
