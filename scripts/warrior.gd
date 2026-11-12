@@ -27,7 +27,9 @@ const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers 
 const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Ascension
 const IDLE_AFTER := 0.8   # seconds with nothing to do before a troop starts its idle animation
 const WINDUP := 0.18      # melee troops rear back over the last moment before a blow
-const ARCHER_LOOP := 5.6  # Archer idle: draw an arrow, twirl it, flip it, twirl, put it back, rest
+const ARCHER_DRAW := 0.9  # Archer idle: draw an arrow out of the quiver (seconds)...
+const ARCHER_LOOP := 3.3  # ...then twirl it, flip it, one lazy turn, over and over while she stands idle...
+const ARCHER_STOW := 0.7  # ...and put it back only once she moves off (seconds)
 const PRIORITIES := ["closest", "first", "strongest", "weakest"]
 const PRIORITY_NAMES := {
 	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
@@ -304,6 +306,7 @@ const TURN_RATE := 11.0   # turns a full about-face in under a fifth of a second
 var target = null
 var anim_t := 0.0         # running clock for idle loops
 var idle_t := 0.0         # how long it has had nothing to do
+var stow_t := 0.0         # Archer: seconds left putting her idle arrow back in the quiver
 var note_timer := 0.0     # Bard: idle tunes
 var route := PackedVector2Array()   # waypoints around walls to route_goal
 var route_goal := Vector2.INF
@@ -3006,6 +3009,9 @@ func _animate(delta: float) -> void:
 	_carry(delta)
 	var busy: bool = moving or swing > 0.0 or pose_left > 0.0 or rez_target != null or not is_active() \
 			or (target != null and _is_valid(target)) or lift > 0.0
+	stow_t = maxf(stow_t - delta, 0.0)
+	if busy and kind == "archer" and idle_t - IDLE_AFTER >= ARCHER_DRAW and not (target != null and _is_valid(target)):
+		stow_t = ARCHER_STOW   # moving off (or picked up): the arrow goes back over her shoulder (to shoot, she keeps it)
 	idle_t = 0.0 if busy else idle_t + delta
 	if kind == "bard" and _idling():
 		# Hums to itself: a note every so often.
@@ -3264,9 +3270,9 @@ func _body_motion() -> Array:
 				# arrow when she flips it.
 				rot = sin(anim_t * 1.6) * 0.05
 				off.y -= absf(sin(anim_t * 1.6)) * 1.0
-				var t := fmod(idle_t - IDLE_AFTER, ARCHER_LOOP)
-				if t > 2.4 and t < 3.2:
-					rot -= 0.07 * sin(PI * (t - 2.4) / 0.8) * lean
+				var t := fmod(idle_t - IDLE_AFTER - ARCHER_DRAW, ARCHER_LOOP) if idle_t - IDLE_AFTER >= ARCHER_DRAW else -1.0
+				if t > 1.5 and t < 2.3:
+					rot -= 0.07 * sin(PI * (t - 1.5) / 0.8) * lean
 	else:
 		sc.y = 1.0 + 0.015 * sin(anim_t * 4.0)   # ready, weight shifting
 	var w := _windup()
@@ -3797,7 +3803,7 @@ func _draw() -> void:
 		var puff := Vector2(0, feet - 2) + back * (6.0 + 8.0 * k)
 		Sprites.disc(self, puff, 3.0 + 3.0 * k, Color(0.75, 0.68, 0.55, 0.45 * (1.0 - k)))
 	var origin: Vector2 = Vector2(0, feet - size.y / 2) + lunge + motion[0]
-	var arrow := _archer_arrow(origin) if kind == "archer" and _idling() and _readying() <= 0.0 else {}
+	var arrow := _archer_arrow(origin) if kind == "archer" and (_idling() or stow_t > 0.0) and _readying() <= 0.0 else {}
 	if not arrow.is_empty() and arrow["behind"]:
 		draw_set_transform(Vector2.ZERO)
 		_draw_arrow(arrow["pos"], arrow["angle"], arrow["alpha"])   # sliding out of (or into) the quiver, behind her
@@ -3947,6 +3953,11 @@ func _draw_glint(origin: Vector2, size: Vector2) -> void:
 
 ## Little props for idle animations, drawn over the sprite.
 func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
+	if kind == "archer" and stow_t > 0.0 and not _idling() and swing <= 0.0:
+		var away := _archer_arrow(origin)
+		if not away.is_empty() and not away["behind"]:
+			_draw_arrow(away["pos"], away["angle"])
+		return
 	if not _idling() or swing > 0.0:
 		return
 	match kind:
@@ -3998,44 +4009,46 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 				draw_set_transform(Vector2.ZERO)
 
 
-## Archer idle: where the arrow is in its loop, as {pos, angle, behind}, or {} while
-## her hands are empty. Every move eases in and out so it flows.
+## Archer idle: where the arrow is, as {pos, angle, behind}, or {} while her hands are
+## empty. Out of the quiver once, then twirled, flipped end over end and turned, round and
+## round for as long as she stands idle; back into the quiver only as she moves off
+## (stow_t). Every move eases in and out so it flows.
 func _archer_arrow(origin: Vector2) -> Dictionary:
-	var t := fmod(idle_t - IDLE_AFTER, ARCHER_LOOP)
 	var hand := _sprite_px(origin, 2.5, 10)
 	var quiver := _sprite_px(origin, 2.0, 6.0)    # on her back, just behind the shoulder
 	var lifted := quiver + Vector2(0, -14)
 	var up := -PI / 2
 	var ahead := 0.0 if flip > 0 else PI
+	if stow_t > 0.0 and not _idling():
+		var s := 1.0 - stow_t / ARCHER_STOW
+		if s < 0.57:
+			# Back over the shoulder...
+			var k := smoothstep(0.0, 1.0, s / 0.57)
+			return {"pos": hand.lerp(lifted, k), "angle": lerp_angle(ahead, up, k), "behind": false}
+		# ...and down into the quiver.
+		var k := smoothstep(0.0, 1.0, (s - 0.57) / 0.43)
+		return {"pos": lifted.lerp(quiver, k), "angle": up, "behind": true, "alpha": 1.0 - k}
+	var t := idle_t - IDLE_AFTER
 	if t < 0.5:
 		# Reaches back and slides an arrow up out of the quiver.
 		var k := smoothstep(0.0, 1.0, t / 0.5)
 		return {"pos": quiver.lerp(lifted, k), "angle": up, "behind": true, "alpha": k}
-	if t < 0.9:
+	if t < ARCHER_DRAW:
 		# Brings it round to her hand, turning it level.
 		var k := smoothstep(0.0, 1.0, (t - 0.5) / 0.4)
 		return {"pos": lifted.lerp(hand, k), "angle": lerp_angle(up, ahead, k), "behind": false}
-	if t < 2.4:
+	var u := fmod(t - ARCHER_DRAW, ARCHER_LOOP)
+	if u < 1.5:
 		# Twirls it: spins up, three turns, spins down.
-		var k := smoothstep(0.0, 1.0, (t - 0.9) / 1.5)
+		var k := smoothstep(0.0, 1.0, u / 1.5)
 		return {"pos": hand, "angle": ahead + k * TAU * 3.0, "behind": false}
-	if t < 3.2:
+	if u < 2.3:
 		# Flips it up into the air, end over end, and catches it.
-		var k := (t - 2.4) / 0.8
+		var k := (u - 1.5) / 0.8
 		return {"pos": hand + Vector2(0, -sin(PI * k) * 34.0), "angle": ahead + smoothstep(0.0, 1.0, k) * TAU * 2.0, "behind": false}
-	if t < 4.2:
-		# One last lazy turn.
-		var k := smoothstep(0.0, 1.0, (t - 3.2) / 1.0)
-		return {"pos": hand, "angle": ahead + k * TAU, "behind": false}
-	if t < 4.6:
-		# Back over the shoulder...
-		var k := smoothstep(0.0, 1.0, (t - 4.2) / 0.4)
-		return {"pos": hand.lerp(lifted, k), "angle": lerp_angle(ahead, up, k), "behind": false}
-	if t < 4.9:
-		# ...and down into the quiver.
-		var k := smoothstep(0.0, 1.0, (t - 4.6) / 0.3)
-		return {"pos": lifted.lerp(quiver, k), "angle": up, "behind": true, "alpha": 1.0 - k}
-	return {}
+	# One lazy turn, and round again.
+	var k := smoothstep(0.0, 1.0, (u - 2.3) / 1.0)
+	return {"pos": hand, "angle": ahead + k * TAU, "behind": false}
 
 
 ## An arrow centered on p, pointing along angle.

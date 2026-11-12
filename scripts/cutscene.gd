@@ -972,7 +972,7 @@ func _draw_archery() -> void:
 			_arrow_at(from.lerp(to, k) + Vector2(0, -sin(k * PI) * 2.0), dir)
 		elif t > 0.3:
 			_arrow_at(to, dir, true)
-	# The middle archer at ease: a slow sway, an arrow drawn, twirled, flipped and put away.
+	# The middle archer at ease: a slow sway, an arrow drawn, then twirled and flipped on and on.
 	var sway := 1.0 if fmod(t * 0.6, 2.0) < 1.0 else 0.0
 	_figure("archer", 80 + sway * 0.25, 134, 0.0, false, 4.0, false)
 	_idle_arrow(Vector2((80 + sway * 0.25) * PX, 134 * PX))
@@ -1003,11 +1003,11 @@ func _arrow_at(p: Vector2, dir: float, stuck := false) -> void:
 		_b(p.x + dir, p.y, 1, 1, Color(0.75, 0.78, 0.82))
 
 
-## The idle archer's arrow, as in battle: out of the quiver, twirled three times, flipped
-## end over end and caught, one lazy turn, and back. `foot` in screen pixels.
+## The idle archer's arrow, as in battle: out of the quiver, then twirled three times,
+## flipped end over end and caught, one lazy turn, and round again (she never moves off,
+## so it never goes back). `foot` in screen pixels.
 func _idle_arrow(foot: Vector2) -> void:
-	var loop := 5.6
-	var c := fmod(t + 0.4, loop)
+	var c := t + 0.4
 	var hand := foot + Vector2(10, -26)
 	var quiver := foot + Vector2(-10, -44)
 	var lifted := quiver + Vector2(0, -16)
@@ -1022,26 +1022,18 @@ func _idle_arrow(foot: Vector2) -> void:
 		var k := smoothstep(0.0, 1.0, (c - 0.5) / 0.4)
 		pos = lifted.lerp(hand, k)
 		ang = lerp_angle(up, 0.0, k)
-	elif c < 2.4:
-		pos = hand
-		ang = smoothstep(0.0, 1.0, (c - 0.9) / 1.5) * TAU * 3.0
-	elif c < 3.2:
-		var k := (c - 2.4) / 0.8
-		pos = hand + Vector2(0, -sin(PI * k) * 40.0)
-		ang = smoothstep(0.0, 1.0, k) * TAU * 2.0
-	elif c < 4.2:
-		pos = hand
-		ang = smoothstep(0.0, 1.0, (c - 3.2) / 1.0) * TAU
-	elif c < 4.6:
-		var k := smoothstep(0.0, 1.0, (c - 4.2) / 0.4)
-		pos = hand.lerp(lifted, k)
-		ang = lerp_angle(0.0, up, k)
-	elif c < 4.9:
-		var k := smoothstep(0.0, 1.0, (c - 4.6) / 0.3)
-		pos = lifted.lerp(quiver, k)
-		ang = up
 	else:
-		return   # hands empty, resting
+		var u := fmod(c - 0.9, 3.3)
+		if u < 1.5:
+			pos = hand
+			ang = smoothstep(0.0, 1.0, u / 1.5) * TAU * 3.0
+		elif u < 2.3:
+			var k := (u - 1.5) / 0.8
+			pos = hand + Vector2(0, -sin(PI * k) * 40.0)
+			ang = smoothstep(0.0, 1.0, k) * TAU * 2.0
+		else:
+			pos = hand
+			ang = smoothstep(0.0, 1.0, (u - 2.3) / 1.0) * TAU
 	var d := Vector2.from_angle(ang)
 	draw_line(pos - d * 14.0, pos + d * 12.0, OUTLINE, 5.0)
 	draw_line(pos - d * 13.0, pos + d * 11.0, Color(0.62, 0.44, 0.24), 3.0)

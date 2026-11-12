@@ -17,7 +17,8 @@ extends SceneTree
 ##   motion       how units move on screen: the walk cycle, blinking, turning about,
 ##                toppling when knocked out, being carried by a drag (lifted, swinging,
 ##                set down with a bump; dropped where it can't stand, it hops back),
-##                and enemies' attack poses
+##                and enemies' attack poses; the Archer twirls her arrow for as long as she
+##                stands idle, putting it away only as she moves off
 ##   knight       the Knight: Charge at tier III is a spear knight; with an axe or two swords
 ##                as well, the spear's on his back till he charges, then they swap
 ## Run from the project folder:
@@ -599,6 +600,24 @@ func _motion() -> void:
 		high = minf(high, w._body_motion()[0].y)
 	check(high < -6.0, "...hopping up and down (%.1fpx)" % high)
 	main.wave_active = false
+	# The Archer's idle arrow: drawn once, twirled and flipped for as long as she stands
+	# there (never put away while idle), and back in the quiver once she moves off.
+	await _fresh()
+	var ar = _hire("archer", Vector2(320, 600))
+	ar.position = ar.post
+	var held_all := true
+	var looked := 0
+	while ar.idle_t < ar.IDLE_AFTER + 30.0:
+		await _frames(30)
+		if ar.idle_t > ar.IDLE_AFTER + ar.ARCHER_DRAW:
+			looked += 1
+			held_all = held_all and not ar._archer_arrow(Vector2.ZERO).is_empty()
+	check(looked > 40 and held_all, "Archer idle: the arrow stays in her hands, twirled and flipped, for as long as she stands there (%d looks)" % looked)
+	ar.order_to(ar.post + Vector2(120, 0))
+	await _frames(3)
+	var stowing: bool = ar.stow_t > 0.0 and not ar._archer_arrow(Vector2.ZERO).is_empty()
+	await _frames(60)
+	check(stowing and ar.stow_t == 0.0 and not ar._idling(), "...moving off, she puts it back over her shoulder into the quiver")
 
 
 func _press(down: bool) -> InputEventMouseButton:
