@@ -47,6 +47,9 @@ var selected_grave = null   # a grave clicked to see who fell there
 var grave_layer := Node2D.new()
 var hazards := preload("res://scripts/hazards.gd").new()   # thin ice and blizzards (the North), over the ground
 var gust := 0.0                    # how hard a blizzard is blowing now (0-1; see hazards.gd)
+var bells := preload("res://scripts/bells.gd").new()   # the High Monastery's temple bells
+var contracts := preload("res://scripts/contracts.gd").new()   # the Free Cities' contracts and sellswords
+var night := preload("res://scripts/night.gd").new()   # a night battle's darkness and lanterns (Carnival Night)
 var corpse_layer := Node2D.new()   # enemies falling as they die (see spawn_corpse), on the ground under the troops
 var ambience := Ambience.new()   # the mood over the field (light, weather, critters), by mode
 var powers := CastlePowers.new()   # the Castle tab: abilities, Stone Walls, Ballistae
@@ -179,7 +182,8 @@ func _ready() -> void:
 	ground_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR   # smooth when shown smaller than painted
 	add_child(ground_sprite)
 	castle.top_part.castle = castle
-	for layer in [hazards, grave_layer, corpse_layer, wall_layer, warrior_layer, castle, castle.top_part, enemy_layer, powers, fx_layer, ambience, overlay]:
+	add_child(contracts)
+	for layer in [hazards, grave_layer, corpse_layer, wall_layer, warrior_layer, bells, castle, castle.top_part, enemy_layer, night, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	for sig in [enemy_layer.child_entered_tree, enemy_layer.child_exiting_tree]:
@@ -201,6 +205,8 @@ func _ready() -> void:
 	hud.restart_pressed.connect(_restart)
 	hud.battle_again.connect(play_again)
 	hud.action_pressed.connect(func(): rules.action())
+	hud.contract_pressed.connect(func(): contracts.sign())
+	hud.merc_pressed.connect(func(): contracts.hire())
 	hud.menu_confirmed.connect(func():
 		if survival() and started and not game_over:
 			_keep_survival_record(waves_survived())   # a run left early still counts
@@ -331,6 +337,9 @@ func choose_mode(mode: String) -> void:
 	_lock_portrait(false)
 	paths.set_map(Maps.get_map(map_id))
 	hazards.setup(self, Maps.get_map(map_id), mission)
+	bells.setup(self, mission)
+	contracts.setup(self, mission)
+	night.setup(self, mission)
 	if paths.has_terrain():
 		_repaint_ground()
 	var map: Dictionary = Maps.get_map(map_id)
@@ -1100,6 +1109,8 @@ func _army_gone() -> bool:
 ## This battlefield's own battle music (getting it composed now, ready for the first wave).
 func set_battle_music(map: Dictionary) -> void:
 	battle_music = Audio.battle_for(map)
+	if Audio.BATTLES.has(mission.get("battle", "")):
+		battle_music = "battle_" + mission["battle"]   # (a mission can have its own, on a shared field)
 	audio.prepare(stage_music)   # (a map's own peaceful music first, if it's made on demand: it's needed first)
 	audio.prepare(battle_music)
 
@@ -1222,6 +1233,9 @@ func _lock_portrait(on: bool) -> void:
 ## The mission's opening: its starting gold, the help already on the field, and its story.
 func _begin_mission() -> void:
 	gold = mission.get("gold", Data.START_GOLD)
+	heat = Campaign.north_heat(Campaign.mission_id) if campaign else 0
+	if heat > 0:
+		hud.show_message("The North has grown bolder: its enemies are %d level%s stronger" % [heat, "" if heat == 1 else "s"])
 	for a in mission.get("allies", []):
 		_lend_unit(a)
 	if campaign:
@@ -1239,6 +1253,10 @@ func _lend_unit(a: Dictionary) -> void:
 	var at: Vector2 = a["at"]
 	w.setup(kind, Data.WARRIORS[kind], self, Vector2(at.x * FIELD_W / Maps.BASE_W, at.y))   # placed on the map as stretched
 	w.spent = 0   # on loan: selling it brings nothing
+	if a.has("tiers"):
+		w.tiers = (a["tiers"] as Array).duplicate()   # (it comes trained: the locals showing what they can do)
+		w._apply_upgrades()
+		w.hp = w.max_hp
 	w.position = w.post
 	warrior_layer.add_child(w)
 	temp_allies.append(w)
@@ -1305,7 +1323,10 @@ func _mission_wave(n: int) -> Array:
 
 ## Enemy strength on wave n (Classic: the wave number; a mission starts at its level).
 func wave_level(n: int) -> int:
-	return int(mission["level"]) + n - 1 if scripted() else n
+	return int(mission["level"]) + heat + n - 1 if scripted() else n
+
+
+var heat := 0   # extra enemy levels: the North growing bolder as you push into it (Campaign.north_heat)
 
 
 ## The wave that ends the game (or, in Classic, offers endless).
@@ -1433,6 +1454,8 @@ func _finish(won: bool) -> void:
 	warrior_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	wall_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	var survived := run_survived
+	if won:
+		contracts.on_win()
 	if campaign:
 		var flawless: bool = won and rules.flawless()
 		if flawless:
@@ -2291,6 +2314,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
 				powers.aiming = ""
 			return
+		if bells.active() and event.button_index == MOUSE_BUTTON_LEFT and placing_type == "" and bells.click(p):
+			return   # a temple bell, rung
 		if not area_pick.is_empty():
 			# Drawing a Guard Area: left-drag it out; right-click cancels.
 			if event.button_index == MOUSE_BUTTON_LEFT:
@@ -2427,6 +2452,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				toggle_song()
 			KEY_D:
 				start_area_pick()
+			KEY_K:
+				if bells.active():
+					bells.ring_all()
+			KEY_U:
+				if contracts.active():
+					contracts.sign()
+			KEY_H:
+				if contracts.active():
+					contracts.hire()
 			KEY_F:
 				cycle_speed()
 			KEY_ESCAPE:

@@ -34,6 +34,7 @@ func _run() -> void:
 	_tier4()
 	_south_training()
 	_north_gate()
+	_north_heat()
 	_replay_xp()
 	_saves()
 	_slots()
@@ -343,6 +344,36 @@ func _north_gate() -> void:
 		check(campaign.beacon_lit(pair[0]) and not campaign.requirements_met("spires"), "...still shut with one northern beacon lit (%s)" % pair[0])
 		_win(north[pair[1]][1])
 		check(campaign.requirements_met("spires"), "...open once a second northern beacon is lit (%s)" % pair[1])
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+
+
+## The North grows bolder: every two northern required missions won (the first counting)
+## make the others' enemies a level stronger (at most NORTH_HEAT_MAX); the first northern mission is at its own
+## strength whichever region it's in; the south never changes.
+func _north_heat() -> void:
+	var terr: Dictionary = CD.TERRITORIES.duplicate(true)
+	var mis: Dictionary = CD.MISSIONS.duplicate(true)
+	var north := {"monastery": ["mo_1", "mo_2"], "freecities": ["fc_1", "fc_2"]}
+	for t in north:
+		terr[t]["missions"] = north[t]
+		for m in north[t]:
+			mis[m] = {"name": m, "territory": t, "waves": 1, "gold": 100}
+	campaign.territories = terr
+	campaign.missions = mis
+	campaign.new_campaign("normal")
+	check(campaign.north_heat("fm_pass") == 0 and campaign.north_heat("mo_1") == 0, "North heat: the first northern mission, wherever, is at its own strength")
+	_win("mo_1")
+	check(campaign.north_heat("fm_pass") == 1 and campaign.north_heat("mo_1") == 0 and campaign.north_heat("mo_2") == 1,
+			"...one won: the others are a level stronger (replaying that one isn't)")
+	_win("mo_2")
+	check(campaign.north_heat("fc_1") == 1, "...two won: still one level")
+	_win("fc_1")
+	check(campaign.north_heat("fc_2") == 2, "...three won: two levels")
+	for m in ["fc_2", "fm_pass"]:
+		_win(m)
+	check(campaign.north_heat("fm_vigil") == campaign.NORTH_HEAT_MAX and campaign.north_heat("gw_exodus") == 0,
+			"...five won: capped at +%d; the south never changes" % campaign.NORTH_HEAT_MAX)
 	campaign.territories = CD.TERRITORIES
 	campaign.missions = CD.MISSIONS
 

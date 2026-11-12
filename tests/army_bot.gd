@@ -18,7 +18,8 @@ extends RefCounted
 ## their places and Frost Towers the Archer Towers', so Slimes and Wyverns can still be
 ## hurt; with Martial Artists to be had, every other melee slot is one (their first path,
 ## Spirit, gives them ki blasts that reach fliers); and a Frost Witch, a Bard, a War Statue
-## and an Alchemist join the support behind the line when they're allowed.
+## and an Alchemist join the support behind the line when they're allowed. The Monastery's
+## bells are rung when a few enemies (or a Troll, a Wyvern or a boss) are round one.
 ##
 ## `style` changes the plan to test other strategies against the mixed army:
 ##   "mixed" (the default), "knights" (melee only), "ranged" (archers and towers first),
@@ -386,6 +387,7 @@ func _orders() -> void:
 func _react() -> void:
 	if main.rules.action_label() != "":
 		main.rules.action()
+	_ring()
 	_hunt()
 	if type == "positions":
 		var standing: Array = main.rules.standing()
@@ -466,6 +468,20 @@ func _upgrade() -> void:
 					spent += before - main.gold
 					spent_any = true
 				break
+
+
+## The Monastery's bells: a ready one rung once a few enemies are round it (or a boss).
+func _ring() -> void:
+	var bells = main.bells
+	if not bells.active():
+		return
+	bells._gather()
+	for b in bells.towers:
+		if not bells.ready(b):
+			continue
+		var near: Array = main.enemies_near(bells.pos(b), bells.REACH).filter(func(e): return not e.dead and e.position.distance_to(bells.pos(b)) <= bells.REACH)
+		if near.size() >= 3 or near.any(func(e): return e.boss or e.kind in ["troll", "wyvern"]):
+			bells.ring(b)
 
 
 ## A line summing up the army: "swordsman 7, archer 4, healer 1 | 23 upgrades".

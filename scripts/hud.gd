@@ -13,6 +13,8 @@ signal auto_pressed
 signal restart_pressed
 signal battle_again(key: String)
 signal action_pressed
+signal contract_pressed   # the Free Cities: sign the contract on offer
+signal merc_pressed       # ...hire sellswords
 signal menu_confirmed
 signal mode_chosen(mode: String)
 signal freeplay_level_changed(step: int)
@@ -81,6 +83,8 @@ var title_scene: Control   # the castle scene behind the mode cards (changes as 
 var hard_label: Label       # shows the difficulty, unless it's Normal (in the campaign: the mission)
 var status_label: Label
 var action_btn: Button
+var contract_btn: Button   # the Free Cities: sign the contract on offer (contracts.gd)...
+var merc_btn: Button       # ...and hire sellswords
 var world_map: Control = null   # the campaign map, while it's up
 var story: Control = null       # a story scene, while one is playing
 var classic_map := ""      # the battlefield picked for Classic ("" = the open meadow)
@@ -272,6 +276,14 @@ func _ready() -> void:
 	action_btn.tooltip_text = "[Y]"
 	action_btn.visible = false
 	action_btn.pressed.connect(func(): action_pressed.emit())
+	contract_btn = _button(self, Vector2(10, 44), Vector2(250, 32), "")
+	contract_btn.add_theme_font_size_override("font_size", 13)
+	contract_btn.visible = false
+	contract_btn.pressed.connect(func(): contract_pressed.emit())
+	merc_btn = _button(self, Vector2(10, 80), Vector2(250, 32), "")
+	merc_btn.add_theme_font_size_override("font_size", 13)
+	merc_btn.visible = false
+	merc_btn.pressed.connect(func(): merc_pressed.emit())
 
 	_make_hover_card()
 	layout(WIDTH)
@@ -606,6 +618,18 @@ func refresh(main) -> void:
 	auto_btn.disabled = main.freeplay or main.forced_auto
 	action_btn.text = main.rules.action_label() if main.started and not main.game_over else ""
 	action_btn.visible = action_btn.text != ""
+	var deals = main.contracts
+	var top := 88.0 if action_btn.visible else 44.0
+	contract_btn.text = deals.contract_label() if deals.active() else ""
+	contract_btn.visible = contract_btn.text != "" and not main.game_over
+	contract_btn.disabled = deals.state != "offered" or not deals.can_sign()
+	contract_btn.tooltip_text = deals.contract_tip()
+	contract_btn.position.y = top
+	merc_btn.text = deals.merc_label() if deals.active() else ""
+	merc_btn.visible = merc_btn.text != ""
+	merc_btn.disabled = not deals.can_hire()
+	merc_btn.tooltip_text = deals.merc_tip()
+	merc_btn.position.y = top + (36.0 if contract_btn.visible else 0.0)
 	if main.freeplay:
 		gold_label.text = "Gold: free"
 		lives_label.text = "Freeplay"   # the castle can't fall here
@@ -1089,7 +1113,11 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 	foe_card.add_theme_stylebox_override("panel", style)
 	foe_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	foe_card.size = Vector2(262, 60)
-	foe_card.position = Vector2(-270, 100)
+	var below := 100.0   # (under the Free Cities' deal buttons, when they're up)
+	for b in [contract_btn, merc_btn]:
+		if b != null and b.visible:
+			below = maxf(below, b.position.y + b.size.y + 8.0)
+	foe_card.position = Vector2(-270, below)
 	add_child(foe_card)
 	var icon := TextureRect.new()
 	icon.texture = Sprites.frames(kind)[0]

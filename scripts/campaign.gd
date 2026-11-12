@@ -679,6 +679,27 @@ func beacon_territories() -> Array:
 	return territories.keys().filter(func(t): return territories[t]["faction"] != "" or t == "ashwatch")
 
 
+## The North grows bolder as you push into it: one enemy level for every two northern
+## (Act 3) required missions already won, besides mission `m` itself (rounded up: the
+## first one won counts), at most NORTH_HEAT_MAX. Whichever region comes first plays at its
+## own strength, and the rest build from there (gently: the army grows too, but the bot
+## and a player new to the North shouldn't hit a wall).
+const NORTH_HEAT_MAX := 2
+
+func north_heat(m: String) -> int:
+	var d: Dictionary = missions.get(m, {})
+	if d.is_empty() or int(territories.get(d["territory"], {}).get("act", 0)) != 3:
+		return 0
+	var n := 0
+	for t in territories:
+		if int(territories[t].get("act", 0)) != 3:
+			continue
+		for r in territories[t]["missions"]:
+			if r != m and completed.has(r):
+				n += 1
+	return mini((n + 1) / 2, NORTH_HEAT_MAX)
+
+
 ## Every people's beacon lit: the fully united ending.
 func fully_united() -> bool:
 	for t in territories:

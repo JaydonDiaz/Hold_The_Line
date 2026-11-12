@@ -64,7 +64,7 @@ var line_y := 0.0
 # part is drawn again on a layer over the troops and enemies (clipped to above a troop's
 # height, so whoever's in front of the foot still stands in front), and turns see-through
 # while someone's back there.
-const TALL := ["watchtower", "beacon"]
+const TALL := ["watchtower", "beacon", "bell", "exchange"]
 const ROOF_CUT := -54.0   # px above its foot where the part drawn over everyone starts
 var cv: CanvasItem = self  # what the drawing goes on (itself, or its roof)
 var roof_mask: Node2D = null
@@ -100,6 +100,8 @@ func setup(m, d: Dictionary) -> void:
 		route.append(Vector2(p.x * k, p.y))
 	speed = float(d.get("speed", 0.0))
 	cargo = str(d.get("cargo", ""))
+	if kind == "exchange":
+		RADIUS = 38.0   # (a grand building)
 	if kind == "civilian":
 		RADIUS = 12.0
 		variant = int(d.get("variant", 0))
@@ -172,7 +174,7 @@ func take_damage(amount: float) -> void:
 		main.spawn_burst(position, 40.0, Color(0.7, 0.6, 0.5))
 		main.spawn_text(position + Vector2(0, -40), "%s %s!" % [label, "lost" if is_mover() else "destroyed"], Color(1, 0.4, 0.3))
 		main.sfx("boom", 0.8)
-		if is_solid() or kind in ["workshop", "watchtower", "beacon", "stone"]:
+		if is_solid() or kind in ["workshop", "watchtower", "beacon", "stone", "bell"]:
 			main.paths.invalidate()   # rubble: the way through is open again
 		destroyed.emit(self)
 
@@ -280,6 +282,10 @@ func _draw_body() -> void:
 			_draw_wagon()
 		"stone":
 			_draw_stone()
+		"bell":
+			preload("res://scripts/bells.gd").draw_bell_tower(cv, Vector2.ZERO, t, 1.0 if hit > 0.0 else 0.0)
+		"exchange":
+			_draw_exchange()
 		_:
 			_draw_workshop()
 	cv.draw_set_transform(Vector2.ZERO)
@@ -305,6 +311,10 @@ func _top() -> float:
 			return -66.0
 		"stone":
 			return -72.0
+		"bell":
+			return -104.0
+		"exchange":
+			return -100.0
 	return -62.0
 
 
@@ -370,6 +380,59 @@ func _draw_workshop() -> void:
 ## A standing stone of the Covenant (Frostmarch): a tall grey menhir, snow on its crown and
 ## heaped at its foot, frost runes cut down its face glowing blue (brighter during a rite),
 ## cracks opening as it's worn down.
+## The Free Cities' Exchange: marble steps, a row of columns under a pediment with the
+## Council's gold coin in it, a green copper dome behind, banners either side; the
+## Council's vote (its charge) glows in its windows.
+func _draw_exchange() -> void:
+	var marble := Color(0.9, 0.87, 0.8)
+	var shade := Color(0.72, 0.68, 0.62)
+	var copper := Color(0.36, 0.66, 0.56)
+	# The dome, behind.
+	_b(-6, -30, 12, 7, OUTLINE)
+	_b(-5, -31, 10, 2, OUTLINE)
+	_b(-5, -29, 10, 6, copper)
+	_b(-4, -30, 8, 1, copper)
+	_b(-4, -29, 2, 5, copper.lightened(0.25))
+	_b(-1, -33, 2, 3, OUTLINE)
+	_b(0, -33, 1, 2, Color(0.98, 0.8, 0.3))
+	# The hall, the pediment and its coin.
+	_b(-12, -22, 24, 22, OUTLINE)
+	_b(-11, -21, 22, 21, shade)
+	var ped := PackedVector2Array([Vector2(-13, -22) * PX, Vector2(0, -28) * PX, Vector2(13, -22) * PX])
+	cv.draw_colored_polygon(PackedVector2Array([ped[0] + Vector2(-3, 2), ped[1] + Vector2(0, -3), ped[2] + Vector2(3, 2)]), OUTLINE)
+	cv.draw_colored_polygon(ped, marble)
+	_b(-12, -22, 24, 2, marble.darkened(0.08))
+	cv.draw_circle(Vector2(0, -24.5) * PX, 1.6 * PX, OUTLINE)
+	cv.draw_circle(Vector2(0, -24.5) * PX, 1.2 * PX, Color(0.98, 0.8, 0.3))
+	# Windows lit with the vote's progress (once it's under way).
+	var glow := Color(1.0, 0.85, 0.45) if progress > 0.0 else Color(0.3, 0.32, 0.4)
+	for x in [-9, -4, 3, 8]:
+		_b(x, -17, 2, 4, OUTLINE)
+		_b(x, -16, 2, 3, glow.lerp(Color(0.3, 0.32, 0.4), 1.0 - clampf(progress * 1.5, 0.0, 1.0)) if progress > 0.0 else glow)
+	# The colonnade.
+	for x in [-11, -7, -3, 1, 5, 9]:
+		_b(x, -12, 2, 10, marble)
+		_b(x + 1, -12, 1, 10, marble.darkened(0.12))
+	_b(-12, -13, 24, 1, marble)
+	_b(-2, -9, 4, 7, Color(0.38, 0.24, 0.16))   # the doors
+	# Steps.
+	_b(-13, -2, 26, 1, marble)
+	_b(-14, -1, 28, 1, marble.darkened(0.06))
+	_b(-15, 0, 30, 1, marble.darkened(0.12))
+	# Banners either side, in the Council's colours.
+	for x in [-15, 14]:
+		_b(x, -26, 1, 24, OUTLINE)
+		_b(x + (1 if x < 0 else -3), -25, 3, 8, Color(0.62, 0.26, 0.52))
+		_b(x + (1 if x < 0 else -3), -19, 3, 1, Color(0.98, 0.8, 0.32))
+	# Cracks as it's worn down.
+	var worn := 1.0 - hp / max_hp
+	if worn > 0.33:
+		cv.draw_line(Vector2(-8, -20) * PX, Vector2(-5, -14) * PX, OUTLINE, 2.0)
+	if worn > 0.66:
+		cv.draw_line(Vector2(6, -21) * PX, Vector2(9, -13) * PX, OUTLINE, 2.0)
+		cv.draw_line(Vector2(9, -13) * PX, Vector2(7, -9) * PX, OUTLINE, 2.0)
+
+
 func _draw_stone() -> void:
 	var grey := Color(0.56, 0.58, 0.62)
 	var dark := Color(0.4, 0.42, 0.48)

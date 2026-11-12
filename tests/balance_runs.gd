@@ -16,7 +16,7 @@ const SOUTH := ["gw_exodus", "gw_watchfires", "gw_trail", "mv_wounded", "mv_sanc
 const REGION := {"gw": "greenwood", "mv": "mercyvale", "dd": "deepdelve"}
 const REGION_MISSIONS := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
 const ACT1 := ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops"]
-const NORTH_MISSIONS := {"frostmarch": ["fm_pass", "fm_vigil"]}   # (Phase 4: grows region by region)
+const NORTH_MISSIONS := {"frostmarch": ["fm_pass", "fm_vigil"], "monastery": ["mo_steps", "mo_gate"], "freecities": ["fc_market", "fc_council"]}   # (Phase 4: grows region by region)
 ## Trained: what a player has typically spent on each kind by the south (a few points on
 ## the Knights, a couple on each people's units). Untrained: nothing (tier I only).
 const TRAINED := {"swordsman": [3, 2, 3, 1], "archer": [2, 1, 2, 1], "tower": [2, 1, 2, 1], "healer": [2, 1, 2, 1],
@@ -119,6 +119,8 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 	else:
 		main.start_mission(id)
 	await process_frame
+	if opts.has("heat"):
+		main.heat = int(opts["heat"])   # (as if this many other northern missions were won)
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame

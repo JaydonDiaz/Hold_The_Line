@@ -28,7 +28,7 @@ const CD = preload("res://scripts/campaign_data.gd")
 const Maps = preload("res://scripts/maps.gd")
 const Data = preload("res://scripts/data.gd")
 const TEST_SAVE := "user://campaign_test.cfg"
-const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note"]   # Data "attack"s that can hit fliers
+const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note", "combo"]   # Data "attack"s that can hit fliers (a Martial Artist's: Spirit Bolts, its tier I)
 const AIR_KEYS := ["path:1", "path:2"]   # wall archers and wall mages shoot fliers too
 # What can hurt a Slime: magic, ice and ki (Martial Artists' Spirit Bolts is a tier I path).
 const SLIME_ATTACKS := ["orb", "frost", "note", "combo"]

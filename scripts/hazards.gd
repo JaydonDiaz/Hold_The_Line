@@ -50,6 +50,8 @@ var fitted_w := -1.0
 var blizzard := {}
 var gust_in := 0.0         # seconds to the next gust (counting while a wave is on)
 var gust_left := 0.0       # seconds of the gust blowing now
+var warned := false        # the coming gust has been announced
+const WARN := 10.0         # seconds of warning before a gust, unless the mission says otherwise
 var t := 0.0
 var sky := Node2D.new()    # the snow, drawn over everything
 
@@ -76,6 +78,7 @@ func setup(m, map: Dictionary, mission: Dictionary) -> void:
 	blizzard = mission.get("weather", {}).get("blizzard", {})
 	gust_in = float(blizzard.get("first", blizzard.get("every", 40.0)))
 	gust_left = 0.0
+	warned = false
 	main.gust = 0.0
 	visible = active()
 	queue_redraw()
@@ -278,7 +281,12 @@ func _update_blizzard(delta: float) -> void:
 			main.hud.show_message("The blizzard eases")
 	elif main.wave_active:
 		gust_in -= delta
+		if not warned and gust_in <= float(blizzard.get("warn", WARN)):
+			warned = true
+			main.hud.show_message("A blizzard is coming! %ds to get ready" % ceili(gust_in))
+			main.sfx("frost")
 		if gust_in <= 0.0:
+			warned = false
 			gust_left = float(blizzard.get("length", 10.0))
 			gust_in = float(blizzard.get("every", 40.0))
 			main.hud.show_message("Blizzard! Everyone slowed, ranged attacks slowed; Frost Witches stronger")
@@ -291,7 +299,7 @@ func _update_blizzard(delta: float) -> void:
 func gust_warning() -> float:
 	if blizzard.is_empty() or gust_left > 0.0 or not main.wave_active:
 		return -1.0
-	return gust_in if gust_in <= float(blizzard.get("warn", 4.0)) else -1.0
+	return gust_in if gust_in <= float(blizzard.get("warn", WARN)) else -1.0
 
 
 ## How plainly an enemy at p can be seen in a whiteout (1: plainly; at least 0.1).
@@ -378,6 +386,10 @@ func _draw_sky() -> void:
 	var w: float = main.FIELD_W
 	var h: float = main.FIELD_H
 	var g: float = main.gust
+	var coming := gust_warning()
+	if coming >= 0.0:
+		# The warning: the sky whitens and the first snow drifts in, more as it nears.
+		g = maxf(g, 0.35 * (1.0 - coming / float(blizzard.get("warn", WARN))))
 	if blizzard.get("whiteout", false):
 		sky.draw_rect(Rect2(0, 0, w, h), Color(0.92, 0.95, 1.0, 0.1))   # the haze that never lifts
 	if g > 0.0:

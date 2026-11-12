@@ -199,6 +199,137 @@ const MAPS := {
 		"bot_posts": [Vector2(150, 500), Vector2(320, 600), Vector2(490, 500), Vector2(110, 420), Vector2(530, 440),
 			Vector2(240, 610), Vector2(400, 610)],
 	},
+	# The High Monastery, the Thousand Steps: four terraces down the mountain, each ledge
+	# crossed by stairs (and, on the middle one, a rope bridge over a chasm on the left).
+	# The Fighting Retreat's lines hold just below each ledge, where the enemy has to come
+	# down the stairs; the camp is at the foot.
+	"monastery_steps": {
+		"name": "The Thousand Steps", "battle": "steps", "music": "mountain",
+		"blurb": "Terraces and\nstairs down the\nmountain",
+		"biome": "mountain",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "cliff", "poly": [Vector2(0, 250), Vector2(196, 250), Vector2(196, 282), Vector2(0, 282)]},
+			{"kind": "stairs", "poly": [Vector2(196, 246), Vector2(286, 246), Vector2(286, 286), Vector2(196, 286)]},
+			{"kind": "cliff", "poly": [Vector2(286, 250), Vector2(354, 250), Vector2(354, 282), Vector2(286, 282)]},
+			{"kind": "stairs", "poly": [Vector2(354, 246), Vector2(444, 246), Vector2(444, 286), Vector2(354, 286)]},
+			{"kind": "cliff", "poly": [Vector2(444, 250), Vector2(640, 250), Vector2(640, 282), Vector2(444, 282)]},
+			{"kind": "chasm", "poly": [Vector2(0, 392), Vector2(104, 392), Vector2(104, 424), Vector2(0, 424)]},
+			{"kind": "rope_bridge", "poly": [Vector2(104, 384), Vector2(176, 384), Vector2(176, 432), Vector2(104, 432)]},
+			{"kind": "chasm", "poly": [Vector2(176, 392), Vector2(250, 392), Vector2(250, 424), Vector2(176, 424)]},
+			{"kind": "stairs", "poly": [Vector2(250, 388), Vector2(330, 388), Vector2(330, 428), Vector2(250, 428)]},
+			{"kind": "cliff", "poly": [Vector2(330, 392), Vector2(476, 392), Vector2(476, 424), Vector2(330, 424)]},
+			{"kind": "stairs", "poly": [Vector2(476, 388), Vector2(556, 388), Vector2(556, 428), Vector2(476, 428)]},
+			{"kind": "cliff", "poly": [Vector2(556, 392), Vector2(640, 392), Vector2(640, 424), Vector2(556, 424)]},
+			{"kind": "cliff", "poly": [Vector2(0, 524), Vector2(216, 524), Vector2(216, 556), Vector2(0, 556)]},
+			{"kind": "stairs", "poly": [Vector2(216, 520), Vector2(300, 520), Vector2(300, 560), Vector2(216, 560)]},
+			{"kind": "cliff", "poly": [Vector2(300, 524), Vector2(340, 524), Vector2(340, 556), Vector2(300, 556)]},
+			{"kind": "stairs", "poly": [Vector2(340, 520), Vector2(424, 520), Vector2(424, 560), Vector2(340, 560)]},
+			{"kind": "cliff", "poly": [Vector2(424, 524), Vector2(640, 524), Vector2(640, 556), Vector2(424, 556)]},
+		],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(320, 96), Vector2(240, 200), Vector2(240, 300), Vector2(290, 360), Vector2(290, 470), Vector2(260, 600), Vector2(320, 736)]],
+		"castle": "fort",
+		"bot_posts": [Vector2(240, 320), Vector2(400, 320), Vector2(140, 460), Vector2(290, 460), Vector2(516, 460),
+			Vector2(258, 590), Vector2(382, 590)],
+	},
+	# The High Monastery, the Gate: the monastery's courtyard, walled in by crags on both
+	# sides, stairs up into it from the mountain road, rocks splitting the way; three bell
+	# towers stand across the courtyard (the missions put them there).
+	"monastery_gate": {
+		"name": "The Monastery Gate", "battle": "gate", "music": "mountain",
+		"blurb": "A courtyard of\nbell towers on\nthe mountain",
+		"biome": "mountain",
+		"lanes": [[120, 520]],
+		"terrain": [
+			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(110, -120), Vector2(96, 200), Vector2(60, 330), Vector2(70, 520),
+				Vector2(40, 736), Vector2(0, 736)]},
+			{"kind": "cliff", "poly": [Vector2(640, -120), Vector2(530, -120), Vector2(544, 200), Vector2(580, 330), Vector2(570, 520),
+				Vector2(600, 736), Vector2(640, 736)]},
+			{"kind": "rock", "poly": [Vector2(200, 226), Vector2(244, 214), Vector2(268, 240), Vector2(256, 272), Vector2(212, 276),
+				Vector2(192, 252)]},
+			{"kind": "rock", "poly": [Vector2(388, 230), Vector2(430, 216), Vector2(456, 244), Vector2(446, 276), Vector2(402, 278),
+				Vector2(380, 254)]},
+			{"kind": "stairs", "poly": [Vector2(120, 300), Vector2(520, 300), Vector2(520, 344), Vector2(120, 344)]},
+		],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [[Vector2(320, 96), Vector2(320, 300), Vector2(320, 736)]],
+		"castle": "keep",
+		"bot_posts": [Vector2(150, 520), Vector2(320, 470), Vector2(490, 520), Vector2(220, 400), Vector2(420, 400),
+			Vector2(320, 600), Vector2(160, 620)],
+	},
+	# The Free Cities, the Market Road: the market square at the top, three streets down
+	# between the townhouses, a canal across with a bridge on each street, and the camp at
+	# the bottom. The townsfolk come down the streets (the mission's routes).
+	"city_market": {
+		"name": "The Market Road", "battle": "market", "music": "city",
+		"blurb": "Three streets\nand a canal\ndown to the gate",
+		"biome": "city",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "building", "poly": [Vector2(0, 220), Vector2(68, 220), Vector2(68, 370), Vector2(0, 370)]},
+			{"kind": "building", "poly": [Vector2(150, 220), Vector2(280, 220), Vector2(280, 370), Vector2(150, 370)]},
+			{"kind": "building", "poly": [Vector2(360, 220), Vector2(490, 220), Vector2(490, 370), Vector2(360, 370)]},
+			{"kind": "building", "poly": [Vector2(572, 220), Vector2(640, 220), Vector2(640, 370), Vector2(572, 370)]},
+			{"kind": "canal", "poly": [Vector2(0, 392), Vector2(70, 392), Vector2(70, 428), Vector2(0, 428)]},
+			{"kind": "canal", "poly": [Vector2(150, 392), Vector2(280, 392), Vector2(280, 428), Vector2(150, 428)]},
+			{"kind": "canal", "poly": [Vector2(360, 392), Vector2(490, 392), Vector2(490, 428), Vector2(360, 428)]},
+			{"kind": "canal", "poly": [Vector2(572, 392), Vector2(640, 392), Vector2(640, 428), Vector2(572, 428)]},
+			{"kind": "bridge", "poly": [Vector2(66, 386), Vector2(154, 386), Vector2(154, 434), Vector2(66, 434)]},
+			{"kind": "bridge", "poly": [Vector2(276, 386), Vector2(364, 386), Vector2(364, 434), Vector2(276, 434)]},
+			{"kind": "bridge", "poly": [Vector2(486, 386), Vector2(576, 386), Vector2(576, 434), Vector2(486, 434)]},
+			{"kind": "building", "poly": [Vector2(150, 456), Vector2(280, 456), Vector2(280, 580), Vector2(150, 580)]},
+			{"kind": "building", "poly": [Vector2(360, 456), Vector2(490, 456), Vector2(490, 580), Vector2(360, 580)]}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"castle": "fort",
+		"bot_posts": [Vector2(110, 460), Vector2(320, 460), Vector2(530, 460), Vector2(110, 300), Vector2(320, 300), Vector2(530, 300),
+			Vector2(220, 640), Vector2(420, 640)],
+	},
+	# The Free Cities, the Exchange: the Council's great Exchange in its square, a canal
+	# across the city above it with three bridges, townhouses on the flanks.
+	"city_exchange": {
+		"name": "The Exchange", "battle": "council", "music": "city",
+		"blurb": "The Exchange\nbehind the\ncanal bridges",
+		"biome": "city",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "canal", "poly": [Vector2(0, 300), Vector2(110, 300), Vector2(110, 332), Vector2(0, 332)]},
+			{"kind": "canal", "poly": [Vector2(180, 300), Vector2(290, 300), Vector2(290, 332), Vector2(180, 332)]},
+			{"kind": "canal", "poly": [Vector2(350, 300), Vector2(460, 300), Vector2(460, 332), Vector2(350, 332)]},
+			{"kind": "canal", "poly": [Vector2(530, 300), Vector2(640, 300), Vector2(640, 332), Vector2(530, 332)]},
+			{"kind": "bridge", "poly": [Vector2(106, 294), Vector2(184, 294), Vector2(184, 338), Vector2(106, 338)]},
+			{"kind": "bridge", "poly": [Vector2(286, 294), Vector2(354, 294), Vector2(354, 338), Vector2(286, 338)]},
+			{"kind": "bridge", "poly": [Vector2(456, 294), Vector2(534, 294), Vector2(534, 338), Vector2(456, 338)]},
+			{"kind": "building", "poly": [Vector2(170, 150), Vector2(260, 150), Vector2(260, 240), Vector2(170, 240)]},
+			{"kind": "building", "poly": [Vector2(380, 150), Vector2(470, 150), Vector2(470, 240), Vector2(380, 240)]},
+			{"kind": "building", "poly": [Vector2(0, 390), Vector2(110, 390), Vector2(110, 560), Vector2(0, 560)]},
+			{"kind": "building", "poly": [Vector2(530, 390), Vector2(640, 390), Vector2(640, 560), Vector2(530, 560)]}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"castle": "keep",
+		"bot_posts": [Vector2(145, 360), Vector2(320, 360), Vector2(495, 360), Vector2(220, 450), Vector2(420, 450),
+			Vector2(320, 560), Vector2(180, 600), Vector2(460, 600)],
+	},
+	# The Free Cities, Carnival Night: streets running into the carnival plaza in the middle
+	# of the city, stalls and townhouses round it (the mission hangs the lanterns).
+	"city_carnival": {
+		"name": "The Carnival Plaza", "battle": "carnival", "music": "city",
+		"blurb": "A plaza of\nstalls and\nlanterns",
+		"biome": "city",
+		"lanes": [[40, 600]],
+		"terrain": [
+			{"kind": "building", "poly": [Vector2(0, 190), Vector2(120, 190), Vector2(120, 330), Vector2(0, 330)]},
+			{"kind": "building", "poly": [Vector2(200, 190), Vector2(262, 190), Vector2(262, 290), Vector2(200, 290)]},
+			{"kind": "building", "poly": [Vector2(378, 190), Vector2(440, 190), Vector2(440, 290), Vector2(378, 290)]},
+			{"kind": "building", "poly": [Vector2(520, 190), Vector2(640, 190), Vector2(640, 330), Vector2(520, 330)]},
+			{"kind": "building", "poly": [Vector2(0, 500), Vector2(130, 500), Vector2(130, 620), Vector2(0, 620)]},
+			{"kind": "building", "poly": [Vector2(210, 540), Vector2(270, 540), Vector2(270, 600), Vector2(210, 600)]},
+			{"kind": "building", "poly": [Vector2(370, 540), Vector2(430, 540), Vector2(430, 600), Vector2(370, 600)]},
+			{"kind": "building", "poly": [Vector2(510, 500), Vector2(640, 500), Vector2(640, 620), Vector2(510, 620)]}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"castle": "fort",
+		"bot_posts": [Vector2(320, 340), Vector2(230, 420), Vector2(410, 420), Vector2(320, 500), Vector2(160, 400), Vector2(480, 400),
+			Vector2(320, 640)],
+	},
 	# Sable Crossing: a river across the field, two bridges (80px, room for the Marshal) and
 	# a shallow ford between them that slows anyone wading it.
 	"sable_crossing": {
