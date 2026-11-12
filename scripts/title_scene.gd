@@ -1611,9 +1611,14 @@ func _draw_mountains(light: Color) -> void:
 ## Greenwood, Mercy Vale's sanctuary, the walls of the Free Cities and Stonehollow's quarry.
 func _draw_lands(light: Color, near: bool) -> void:
 	if not near:
-		# Frostmarch: a hall of dark timber on the snowfield.
-		_rect(Rect2(3, 302, 14, 6), _haze(Color(0.36, 0.26, 0.2) * light, 0.45))
-		_poly(PackedVector2Array([Vector2(1, 303), Vector2(10, 296), Vector2(19, 303)]), _haze(Color(0.9, 0.92, 1.0) * light, 0.3))
+		# Frostmarch: a hall of dark timber on the snowfield, a steep dark roof under a cap
+		# of snow (a white roof would vanish into the peak's snow), a lit window and door.
+		var timber := _haze(Color(0.36, 0.26, 0.2) * light, 0.4)
+		_rect(Rect2(3, 302, 14, 7), timber)
+		_poly(PackedVector2Array([Vector2(0, 303), Vector2(10, 293), Vector2(20, 303)]), _haze(Color(0.26, 0.18, 0.15) * light, 0.4))
+		_poly(PackedVector2Array([Vector2(5, 298), Vector2(10, 293), Vector2(15, 298)]), _haze(Color(0.95, 0.97, 1.0) * light, 0.25))
+		_rect(Rect2(5, 304, 3, 2), _haze(Color(1.0, 0.75, 0.35), 0.3))
+		_rect(Rect2(11, 305, 3, 4), _haze(Color(0.2, 0.13, 0.1) * light, 0.4))
 		# The High Monastery: tiered roofs on its crag.
 		var wall := _haze(Color(0.9, 0.86, 0.78) * light, 0.35)
 		var roof := _haze(Color(0.75, 0.3, 0.22) * light, 0.35)
