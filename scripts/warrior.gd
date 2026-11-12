@@ -1439,7 +1439,10 @@ func _blink_spot(e) -> Vector2:
 func _follow_anchor(delta: float) -> void:
 	if anchor == null:
 		return
-	if not is_instance_valid(anchor) or not anchor.is_target():
+	# Kept until what it follows is gone (a villager saved or lost, a wagon destroyed): a
+	# wagon at the end of its stretch isn't a target any more, but the troops stay with it
+	# onto the next one.
+	if not is_instance_valid(anchor) or anchor.is_queued_for_deletion() or ("dead" in anchor and anchor.dead):
 		anchor = null
 		return
 	anchor_check -= delta

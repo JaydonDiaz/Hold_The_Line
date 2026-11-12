@@ -32,12 +32,14 @@ func _run() -> void:
 	_chains()
 	_gates()
 	_tier4()
+	_south_training()
 	_saves()
+	_slots()
 	await _screens()
 	campaign.territories = CD.TERRITORIES
 	campaign.missions = CD.MISSIONS
 	campaign.reset()
-	for f in [TEST_SAVE, TEST_SAVE + ".tmp"]:
+	for f in [TEST_SAVE, TEST_SAVE + ".tmp", "user://progression_test_2.cfg", "user://progression_test_3.cfg"]:
 		if FileAccess.file_exists(f):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
 	print("%d checks, %d failed" % [checks, fails])
@@ -308,3 +310,93 @@ func _screens() -> void:
 			lit = true
 	check(lit, "...and the map announces the lit beacon")
 	main.free()
+
+
+## Each southern people as it ships: their first mission brings them in (their units and
+## keys, no beacon yet); the last required mission lights the beacon, which grants
+## nothing but opens Tier IV, and only for a path at Tier III with a point to spend.
+## Winning a mission again changes nothing; an optional mission's points come once.
+func _south_training() -> void:
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+	var chains := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
+	for f in chains:
+		campaign.new_campaign("normal")
+		_win("ashwatch")
+		_win("stonehollow")
+		var keys: Array = CD.FACTIONS[f]["unlocks"]
+		check(keys.all(func(k): return not campaign.allows(k)), "South %s: before its first mission, none of %s" % [f, ", ".join(keys)])
+		_win(chains[f][0])
+		check(campaign.allied(f) and keys.all(func(k): return campaign.allows(k)) and not campaign.beacon_lit(f),
+				"...its first mission brings the people in (%s), but no beacon" % ", ".join(keys))
+		var kinds: Array = campaign.tier4_kinds(f)
+		check(not kinds.is_empty() and kinds.all(func(k): return campaign.trainable().has(k)), "...their units can be trained at once (%s)" % ", ".join(kinds))
+		for k in kinds:
+			campaign.xp[k] = 1e9
+			campaign.unlock(k, 0)
+			campaign.unlock(k, 0)
+		check(kinds.all(func(k): return campaign.path_tier(k, 0) == 3 and not campaign.can_unlock(k, 0)),
+				"...Tier III trained, Tier IV refused before the beacon, points to spare")
+		var before: Dictionary = campaign.unlocked.duplicate(true)
+		var spent_before: Dictionary = campaign.spent.duplicate(true)
+		_win(chains[f][1])
+		check(campaign.beacon_lit(f) and campaign.just_lit == f, "...every required mission won: the beacon is lit")
+		check(campaign.unlocked == before and campaign.spent == spent_before, "...and nothing is bought by itself: tiers and points as they were")
+		check(kinds.all(func(k): return campaign.can_unlock(k, 0) and campaign.tier_lock_reason(k, 0) == ""), "...Tier IV can now be bought on a Tier III path")
+		check(kinds.all(func(k): return campaign.can_unlock(k, 1) and campaign.path_tier(k, 1) == 1), "...a path at Tier I still goes to Tier II first")
+		var k0: String = kinds[0]
+		var xp0: float = campaign.xp[k0]
+		campaign.xp[k0] = 0.0
+		check(not campaign.can_unlock(k0, 0), "...and with no points to spend, %s's Tier IV still can't be bought" % k0)
+		campaign.xp[k0] = xp0
+		check(campaign.unlock(k0, 0) and campaign.path_tier(k0, 0) == 4, "...with a point, it can")
+		# Replaying: no second beacon, nothing taken away or given.
+		var done: Array = campaign.completed.duplicate()
+		var trained: Dictionary = campaign.unlocked.duplicate(true)
+		_win(chains[f][1])
+		_win(chains[f][0])
+		check(campaign.completed == done and campaign.unlocked == trained and campaign.just_lit == "" and campaign.just_joined == "",
+				"...winning its missions again changes nothing (no new beacon, tiers kept)")
+	# The Hunter's Trail: its Archer point comes on the first win only, however often it's played.
+	campaign.new_campaign("normal")
+	for m in ["ashwatch", "stonehollow", "gw_exodus"]:
+		_win(m)
+	for i in 5:
+		_win("gw_trail")
+	check(campaign.bonus_points("archer") == 1 and campaign.completed.count("gw_trail") == 1, "The Hunter's Trail won five times: still one bonus point (%d)" % campaign.bonus_points("archer"))
+
+
+## Three campaigns side by side, one in each save: each keeps its own missions, peoples,
+## training and difficulty, and none leaks into another.
+func _slots() -> void:
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+	var plans := {1: ["easy", "greenwood", ["gw_exodus", "gw_trail"], "archer"], 2: ["normal", "mercyvale", ["mv_wounded", "mv_sanctuary"], "healer"],
+			3: ["hard", "deepdelve", ["dd_entrance"], "cannon"]}
+	for n in plans:
+		campaign.use_slot(n)
+		campaign.new_campaign(plans[n][0])
+		for m in ["ashwatch", "stonehollow"] + plans[n][2]:
+			_win(m)
+		campaign.xp[plans[n][3]] = 1e9
+		campaign.unlock(plans[n][3], 2)
+		campaign.save_game()
+	for n in [3, 1, 2]:
+		campaign.use_slot(n)
+		campaign.reset()
+		campaign.use_slot(n)
+		campaign.load_game()
+		var kind: String = plans[n][3]
+		var others: Array = [1, 2, 3].filter(func(x): return x != n).map(func(x): return plans[x][1])
+		check(campaign.difficulty == plans[n][0] and campaign.allied(plans[n][1]) and not others.any(func(f): return campaign.allied(f))
+				and campaign.path_tier(kind, 2) == 2 and campaign.completed == ["ashwatch", "stonehollow"] + plans[n][2],
+				"Save %d: %s, %s joined, %s trained, nothing from the other saves" % [n, plans[n][0], plans[n][1], kind])
+		var info: Dictionary = campaign.slot_info(n)
+		check(info["difficulty"] == plans[n][0] and info["alliances"] == 2, "...and the save menu reads it right (%s, %d alliances)" % [info["difficulty"], info["alliances"]])
+	var lit2: bool = campaign.beacon_lit("mercyvale")   # (Save 2 is the one loaded last)
+	campaign.use_slot(1)
+	campaign.load_game()
+	check(lit2 and not campaign.beacon_lit("mercyvale"), "...Mercy Vale's beacon is lit in Save 2 alone")
+	for n in [2, 3]:
+		campaign.delete_slot(n)
+	campaign.use_slot(1)

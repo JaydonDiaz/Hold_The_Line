@@ -83,6 +83,10 @@ var chase_check := 0.0
 var chase_goal := Vector2.INF
 var shots := 0               # Skeleton Archer: arrows loosed (the tests look at where from)
 var last_shot_from := Vector2.ZERO
+var idle_shots := 0         # Skeleton Archer: arrows at troops since it was last hurt itself
+var press_on := 0.0         # ...and seconds it's ignoring troops to push on (see PRESS_AFTER)
+const PRESS_AFTER := 8      # arrows at troops that can't (or won't) come for it before it pushes on
+const PRESS_TIME := 4.0
 static var slimes_out := 0  # Slimes on the field, so troops only look out for them when there are any
 var breath_timer := 1.0
 var horn_timer := 15.0
@@ -303,6 +307,7 @@ func _process(delta: float) -> void:
 		queue_redraw()
 		return
 	aggro_check -= delta
+	press_on = maxf(press_on - delta, 0.0)
 	if not ranged.is_empty() and not sieging and _shoot_from_range():
 		_push_out()
 		progress = position.y
@@ -668,7 +673,11 @@ func _shoot_from_range() -> bool:
 		return false   # nowhere your troops could get at it: keep walking
 	var mark = null
 	var best := INF
-	for w in main.warriors_near(position, r + 40.0):
+	# A troop that stays out of its reach (holding its post, or healed as fast as it's
+	# hit) would keep it shooting forever and the wave from ever ending: after a few
+	# arrows that don't bring anyone to it, it leaves the troops be and pushes on.
+	var troops: Array = [] if press_on > 0.0 else main.warriors_near(position, r + 40.0)
+	for w in troops:
 		if not w.is_active():
 			continue
 		var d: float = position.distance_to(w.position) - w.RADIUS - radius
@@ -698,6 +707,11 @@ func _shoot_from_range() -> bool:
 		shot.position = position + Vector2(8.0 * flip, -radius * 1.2)
 		shot.speed = ranged["speed"]
 		shot.damage = (damage if mark != null else wall_damage) * _hit_mult()
+		if mark != null and mark != goal:   # (a troop, not its objective)
+			idle_shots += 1
+			if idle_shots >= PRESS_AFTER:
+				idle_shots = 0
+				press_on = PRESS_TIME
 		main.add_projectile(shot)
 		main.sfx("bow", 0.8)
 	return true
@@ -923,6 +937,7 @@ func _push_from(p: Vector2, min_d: float, share: float) -> void:
 func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 	if dead:
 		return
+	idle_shots = 0   # (being hit back: it isn't shooting at nothing)
 	if not banner.is_empty():
 		recent_hurt += amount   # (a hard enough beating knocks his banner down)
 	if gooey:

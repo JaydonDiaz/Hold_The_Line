@@ -97,6 +97,18 @@ func _archers() -> void:
 	var pos: Vector2 = sk.position
 	await _frames(240)
 	check(sk.position.distance_to(pos) < 4.0 and sw.hp < hp_before, "A  it holds its spot and keeps shooting")
+	# A troop that never comes for it (holding its post, healed as fast as it's hit) mustn't
+	# keep it there for ever, the wave never ending: after a few arrows it pushes on.
+	var pushed := false
+	for i in 60:
+		await _frames(20)
+		if sk.position.distance_to(pos) > 20.0:
+			pushed = true
+			break
+	check(pushed and sk.press_on > 0.0, "A  ...but a troop that never comes for it doesn't hold it for ever: it pushes on (%d arrows)" % sk.shots)
+	sk.idle_shots = 5
+	sk.take_damage(1.0)
+	check(sk.idle_shots == 0, "A  ...(hit back, it stands and shoots again as long as it likes)")
 	# Nobody about: it stops short of the castle and shoots the wall.
 	sw.queue_free()
 	await process_frame

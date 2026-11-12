@@ -793,10 +793,12 @@ func _escort() -> void:
 	medic.stay_with([t1])
 	main.last_priority["swordsman"] = "strongest"
 	var off: Vector2 = t1.position - wagon.position
+	main.set_follow(wagon, [t1])   # (following it out of the meadow)
 	wagon.position = wagon.route[-1]
 	wagon.leg = wagon.route.size()
 	t1.position = wagon.position + off
 	await create_timer(1.2).timeout
+	check(t1.anchor == wagon, "...a troop following the wagon still follows it on the next stretch (it used to stop when the wagon reached the top)")
 	check(r.zone_i == 1 and main.map_id == "convoy_forest" and main.paths.has_terrain() and not main.game_over,
 			"...out the top of the meadow, the field turns into the next zone (%s)" % main.map_id)
 	check(main.get_enemies().is_empty() and left_by > 0, "...the enemies are left behind (%d)" % left_by)
