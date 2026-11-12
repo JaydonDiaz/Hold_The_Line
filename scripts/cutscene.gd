@@ -261,8 +261,13 @@ func _draw() -> void:
 
 
 ## One art pixel (or a block of them).
+## Nothing goes below the art's foot (GH), where the text panel starts.
 func _b(x: float, y: float, w: float, h: float, c: Color) -> void:
-	draw_rect(Rect2(floorf(x) * PX, floorf(y) * PX, maxf(1.0, roundf(w)) * PX, maxf(1.0, roundf(h)) * PX), c)
+	var top := floorf(y)
+	var rows := minf(maxf(1.0, roundf(h)), GH - top)
+	if rows <= 0.0:
+		return
+	draw_rect(Rect2(floorf(x) * PX, top * PX, maxf(1.0, roundf(w)) * PX, rows * PX), c)
 
 
 ## A sky in flat bands, lighter toward the horizon.
@@ -589,7 +594,7 @@ func _draw_nation(f: String) -> void:
 			_b(0, 74, GW, 50, Color(0.16, 0.3, 0.18))
 			for layer in 3:
 				var col := Color(0.22, 0.44, 0.27).darkened(0.22 * (2 - layer))
-				_b(0, 74 + layer * 18, GW, 50, Color(0.16, 0.3, 0.18).lightened(0.06 * layer))
+				_b(0, 74 + layer * 18, GW, mini(50, GH - (74 + layer * 18)), Color(0.16, 0.3, 0.18).lightened(0.06 * layer))   # (not past the art's foot, into the text)
 				for i in 12:
 					_pine(6 + i * 14 + layer * 5, 76 + layer * 22, 16 + layer * 4 + (i * 3 + layer) % 5, col)
 			# Sunbeams slanting down through the canopy.
