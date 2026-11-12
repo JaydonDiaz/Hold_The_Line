@@ -73,6 +73,8 @@ func process(delta: float) -> void:
 		zone.progress = minf(zone.progress + delta / take, 1.0)
 	elif theirs > 0 and mine == 0:
 		zone.progress = maxf(zone.progress - delta / take * (1.0 if phase == "hold" else 0.5), 0.0)
+		if phase == "hold":
+			spoil("They took ground back")
 	if endless():
 		_endless(delta)
 		return

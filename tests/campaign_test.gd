@@ -69,6 +69,7 @@ func _run() -> void:
 		_data()
 	if _wants("T"):
 		await _training()
+		await _flawless()
 	if _wants("C"):
 		await _cutscene()
 	if _wants("B"):
@@ -81,6 +82,59 @@ func _run() -> void:
 	_delete_save()
 	print("FAILS: %d" % fails)
 	quit(1 if fails > 0 else 0)
+
+
+## A flawless win (perfect play by the battle's own measure) trains every unit
+## FLAWLESS_BONUS more; anything that spoils it (the castle hit, even if repaired after,
+## enemies through, an objective fallen or hit, a villager lost) loses the bonus.
+func _flawless() -> void:
+	var bonus: float = 1.0 + CD.FLAWLESS_BONUS
+	# A castle mission won without the castle being touched.
+	campaign.new_campaign("normal")
+	await _play("ashwatch")
+	main.battle_xp = {"swordsman": 1000.0}
+	main._finish(true)
+	check(main.rules.flawless() and is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0 * bonus),
+			"T  a flawless win (the castle never hit) trains %d%% more (%d XP for 1000)" % [roundi(CD.FLAWLESS_BONUS * 100), campaign.xp.get("swordsman", 0.0)])
+	# The castle hit once, then repaired to full: not flawless.
+	campaign.new_campaign("normal")
+	await _play("ashwatch")
+	main.damage_castle(10.0)
+	main.castle_hp = main.castle_max
+	main.battle_xp = {"swordsman": 1000.0}
+	main._finish(true)
+	check(not main.rules.flawless() and is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0),
+			"T  ...the castle hit once and repaired to full: no bonus (%d XP)" % campaign.xp.get("swordsman", 0.0))
+	# A loss is never flawless.
+	campaign.new_campaign("normal")
+	await _play("ashwatch")
+	main.battle_xp = {"swordsman": 1000.0}
+	main._finish(false)
+	check(is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0 * CD.XP_LOSS_SHARE), "T  ...a loss gets no bonus")
+	# Each kind of battle by its own measure.
+	campaign.new_campaign("normal")
+	campaign.completed = ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops", "gw_exodus", "gw_watchfires", "mv_wounded", "mv_sanctuary", "sable_crossing", "fm_pass"]
+	campaign.allies = ["stonehollow", "greenwood", "mercyvale", "frostmarch"]
+	await _play("fm_pass")
+	var ok_before: bool = main.rules.flawless()
+	main._spawn_enemy("goblin", 1, Vector2(320, 700))
+	main.rules.on_reached_bottom(main.get_enemies()[-1])
+	check(ok_before and not main.rules.flawless(), "T  Hold the Pass: one enemy through and it's not flawless")
+	await _play("fm_vigil")
+	ok_before = main.rules.flawless()
+	var stone = main.rules.objectives()[0]
+	stone.take_damage(50.0)
+	var after_hit: bool = main.rules.flawless()
+	stone.take_damage(1e9)
+	check(ok_before and after_hit and not main.rules.flawless(), "T  Multiple Positions: a stone hit is still flawless, a stone fallen isn't")
+	await _play("fm_whiteout")
+	ok_before = main.rules.flawless()
+	main.rules.wagon.take_damage(5.0)
+	check(ok_before and not main.rules.flawless(), "T  Escort: the sled hit at all and it's not flawless")
+	await _play("mv_wounded")
+	ok_before = main.rules.flawless()
+	main.rules._on_lost(null)
+	check(ok_before and not main.rules.flawless(), "T  Evacuation: one villager lost and it's not flawless")
 
 
 func _wants(group: String) -> bool:

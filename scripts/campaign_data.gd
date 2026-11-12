@@ -34,6 +34,7 @@ const XP_FIRST := 2000.0        # XP to a kind's first level (a Swordsmen-only A
 const XP_GROWTH := 1.2          # each level after that needs this much more than the one before (79k XP in all)
 const XP_LOSS_SHARE := 0.5      # a battle lost (or left) counts for this share of its XP
 const XP_REPLAY_SHARE := 0.5    # ...and a mission already won, played again, this share (on top)
+const FLAWLESS_BONUS := 0.5     # a flawless win (rules.flawless: nothing lost, nobody through) trains this much more
 const MAX_TRAINING := 12        # points that train a kind fully: tiers II-IV on all four paths
 
 const FACTIONS := {

@@ -116,6 +116,7 @@ func _on_saved(v) -> void:
 
 func _on_lost(_v) -> void:
 	lost += 1
+	spoil("A villager was lost")
 	if not over and endless():
 		if lost > can_lose():
 			over = true

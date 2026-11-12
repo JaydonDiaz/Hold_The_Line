@@ -29,6 +29,7 @@ func worth(kind: String) -> int:
 func on_reached_bottom(e) -> bool:
 	var n := worth(e.kind)
 	through += n
+	spoil("Enemies got through")
 	main.spawn_text(Vector2(e.position.x, main.CASTLE_Y - 20), "Broke through!" if n == 1 else "Broke through! (x%d)" % n, Color(1, 0.4, 0.3))
 	main.sfx("castle")
 	if through > limit() and not lost and not main.game_over:

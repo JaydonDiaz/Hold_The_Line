@@ -113,6 +113,30 @@ func on_objective_lost(_o) -> void:
 	pass
 
 
+# --- A flawless win (the campaign's bonus training: see main._finish) -----------------------
+# Perfect play by the battle's own measure: the castle never hit (a repair doesn't undo a
+# hit), nobody through the line, no objective fallen (the one you're guarding in Protect
+# or Escort never even hit), no villager lost, no ground given back. The first thing that
+# spoils it is kept, to say on the end screen.
+var flaw := ""
+
+
+func spoil(why: String) -> void:
+	if flaw == "":
+		flaw = why
+
+
+func flawless() -> bool:
+	return flaw == ""
+
+
+## An objective was hit (objective.gd): in Protect and Escort, the one thing you're
+## guarding, so that's the end of a flawless win.
+func on_objective_hit(o) -> void:
+	if mission.get("type", "") in ["protect", "escort"] and o.kind != "civilian":
+		spoil("The %s was hit" % o.label.to_lower())
+
+
 func process(_delta: float) -> void:
 	pass
 

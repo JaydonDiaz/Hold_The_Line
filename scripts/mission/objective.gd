@@ -156,6 +156,8 @@ func take_damage(amount: float) -> void:
 		return
 	hp -= amount
 	hit = 0.2
+	if main.rules != null:
+		main.rules.on_objective_hit(self)
 	if kind == "civilian":
 		panic = PANIC_TIME
 	if hp <= 0.0:

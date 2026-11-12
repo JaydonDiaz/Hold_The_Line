@@ -89,6 +89,7 @@ func on_reached_bottom(_e) -> bool:
 
 func on_objective_lost(o) -> void:
 	lost += 1
+	spoil("The %s fell" % o.label.to_lower())
 	if lost > can_lose() and not over and not main.game_over:
 		over = true
 		main.hud.show_message("The %s has fallen. The line is broken!" % o.label)

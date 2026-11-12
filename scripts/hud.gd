@@ -1841,17 +1841,24 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary :=
 		again.pressed.connect(func(): campaign_retry.emit())
 		var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
 		map_btn.pressed.connect(func(): campaign_map.emit())
+	# A flawless win (or what spoiled it), on its own line under the buttons.
+	if won and flawless_note.size() == 2 and flawless_note[0] != "":
+		var fl := _label(dim, Vector2(30, 528), Vector2(WIDTH - 60, 22), Color(1.0, 0.85, 0.3) if flawless_note[1] else Color(0.75, 0.72, 0.68), 15)
+		fl.text = flawless_note[0]
+		fl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	flawless_note = []
 	# What each unit learned: XP earned, and any training points it reached.
 	var earned: Array = Campaign.last_battle.keys()
 	earned.sort_custom(func(a, b): return Campaign.last_battle[a][0] > Campaign.last_battle[b][0])
 	if not earned.is_empty():
-		var head := _label(dim, Vector2(0, 540), Vector2(WIDTH, 24), Color(1, 0.85, 0.3), 17)
+		var head := _label(dim, Vector2(0, 572), Vector2(WIDTH, 24), Color(1, 0.85, 0.3), 17)
 		head.text = "Experience"
 		head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		for i in mini(earned.size(), 8):
 			var kind: String = earned[i]
 			var got: Array = Campaign.last_battle[kind]
-			var line := _label(dim, Vector2(WIDTH / 2.0 - 240, 570 + i * 24), Vector2(480, 22), Color(0.92, 0.9, 0.85), 15)
+			var line := _label(dim, Vector2(WIDTH / 2.0 - 240, 602 + i * 24), Vector2(480, 22), Color(0.92, 0.9, 0.85), 15)
 			var caught: bool = got.size() > 2 and got[2] > 0.0
 			line.text = "%s  +%d XP%s%s" % [Data.WARRIORS[kind]["name"], roundi(got[0]), " (x2 catch-up)" if caught else "",
 					"  ·  +%d training point%s!" % [got[1], "" if got[1] == 1 else "s"] if got[1] > 0 else ""]
@@ -1883,6 +1890,7 @@ func _button(parent: Node, pos: Vector2, size: Vector2, text: String) -> Button:
 # --- Orders: the selected unit's (or group's) target priority, commitment, movement
 # zone, danger reactions and answering calls for help ----------------------------------
 
+var flawless_note := []       # [what to say, flawless] for the campaign's end screen (main._finish)
 var orders_box: Panel = null
 var orders_for = null          # the first of the units the box was built for (for a group, any one of them)
 var orders_units := []         # the units the box gives orders to (one, or the group)

@@ -814,6 +814,7 @@ func damage_castle(amount: float) -> void:
 		return
 	amount *= 1.0 - powers.armor()
 	castle_hp -= amount
+	rules.spoil("The castle was hit")   # (repairing it later doesn't undo this)
 	castle.struck(amount)
 	sfx("castle")
 	if amount >= 15.0:
@@ -1433,7 +1434,16 @@ func _finish(won: bool) -> void:
 	wall_layer.process_mode = Node.PROCESS_MODE_DISABLED
 	var survived := run_survived
 	if campaign:
+		var flawless: bool = won and rules.flawless()
+		if flawless:
+			for k in battle_xp:
+				battle_xp[k] *= 1.0 + Campaign.CD.FLAWLESS_BONUS   # perfect play: more learned
 		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
+		var note := ""
+		if won:
+			note = ("Flawless! Every unit learns %d%% more." % roundi(Campaign.CD.FLAWLESS_BONUS * 100.0)) if flawless else \
+					"Not flawless (%s): a perfect win trains every unit %d%% more." % [rules.flaw.to_lower(), roundi(Campaign.CD.FLAWLESS_BONUS * 100.0)]
+		hud.flawless_note = [note, flawless]
 		hud.show_campaign_end(won, mission, survived, _summary(won))
 		return
 	if battle_id != "":
