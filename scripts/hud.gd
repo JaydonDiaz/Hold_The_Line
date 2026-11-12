@@ -1210,7 +1210,7 @@ func _show_cards(set_name: String) -> void:
 				if t == "castle":
 					continue
 				var ty: Dictionary = Scenarios.TYPES[t]
-				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], "normal"])
+				modes.append(["goto:bm:" + t, ty["name"], ty["blurb"], ty["color"], ty["look"], t])   # its own scene behind
 			modes.append(back)
 			# Two rows of four along the bottom, clear of the castle (Back last).
 			narrow = true
@@ -1253,7 +1253,7 @@ func _show_cards(set_name: String) -> void:
 			if sc["type"] == "escort":
 				where = "from %s on" % where
 			modes.append(["goto:bmd:" + id, sc["name"], "Survive as\nmany waves\nas you can\n%s" % where,
-					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], "normal"])
+					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], t])
 		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
 		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
 	elif set_name.begins_with("bmd:"):
@@ -1391,7 +1391,6 @@ func _difficulty_card(diff: String, key: String) -> Array:
 
 ## Cards are 190 wide, three to a row; narrow ones (NARROW_W) go four to a row.
 const NARROW_W := 150.0
-const ModeVignette = preload("res://scripts/mode_vignette.gd")
 
 
 func _mode_card(m: Array, at: Vector2, delay: float, w := 190.0) -> Button:
@@ -1423,20 +1422,6 @@ func _mode_card(m: Array, at: Vector2, delay: float, w := 190.0) -> Button:
 	var t := create_tween().set_parallel()
 	t.tween_property(b, "position", at, 0.55).set_delay(delay).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(b, "modulate:a", 1.0, 0.3).set_delay(delay)
-	# A kind of battle (Battle Modes) has its own little scene playing on its card.
-	var key: String = m[0]
-	if key.begins_with("goto:bm:"):
-		var v := ModeVignette.new()
-		v.kind = key.substr(8)
-		v.look = m[4]
-		v.position = Vector2(4, 38)
-		v.size = Vector2(w - 8.0, 54)
-		v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		v.clip_contents = true
-		v.t = delay * 3.0   # (each a little out of step)
-		b.add_child(v)
-		icon.visible = false   # (the character's in the scene)
-		desc.position.y = 94.0
 	# The character on the card bobs up and down, each a little out of step.
 	var bob := create_tween().set_loops()
 	bob.tween_property(icon, "position:y", 37.0, 0.5 + delay * 0.3).set_trans(Tween.TRANS_SINE)

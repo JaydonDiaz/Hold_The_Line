@@ -254,13 +254,65 @@ func _battle_modes() -> void:
 	for t in looks:
 		seen[t] = true
 	check(seen.size() == looks.size(), "...each with its own character")
+	# Hovering one sets the title screen's scene for that kind of battle, as the Classic cards do.
+	var ts = hud.title_scene
 	var scenes := {}
 	for c in hud.mode_cards:
-		for n in c.get_children():
-			if n.get_script() == hud.ModeVignette:
-				scenes[n.kind] = n.look
+		var lk: String = c.get_meta("look", "")
+		if ts.LOOKS.has(lk) and lk != "":
+			scenes[lk] = true
 	check(scenes.size() == 7 and scenes.keys().all(func(k): return main.Scenarios.TYPES.has(k)),
-			"...and its own little scene playing on it (%s)" % ", ".join(scenes.keys()))
+			"...and its own scene behind the castle while it's hovered (%s)" % ", ".join(scenes.keys()))
+	hud.mode_cards[0].mouse_entered.emit()
+	check(ts.look == "positions", "...hovering Multiple Positions shows its scene (%s)" % ts.look)
+	hud.mode_cards[0].mouse_exited.emit()
+	await create_timer(0.4).timeout
+	check(ts.look == "", "...and leaving it goes back to the plain title screen")
+	for lk in ["positions", "pass", "protect", "evac", "capture", "escort", "retreat"]:
+		ts.set_look(lk)
+		await create_timer(0.5).timeout
+		var start := {}
+		for a in ts.actors:
+			if not a["leaving"]:
+				start[a["id"]] = a["pos"]
+		await create_timer(4.5).timeout
+		var live: Array = ts.actors.filter(func(a): return not a["leaving"])
+		var kinds: Array = live.map(func(a): return a["kind"])
+		var foes: int = live.filter(func(a): return a["side"] == "foe").size()
+		var ok := foes > 0
+		match lk:
+			"positions":
+				ok = ok and live.filter(func(a): return a["kind"] == "watchtower" and a.get("objective", false)).size() == 2 \
+						and "engineer" in kinds
+			"pass":
+				ok = ok and kinds.count("crag") == 4 and "swordsman" in kinds
+			"protect":
+				ok = ok and "beacon" in kinds and "mage" in kinds
+			"evac":
+				ok = ok and kinds.count("cottage") == 2 and ts.actors.any(func(a): return a["side"] == "walker")
+			"capture":
+				ok = ok and "fort" in kinds and "martial" in kinds
+			"escort":
+				var wagon = ts._prop("wagon")
+				ok = ok and wagon != null and start.has(wagon["id"]) and wagon["pos"].x > start[wagon["id"]].x + 100.0 \
+						and live.filter(func(a): return a["role"] == "escort").all(func(a): return a["pos"] == wagon["pos"] + a["off"])
+			"retreat":
+				ok = ok and ts.cur["storm"] > 0.9 and live.filter(func(a): return a["side"] == "guard" and start.has(a["id"])) \
+						.all(func(a): return a["pos"].x < start[a["id"]].x - 40.0)
+		check(ok, "...the %s scene plays out (%s, %d foes)" % [lk, ", ".join(kinds), foes])
+	ts.set_look("evac")
+	var reached := false
+	for i in 40:
+		await create_timer(0.25).timeout
+		reached = reached or ts.actors.any(func(a): return a["side"] == "walker" and a["leaving"] and a["pos"].y <= ts.GROUND_Y + 12.0)
+	check(reached, "...in the evacuation, villagers walk in at the castle gate")
+	ts.set_look("campaign")
+	await create_timer(0.3).timeout
+	var dark: bool = ts.chain < 0.6
+	await create_timer(3.4).timeout
+	check(ts.BEACONS.size() == 8 and dark and ts.chain >= 0.6 + 7 * 0.35,
+			"The far country has the eight peoples' beacons, lit one by one for the Campaign")
+	ts.set_look("")
 	hud._show_cards("top")
 	looks = hud.mode_cards.map(func(c): return (c.get_child(1) as TextureRect).texture)
 	seen = {}

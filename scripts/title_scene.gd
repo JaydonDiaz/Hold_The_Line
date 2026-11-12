@@ -6,7 +6,12 @@ extends Control
 ## troops and graves for Hard, a twilight of conjured enemies for Freeplay, and
 ## Engineers at work (on emplacement construction sites, mending the castle wall,
 ## one tossing his hammer) for Settings, and a dawn with the keep's last two
-## swordsmen facing the first raiders for the Campaign. Pure decoration: nothing here touches the game.
+## swordsmen facing the first raiders for the Campaign. Each kind of battle in Battle
+## Modes has a scene of its own too: watchtowers under attack, a pass held, a beacon
+## building to a blaze, villagers making for the gate, a fort's flag raised, a convoy
+## rolling by, and a line falling back through a storm. Past the castle lies the far
+## country: mountains, the eight peoples' lands and their beacons (which light one by one
+## for the Campaign). Pure decoration: nothing here touches the game.
 
 const Sprites = preload("res://scripts/sprites.gd")
 const Grave = preload("res://scripts/grave.gd")
@@ -47,7 +52,44 @@ const LOOKS := {
 	"settings": {"top": Color(0.36, 0.6, 0.93), "low": Color(0.82, 0.9, 0.98), "clouds": 5, "cloud": Color(1, 1, 1),
 		"sun": 0.9, "moon": 0.0, "stars": 0.0, "light": Color(1.02, 1.0, 0.96), "windows": 0.0, "storm": 0.0,
 		"guards": [], "foes": [], "scene": "workshop"},
+	# The Battle Modes, one look for each kind of battle (keyed as in Scenarios.TYPES).
+	"positions": {"top": Color(0.34, 0.62, 0.98), "low": Color(0.8, 0.92, 1.0), "clouds": 4, "cloud": Color(1, 1, 1),
+		"sun": 1.0, "moon": 0.0, "stars": 0.0, "light": Color(1.03, 1.02, 0.97), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": ["goblin", "goblin", "wolf", "orc", "sapper"], "scene": "positions"},
+	"pass": {"top": Color(0.42, 0.5, 0.62), "low": Color(0.76, 0.8, 0.84), "clouds": 11, "cloud": Color(0.88, 0.9, 0.92),
+		"sun": 0.3, "moon": 0.0, "stars": 0.0, "light": Color(0.9, 0.92, 0.95), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": ["goblin", "goblin", "orc", "wolf"], "scene": "pass", "bounce": true},
+	"protect": {"top": Color(0.2, 0.18, 0.42), "low": Color(0.98, 0.55, 0.38), "clouds": 5, "cloud": Color(0.95, 0.7, 0.65),
+		"sun": 0.0, "moon": 0.45, "stars": 0.35, "light": Color(0.86, 0.76, 0.8), "windows": 1.0, "storm": 0.0,
+		"guards": [], "foes": ["goblin", "orc", "wolf", "goblin"], "scene": "protect"},
+	"evac": {"top": Color(0.5, 0.62, 0.8), "low": Color(0.95, 0.88, 0.76), "clouds": 6, "cloud": Color(1, 0.97, 0.92),
+		"sun": 0.7, "moon": 0.0, "stars": 0.0, "light": Color(1.0, 0.96, 0.9), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": ["wolf", "goblin", "orc"], "scene": "evac"},
+	"capture": {"top": Color(0.3, 0.55, 0.92), "low": Color(0.96, 0.88, 0.7), "clouds": 3, "cloud": Color(1, 0.98, 0.94),
+		"sun": 1.0, "moon": 0.0, "stars": 0.0, "light": Color(1.05, 1.0, 0.9), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": ["goblin", "orc", "skeleton_archer", "goblin"], "scene": "capture"},
+	"escort": {"top": Color(0.38, 0.6, 0.9), "low": Color(0.85, 0.9, 0.95), "clouds": 8, "cloud": Color(1, 1, 1),
+		"sun": 0.8, "moon": 0.0, "stars": 0.0, "light": Color(1.0, 1.0, 0.97), "windows": 0.0, "storm": 0.0,
+		"guards": [], "foes": ["goblin", "wolf", "goblin"], "scene": "escort"},
+	"retreat": {"top": Color(0.15, 0.17, 0.25), "low": Color(0.4, 0.42, 0.5), "clouds": 14, "cloud": Color(0.36, 0.38, 0.46),
+		"sun": 0.0, "moon": 0.0, "stars": 0.0, "light": Color(0.62, 0.64, 0.74), "windows": 0.8, "storm": 1.0,
+		"guards": [], "foes": ["orc", "goblin", "troll", "wolf", "orc"], "scene": "retreat"},
 }
+const FIGHTS := ["battle", "conjure", "positions", "pass", "protect", "evac", "capture", "escort", "retreat"]   # scenes enemies come at
+const WAGON_SPEED := 30.0      # the convoy's pace in the escort scene
+const RETREAT_STEP := 2.6      # seconds between the steps back in the retreat scene
+const CHARGE := 4.2            # seconds for the protect scene's beacon to build to a blaze (then a moment ablaze)
+const RAISE := 3.4             # seconds for the capture scene's flag to climb its pole
+# The far country seen past the castle: two ranges of mountains (x, peak y, half width;
+# snow on those that rise above SNOW_Y), and the eight peoples' lands, each with its beacon.
+const FAR_PEAKS := [[-700, 290, 120], [-560, 304, 110], [-420, 296, 120], [-260, 300, 120], [-120, 286, 110], [10, 276, 100], [92, 304, 80], [180, 318, 90], [258, 300, 80],
+		[380, 306, 90], [470, 290, 100], [602, 262, 110], [720, 292, 120], [860, 284, 110], [1000, 300, 120], [1150, 288, 110], [1300, 302, 120]]
+const NEAR_PEAKS := [[-520, 348, 120], [-180, 352, 110], [52, 334, 70], [205, 330, 60], [418, 352, 50], [700, 350, 120], [1020, 346, 120]]
+const SNOW_Y := 312.0
+## Where each beacon stands (in the order they light, west to east) and how far off it is
+## (1 near, smaller further).
+const BEACONS := [[Vector2(10, 276), 0.8], [Vector2(70, 405), 0.9], [Vector2(214, 353), 0.85], [Vector2(244, 331), 0.8],
+		[Vector2(426, 334), 0.85], [Vector2(566, 452), 1.1], [Vector2(628, 316), 0.75], [Vector2(631, 410), 0.95]]
 const ENGINEER_SWING := 0.36   # seconds per hammer blow in the workshop scene
 const TOSS := 1.5              # seconds per hammer toss in the workshop scene
 const BOLT_COLORS := {"archer": Color(0.95, 0.9, 0.7), "mage": Color(0.75, 0.5, 1.0), "frost": Color(0.6, 0.9, 1.0),
@@ -90,6 +132,15 @@ var bolt_path := PackedVector2Array()
 var storm_cd := 2.0
 var title_pixels := []     # [col, row] lit pixels of the title, worked out once
 var title_cols := 0
+var bat: Batch = null      # while set, the far country's drawing goes into this mesh (see _draw_land)
+var land_mesh: ArrayMesh = null
+var land_key := []
+var fire_mesh: ArrayMesh = null
+var rain_mesh: ArrayMesh = null
+var chain := 99.0          # seconds since the beacons began lighting one by one (the Campaign's look)
+var step_cd := 0.0         # the retreat scene's wait before the line steps back again
+var steps := 0
+var scene_t := 0.0         # seconds the current look has been showing
 
 
 func _ready() -> void:
@@ -132,6 +183,9 @@ func _apply(key: String) -> void:
 	if key == look:
 		return
 	look = key
+	scene_t = 0.0
+	if key == "campaign":
+		chain = 0.0   # the beacons go out, then light again one after another
 	_cast()
 
 
@@ -162,6 +216,59 @@ func _cast() -> void:
 			_add_actor("engineer", Vector2(205, GROUND_Y + 18), "guard", "repair")
 			_add_actor("engineer", Vector2(436, GROUND_Y + 18), "guard", "repair_l")
 			_add_actor("engineer", Vector2(320, ROWS[1] + 6), "guard", "toss")
+		"positions":
+			# Two watchtowers out on the field, an Engineer patching one, Archers covering both.
+			_add_actor("watchtower", Vector2(190, ROWS[0] - 2), "prop")
+			actors[-1]["objective"] = true
+			_add_actor("watchtower", Vector2(446, ROWS[0] + 2), "prop")
+			actors[-1]["objective"] = true
+			_add_actor("engineer", Vector2(418, ROWS[0] + 6), "guard", "build")
+			_add_actor("archer", Vector2(120, ROWS[1]), "guard", "fight")
+			_add_actor("archer", Vector2(300, ROWS[1]), "guard", "fight")
+		"pass":
+			# Crags either side, and Swordsmen holding the gap: the enemy bounces off them.
+			for c in [[Vector2(16, 534), 1.2], [Vector2(612, 532), 1.3], [Vector2(560, 610), 0.9], [Vector2(70, 612), 0.8]]:
+				_add_actor("crag", c[0], "prop", str(c[1]))
+			_add_actor("swordsman", Vector2(330, ROWS[0]), "guard", "fight")
+			_add_actor("swordsman", Vector2(346, ROWS[1]), "guard", "fight")
+			_add_actor("archer", Vector2(230, ROWS[0]), "guard", "fight")
+			_add_actor("archer", Vector2(250, ROWS[1]), "guard", "fight")
+		"protect":
+			# A signal beacon building to a blaze, with a Mage at its foot and a guard out front.
+			_add_actor("beacon", Vector2(140, ROWS[0] - 4), "prop")
+			actors[-1]["objective"] = true
+			_add_actor("mage", Vector2(200, ROWS[1]), "guard", "fight")
+			_add_actor("mage", Vector2(90, ROWS[1] + 4), "guard", "fight")
+			_add_actor("swordsman", Vector2(300, ROWS[0]), "guard", "fight")
+			_add_actor("martial", Vector2(318, ROWS[1]), "guard", "fight")
+		"evac":
+			# Villagers leave their cottages for the castle gate, a Healer seeing them along.
+			_add_actor("cottage", Vector2(58, ROWS[0] - 12), "prop", "0")
+			_add_actor("cottage", Vector2(150, ROWS[0] - 20), "prop", "1")
+			_add_actor("healer", Vector2(232, ROWS[1]), "guard", "fight")
+			_add_actor("archer", Vector2(400, ROWS[0]), "guard", "fight")
+			_add_actor("swordsman", Vector2(470, ROWS[1]), "guard", "fight")
+		"capture":
+			# An old fort taken back: its flag climbs the pole, red to ours, as the Martial
+			# Artists hold the ground in front.
+			_add_actor("fort", Vector2(410, ROWS[0] - 6), "prop")
+			_add_actor("martial", Vector2(500, ROWS[0]), "guard", "fight")
+			_add_actor("martial", Vector2(520, ROWS[1]), "guard", "fight")
+			_add_actor("archer", Vector2(330, ROWS[1]), "guard", "fight")
+		"escort":
+			# The convoy: a wagon rolling along the road, a Bard out in front and guards around it.
+			_add_actor("wagon", Vector2(-40, ROWS[1] + 4), "prop")
+			for e in [["bard", Vector2(96, 0)], ["swordsman", Vector2(64, -34)], ["archer", Vector2(-58, -34)]]:
+				_add_actor(e[0], Vector2(-40, ROWS[1] + 4) + e[1], "guard", "escort")
+				actors[-1]["off"] = e[1]
+		"retreat":
+			# A line falling back, step by step, the Frost Mage in the rearguard.
+			_add_actor("frost", Vector2(380, ROWS[0]), "guard", "fight")
+			_add_actor("archer", Vector2(350, ROWS[1]), "guard", "fight")
+			_add_actor("swordsman", Vector2(456, ROWS[0]), "guard", "fight")
+			_add_actor("swordsman", Vector2(470, ROWS[1]), "guard", "fight")
+			step_cd = RETREAT_STEP
+			steps = 0
 		"idle":
 			# Guards on watch either side of the gate.
 			_add_actor(guards[0], Vector2(250, ROWS[1]), "guard", "idle")
@@ -193,7 +300,7 @@ func _cast() -> void:
 
 func _add_actor(kind: String, at: Vector2, side: String, role := "") -> void:
 	actors.append({"kind": kind, "pos": at, "home": at, "side": side, "role": role, "hp": 3, "cd": randf_range(0.2, 1.0),
-			"lunge": 0.0, "hurt": 0.0, "alpha": 0.0, "leaving": false, "id": randi()})
+			"lunge": 0.0, "hurt": 0.0, "hop": 0.0, "alpha": 0.0, "leaving": false, "id": randi()})
 
 
 func _spawn_foe() -> void:
@@ -216,6 +323,8 @@ func _spawn_foe() -> void:
 
 func _process(delta: float) -> void:
 	t += delta
+	chain += delta
+	scene_t += delta
 	if pending_default >= 0.0:
 		pending_default -= delta
 		if pending_default < 0.0:
@@ -285,18 +394,20 @@ func _blend(delta: float) -> void:
 
 func _update_actors(delta: float) -> void:
 	var scene: String = LOOKS[look]["scene"]
-	if scene == "battle" or scene == "conjure":
+	if scene in FIGHTS:
 		spawn_cd -= delta
 		var foes := actors.filter(func(a): return a["side"] == "foe" and not a["leaving"])
 		if spawn_cd <= 0.0 and foes.size() < 5:
 			spawn_cd = randf_range(0.9, 1.8)
 			_spawn_foe()
+	_scene_step(scene, delta)
 	for a in actors.duplicate():
 		a["alpha"] = move_toward(a["alpha"], 0.0 if a["leaving"] else 1.0, delta * 3.0)
 		if a["leaving"] and a["alpha"] <= 0.0:
 			actors.erase(a)
 			continue
 		a["lunge"] = maxf(a["lunge"] - delta, 0.0)
+		a["hop"] = maxf(a["hop"] - delta, 0.0)
 		a["hurt"] = maxf(a["hurt"] - delta, 0.0)
 		a["cd"] -= delta
 		if a["leaving"]:
@@ -320,17 +431,88 @@ func _update_actors(delta: float) -> void:
 
 
 func _foe_step(a: Dictionary, delta: float) -> void:
-	var g = _nearest(a, "guard")
+	if a["hop"] > 0.0:
+		# Knocked back (Hold the Pass): flung away before it comes on again.
+		a["pos"] = a["pos"] + Vector2(90.0 * delta, 0)
+		return
+	var g
 	var stop := 230.0
-	if g != null and not g["kind"] in RANGED:
-		stop = g["pos"].x + 34.0
+	if LOOKS[look]["scene"] in ["battle", "conjure"]:
+		g = _nearest(a, "guard")
+		if g != null and not g["kind"] in RANGED:
+			stop = g["pos"].x + 34.0
+	else:
+		# The first thing in its way: a fighter (not a ranged one or an Engineer), or what's being defended.
+		g = _blocker(a)
+		if g != null:
+			stop = g["pos"].x + 34.0
 	if a["pos"].x > stop:
 		a["pos"] = a["pos"] + Vector2(-a.get("speed", 34.0) * delta, 0)
-	elif a["cd"] <= 0.0 and g != null:
-		a["cd"] = 0.8
-		a["lunge"] = 0.3
-		g["lunge"] = 0.2
-		_hit(a, Color(1, 1, 0.85))
+	else:
+		a["pos"].x = maxf(a["pos"].x, stop - 4.0)   # pushed along by a guard on the move (the convoy)
+		if a["cd"] <= 0.0 and g != null:
+			a["cd"] = 0.8
+			a["lunge"] = 0.3
+			if g["side"] == "prop":
+				g["hurt"] = 0.25   # it shakes under the blow
+			else:
+				g["lunge"] = 0.2
+			_hit(a, Color(1, 1, 0.85))
+			if LOOKS[look].get("bounce", false) and a["side"] == "foe" and actors.has(a):
+				a["hop"] = 0.4
+
+
+func _blocker(a: Dictionary) -> Variant:
+	var best = null
+	for b in actors:
+		if b["leaving"] or b["pos"].x > a["pos"].x + 10.0:
+			continue
+		var blocks: bool = b.get("objective", false) or (b["side"] == "guard" and not b["kind"] in RANGED and b["kind"] != "engineer")
+		if blocks and (best == null or b["pos"].x > best["pos"].x):
+			best = b
+	return best
+
+
+## What each Battle Modes scene does besides the fighting: the convoy rolls on, the line
+## steps back, villagers set out for the gate.
+func _scene_step(scene: String, delta: float) -> void:
+	match scene:
+		"escort":
+			var wagon = _prop("wagon")
+			if wagon == null:
+				return
+			wagon["pos"].x += WAGON_SPEED * delta
+			if wagon["pos"].x > 780.0:
+				wagon["pos"].x = -150.0   # round again, from the left
+			for a in actors:
+				if a["role"] == "escort" and not a["leaving"]:
+					a["pos"] = wagon["pos"] + a["off"]
+		"retreat":
+			step_cd -= delta
+			if step_cd <= 0.0:
+				step_cd = RETREAT_STEP
+				steps += 1
+				if steps > 4:
+					_cast()   # back to where the line started
+					return
+				for a in actors:
+					if a["side"] == "guard" and not a["leaving"]:
+						a["back_to"] = a["pos"].x - 44.0
+			for a in actors:
+				if a.has("back_to") and not a["leaving"]:
+					a["pos"].x = move_toward(a["pos"].x, a["back_to"], 70.0 * delta)
+		"evac":
+			var walkers := actors.filter(func(a): return a["side"] == "walker" and not a["leaving"])
+			if walkers.size() < 4 and fmod(scene_t, 1.3) < delta:
+				var kind: String = ["villager", "villager_woman", "villager_child", "villager_elder"][randi() % 4]
+				var from: Vector2 = [Vector2(76, ROWS[0] - 4), Vector2(168, ROWS[0] - 12)][randi() % 2]
+				_add_actor(kind, from, "walker")
+			for a in walkers:
+				# Along the field, then up the road and in at the gate.
+				var to := Vector2(320, a["pos"].y) if a["pos"].x < 300.0 else Vector2(320, GROUND_Y + 6)
+				a["pos"] = a["pos"].move_toward(to, 30.0 * delta)
+				if a["pos"].y <= GROUND_Y + 12.0:
+					a["leaving"] = true
 
 
 func _guard_step(a: Dictionary) -> void:
@@ -349,7 +531,7 @@ func _guard_step(a: Dictionary) -> void:
 		"spar", "spar_r":
 			a["cd"] = 0.9
 			a["lunge"] = 0.3
-		"fight":
+		"fight", "escort":
 			if a["kind"] in RANGED:
 				var e = _nearest(a, "foe")
 				if e != null and e["pos"].x < 640.0:
@@ -408,10 +590,13 @@ func _nearest(a: Dictionary, side: String) -> Variant:
 func _draw() -> void:
 	var light: Color = cur["light"]
 	_draw_sky()
-	_draw_hills(light)
+	_draw_birds(light)
+	_draw_land(light)
+	_draw_beacon_fires(light)
 	_draw_castle(light)
 	_draw_ground(light)
 	_draw_actors(light)
+	_draw_rain()
 	for b in bolts:
 		var target = _actor_by_id(b["target"])
 		if target == null:
@@ -494,7 +679,11 @@ func _draw_hills(light: Color) -> void:
 			pts.append(Vector2(x, base - (sin(x * 0.011 + layer * 2.0) * 22.0 + sin(x * 0.027 + layer) * 10.0)))
 			x += 20.0
 		pts.append(Vector2(W + 1000, GROUND_Y + 10))
-		draw_colored_polygon(pts, far if layer == 0 else near)
+		_poly(pts, far if layer == 0 else near)
+		if layer == 0:
+			_draw_lands(light, true)
+		else:
+			_draw_quarry(light)
 
 
 ## The castle seen from the front, as detailed pixel art: a keep behind with a corner
@@ -1031,6 +1220,11 @@ func _draw_actors(light: Color) -> void:
 		if kind == "engineer":
 			_draw_engineer(a, alpha, light)
 			continue
+		if kind in ["watchtower", "crag", "beacon", "cottage", "fort", "wagon"]:
+			draw_set_transform(Vector2(sin(a["hurt"] * 60.0) * a["hurt"] * 8.0, 0))   # shaken by a blow
+			call("_draw_" + kind, a, alpha, light)
+			draw_set_transform(Vector2.ZERO)
+			continue
 		var s: float = BIG.get(kind, SPRITE_SCALE)
 		var flying: bool = kind == "bat" or kind == "wyvern"
 		var foot := p + Vector2(0, 2)
@@ -1058,6 +1252,8 @@ func _draw_actors(light: Color) -> void:
 		var lunge: float = a["lunge"]
 		var off := Vector2(dir * 8.0 * minf(lunge / 0.15, 1.0), 0)
 		var bob := Vector2(0, sin(t * (9.0 if a["side"] == "foe" else 3.0) + a["id"] % 13) * 1.5)
+		if a["hop"] > 0.0:
+			bob.y -= sin(a["hop"] / 0.4 * PI) * 16.0   # bounced off the line
 		if flying:
 			bob += Vector2(0, -36 + sin(t * 4.0 + a["id"] % 5) * 4.0)
 		draw_set_transform(p + off + bob + Vector2(0, -sz.y / 2.0 + 4), 0, Vector2(dir, 1))
@@ -1137,3 +1333,527 @@ func _draw_title() -> void:
 		var g := absf(px.x + px.y * 0.5 - glint)
 		if g < 1.5:
 			draw_rect(r, Color(1, 1, 1, 0.6 * (1.0 - g / 1.5)))
+
+
+# --- The Battle Modes' props ------------------------------------------------------
+
+## A wooden watchtower on stilts, a lookout hut on top with a lamp, and our pennant.
+func _draw_watchtower(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var lit := Color(light, 1)
+	var ink := Color(OUTLINE, alpha)
+	var wood := Color(0.6, 0.42, 0.24, alpha) * lit
+	var wood_dk := Color(0.42, 0.28, 0.15, alpha) * lit
+	draw_set_transform(p + Vector2(0, 2), 0, Vector2(1, 0.35))
+	draw_circle(Vector2.ZERO, 26.0, Color(0, 0, 0, 0.22 * alpha))
+	draw_set_transform(Vector2(sin(a["hurt"] * 60.0) * a["hurt"] * 8.0, 0))
+	for side in [-1.0, 1.0]:
+		var foot := p + Vector2(side * 16.0, 0)
+		var top := p + Vector2(side * 11.0, -62)
+		draw_line(foot, top, ink, 6.0)
+		draw_line(foot, top, wood, 3.5)
+	draw_line(p + Vector2(-14, -8), p + Vector2(12, -40), wood_dk, 2.5)
+	draw_line(p + Vector2(14, -8), p + Vector2(-12, -40), wood_dk, 2.5)
+	var hut := Rect2(p.x - 17, p.y - 84, 34, 24)
+	draw_rect(hut.grow(2), ink)
+	draw_rect(hut, wood)
+	for i in 4:
+		draw_line(Vector2(hut.position.x + 1, hut.position.y + 5 + i * 6), Vector2(hut.end.x - 1, hut.position.y + 5 + i * 6), wood_dk, 1.0)
+	draw_rect(Rect2(p.x - 5, p.y - 80, 10, 8), Color(1.0, 0.72, 0.3, alpha) * Color(1, 1, 1).lerp(lit, 0.4))   # the lamp in the window
+	var roof := PackedVector2Array([Vector2(p.x - 23, p.y - 82), Vector2(p.x + 23, p.y - 82), Vector2(p.x, p.y - 100)])
+	draw_colored_polygon(PackedVector2Array([roof[0] + Vector2(-2, 2), roof[1] + Vector2(2, 2), roof[2] + Vector2(0, -3)]), ink)
+	draw_colored_polygon(roof, Color(0.45, 0.32, 0.3, alpha) * lit)
+	draw_line(Vector2(p.x, p.y - 100), Vector2(p.x, p.y - 116), ink, 2.0)
+	var wave := sin(t * 5.0 + p.x) * 2.0
+	draw_colored_polygon(PackedVector2Array([Vector2(p.x + 1, p.y - 116), Vector2(p.x + 16, p.y - 113 + wave), Vector2(p.x + 1, p.y - 108)]),
+			Color(0.3, 0.45, 0.85, alpha) * lit)
+	draw_set_transform(Vector2.ZERO)
+
+
+## A craggy outcrop of grey rock, the sides of the pass. Its role is its size.
+func _draw_crag(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var k := float(a["role"])
+	var lit := Color(light, 1)
+	var rock := Color(0.52, 0.5, 0.5, alpha) * lit
+	var pts := PackedVector2Array([p + Vector2(-34, 0) * k, p + Vector2(-28, -26) * k, p + Vector2(-14, -44) * k, p + Vector2(-2, -36) * k,
+			p + Vector2(10, -58) * k, p + Vector2(24, -30) * k, p + Vector2(34, 0) * k])
+	var out := PackedVector2Array()
+	for q in pts:
+		out.append(p + (q - p) * 1.06 + Vector2(0, 1))
+	draw_colored_polygon(out, Color(OUTLINE, alpha))
+	draw_colored_polygon(pts, rock)
+	# The shaded side, away from the light, and a few cracks and ledges.
+	draw_colored_polygon(PackedVector2Array([pts[4], pts[5], pts[6], p + Vector2(4, 0) * k]), rock.darkened(0.25))
+	draw_colored_polygon(PackedVector2Array([pts[1], pts[2], p + Vector2(-16, -30) * k]), rock.lightened(0.15))
+	draw_line(p + Vector2(-8, -30) * k, p + Vector2(-2, -12) * k, rock.darkened(0.4), 1.5)
+	draw_line(p + Vector2(14, -38) * k, p + Vector2(18, -20) * k, rock.darkened(0.45), 1.5)
+	draw_rect(Rect2(p + Vector2(-26, -6) * k, Vector2(10, 3) * k), Color(0.32, 0.5, 0.26, alpha) * lit)   # moss at the foot
+
+
+## A signal beacon: a stone tower whose fire builds over CHARGE seconds to a blaze that
+## flares, throws sparks and settles, then builds again.
+func _draw_beacon(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var lit := Color(light, 1)
+	draw_set_transform(p + Vector2(0, 2), 0, Vector2(1, 0.35))
+	draw_circle(Vector2.ZERO, 26.0, Color(0, 0, 0, 0.25 * alpha))
+	draw_set_transform(Vector2(sin(a["hurt"] * 60.0) * a["hurt"] * 8.0, 0))
+	var body := Rect2(p.x - 16, p.y - 66, 32, 66)
+	draw_rect(body.grow(2), Color(OUTLINE, alpha))
+	var stone := Color(0.7, 0.66, 0.6, alpha) * lit
+	draw_rect(body, stone)
+	for i in 6:
+		var y := body.position.y + 6 + i * 11
+		draw_line(Vector2(body.position.x, y), Vector2(body.end.x, y), stone.darkened(0.3), 1.0)
+		var x := body.position.x + (8.0 if i % 2 == 0 else 16.0)
+		draw_line(Vector2(x, y - 11), Vector2(x, y), stone.darkened(0.3), 1.0)
+	draw_rect(Rect2(body.end.x - 9, body.position.y, 9, body.size.y), Color(0, 0, 0, 0.18 * alpha))
+	var brazier := Rect2(p.x - 22, p.y - 74, 44, 9)
+	draw_rect(brazier.grow(2), Color(OUTLINE, alpha))
+	draw_rect(brazier, Color(0.38, 0.36, 0.4, alpha) * lit)
+	var cycle := fmod(scene_t, CHARGE + 1.2)
+	var k := minf(cycle / CHARGE, 1.0)
+	var top := Vector2(p.x, p.y - 74)
+	var h := 8.0 + k * 34.0 + sin(t * 14.0) * 2.5
+	var w := 10.0 + k * 10.0
+	draw_circle(top + Vector2(0, -h * 0.4), 20.0 + k * 40.0, Color(1.0, 0.6, 0.25, (0.08 + 0.14 * k) * alpha))
+	for layer in [[1.0, Color(0.9, 0.25, 0.08)], [0.7, Color(1.0, 0.58, 0.16)], [0.42, Color(1.0, 0.95, 0.6)]]:
+		var f: float = layer[0]
+		var sway := sin(t * 9.0 + f * 3.0) * 3.0 * f
+		draw_colored_polygon(PackedVector2Array([top + Vector2(-w * f, 0), top + Vector2(w * f, 0), top + Vector2(sway, -h * f)]),
+				Color(layer[1], alpha))
+	if cycle > CHARGE:
+		# Ablaze: a bright flare and sparks flying up.
+		var f := (cycle - CHARGE) / 1.2
+		draw_circle(top + Vector2(0, -20), 14.0 + f * 40.0, Color(1, 0.95, 0.65, 0.7 * (1.0 - f) * alpha))
+		for i in 7:
+			var d := Vector2.from_angle(-PI / 2.0 + (i - 3) * 0.32) * (10.0 + f * 60.0)
+			draw_rect(Rect2(top + Vector2(0, -16) + d, Vector2(3, 3)), Color(1, 0.8, 0.3, (1.0 - f) * alpha))
+	draw_set_transform(Vector2.ZERO)
+
+
+## A thatched cottage with a door and a chimney trailing smoke. Its role picks which.
+func _draw_cottage(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var lit := Color(light, 1)
+	var ink := Color(OUTLINE, alpha)
+	var big: bool = a["role"] == "1"
+	var w := 58.0 if big else 46.0
+	var wall := Rect2(p.x - w / 2.0, p.y - 30, w, 30)
+	draw_rect(wall.grow(2), ink)
+	draw_rect(wall, Color(0.88, 0.83, 0.72, alpha) * lit)
+	draw_rect(Rect2(wall.end.x - 12, wall.position.y, 12, 30), Color(0, 0, 0, 0.12 * alpha))
+	for x in [wall.position.x + 2, wall.end.x - 5]:
+		draw_rect(Rect2(x, wall.position.y, 3, 30), Color(0.45, 0.3, 0.18, alpha) * lit)   # beams
+	draw_rect(Rect2(p.x - 6, p.y - 18, 12, 18).grow(1.5), ink)
+	draw_rect(Rect2(p.x - 6, p.y - 18, 12, 18), Color(0.12, 0.08, 0.06, alpha))   # the door stands open
+	draw_rect(Rect2(wall.position.x + 7, p.y - 22, 8, 7), Color(0.35, 0.28, 0.2, alpha) * lit)
+	var roof := PackedVector2Array([Vector2(wall.position.x - 7, wall.position.y + 2), Vector2(wall.end.x + 7, wall.position.y + 2),
+			Vector2(wall.end.x - 6, wall.position.y - 20), Vector2(wall.position.x + 6, wall.position.y - 20)])
+	var rim := PackedVector2Array()
+	for q in roof:
+		rim.append(q + (q - Vector2(p.x, wall.position.y - 8)).normalized() * 2.0)
+	draw_colored_polygon(rim, ink)
+	draw_colored_polygon(roof, Color(0.8, 0.64, 0.34, alpha) * lit)
+	for i in 3:
+		var y := wall.position.y - 4 - i * 6
+		draw_line(Vector2(wall.position.x - 2 + i * 2.5, y), Vector2(wall.end.x + 2 - i * 2.5, y), Color(0.62, 0.48, 0.24, alpha) * lit, 1.0)
+	var chim := Rect2(wall.end.x - 16, wall.position.y - 26, 7, 12)
+	draw_rect(chim.grow(1.5), ink)
+	draw_rect(chim, Color(0.6, 0.56, 0.52, alpha) * lit)
+	for i in 4:
+		var k := fmod(t * 0.4 + i * 0.25 + (0.5 if big else 0.0), 1.0)
+		draw_circle(chim.position + Vector2(3.5 + k * 16.0, -4 - k * 34.0), 3.0 + k * 5.0, Color(0.85, 0.85, 0.85, 0.5 * (1.0 - k) * alpha))
+
+
+## The old fort's broken walls round a flagpole; the flag climbs, red turning to our blue
+## halfway, flutters at the top, then the next capture starts it again.
+func _draw_fort(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var lit := Color(light, 1)
+	var ink := Color(OUTLINE, alpha)
+	var stone := Color(0.64, 0.62, 0.58, alpha) * lit
+	for seg in [[-58, 34, 0], [-36, 22, 1], [22, 40, 2], [46, 26, 3]]:
+		var r := Rect2(p.x + seg[0], p.y - seg[1], 20, seg[1])
+		draw_rect(r.grow(2), ink)
+		draw_rect(r, stone)
+		draw_rect(Rect2(r.position.x + 3 + seg[2] * 3, r.position.y - 5, 8, 5).grow(1.5), ink)   # a broken stub above
+		draw_rect(Rect2(r.position.x + 3 + seg[2] * 3, r.position.y - 5, 8, 5), stone)
+		for y in range(int(r.position.y) + 8, int(r.end.y), 9):
+			draw_line(Vector2(r.position.x, y), Vector2(r.end.x, y), stone.darkened(0.3), 1.0)
+		draw_rect(Rect2(r.end.x - 6, r.position.y, 6, r.size.y), Color(0, 0, 0, 0.16 * alpha))
+	var pole_top := p + Vector2(0, -110)
+	draw_line(p, pole_top, ink, 4.0)
+	draw_line(p, pole_top, Color(0.55, 0.4, 0.24, alpha) * lit, 2.0)
+	draw_circle(pole_top, 3.0, Color(1.0, 0.82, 0.3, alpha) * lit)
+	var cycle := fmod(scene_t, RAISE + 1.6)
+	var k := minf(cycle / RAISE, 1.0)
+	var fy: float = lerpf(p.y - 24.0, pole_top.y + 4.0, k)
+	var col := Color(0.82, 0.22, 0.2).lerp(Color(0.3, 0.45, 0.85), clampf((k - 0.45) * 4.0, 0.0, 1.0))
+	var pts := PackedVector2Array()
+	for i in 6:
+		pts.append(Vector2(p.x + 2 + i * 6, fy + sin(t * 6.0 - i * 0.9) * 2.0 * i / 5.0))
+	for i in range(5, -1, -1):
+		pts.append(Vector2(p.x + 2 + i * 6, fy + 18 + sin(t * 6.0 - i * 0.9) * 2.0 * i / 5.0))
+	draw_colored_polygon(pts, Color(col, alpha) * lit)
+	draw_polyline(pts + PackedVector2Array([pts[0]]), ink, 1.5)
+	if cycle > RAISE:
+		var f := (cycle - RAISE) / 1.6
+		draw_circle(pole_top, 6.0 + f * 26.0, Color(1, 0.92, 0.5, 0.6 * (1.0 - f) * alpha))
+
+
+## The convoy's wagon: an ox in harness, the bed and a canvas tilt, wheels turning as it rolls.
+func _draw_wagon(a: Dictionary, alpha: float, light: Color) -> void:
+	var p: Vector2 = a["pos"]
+	var lit := Color(light, 1)
+	var ink := Color(OUTLINE, alpha)
+	var bob := sin(t * 10.0) * 0.8
+	draw_set_transform(p + Vector2(10, 2), 0, Vector2(1, 0.3))
+	draw_circle(Vector2.ZERO, 50.0, Color(0, 0, 0, 0.22 * alpha))
+	draw_set_transform(Vector2.ZERO)
+	# The ox, out in front.
+	var hide := Color(0.55, 0.4, 0.28, alpha) * lit
+	var step := sin(t * 7.0) * 3.0
+	for lx in [36.0 + step, 46.0 - step, 58.0 + step, 66.0 - step]:
+		draw_rect(Rect2(p.x + lx - 1, p.y - 14, 6, 14), ink)
+		draw_rect(Rect2(p.x + lx, p.y - 13, 4, 12), hide.darkened(0.2))
+	var body := Rect2(p.x + 32, p.y - 34 + bob, 40, 22)
+	draw_rect(body.grow(2), ink)
+	draw_rect(body, hide)
+	draw_rect(Rect2(body.position.x, body.end.y - 6, body.size.x, 6), hide.darkened(0.15))
+	var head := Rect2(p.x + 70, p.y - 40 + bob, 16, 15)
+	draw_rect(head.grow(2), ink)
+	draw_rect(head, hide)
+	draw_rect(Rect2(head.end.x - 5, head.end.y - 6, 5, 5), Color(0.8, 0.62, 0.5, alpha) * lit)
+	draw_line(head.position + Vector2(2, 0), head.position + Vector2(-4, -7), Color(0.92, 0.88, 0.76, alpha) * lit, 2.5)   # horns
+	draw_line(head.position + Vector2(13, 0), head.position + Vector2(19, -7), Color(0.92, 0.88, 0.76, alpha) * lit, 2.5)
+	draw_rect(Rect2(head.position.x + 8, head.position.y + 4, 2, 2), ink)
+	draw_line(Vector2(p.x + 16, p.y - 22), body.position + Vector2(2, 10), ink, 2.5)   # the shaft
+	# The wagon.
+	var wood := Color(0.5, 0.33, 0.18, alpha) * lit
+	var bed := Rect2(p.x - 48, p.y - 30 + bob, 66, 14)
+	draw_rect(bed.grow(2), ink)
+	draw_rect(bed, wood)
+	draw_line(Vector2(bed.position.x, bed.position.y + 7), Vector2(bed.end.x, bed.position.y + 7), wood.darkened(0.3), 1.0)
+	var tilt := PackedVector2Array()
+	for i in 13:
+		var ang := PI + PI * i / 12.0
+		tilt.append(Vector2(p.x - 15, p.y - 30 + bob) + Vector2(cos(ang) * 32.0, sin(ang) * 24.0))
+	draw_colored_polygon(tilt, ink)
+	var inner := PackedVector2Array()
+	for q in tilt:
+		inner.append(q + (Vector2(p.x - 15, p.y - 30 + bob) - q) * 0.07)
+	draw_colored_polygon(inner, Color(0.92, 0.88, 0.76, alpha) * lit)
+	for i in 3:
+		var x := p.x - 33 + i * 18
+		draw_line(Vector2(x, p.y - 30 + bob), Vector2(x, p.y - 48 + bob + absf(i - 1) * 6.0), Color(0.75, 0.7, 0.6, alpha) * lit, 1.5)
+	for wx in [-34.0, 6.0]:
+		var c := Vector2(p.x + wx, p.y - 10)
+		draw_circle(c, 12.0, ink)
+		draw_circle(c, 9.5, wood.lightened(0.1))
+		draw_circle(c, 3.0, ink)
+		var ang := p.x / 10.0   # turning with the distance rolled
+		for j in 3:
+			var d := Vector2.from_angle(ang + j * PI / 3.0) * 9.0
+			draw_line(c - d, c + d, ink, 1.5)
+
+
+# --- The far country ----------------------------------------------------------------
+
+## A colour washed towards the horizon's, the further off the more.
+func _haze(c: Color, k: float) -> Color:
+	return c.lerp(cur["low"], k)
+
+
+## The mountains past the castle: a far range, then a nearer one, lit from the left,
+## snow on the high peaks. Their tops show between the towers and either side.
+func _draw_mountains(light: Color) -> void:
+	for range_ in 2:
+		var peaks: Array = FAR_PEAKS if range_ == 0 else NEAR_PEAKS
+		var haze := 0.55 if range_ == 0 else 0.4
+		var base_col := Color(0.42, 0.46, 0.6) if range_ == 0 else Color(0.38, 0.44, 0.5)
+		var lit := _haze(base_col * light, haze)
+		var shade := _haze(base_col.darkened(0.25) * light, haze)
+		var snow := _haze(Color(0.95, 0.96, 1.0) * light, haze * 0.6)
+		if range_ == 0:
+			# A low line of hills under them, all the way across a wide window.
+			var pts := PackedVector2Array([Vector2(-1000, 470)])
+			var x := -1000.0
+			while x <= W + 1000.0:
+				pts.append(Vector2(x, 372.0 - sin(x * 0.019) * 14.0 - sin(x * 0.051) * 6.0))
+				x += 24.0
+			pts.append(Vector2(W + 1000, 470))
+			_poly(pts, shade)
+		for pk in peaks:
+			var px: float = pk[0]
+			var top: float = pk[1]
+			var hw: float = pk[2]
+			var apex := Vector2(px, top)
+			var l := Vector2(px - hw, 470)
+			var r := Vector2(px + hw * 0.9, 470)
+			var jag := 6.0 * _rand(px, top, 3)
+			_poly(PackedVector2Array([l, apex.lerp(l, 0.45) + Vector2(-jag, 0), apex, apex.lerp(r, 0.4) + Vector2(4, -jag),
+					r]), shade)
+			# The sunlit face, down from the peak.
+			_poly(PackedVector2Array([l, apex.lerp(l, 0.45) + Vector2(-jag, 0), apex, Vector2(px + hw * 0.12, 470)]), lit)
+			if top < SNOW_Y:
+				var d := (SNOW_Y - top) / (470.0 - top) * 1.6 + 0.12
+				var sl := apex.lerp(l, d)
+				var sr := apex.lerp(r, d)
+				var cap := PackedVector2Array([apex, sr, apex.lerp(sr, 0.5) + Vector2(-3, 6), apex.lerp(sl, 0.4).lerp(sr, 0.35) + Vector2(0, 8), sl])
+				_poly(cap, snow)
+				_poly(PackedVector2Array([apex, sr, apex.lerp(sr, 0.5) + Vector2(-3, 6)]), snow.darkened(0.12))
+
+
+## The peoples' lands, small with distance: Frostmarch's snows, the Monastery high on its
+## crag, the Arcane Spires on the tallest peak and Deepdelve's mine; then nearer, the
+## Greenwood, Mercy Vale's sanctuary, the walls of the Free Cities and Stonehollow's quarry.
+func _draw_lands(light: Color, near: bool) -> void:
+	if not near:
+		# Frostmarch: a hall of dark timber on the snowfield.
+		_rect(Rect2(3, 302, 14, 6), _haze(Color(0.36, 0.26, 0.2) * light, 0.45))
+		_poly(PackedVector2Array([Vector2(1, 303), Vector2(10, 296), Vector2(19, 303)]), _haze(Color(0.9, 0.92, 1.0) * light, 0.3))
+		# The High Monastery: tiered roofs on its crag.
+		var wall := _haze(Color(0.9, 0.86, 0.78) * light, 0.35)
+		var roof := _haze(Color(0.75, 0.3, 0.22) * light, 0.35)
+		for i in 3:
+			var w := 24.0 - i * 6.0
+			var y := 340.0 - i * 9.0
+			_rect(Rect2(205 - w / 2.0 + 3, y - 6, w - 6, 7), wall)
+			_poly(PackedVector2Array([Vector2(203 - w / 2.0, y - 5), Vector2(207 + w / 2.0, y - 5), Vector2(205, y - 11)]), roof)
+		# Deepdelve: a timbered mine mouth on its mountainside, lamplight inside.
+		var dd := Vector2(232, 350)
+		_rect(Rect2(dd + Vector2(-6, -8), Vector2(12, 10)), _haze(Color(0.42, 0.3, 0.18) * light, 0.3))
+		_rect(Rect2(dd + Vector2(-4, -6), Vector2(8, 8)), Color(0.12, 0.08, 0.06).lerp(Color(1.0, 0.7, 0.3), 0.5 + 0.4 * cur["windows"]))
+		# Mercy Vale: a white sanctuary on its hilltop, the beacon up on its bell tower.
+		var white := _haze(Color(0.95, 0.93, 0.86) * light, 0.25)
+		var slate := _haze(Color(0.45, 0.5, 0.7) * light, 0.25)
+		_rect(Rect2(404, 352, 22, 14), white)
+		_poly(PackedVector2Array([Vector2(402, 353), Vector2(424, 353), Vector2(413, 345)]), slate)
+		_rect(Rect2(422, 336, 8, 30), white)
+		_rect(Rect2(424, 342, 4, 4), _haze(Color(0.55, 0.45, 0.3) * light, 0.25))   # the bell
+		# The Arcane Spires: three slender towers on the tallest peak, their tips glowing.
+		var spire := _haze(Color(0.5, 0.42, 0.62) * light, 0.4)
+		for sp in [[588.0, 282.0, 30.0], [604.0, 262.0, 44.0], [618.0, 276.0, 34.0]]:
+			_rect(Rect2(sp[0] - 2.5, sp[1], 5, sp[2]), spire)
+			_poly(PackedVector2Array([Vector2(sp[0] - 4, sp[1]), Vector2(sp[0] + 4, sp[1]), Vector2(sp[0], sp[1] - 10)]), spire.darkened(0.2))
+		return
+	# Greenwood: a dark wood of pines over the western hills.
+	var pine := _haze(Color(0.16, 0.34, 0.2) * light, 0.25)
+	for i in 15:
+		var x := -64.0 + i * 8.0 + _rand(i, 1, 4) * 5.0
+		var base := _hill_y(x, 0) + 8.0
+		var h := 20.0 + _rand(i, 2, 4) * 12.0
+		_poly(PackedVector2Array([Vector2(x - 6, base), Vector2(x + 6, base), Vector2(x, base - h)]),
+				pine if i % 2 == 0 else pine.darkened(0.12))
+	# The Free Cities: walls and towers, red roofs crowded inside, on the eastern hills.
+	var fc := _hill_y(600, 0) + 4.0
+	var stone := _haze(Color(0.78, 0.74, 0.66) * light, 0.25)
+	var tile := _haze(Color(0.75, 0.38, 0.3) * light, 0.25)
+	for i in 6:
+		var x := 566.0 + i * 11.0
+		var y := fc - 18.0 - (i % 3) * 4.0
+		_rect(Rect2(x, y, 9, 10), _haze(Color(0.9, 0.85, 0.76) * light, 0.25))
+		_poly(PackedVector2Array([Vector2(x - 1, y), Vector2(x + 10, y), Vector2(x + 4.5, y - 7)]), tile)
+	_rect(Rect2(560, fc - 10, 84, 10), stone)
+	for x in [560.0, 594.0, 626.0]:
+		_rect(Rect2(x, fc - 20, 10, 20), stone)
+		_rect(Rect2(x - 1, fc - 22, 12, 3), stone.darkened(0.15))
+	for x in range(564, 640, 6):
+		_rect(Rect2(x, fc - 12, 3, 2), stone)
+
+
+## The hills' height at x (layer 0 the further, 1 the nearer).
+static func _hill_y(x: float, layer: int) -> float:
+	return 430.0 + layer * 40.0 - (sin(x * 0.011 + layer * 2.0) * 22.0 + sin(x * 0.027 + layer) * 10.0)
+
+
+## Stonehollow's quarry on the near eastern hill: cut steps in pale stone, and a crane.
+func _draw_quarry(light: Color) -> void:
+	var q := Vector2(588, _hill_y(588, 1) + 4)
+	var pale := _haze(Color(0.82, 0.76, 0.62) * light, 0.12)
+	for i in 3:
+		_rect(Rect2(q.x - 30 + i * 10, q.y - 4 - i * 6, 60 - i * 20, 6), pale.darkened(i * 0.08))
+	var wood := _haze(Color(0.45, 0.3, 0.16) * light, 0.12)
+	_seg(q + Vector2(26, 0), q + Vector2(26, -34), wood, 2.0)
+	_seg(q + Vector2(26, -34), q + Vector2(4, -26), wood, 2.0)
+
+
+## The eight beacons, one in each people's land: a little stone tower and its fire, a
+## glow round it that shows more as the light goes, and smoke drifting off by day. In the
+## Campaign's look they go dark, then light one after another.
+func _draw_beacon_towers(light: Color) -> void:
+	for i in BEACONS.size():
+		var at: Vector2 = BEACONS[i][0]
+		var s: float = BEACONS[i][1]
+		var tower := _haze(Color(0.5, 0.46, 0.44) * light, 0.35 * (1.1 - s))
+		_rect(Rect2(at + Vector2(-3, -9) * s, Vector2(6, 9) * s), tower)
+		_rect(Rect2(at + Vector2(-4, -11) * s, Vector2(8, 2) * s), tower.darkened(0.2))
+
+
+## The beacons' fires (their towers are in the far country's mesh): a glow that shows more
+## as the light goes, and smoke drifting off by day. In the Campaign's look they go dark,
+## then light one after another. All in one mesh, made fresh each frame.
+func _draw_beacon_fires(light: Color) -> void:
+	var dark := clampf(1.0 - light.v, 0.0, 1.0)
+	bat = Batch.new()
+	for i in BEACONS.size():
+		var at: Vector2 = BEACONS[i][0]
+		var s: float = BEACONS[i][1]
+		var lit_at := 0.6 + i * 0.35
+		if chain < lit_at:
+			continue
+		var age := chain - lit_at
+		var flare := clampf(1.0 - age / 0.6, 0.0, 1.0) if age < 0.6 else 0.0
+		var f := 0.8 + 0.2 * sin(t * 11.0 + i * 1.3) * sin(t * 6.1 + i)
+		var top := at + Vector2(0, -11) * s
+		_circ(top + Vector2(0, -3) * s, (6.0 + 3.0 * dark + 14.0 * flare) * s * f, Color(1.0, 0.6, 0.25, 0.12 + 0.22 * dark + 0.4 * flare))
+		_poly(PackedVector2Array([top + Vector2(-3.5, 0) * s, top + Vector2(3.5, 0) * s, top + Vector2(sin(t * 8.0 + i), -9.0 * f) * s]),
+				Color(1.0, 0.5, 0.15))
+		_poly(PackedVector2Array([top + Vector2(-1.8, 0) * s, top + Vector2(1.8, 0) * s, top + Vector2(0, -5.0 * f) * s]),
+				Color(1.0, 0.92, 0.55))
+		if dark < 0.35:
+			for k in 3:
+				var u := fmod(t * 0.3 + k / 3.0 + i * 0.13, 1.0)
+				_circ(top + Vector2(u * 14.0, -10.0 - u * 26.0) * s, (1.5 + u * 3.0) * s,
+						Color(0.8, 0.8, 0.82, 0.35 * (1.0 - u) * (1.0 - dark * 2.5)))
+	# The glowing tips of the Arcane Spires, and the stone swinging from Stonehollow's crane.
+	for sp in [[588.0, 282.0], [604.0, 262.0], [618.0, 276.0]]:
+		var pulse := 0.6 + 0.4 * sin(t * 2.0 + sp[0])
+		_circ(Vector2(sp[0], sp[1] - 12), 5.0 * pulse, Color(0.8, 0.55, 1.0, 0.25 * pulse))
+		_circ(Vector2(sp[0], sp[1] - 12), 2.0, Color(0.9, 0.75, 1.0, 0.9))
+	var q := Vector2(588, _hill_y(588, 1) + 4)
+	var swing := sin(t * 0.8) * 2.0
+	_seg(q + Vector2(6, -27), q + Vector2(6 + swing, -14), Color(0.2, 0.2, 0.2, 0.7), 1.0)
+	_rect(Rect2(q + Vector2(3 + swing, -14), Vector2(6, 4)), _haze(Color(0.82, 0.76, 0.62) * light, 0.12))
+	fire_mesh = bat.mesh()   # (held on to: the renderer draws it after this returns)
+	bat = null
+	if fire_mesh != null:
+		draw_mesh(fire_mesh, _plain())
+
+
+## The far country (mountains, the lands, the hills and the beacons' towers) as one mesh:
+## a single draw instead of hundreds, made again only when the light changes.
+func _draw_land(light: Color) -> void:
+	var key := [light, cur["low"], cur["windows"]]
+	var stale := land_mesh == null
+	if not stale:
+		for i in 2:
+			var a: Color = key[i]
+			var b: Color = land_key[i]
+			stale = stale or absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) > 0.006
+		stale = stale or absf(key[2] - land_key[2]) > 0.01
+	if stale:
+		land_key = key
+		bat = Batch.new()
+		_draw_mountains(light)
+		_draw_lands(light, false)
+		_draw_hills(light)
+		_draw_beacon_towers(light)
+		land_mesh = bat.mesh()
+		bat = null
+	draw_mesh(land_mesh, _plain())
+
+
+## A plain white texture for the meshes (theirs is a whole texture, not a region of the atlas).
+static var _white_tex: ImageTexture = null
+static func _plain() -> ImageTexture:
+	if _white_tex == null:
+		var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+		img.fill(Color.WHITE)
+		_white_tex = ImageTexture.create_from_image(img)
+	return _white_tex
+
+
+## Draws straight away, or (while `bat` is set) adds to the mesh being made.
+func _poly(pts: PackedVector2Array, col: Color) -> void:
+	if bat != null:
+		bat.poly(pts, col)
+	else:
+		draw_colored_polygon(pts, col)
+
+
+func _rect(r: Rect2, col: Color) -> void:
+	if bat != null:
+		bat.poly(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]), col)
+	else:
+		draw_rect(r, col)
+
+
+func _circ(c: Vector2, r: float, col: Color) -> void:
+	if bat != null:
+		bat.circle(c, r, col)
+	else:
+		draw_circle(c, r, col)
+
+
+func _seg(a: Vector2, b: Vector2, col: Color, w := 1.0) -> void:
+	if bat != null:
+		var n := (b - a).orthogonal().normalized() * w / 2.0
+		bat.poly(PackedVector2Array([a + n, b + n, b - n, a - n]), col)
+	else:
+		draw_line(a, b, col, w)
+
+
+## Coloured triangles gathered up to be drawn as one mesh.
+class Batch:
+	var verts := PackedVector2Array()
+	var cols := PackedColorArray()
+
+	func poly(pts: PackedVector2Array, col: Color) -> void:
+		var idx := PackedInt32Array()
+		if pts.size() <= 4:
+			for i in range(1, pts.size() - 1):
+				idx.append_array([0, i, i + 1])   # small ones are convex: a fan does
+		else:
+			idx = Geometry2D.triangulate_polygon(pts)
+		for i in idx:
+			verts.append(pts[i])
+			cols.append(col)
+
+	func circle(c: Vector2, r: float, col: Color) -> void:
+		var n := clampi(int(r * 1.5), 8, 24)
+		for i in n:
+			verts.append_array([c, c + Vector2.from_angle(TAU * i / n) * r, c + Vector2.from_angle(TAU * (i + 1) / n) * r])
+			cols.append_array([col, col, col])
+
+	func mesh() -> ArrayMesh:
+		if verts.is_empty():
+			return null
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_COLOR] = cols
+		var m := ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		return m
+
+
+## A few birds wheeling across the sky on fair days.
+func _draw_birds(light: Color) -> void:
+	var a: float = clampf(cur["sun"] - 0.4, 0.0, 0.6) * (1.0 - cur["storm"])
+	if a <= 0.01:
+		return
+	var col := Color(Color(0.18, 0.18, 0.24) * light, a * 1.4)
+	for i in 4:
+		var x := fposmod(t * 22.0 + i * 37.0 - 200.0, W + 400.0) - 200.0 + (i % 2) * 16.0
+		var y := 250.0 + i * 9.0 + sin(t * 0.7 + i) * 8.0
+		var flap := sin(t * 7.0 + i * 1.7) * 3.0
+		draw_polyline(PackedVector2Array([Vector2(x - 6, y - flap), Vector2(x, y), Vector2(x + 6, y - flap)]), col, 1.5)
+
+
+## Rain slanting down in the storm.
+func _draw_rain() -> void:
+	var a: float = cur["storm"]
+	if a <= 0.02:
+		return
+	var view := _view_x()
+	bat = Batch.new()
+	for i in 90:
+		var x := view.x + fposmod(i * 73.1 + t * 160.0, view.y - view.x + 80.0) - 40.0
+		var y := fposmod(i * 131.7 + t * 620.0, EARTH_Y + 120.0) - 100.0
+		_seg(Vector2(x, y), Vector2(x - 5, y + 14), Color(0.75, 0.8, 0.95, 0.35 * a), 1.0)
+	rain_mesh = bat.mesh()
+	bat = null
+	draw_mesh(rain_mesh, _plain())
