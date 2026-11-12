@@ -64,14 +64,14 @@ const SPRITES := {
 			"......rr........",
 			".....krrk.......",
 			"....khhhhk....k.",
-			"...khhhhhHk..kwk",
+			"...khwhhhHk..kwk",
 			"...khkkkkHk..kwk",
 			"...khhhhhHk..kwk",
 			"....kssssk...kwk",
 			"..kkTttttTkk.kwk",
-			"..kTttttttTk.kwk",
-			"..kTttttttTkgggk",
-			"..ksbbbbbbskskk.",
+			"..kTtrrrrtTk.kwk",
+			"..kTttrrttTkgggk",
+			"..ksbbttbbskskk.",
 			"..kTttttttTk.k..",
 			"...kTttttTk.....",
 			"...kppkkppk.....",
@@ -117,7 +117,7 @@ const SPRITES := {
 			"kLklllllllllkssb",
 			"kGkLklllllkLkw.b",
 			".kkskLLLLLkskwbk",
-			"...kllllllk..bk.",
+			"...kLLaLLLk..bk.",
 			"...kppppppk..k..",
 			"...kppkkppk.....",
 			"...kffk.kffk....",
@@ -166,8 +166,8 @@ const SPRITES := {
 			"...krWWWWWWrkswk",
 			"...krrWWWWrrk.wk",
 			"..krrrWWrrrRk.wk",
-			"..kRrrrrrrrRk.wk",
-			"..kRrrrrrrrRk.wk",
+			"..kRrryrrrrRk.wk",
+			"..kRrrrrryrRk.wk",
 			"..kRRrrrrrRRk.wk",
 			"...kkfkkfkkk..k.",
 			"....kk..kk......",
@@ -210,13 +210,13 @@ const SPRITES := {
 			"...khskssksk..wk",
 			"...khssssshk.swk",
 			"...kkhhhhhkk.kwk",
-			"..kCrrrrrrrCk.wk",
+			"..kCrrrIrrrCk.wk",
 			"..kCrRrrrRrCk.wk",
 			"..kCrrrrrrrCk.wk",
 			"...kRrrrrrRk..wk",
 			"...kRrrrrrRk..wk",
 			"..kRRrrrrrRRk.wk",
-			"..kRRRrrrRRRk.wk",
+			"..khhhhhhhhhk.wk",
 			"...kkkfkfkkk..k.",
 			"................",
 		],
@@ -226,6 +226,13 @@ const SPRITES := {
 		],
 	},
 	"goblin": {
+		"poses": {
+			"strike": {
+				11: "............kkkk",
+				12: "............wwwk",
+				13: "............kkk_",
+			},
+		},
 		"palette": {
 			"g": Color(0.45, 0.72, 0.28), "G": Color(0.3, 0.52, 0.18), "e": Color(1.0, 0.85, 0.2),
 			"m": Color(0.3, 0.1, 0.1), "b": Color(0.5, 0.35, 0.2), "B": Color(0.36, 0.24, 0.13),
@@ -241,7 +248,7 @@ const SPRITES := {
 			"..kgGggggggGgk..",
 			"...kkgeggegkk...",
 			"....kggggggk....",
-			"....kggmmggk....",
+			"....kgwmmwgk....",
 			".....kkggkk.....",
 			"....kbbbbbbk.k..",
 			"...kgkBbbBkgkwk.",
@@ -255,6 +262,36 @@ const SPRITES := {
 		],
 	},
 	"orc": {
+		"poses": {
+			"raise": {   # the axe hauled up overhead
+				0: ".............kk.",
+				1: ".............xxk",
+				2: ".............xwk",
+				3: "............._wk",
+				4: "............._wk",
+				5: ".............kwk",
+				6: ".............gwk",
+				7: ".............gwk",
+				8: ".............kwk",
+				9: "............._wk",
+				10: ".............k__",
+				11: ".............___",
+				12: ".............___",
+			},
+			"strike": {  # brought down and forward
+				2: ".............__.",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: ".............kkkkkk",
+				8: ".............gwwwxxk",
+				9: ".............gkkkxxk",
+				10: ".............k___kk",
+				11: ".............___",
+				12: "..............__",
+			},
+		},
 		"palette": {
 			"g": Color(0.4, 0.55, 0.3), "G": Color(0.28, 0.4, 0.2), "e": Color(0.95, 0.3, 0.2),
 			"t": Color(0.95, 0.92, 0.8), "a": Color(0.45, 0.35, 0.3), "A": Color(0.32, 0.24, 0.2),
@@ -268,11 +305,11 @@ const SPRITES := {
 			"...kgeggggeGkxwk",
 			"...kgtggggtGk.wk",
 			"...kkggggggkk.wk",
-			".kaaaaaaaaaaAkwk",
+			".kaxaaaaaaxaAkwk",
 			".kgkaaaaaaaakgwk",
 			".kgkaAaaaaAakgwk",
 			".kgkaaaaaaaakkwk",
-			"..kkAAAAAAAAk.wk",
+			"..kkAAAxxAAAk.wk",
 			"...kpppppppk..k.",
 			"...kppkkkppk....",
 			"...kGGk.kGGk....",
@@ -285,6 +322,15 @@ const SPRITES := {
 		],
 	},
 	"wolf": {
+		"poses": {
+			"strike": {   # the bite: jaws open, teeth bared
+				7: "k........kggegkkk",
+				8: "kgk.kkkkkggggggnk",
+				9: ".kgkgggggggggkw__",
+				10: "..kgggggggggGgwwk",
+				11: "..kGgggggggGGkkk.",
+			},
+		},
 		"palette": {
 			"g": Color(0.6, 0.6, 0.66), "G": Color(0.42, 0.42, 0.5), "w": Color(0.82, 0.82, 0.86),
 			"e": Color(1.0, 0.85, 0.2), "n": Color(0.1, 0.07, 0.1),
@@ -314,6 +360,13 @@ const SPRITES := {
 		],
 	},
 	"skeleton_archer": {  # Bones in a tattered hood with a bow; red pinprick eyes
+		"poses": {
+			"raise": {   # an arrow nocked and drawn, about to loose
+				7: "................kkk",
+				8: "...kDBDBDkkkkkwDDBBk",
+				9: "................kkk",
+			},
+		},
 		"palette": {
 			"B": Color(0.9, 0.88, 0.8), "D": Color(0.62, 0.6, 0.55), "e": Color(1.0, 0.3, 0.2),
 			"h": Color(0.32, 0.3, 0.36), "H": Color(0.22, 0.2, 0.26), "w": Color(0.5, 0.34, 0.18), "s": Color(0.85, 0.85, 0.8),
@@ -512,6 +565,33 @@ const SPRITES := {
 		],
 	},
 	"ogre_king": {  # The final boss: a crowned ogre with a spiked club
+		"poses": {
+			"raise": {   # the spiked club hauled up overhead
+				0: "............_kk_",
+				1: "............kWWk",
+				2: "............kWWk",
+				3: "............_kWk",
+				4: "............_kWk",
+				5: "............_kWk",
+				6: "............_kWk",
+				7: "............skWk",
+				8: "............k___",
+				9: "............k__.",
+				10: "............k__.",
+			},
+			"strike": {   # and brought down in front of him
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____",
+				7: ".............___.kkkkk",
+				8: "............kkkkkkWWWk",
+				9: "............sWWWWWWWWk",
+				10: "............kkkkkkWWWk",
+				11: ".................kkkkk",
+			},
+		},
 		"palette": {
 			"g": Color(0.5, 0.6, 0.35), "G": Color(0.36, 0.45, 0.25), "y": Color(1.0, 0.82, 0.25),
 			"R": Color(0.85, 0.15, 0.2), "e": Color(1.0, 0.3, 0.2), "t": Color(0.95, 0.92, 0.8),
@@ -543,6 +623,33 @@ const SPRITES := {
 		],
 	},
 	"ash_marshal": {  # The Ogre King's herald: horned black armour, a soot-red tabard, an ember-edged axe
+		"poses": {
+			"raise": {   # the ember-edged axe lifted high
+				0: "............_kk_",
+				1: "............_kOk",
+				2: "............_kOk",
+				3: "............_kOk",
+				4: "............_kWk",
+				5: "............_kWk",
+				6: "............_kWk",
+				7: "............kkWk",
+				8: ".............k__",
+				9: ".............k__",
+				10: ".............k__",
+				11: "..............__",
+			},
+			"strike": {   # and swept out in front
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: "..............__",
+				8: "..............kkkkkkkk",
+				9: ".............kWWWWWOOk",
+				10: "............skkkkkkkkk",
+				11: "..............__",
+			},
+		},
 		"palette": {
 			"H": Color(0.85, 0.8, 0.7), "A": Color(0.26, 0.24, 0.27), "e": Color(1.0, 0.55, 0.15), "R": Color(0.55, 0.16, 0.1),
 			"O": Color(1.0, 0.5, 0.15), "W": Color(0.35, 0.22, 0.14), "s": Color(0.4, 0.34, 0.33), "D": Color(0.18, 0.16, 0.18),
@@ -572,6 +679,34 @@ const SPRITES := {
 		],
 	},
 	"troll": {
+		"poses": {
+			"raise": {
+				0: ".............kk.",
+				1: ".............cck",
+				2: ".............cCk",
+				3: ".............cCk",
+				4: "............._ck",
+				5: ".............kck",
+				6: ".............gck",
+				7: "............._ck",
+				8: "............._ck",
+				9: "............._kk",
+				10: ".............___",
+				11: ".............___",
+			},
+			"strike": {
+				2: ".............__.",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___.kkkk",
+				7: ".............kkkkkcCck",
+				8: ".............gcccccCck",
+				9: ".............kkkkkcCck",
+				10: ".............___.kkkk",
+				11: ".............___",
+			},
+		},
 		"palette": {
 			"g": Color(0.5, 0.6, 0.65), "G": Color(0.35, 0.43, 0.5), "e": Color(1.0, 0.85, 0.2),
 			"t": Color(0.95, 0.92, 0.8), "l": Color(0.5, 0.35, 0.2), "c": Color(0.45, 0.3, 0.15),
@@ -589,7 +724,7 @@ const SPRITES := {
 			"kgkgGGGGGGgkggck",
 			"kgkgggggggggk.ck",
 			".kklllllllllk.ck",
-			"..klllllllllk.kk",
+			"..klkllklllkk.kk",
 			"..kgggkkkgggk...",
 			"..kgggk.kgggk...",
 			".kGGGGk.kGGGGk..",
@@ -603,6 +738,21 @@ const SPRITES := {
 		],
 	},
 	"warlord": {
+		"poses": {
+			"strike": {   # the greatsword swept out level
+				1: ".............._",
+				2: ".............___",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: "..............__",
+				8: ".............kkykkkkkk",
+				9: ".............Rgywwwwwwk",
+				10: ".............kkykkkkkk",
+				11: "..............._",
+			},
+		},
 		"palette": {
 			"r": Color(0.7, 0.18, 0.18), "R": Color(0.45, 0.1, 0.12), "y": Color(1.0, 0.8, 0.25),
 			"h": Color(0.92, 0.88, 0.75), "m": Color(0.35, 0.33, 0.4), "e": Color(1.0, 0.45, 0.2),
@@ -970,7 +1120,7 @@ const SPRITES := {
 			"..kHHHHyHHHHkswk",
 			"..kHHHyyyHHHk.wk",
 			"..kHHHHyHHHHk.wk",
-			"..kHHHHHHHHHk.wk",
+			"..kHHgggggHHk.wk",
 			"..kHHHHHHHHHk.wk",
 			"..kGGGGGGGGGk.wk",
 			"...kkfkkfkkk..k.",
@@ -1092,7 +1242,7 @@ const SPRITES := {
 			"..kTTTTyyTTTnkk.",
 			"..kTkTTTTTkLLLk.",
 			"..kskTTTTkLLoLLk",
-			"...kTTTTTkLLLLLk",
+			"...knnynnkLLLLLk",
 			"...kppppppkLLLk.",
 			"...kppkkppk.kk..",
 			"...kffk.kffk....",
@@ -1252,7 +1402,7 @@ const SPRITES := {
 			"..kCCAAAAAACkxxk",
 			"..kCkAAAAAkCkxxk",
 			"..kskAAAAAkssk..",
-			"...kaaaaaak.....",
+			"...kaxavaak.....",
 			"...kAAAAAAk.....",
 			"...kppkkppk.....",
 			"...kffk.kffk....",
@@ -3384,6 +3534,89 @@ static func frames(sprite: String, recolor := {}, tag := "", layers := []) -> Ar
 	return _cache[key]
 
 
+## The walk cycle's frame for step `i` from a frames() pair: plant, lift the left foot,
+## plant, lift the right foot. The lifted-foot frames are made from the first frame by
+## raising one foot a pixel (that leg's bottom rows moved up a row); a figure without
+## two feet on the ground (a robe, four legs, a slime) keeps alternating its two frames.
+## They're built the first time it walks, and kept on the same frames array.
+static func step(fr: Array, i: int) -> Texture2D:
+	if fr.size() < 4:
+		var lifted := _lift_feet(_image_of(fr[0]))
+		if lifted.is_empty():
+			fr.append_array([fr[1], fr[1]])   # A, B, A, B
+		else:
+			fr.append_array([_pack(lifted[0]), _pack(lifted[1])])
+	return fr[2 if i % 4 == 1 else 3] if i % 2 == 1 else fr[0]
+
+
+## The same frame with its eyes shut, for blinking, or null if it has no eyes to shut:
+## eyes are outline pixels with skin on both sides, in the top ten rows (a face's
+## "kskssksk"); a blink paints them over in that skin. Kept per frame.
+static var _blinks := {}
+
+static func blink(tex: Texture2D):
+	var id := tex.get_instance_id()
+	if _blinks.has(id):
+		return _blinks[id]
+	_blinks[id] = null
+	var img := _image_of(tex)
+	var shut := img.duplicate()
+	var found := 0
+	for y in range(1, 10):
+		for x in range(1, img.get_width() - 1):
+			var c := img.get_pixel(x, y)
+			if c.a == 0.0 or not _same(c, OUTLINE):
+				continue
+			var l := img.get_pixel(x - 1, y)
+			var r := img.get_pixel(x + 1, y)
+			# (the shading may have lit one side a touch: both just have to be skin)
+			if l.a > 0.0 and r.a > 0.0 and _skin_like(l) and _skin_like(r):
+				var lid := l if l.get_luminance() < r.get_luminance() else r
+				shut.set_pixel(x, y, lid.darkened(0.15))   # a closed lid, a shade darker than the face
+				found += 1
+	if found >= 1 and found <= 3:
+		_blinks[id] = _pack(shut)
+	return _blinks[id]
+
+
+static func _same(a: Color, b: Color) -> bool:   # (8-bit pixels: near enough)
+	return absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) < 0.02
+
+
+static func _skin_like(c: Color) -> bool:
+	return c.r > 0.7 and c.r > c.g and c.g > c.b and c.r - c.b > 0.15
+
+
+## [left foot raised, right foot raised] for a figure standing on two feet, or [] if it
+## isn't: the bottom row has to have exactly two separate runs of pixels (the boots).
+static func _lift_feet(src: Image) -> Array:
+	var w := src.get_width()
+	var y0 := SIZE - 1
+	var runs := []
+	var x := 0
+	while x < w:
+		if src.get_pixel(x, y0).a > 0.0:
+			var start := x
+			while x < w and src.get_pixel(x, y0).a > 0.0:
+				x += 1
+			runs.append([start, x - 1])
+		x += 1
+	if runs.size() != 2 or runs[0][1] - runs[0][0] > 6 or runs[1][1] - runs[1][0] > 6:
+		return []
+	var split: int = (runs[0][1] + runs[1][0] + 1) / 2
+	var out := []
+	for side in 2:
+		var img := src.duplicate()
+		var from: int = runs[0][0] if side == 0 else split
+		var to: int = split - 1 if side == 0 else runs[1][1]
+		for cx in range(from, to + 1):
+			for cy in range(SIZE - 3, SIZE - 1):
+				img.set_pixel(cx, cy, src.get_pixel(cx, cy + 1))
+			img.set_pixel(cx, SIZE - 1, Color(0, 0, 0, 0))
+		out.append(img)
+	return out
+
+
 # --- Mounted emplacements ----------------------------------------------------
 # The Archer, Mage and Frost Witch towers are drawn bigger with a real troop standing
 # on the battlements, and the Cannon with its own Cannoneer beside it. The tower art
@@ -3938,7 +4171,61 @@ static func _make(rows: Array, palette: Dictionary) -> Texture2D:
 			if ch != "k":
 				col = palette.get(ch, COMMON.get(ch, Color.MAGENTA))
 			img.set_pixel(x, y, col)
+	_shade(img, rows)
 	return _pack(img)
+
+
+## Lights a sprite from the upper left: a pixel on the top edge of the figure (just under
+## its outline) is lightened a touch, one on the lower right edge darkened, so the flat
+## colors read as rounded. Only the outer outline counts as an edge (not eyes, belts and
+## other lines drawn inside the figure), and outline pixels themselves are left alone.
+static var shading := true
+const SHADE_LIGHT := 0.14
+const SHADE_DARK := 0.2
+
+static func _shade(img: Image, rows: Array) -> void:
+	if not shading:
+		return
+	var w := img.get_width()
+	var n := w * SIZE
+	# Per pixel: 0 empty, 1 outline ("k"), 2 color. Then edge: empty, or outline touching empty.
+	var kind := PackedByteArray()
+	kind.resize(n)
+	for y in SIZE:
+		var row: String = rows[y]
+		for x in mini(row.length(), w):
+			var ch := row[x]
+			if ch != ".":
+				kind[y * w + x] = 1 if ch == "k" else 2
+	var edge := PackedByteArray()
+	edge.resize((w + 2) * (SIZE + 2))   # with a border of empty all round
+	edge.fill(1)
+	for y in SIZE:
+		for x in w:
+			var i := y * w + x
+			var e := 0
+			if kind[i] == 0:
+				e = 1
+			elif kind[i] == 1:
+				if (x == 0 or kind[i - 1] == 0) or (x == w - 1 or kind[i + 1] == 0) \
+						or (y == 0 or kind[i - w] == 0) or (y == SIZE - 1 or kind[i + w] == 0):
+					e = 1
+			edge[(y + 1) * (w + 2) + x + 1] = e
+	var stride := w + 2
+	for y in SIZE:
+		for x in w:
+			if kind[y * w + x] != 2:
+				continue
+			var j := (y + 1) * stride + x + 1
+			var up := edge[j - stride] == 1
+			var left := edge[j - 1] == 1
+			var right := edge[j + 1] == 1
+			var down := edge[j + stride] == 1
+			if up or left:
+				if not (right and down):
+					img.set_pixel(x, y, img.get_pixel(x, y).lerp(Color.WHITE, SHADE_LIGHT))
+			elif right or down:
+				img.set_pixel(x, y, img.get_pixel(x, y).darkened(SHADE_DARK))
 
 
 ## 16x16 ground tile. Variants 0-2 are plain grass, 3 has flowers, 4 is dirt.

@@ -103,15 +103,17 @@ func _draw() -> void:
 	var feet := Vector2(0, 16)
 	draw_texture_rect(Sprites.shadow(), Rect2(-14, 12, 28, 8), false, Color(0, 0, 0, 0.3))
 	var walking := state != "work" and position.distance_to(_target()) > 2.0
-	var tex: Texture2D = Sprites.frames("engineer")[int(walk) % 2 if walking else 0]
+	var tex: Texture2D = Sprites.step(Sprites.frames("engineer"), int(walk)) if walking else Sprites.frames("engineer")[0]
 	# Body motion, like the troops': a hop and a lean while walking (with dust kicked
 	# up behind), a wind-up and a squash with each hammer blow.
 	var off := Vector2.ZERO
 	var rot := 0.0
 	var sc := Vector2.ONE
 	if walking:
-		off.y -= absf(sin(walk * PI)) * 3.0
-		rot = 0.08 * flip
+		var stride := cos(PI * (walk - 0.5))   # 1 on a footfall, -1 with a foot up (Sprites.step)
+		off.y -= 1.6 * (1.0 - stride)
+		sc = Vector2(1.0 + 0.025 * stride, 1.0 - 0.04 * stride)
+		rot = 0.08 * flip + 0.04 * sin(PI * walk * 0.5)
 		var k := fmod(walk, 1.0)
 		var puff := feet + Vector2(-flip * (6.0 + 8.0 * k), -2)
 		Sprites.disc(self, puff, 3.0 + 3.0 * k, Color(0.75, 0.68, 0.55, 0.45 * (1.0 - k)))

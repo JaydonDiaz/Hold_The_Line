@@ -98,6 +98,9 @@ var bounty := 5
 var radius := 12.0
 var sprite_scale := 2.5
 var flip := 1.0
+var turn := 1.0             # the facing it's drawn with: swings over to flip in a quick turn, never snaps
+var turn_hold := 0.0        # how long flip has pointed away from turn (a turn starts once it's held a moment)
+var life_t := 0.0           # running clock (breathing while it fights)
 var color := Color.WHITE
 var progress := 0.0   # how far down the screen; warriors use it to judge threat
 var dead := false
@@ -216,6 +219,8 @@ func _process(delta: float) -> void:
 		if slow_timer <= 0.0:
 			slow_factor = 1.0
 	flash = maxf(flash - delta, 0.0)
+	_turn_toward(delta)
+	life_t += delta
 	lunge = maxf(lunge - delta, 0.0)
 	rally = maxf(rally - delta, 0.0)
 	ice_crust = maxf(ice_crust - delta, 0.0)
@@ -420,10 +425,15 @@ func _process(delta: float) -> void:
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
+		var was_at := position
 		_step_to(position + dir * speed * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
-		bob += delta * (20.0 if flying else 10.0)   # bats flap fast
+		if flying:
+			bob += delta * 20.0   # bats flap fast
+		else:
+			# Steps keep pace with the ground it covers (slowed, it steps slowly; no sliding feet).
+			bob += minf(position.distance_to(was_at) / (1.4 * sprite_scale), delta * 30.0)
 		walking = true
 	_push_out()
 	progress = position.y
@@ -1055,6 +1065,49 @@ func apply_slow(strength: float, duration: float) -> void:
 	slow_timer = maxf(slow_timer, duration)
 
 
+## Turns the drawn facing round to flip, once flip has held for a moment: a path that
+## wobbles left and right doesn't make it twitch back and forth.
+func _turn_toward(delta: float) -> void:
+	if flip == 0.0 or signf(turn) == flip and absf(turn) >= 1.0:
+		turn_hold = 0.0
+		return
+	if signf(turn) != flip:
+		turn_hold += delta
+		if turn_hold < 0.12:
+			return
+	turn = move_toward(turn, flip, delta * 11.0)
+
+
+## The walk, by kind: [offset, tilt, scale] this frame. One step per walk frame.
+func _gait() -> Array:
+	var ph := bob * PI / 2.5
+	var s := sin(ph)
+	var up := absf(s)                       # 0 on a footfall, 1 mid-stride
+	var k := minf(1.0, 3.0 / sprite_scale)  # big ones bounce less (in sprite pixels)
+	# On two feet (Sprites.step): planted on even frames, a foot up on odd ones, rocking
+	# over onto the planted foot step by step.
+	var pace := 0.5 - 0.5 * cos(PI * (bob / 2.5 - 0.5))
+	var side := sin(ph * 0.5)
+	match kind:
+		"slime":
+			# Hops: squashed flat on the ground (its squashed frame: see _draw), springing
+			# up tall, landing flat again.
+			return [Vector2(0, -5.0 * up * k), 0.0, Vector2(1.0 - 0.08 * up, 1.0 + 0.12 * up)]
+		"wolf":
+			# A gallop: rocking nose-down, tail-down, stretching out with each bound.
+			return [Vector2(0, -3.0 * up * k), cos(ph) * 0.13, Vector2(1.0 + 0.06 * up, 1.0 - 0.04 * up)]
+		"troll", "ogre_king", "warlord", "ash_marshal", "orc":
+			# A heavy tread: rolling from foot to foot, sinking into each footfall.
+			return [Vector2(0, -1.5 * pace * k), side * 0.09, Vector2(1.0 + 0.05 * (1.0 - pace), 1.0 - 0.05 * (1.0 - pace))]
+		"skeleton", "skeleton_archer":
+			# A clattering shamble, bones rattling.
+			return [Vector2(sin(bob * 9.0) * 0.7, -2.0 * pace * k), side * 0.05 + sin(bob * 7.0) * 0.03, Vector2.ONE]
+		"goblin", "sapper":
+			# A scurry: quick, hunched, bouncing high.
+			return [Vector2(0, -3.2 * pace * k), side * 0.11, Vector2(1.0 + 0.04 * (1.0 - pace), 1.0 - 0.06 * (1.0 - pace))]
+	return [Vector2(0, -2.5 * pace * k), side * 0.06, Vector2.ONE]
+
+
 func _draw() -> void:
 	var tint := Color.WHITE
 	if slow_timer > 0.0 or freeze_timer > 0.0 or ice_crust > 0.0:
@@ -1073,15 +1126,35 @@ func _draw() -> void:
 	if fuse >= 0.0 and int(fuse * 12.0) % 2 == 0:
 		tint = Color(3, 1.2, 0.6)   # a lit bomb blinks
 	var frame := int(bob / 2.5) % 2
+	var body_tex: Texture2D = Sprites.step(frames, int(bob / 2.5)) if walking and not flying else frames[frame]
+	if kind == "slime" and walking:
+		body_tex = frames[1] if absf(sin(bob * PI / 2.5)) < 0.35 else frames[0]   # squashed on the ground, round in the air
+	# Attacking: the weapon hauled back as the blow comes, then brought down as it lands.
+	var attack := ""
+	if lunge > 0.0:
+		attack = "strike"
+	elif fighting and cd_timer < 0.3:
+		attack = "raise"
+	if attack != "":
+		var posed = Sprites.pose(kind, attack)
+		if posed != null:
+			body_tex = posed
 	var nudge := lunge_dir * (lunge / 0.15) * 6.0
 	# Body motion: a waddling hop while walking, rearing back before a blow, and a
 	# squash when hit. Pivots on the feet.
 	var rot := 0.0
 	var sc := Vector2.ONE
 	if walking and not flying:
-		var ph := bob * PI / 2.5
-		nudge.y -= absf(sin(ph)) * 2.5 * minf(1.0, 3.0 / sprite_scale)
-		rot = sin(ph) * 0.06
+		var g := _gait()
+		nudge += g[0]
+		rot = g[1]
+		sc = g[2]
+	elif flying:
+		# Wings beating: a little lift on each downstroke, swooping side to side.
+		sc = Vector2(1.0, 1.0 + 0.05 * sin(bob * PI / 2.5))
+		rot = sin(bob * 0.15) * 0.08
+	else:
+		sc = Vector2(1.0 - 0.012 * sin(life_t * 3.0 + drift), 1.0 + 0.022 * sin(life_t * 3.0 + drift))   # breathing hard
 	if fighting and cd_timer < 0.3 and lunge <= 0.0:
 		var k := 1.0 - cd_timer / 0.3
 		nudge -= lunge_dir * 4.0 * k
@@ -1091,8 +1164,10 @@ func _draw() -> void:
 		sc = Vector2(1.1, 0.92)
 	if flash > 0.0:
 		sc = Vector2(1.12, 0.88)
-	draw_set_transform(Vector2(0, feet) + nudge, rot, Vector2(flip * sc.x, sc.y))
-	draw_texture_rect(frames[frame], Rect2(Vector2(-size.x / 2, -size.y), size), false, tint)
+		nudge -= lunge_dir * 2.0 * flash / 0.08   # rocked back by the blow
+	var fx := signf(turn if turn != 0.0 else flip) * maxf(absf(turn), 0.5)   # squeezed thin mid-turn
+	draw_set_transform(Vector2(0, feet) + nudge, rot, Vector2(fx * sc.x, sc.y))
+	draw_texture_rect(body_tex, Rect2(Vector2(-size.x / 2, -size.y), Vector2(body_tex.get_width() * sprite_scale, size.y)), false, tint)   # (a wide pose reaches forward)
 	if ice_crust > 0.0 and freeze_timer <= 0.0:
 		# Iced over: a frosty glaze and a rim of ice.
 		var glaze := Rect2(Vector2(-size.x / 2, -size.y) + Vector2(size.x * 0.1, size.y * 0.45), size * Vector2(0.8, 0.55))

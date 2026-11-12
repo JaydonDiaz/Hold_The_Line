@@ -720,7 +720,7 @@ func _draw_castle(light: Color) -> void:
 		var span := 36.0
 		var x: float = (198.0 if i == 0 else 442.0) + sin(t * 0.35 + i * 2.0) * span
 		var dir := signf(cos(t * 0.35 + i * 2.0))
-		var tex: Texture2D = Sprites.frames("archer" if i == 0 else "swordsman")[int(t * 4.0) % 2]
+		var tex: Texture2D = Sprites.step(Sprites.frames("archer" if i == 0 else "swordsman"), int(t * 4.0))
 		draw_set_transform(Vector2(x, 392), 0, Vector2(dir * 1.6, 1.6))
 		draw_texture_rect(tex, Rect2(Vector2(-8, -16), Vector2(16, 16)), false, Color(light, 1))
 		draw_set_transform(Vector2.ZERO)
@@ -1232,7 +1232,7 @@ func _draw_actors(light: Color) -> void:
 		draw_circle(Vector2.ZERO, 7.0 * s, Color(0, 0, 0, 0.25 * alpha))
 		draw_set_transform(Vector2.ZERO)
 		var frames: Array = Sprites.frames(kind)
-		var tex: Texture2D = frames[int(t * 5.0 + a["id"] % 7) % frames.size()]
+		var tex: Texture2D = Sprites.step(frames, int(t * 5.0 + a["id"] % 7))
 		var slash := 0.0   # the training Swordsman's blow, 1 as it starts down to 0
 		if kind == "swordsman" and a["role"] == "dummy" and a["lunge"] > 0.0:
 			# His in-game attack: the sword swung up, then brought down (see warrior.gd).

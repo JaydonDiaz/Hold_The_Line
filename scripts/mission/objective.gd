@@ -309,12 +309,12 @@ func _draw_villager() -> void:
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * 3.0
 	var walking: bool = speed > 0.0 and main.started and not main.deploying and not main.game_over
 	var stride := t * (16.0 if panic > 0.0 else 9.0)
-	var frame := int(stride / PI) % 2 if walking else 0
-	var hop := -absf(sin(stride)) * 2.0 if walking else 0.0
+	var hop := -(1.5 - 1.5 * sin(stride)) if walking else 0.0   # up as a foot lifts (see Sprites.step)
 	cv.draw_texture_rect(Sprites.shadow(), Rect2(-13, 4, 26, 8), false, Color(0, 0, 0, 0.3))
 	cv.draw_set_transform(Vector2(0, hop), 0.0, Vector2(face, 1.0))
 	var tint := Color(3, 3, 3) if hit > 0.1 else Color.WHITE
-	cv.draw_texture_rect(frames[frame], Rect2(-size.x / 2.0, 10.0 - size.y, size.x, size.y), false, tint)
+	var tex: Texture2D = Sprites.step(frames, int(stride / PI)) if walking else frames[0]
+	cv.draw_texture_rect(tex, Rect2(-size.x / 2.0, 10.0 - size.y, size.x, size.y), false, tint)
 	cv.draw_set_transform(Vector2.ZERO)
 	if hp < max_hp:
 		var top := -34.0 if look == "villager_child" else -40.0

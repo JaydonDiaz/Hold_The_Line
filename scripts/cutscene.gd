@@ -454,9 +454,9 @@ func _px_at(p: Vector2, size: float, c: Color) -> void:
 
 func _walker(kind: String, x: float, y: float, phase: float, scale := 4.0) -> void:
 	var frames: Array = Sprites.frames(kind)
-	var tex: Texture2D = frames[int((t + phase) * 6.0) % frames.size()]
+	var tex: Texture2D = Sprites.step(frames, int((t + phase) * 6.0))
 	var sz := Vector2(tex.get_width(), tex.get_height()) * scale
-	var foot := Vector2(x * PX, y * PX - absf(sin((t + phase) * 9.0)) * 3.0)
+	var foot := Vector2(x * PX, y * PX - (1.5 - 1.5 * cos(PI * ((t + phase) * 6.0 - 0.5))) * 1.0)
 	draw_texture_rect(tex, Rect2(foot.x - sz.x / 2.0, foot.y - sz.y, sz.x, sz.y), false)
 
 

@@ -51,8 +51,11 @@ func _draw() -> void:
 			var fade := clampf((1.0 - t / life) * 2.2, 0.0, 1.0)
 			var ease_k := k * k
 			var drop := height * (1.0 - ease_k)
-			draw_set_transform(Vector2(0, radius - drop), -flip * ease_k * PI * 0.5, Vector2(flip, 1.0))
-			draw_texture_rect(tex, Rect2(Vector2(-size.x / 2, -size.y), size), false, Color(1, 0.75, 0.75, fade))
+			# It hits the ground with a little bounce, and flashes white as the blow lands.
+			var bounce := sin(clampf((t - life * 0.45) / (life * 0.16), 0.0, 1.0) * PI) * 0.13
+			var col := Color(1, 0.75, 0.75, fade) if t > 0.06 else Color(2.5, 2.5, 2.5, fade)
+			draw_set_transform(Vector2(0, radius - drop), -flip * (ease_k * PI * 0.5 - bounce), Vector2(flip, 1.0))
+			draw_texture_rect(tex, Rect2(Vector2(-size.x / 2, -size.y), size), false, col)
 			draw_set_transform(Vector2.ZERO)
 			if k >= 1.0 or height == 0.0:
 				# The dust it kicks up.
