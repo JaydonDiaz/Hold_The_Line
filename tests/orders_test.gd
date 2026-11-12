@@ -516,6 +516,55 @@ func _danger() -> void:
 		await process_frame
 		closest = minf(closest, w.position.distance_to(w.post))
 	check(not w.retreating and closest < 20.0, "...to its post, and rejoins once no enemy has come near for a moment (got within %dpx of its post)" % roundi(closest))
+	# Falling back, a ranged troop keeps shooting whatever's in reach as it goes.
+	await _fresh()
+	var ar = _hire("archer", Vector2(320, 600))
+	ar.position = ar.post
+	var foe = _foe("orc", Vector2(320, 470))
+	foe.speed = 0.0
+	foe.damage = 0.0
+	main.give_order("danger_mode", "fall_back", [ar])
+	ar.hp = ar.max_hp * 0.2
+	ar.take_damage(1.0)
+	await _frames(3)
+	var foe_hp: float = foe.hp
+	var shot_while_back := false
+	for f in 60 * 3:
+		await process_frame
+		if ar.retreating:
+			ar.danger_t = 1.0   # (still being hit)
+			ar.hp = minf(ar.hp, ar.max_hp * 0.2)
+			shot_while_back = shot_while_back or foe.hp < foe_hp
+	check(ar.retreating and shot_while_back, "Falling back, an Archer still shoots the enemy in reach as it goes")
+	# ...and a Healer keeps mending as it goes: itself, and an ally beside it.
+	var hl = _hire("healer", Vector2(320, 640))
+	var mate = _hire("swordsman", Vector2(350, 640))
+	hl.position = hl.post
+	mate.position = mate.post
+	mate.hp = mate.max_hp * 0.5
+	foe.free()
+	var near_foe = _foe("orc", hl.position + Vector2(0, -110))
+	near_foe.speed = 0.0
+	near_foe.damage = 0.0   # (an enemy about, so it keeps falling back)
+	main.give_order("danger_mode", "fall_back", [hl])
+	hl.hp = hl.max_hp * 0.2
+	hl.take_damage(1.0)
+	await _frames(2)
+	var was_back: bool = hl.retreating
+	var self0: float = hl.hp
+	var mate0: float = mate.hp
+	for f in 60 * 3:
+		await process_frame
+		if hl.retreating:
+			hl.danger_t = 1.0
+	check(was_back and hl.hp > self0, "...a Healer falling back keeps healing: itself, the worst hurt (%.2f%% → %.2f%%)" % [self0 / hl.max_hp * 100.0, hl.hp / hl.max_hp * 100.0])
+	mate.hp = mate.max_hp * 0.05
+	mate0 = mate.hp
+	for f in 60 * 3:
+		await process_frame
+		if hl.retreating:
+			hl.danger_t = 1.0
+	check(hl.retreating and mate.hp > mate0, "...and an ally beside it, once that ally's worse off")
 
 
 # --- Answering calls for help ------------------------------------------------------------

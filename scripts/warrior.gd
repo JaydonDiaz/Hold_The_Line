@@ -1309,25 +1309,7 @@ func _process(delta: float) -> void:
 		if not ordered:
 			_mend(max_hp * REGEN * delta)
 
-	# Attacking happens on the move: hit the target if it's in reach, otherwise anything
-	# else in reach (picked by priority), including while following a move order.
-	if offhand_timer > 0.0:
-		offhand_timer -= delta
-		if offhand_timer <= 0.0:
-			_offhand_strike()
-	if combo_left > 0:
-		_continue_combo(delta)
-	elif cd_timer <= 0.0:
-		var victim = _victim()
-		if victim != null:
-			cd_timer = cooldown / _rate()
-			facing = position.direction_to(victim.position)
-			if data["attack"] == "combo":
-				combo_left = combo_hits
-				combo_timer = 0.0
-				_continue_combo(0.0)
-			else:
-				_attack(victim)
+	_strike_in_reach(delta)
 	if absf(facing.x) > 0.2:
 		flip = signf(facing.x)
 	if not dash.is_empty():
@@ -3119,8 +3101,9 @@ func in_danger() -> bool:
 
 ## Falling back (its orders say so, and it's in danger): breaks off and makes for a
 ## Healer or a Medic Bay (else its post, or the castle if its post is where the fight
-## is), till it's mended or no enemy has come near for a moment. Returns whether it's
-## falling back this frame (it does nothing else then).
+## is), till it's mended or no enemy has come near for a moment. On the way a Healer keeps
+## mending whoever's in reach (itself too) and a ranged troop keeps shooting; a melee troop
+## just runs. Returns whether it's falling back this frame (it does nothing else then).
 func _fall_back(delta: float) -> bool:
 	if danger_mode != "fall_back" or is_emplacement() or wall_guard or summoned or clone_of != null:
 		retreating = false
@@ -3147,7 +3130,55 @@ func _fall_back(delta: float) -> bool:
 		_move_toward(dest, d, delta)
 	elif not near.is_empty():
 		facing = position.direction_to(near[0].position)
+	# Still useful on the way: a Healer mends whoever's in reach (itself too), a ranged
+	# troop shoots whatever's in reach; only melee troops just run.
+	if is_mobile_healer():
+		_heal_in_reach()
+	elif (not is_melee() or not blast.is_empty()) and not is_healer():
+		_strike_in_reach(delta)   # (a Martial Artist with Spirit Bolts counts: it shoots ki)
 	return true
+
+
+## Attacking happens on the move: hit the target if it's in reach, otherwise anything
+## else in reach (picked by priority), including while following a move order, or (a
+## ranged troop) while falling back.
+func _strike_in_reach(delta: float) -> void:
+	if offhand_timer > 0.0:
+		offhand_timer -= delta
+		if offhand_timer <= 0.0:
+			_offhand_strike()
+	if combo_left > 0:
+		_continue_combo(delta)
+	elif cd_timer <= 0.0:
+		var victim = _victim()
+		if victim != null:
+			cd_timer = cooldown / _rate()
+			facing = position.direction_to(victim.position)
+			if data["attack"] == "combo":
+				combo_left = combo_hits
+				combo_timer = 0.0
+				_continue_combo(0.0)
+			else:
+				_attack(victim)
+
+
+## A Healer falling back keeps mending as it goes: whoever in reach is worst hurt
+## (itself included), when it's ready.
+func _heal_in_reach() -> void:
+	if cd_timer > 0.0:
+		return
+	var best = null
+	var best_frac := 0.999
+	for w in main.get_warriors() + _villagers():
+		if not w.is_active() or not w.is_target() or (w != self and _ally_gap(w) > attack_range):
+			continue
+		var frac: float = w.hp / w.max_hp
+		if frac < best_frac:
+			best_frac = frac
+			best = w
+	if best != null:
+		cd_timer = cooldown
+		_heal(best)
 
 
 ## Where to fall back to: beside the nearest Healer on its feet or Medic Bay (on the
