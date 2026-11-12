@@ -1524,6 +1524,8 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 		return false
 	if ground_problem(p) != "":
 		return false
+	if _emplacing(ignore) and hazards.on_thin_ice(p):
+		return false   # nothing is built on thin ice: it couldn't get off
 	for w in get_warriors():
 		if w != ignore and w.post.distance_to(p) < MIN_POST_GAP:
 			return false
@@ -1531,6 +1533,13 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 		if b.gap_from(p) < Warrior.RADIUS:
 			return false
 	return true
+
+
+## Whether an emplacement is being placed (or `w`, being moved, is one).
+func _emplacing(w) -> bool:
+	if w != null:
+		return w.is_emplacement()
+	return placing_type != "" and Data.WARRIORS.has(placing_type) and Data.WARRIORS[placing_type].get("emplacement", false)
 
 
 ## Why the battlefield itself won't take a post at p ("" if it will): rock, cliff,
@@ -1634,6 +1643,8 @@ func hire_at(p: Vector2) -> void:
 	if not can_post_at(p):
 		if ground_problem(p) != "":
 			hud.show_message(ground_problem(p))
+		elif _emplacing(null) and hazards.on_thin_ice(p):
+			hud.show_message("Nothing can be built on thin ice")
 		return
 	var data: Dictionary = Data.WARRIORS[placing_type]
 	var cost := hire_cost(placing_type)

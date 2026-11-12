@@ -7,9 +7,12 @@ extends Node2D
 ##   - it holds your troops, and any enemy that isn't HEAVY, for ever;
 ##   - a HEAVY enemy (a Troll, the Warlord, the Ash Marshal, the Ogre King) stepping onto a
 ##     patch sets it cracking: cracks spread, its edge flashes red, and a countdown shows;
+##   - your troops on a cracking patch drop everything and make for the nearest shore;
 ##   - CRACK_TIME later the whole patch gives way, whoever is on it then: enemies fall
 ##     through and are lost (a boss scrambles out onto the shore instead, stunned and
-##     hurt), your troops on it are put back on the nearest shore, never lost;
+##     hurt); troops still on it fall through too and go down (a Healer can revive them,
+##     as for any troop knocked out), dragged out onto the shore;
+##   - nothing can be built on thin ice (an emplacement couldn't get off it);
 ##   - the patch is open water from then on: nobody can cross it, and every route
 ##     (enemies', your troops') is worked out afresh round it.
 ## Maps keep objectives, lanes and the castle reachable with every patch broken
@@ -18,7 +21,8 @@ extends Node2D
 ## Blizzards (mission "weather": {"blizzard": {"first", "every", "length", "warn"}}): while
 ## a wave is on, a gust blows in every so often, announced WARN seconds ahead. In a gust
 ## everyone moves GUST_SLOW slower and ranged attacks come GUST_RATE slower (troops and
-## enemies alike; the Covenant's Frost Witches and Frost Towers are at home in it).
+## enemies alike); the Covenant's Frost Witches and Frost Towers are at home in it: not
+## slowed at all, they hit FROST_POWER harder and attack FROST_RATE faster while it blows.
 
 const Maps = preload("res://scripts/maps.gd")
 const Data = preload("res://scripts/data.gd")
@@ -27,6 +31,8 @@ const CRACK_TIME := 2.5
 const GUST_SLOW := 0.2     # a share off everyone's speed in a gust
 const GUST_RATE := 0.3     # ...and off ranged attack rates
 const IMMUNE := ["frost", "frosttower"]
+const FROST_POWER := 0.3   # Frost Witches and Frost Towers in a gust: this much more damage...
+const FROST_RATE := 0.2    # ...and this much faster
 const OUTLINE := Color(0.1, 0.07, 0.1)
 
 var main
@@ -58,6 +64,8 @@ func setup(m, map: Dictionary, mission: Dictionary) -> void:
 			ice.append({"i": i, "state": "whole", "t": 0.0, "by": "", "at": Vector2.ZERO})
 	fitted_w = -1.0
 	_refit()
+	_flee.clear()
+	_fled.clear()
 	blizzard = mission.get("weather", {}).get("blizzard", {})
 	gust_in = float(blizzard.get("first", blizzard.get("every", 40.0)))
 	gust_left = 0.0
@@ -104,6 +112,12 @@ func _update_ice(delta: float) -> void:
 						p["t"] = CRACK_TIME
 						p["by"] = e.kind
 						p["at"] = e.position
+						# Troops posted out on it get posts on the shore, so none heads back out.
+						for w in main.get_warriors():
+							if not w.is_emplacement() and Geometry2D.is_point_in_polygon(w.post, polys[n]):
+								var spot := _shore(polys[n], w.position, w.RADIUS)
+								_flee["%d:%d" % [n, w.get_instance_id()]] = spot
+								w.set_post(spot)
 						main.hud.show_message("The ice is cracking under the %s!" % Data.ENEMIES[e.kind].get("name", e.kind.capitalize()))
 						main.sfx("crumble")
 						break
@@ -133,9 +147,20 @@ func _break(n: int) -> void:
 		if w.is_emplacement() or not Geometry2D.is_point_in_polygon(w.position, poly):
 			continue
 		var safe := _shore(poly, w.position, w.RADIUS)
-		w.position = safe
-		if Geometry2D.is_point_in_polygon(w.post, poly):
-			w.set_post(safe)   # its post was out on the ice: it's on the shore now
+		if w.is_active():
+			# Still on it: it goes through like anything else, and is hauled out downed.
+			var dodge: float = w.evade
+			var guard: float = w.block
+			w.evade = 0.0
+			w.block = 0.0
+			main.spawn_text(w.position + Vector2(0, -30), "Through the ice!", Color(0.7, 0.9, 1.0))
+			w.take_damage(1e9)
+			w.evade = dodge
+			w.block = guard
+		if is_instance_valid(w) and not w.is_queued_for_deletion():
+			w.position = safe
+			if Geometry2D.is_point_in_polygon(w.post, poly):
+				w.set_post(safe)   # its post was out on the ice: it's on the shore now
 	# The patch is water now: rebuild every route round it.
 	raw["terrain"][p["i"]]["kind"] = "water"
 	main.paths.set_map(raw)
@@ -185,6 +210,48 @@ func _centre(poly: PackedVector2Array) -> Vector2:
 	return c / maxf(poly.size(), 1)
 
 
+## Whether p is on thin ice that's still there (whole or cracking).
+func on_thin_ice(p: Vector2) -> bool:
+	_refit()
+	for n in ice.size():
+		if ice[n]["state"] != "broken" and Geometry2D.is_point_in_polygon(p, polys[n]):
+			return true
+	return false
+
+
+## Where troop `w` should run to, standing on a patch that's cracking (Vector2.INF if it's
+## safe where it is). Worked out a few times a second and kept between.
+func flee_spot(w) -> Vector2:
+	for n in ice.size():
+		if ice[n]["state"] != "cracking":
+			continue
+		var key := "%d:%d" % [n, w.get_instance_id()]
+		var on: bool = _gap(w.position, polys[n]) < w.RADIUS or Geometry2D.is_point_in_polygon(w.position, polys[n])
+		if on and not _flee.has(key):
+			_flee[key] = _shore(polys[n], w.position, w.RADIUS)
+		# Once it's running it keeps going till it's there, clear of the ice.
+		if _flee.has(key) and w.position.distance_to(_flee[key]) > 4.0 and (on or _fled.get(key, false) == false):
+			_fled[key] = false
+			return _flee[key]
+		if _flee.has(key):
+			_fled[key] = true
+	return Vector2.INF
+
+
+var _fled := {}   # "patch:troop" -> it's reached its shore spot
+
+
+## Whether p is on (or at the very edge of) ice that's cracking: troops don't step there.
+func cracking_at(p: Vector2, r := 0.0) -> bool:
+	for n in ice.size():
+		if ice[n]["state"] == "cracking" and (Geometry2D.is_point_in_polygon(p, polys[n]) or _gap(p, polys[n]) < r):
+			return true
+	return false
+
+
+var _flee := {}   # "patch:troop" -> the shore spot it's running for
+
+
 ## Whether patch n is still there to walk on.
 func ice_state(n: int) -> String:
 	return ice[n]["state"]
@@ -202,7 +269,7 @@ func _update_blizzard(delta: float) -> void:
 		if gust_in <= 0.0:
 			gust_left = float(blizzard.get("length", 10.0))
 			gust_in = float(blizzard.get("every", 40.0))
-			main.hud.show_message("Blizzard! Everyone slowed, ranged attacks slowed (Frost Witches aren't)")
+			main.hud.show_message("Blizzard! Everyone slowed, ranged attacks slowed; Frost Witches stronger")
 	# Gust strength, easing in and out over a second.
 	var target := 1.0 if gust_left > 0.0 else 0.0
 	main.gust = move_toward(main.gust, target, delta)
@@ -220,9 +287,14 @@ func speed_factor(kind: String) -> float:
 	return 1.0 if IMMUNE.has(kind) else 1.0 - GUST_SLOW * main.gust
 
 
-## ...and how much its ranged attacks are slowed.
+## ...how fast its ranged attacks come (under 1: slowed; a Frost Witch's: faster).
 func rate_factor(kind: String) -> float:
-	return 1.0 if IMMUNE.has(kind) else 1.0 - GUST_RATE * main.gust
+	return 1.0 + FROST_RATE * main.gust if IMMUNE.has(kind) else 1.0 - GUST_RATE * main.gust
+
+
+## ...and how hard it hits (a Frost Witch's or Frost Tower's: harder in a blizzard).
+func power_factor(kind: String) -> float:
+	return 1.0 + FROST_POWER * main.gust if IMMUNE.has(kind) else 1.0
 
 
 # --- Drawing --------------------------------------------------------------------------------
@@ -289,7 +361,7 @@ func _draw_sky() -> void:
 	var warn := gust_warning()
 	var msg := ""
 	if gust_left > 0.0:
-		msg = "BLIZZARD  %ds  -  everyone slowed, ranged attacks slowed" % ceili(gust_left)
+		msg = "BLIZZARD  %ds  -  everyone slowed, ranged attacks slowed, Frost Witches stronger" % ceili(gust_left)
 	elif warn >= 0.0:
 		msg = "Blizzard coming in %ds" % ceili(warn)
 	if msg != "":

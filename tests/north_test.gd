@@ -5,10 +5,13 @@ extends SceneTree
 ##                 walked until it breaks; none of them blocks
 ##   I  thin ice   only heavy enemies crack it; a crack gives warning and a countdown, then
 ##                 the patch gives way: enemies on it are lost (a boss climbs out onto the
-##                 shore, stunned), troops on it are put on the shore with their posts, and
-##                 it's open water after, every lane still reaching the castle
+##                 shore, stunned); troops on a cracking patch run for the shore, and one
+##                 that can't (stunned) falls through, goes down and is hauled ashore; it's
+##                 open water after, every lane still reaching the castle; nothing can be
+##                 built on thin ice
 ##   B  blizzard   gusts are announced before they blow, then slow everyone's movement and
-##                 ranged fire for a while (Frost Witches excepted); Classic has none
+##                 ranged fire for a while; Frost Witches aren't slowed and get stronger;
+##                 Classic has none
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://north_test_campaign.cfg"
@@ -123,24 +126,36 @@ func _ice() -> void:
 	var orc = _foe("orc", Vector2(360, 380))
 	await _frames(60 * 4)
 	check(hz.ice_state(0) == "whole", "I  a Goblin and an Orc standing on it: it holds")
-	# A troop out on the ice, then a Troll steps onto it.
+	# Nothing is built on thin ice (an emplacement couldn't get off); troops may stand there.
+	main.placing_type = "tower"
+	check(not main.can_post_at(Vector2(320, 360)) and main.can_post_at(Vector2(320, 520)), "I  an emplacement can't be built on thin ice (it can elsewhere)")
+	main.placing_type = "swordsman"
+	check(main.can_post_at(Vector2(330, 340)), "I  ...a troop can be posted on it")
+	main.placing_type = ""
+	# Two troops out on the ice, one of them stunned; then a Troll steps onto it.
 	var sw = _hire("swordsman", Vector2(400, 400))
 	sw.max_hp = 1e6
 	sw.hp = 1e6
+	var stuck_one = _hire("swordsman", Vector2(330, 340))
+	stuck_one.dazed = 30.0   # (stunned: it can't get off)
 	var troll = _foe("troll", Vector2(240, 330))
 	await _frames(5)
 	check(hz.ice_state(0) == "cracking", "I  a Troll steps on: it starts cracking")
 	check(hz.ice[0]["t"] > 2.0, "I  ...with %.1fs warning before it goes" % hz.ice[0]["t"])
-	await _frames(int(60 * 1.0))
+	await _frames(30)
+	check(sw.position.distance_to(Vector2(400, 400)) > 10.0, "I  ...the Swordsman on it drops everything and makes for the shore")
+	await _frames(30)
 	check(hz.ice_state(0) == "cracking", "I  ...still standing a second later")
 	await _frames(int(60 * (hz.CRACK_TIME - 0.9)))
 	check(hz.ice_state(0) == "broken", "I  ...and it gives way on time")
 	var gone := func(e): return not is_instance_valid(e) or e.dead
 	check(gone.call(troll) and gone.call(gob) and gone.call(orc), "I  every enemy on it went through the ice")
 	var poly: PackedVector2Array = hz.polys[0]
-	check(not Geometry2D.is_point_in_polygon(sw.position, poly) and not main.paths.blocked(sw.position, 16.0) and sw.is_active(),
-			"I  the Swordsman on it was put on the shore, unhurt (%s)" % str(sw.position.round()))
+	check(not Geometry2D.is_point_in_polygon(sw.position, poly) and not main.paths.blocked(sw.position, 16.0) and sw.is_active() and sw.hp == sw.max_hp,
+			"I  the Swordsman got off before it broke, unhurt (%s, %d/%d)" % [str(sw.position.round()), sw.hp, sw.max_hp])
 	check(not Geometry2D.is_point_in_polygon(sw.post, poly), "I  ...and its post moved off the water with it")
+	check(not stuck_one.is_active() and not Geometry2D.is_point_in_polygon(stuck_one.position, poly) and not main.paths.blocked(stuck_one.position, 16.0),
+			"I  the stunned one couldn't get off: it fell through, went down, and was hauled onto the shore")
 	check(main.paths.blocked(Vector2(320, 360), 4.0), "I  the patch is open water now: nobody crosses it")
 	var stuck := []
 	for r in [11.0, 14.0, 19.0, 24.0]:
@@ -185,7 +200,11 @@ func _blizzard() -> void:
 	var gusting: float = sw.position.distance_to(p0)
 	check(gusting < calm * 0.88 and gusting > calm * 0.7, "B  troops move slower in it (%.0fpx against %.0fpx in half a second)" % [gusting, calm])
 	check(is_equal_approx(hz.rate_factor("archer"), 0.7) and is_equal_approx(hz.speed_factor("orc"), 0.8), "B  ranged fire 30% slower, enemies 20% slower too")
-	check(hz.rate_factor("frost") == 1.0 and hz.speed_factor("frost") == 1.0, "B  ...but not the Frost Witches")
+	check(hz.speed_factor("frost") == 1.0 and hz.rate_factor("frost") > 1.15 and hz.power_factor("frost") > 1.25 and hz.power_factor("archer") == 1.0,
+			"B  Frost Witches aren't slowed, and they're stronger in it (%.2fx damage, %.2fx rate)" % [hz.power_factor("frost"), hz.rate_factor("frost")])
+	var fw = _hire("frost", Vector2(200, 650))
+	var archer = _hire("archer", Vector2(440, 650))
+	check(fw._power() > 1.25 and fw._rate() > 1.15 and archer._rate() < 0.75, "B  ...and it shows in their own attacks (Frost Witch %.2fx damage, %.2fx rate; Archer %.2fx rate)" % [fw._power(), fw._rate(), archer._rate()])
 	await _frames(int(60 * 3.0))
 	check(main.gust < 0.05 and hz.gust_left <= 0.0, "B  it eases off after a while")
 	# Classic: no hazards at all.

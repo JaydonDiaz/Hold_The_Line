@@ -644,7 +644,8 @@ func uses_targeting() -> bool:
 
 
 func _power() -> float:
-	return (surge["damage"] if surge_left > 0.0 else 1.0) * _form("damage") * (1.0 + buff["damage"]) * _body_share()
+	var weather: float = 1.0 if main.gust <= 0.0 else main.hazards.power_factor(kind)   # Frost Witches in a blizzard
+	return (surge["damage"] if surge_left > 0.0 else 1.0) * _form("damage") * (1.0 + buff["damage"]) * _body_share() * weather
 
 
 ## Mirror Self: the share of the Martial Artist's power each of his bodies has right
@@ -1190,6 +1191,9 @@ func _process(delta: float) -> void:
 	danger_t = maxf(danger_t - delta, 0.0)
 	if call_help and in_danger() and not summoned:
 		main.call_for_help(self)
+	if _off_the_ice(delta):
+		_separate()
+		return
 	if _fall_back(delta):
 		if absf(facing.x) > 0.2:
 			flip = signf(facing.x)
@@ -1808,7 +1812,10 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements() or main.paths.has_terrain()) \
 			and _way_blocked(stop, delta):
 		aim = _route_step(p, delta)
-	_step_to(position + position.direction_to(aim) * step)
+	var next := position + position.direction_to(aim) * step
+	if not main.hazards.ice.is_empty() and main.hazards.cracking_at(next, RADIUS) and not main.hazards.cracking_at(position, RADIUS):
+		return   # ice cracking ahead: it won't step out onto it (it waits at the edge)
+	_step_to(next)
 	walk += step / 12.0   # swap walk frames every 12px
 	moving = step > 0.01
 
@@ -3082,6 +3089,22 @@ func _jostle() -> void:
 
 
 # --- Danger: falling back, calling for help, answering calls -----------------------------
+
+## Standing on thin ice that's cracking: it drops everything and makes for the shore
+## (hazards.gd). Returns whether it's doing that this frame.
+func _off_the_ice(delta: float) -> bool:
+	if main.hazards.ice.is_empty() or is_emplacement() or wall_guard or held:
+		return false
+	var spot: Vector2 = main.hazards.flee_spot(self)
+	if spot == Vector2.INF:
+		return false
+	_set_target(null)
+	facing = position.direction_to(spot)
+	if absf(facing.x) > 0.2:
+		flip = signf(facing.x)
+	_move_toward(spot, position.distance_to(spot), delta)
+	return true
+
 
 ## In danger: low on health and still being hit (see DANGER_HP).
 func in_danger() -> bool:
