@@ -448,6 +448,17 @@ func _upgrade() -> void:
 			if waited < 20:
 				keep = main.hire_cost(items[i][0])
 			waited = 0 if main.gold >= main.hire_cost(items[i][0]) else waited + 1
+	# Slimes or fliers on the field: Martial Artists' Spirit Bolts (path 0, tier I) first,
+	# whatever's being saved for, as a player would (ki is all that touches them).
+	if main.get_enemies().any(func(e): return not e.dead and (e.flying or e.gooey)):
+		for w in main.get_warriors().filter(func(w): return w.is_active() and w.kind == "martial" and w.tiers[0] == 0):
+			if w.path_state(0) == "ok" and main.gold >= w.upgrade_cost(0):
+				main.selected = w
+				var before0: int = main.gold
+				main.upgrade_selected(0)
+				if main.gold < before0:
+					upgrades += 1
+					spent += before0 - main.gold
 	var spent_any := true
 	while spent_any:
 		spent_any = false
