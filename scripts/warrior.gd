@@ -24,7 +24,7 @@ const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.
 const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
 const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
 const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers his spear for it
-const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Warrior
+const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Ascension
 const IDLE_AFTER := 0.8   # seconds with nothing to do before a troop starts its idle animation
 const WINDUP := 0.18      # melee troops rear back over the last moment before a blow
 const ARCHER_LOOP := 5.6  # Archer idle: draw an arrow, twirl it, flip it, twirl, put it back, rest
@@ -67,8 +67,8 @@ var wall_guard := false      # posted on the castle wall by a castle upgrade: st
 var last_path := -1   # the path upgraded most recently (its look wins a tie)
 var summoned := false # a skeleton raised by Necromancy: can't be sold, crumbles at the end of the wave
 var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial Artist a copy came from
-var clone_of = null   # Multiform: the real Martial Artist this copy is part of (null for the real one)
-var multiform := {}   # Multiform: copies, power, hp, cooldown
+var clone_of = null   # Mirror Self: the real Martial Artist this copy is part of (null for the real one)
+var multiform := {}   # Mirror Self: copies, power, hp, cooldown
 var multiform_timer := 0.0
 var spent := 0
 var priority := "closest"
@@ -115,8 +115,8 @@ var breath := {}  # damage, interval, burn_dps, burn_time (mage Fire path)
 var combo_hits := 0          # hits per melee combo
 var knockback_chance := 0.0
 var knockback_force := 0.0
-var blast := {}              # damage, count, range, cooldown (Ki path)
-var blast_count := 0         # blasts per volley (Combat tiers add to this when Ki is taken)
+var blast := {}              # damage, count, range, cooldown (Spirit path)
+var blast_count := 0         # blasts per volley (Brawling tiers add to this when Spirit is taken)
 var beam := {}               # damage, cooldown, width
 var evade := 0.0
 var teleport := {}           # cooldown, min_dist
@@ -392,7 +392,7 @@ func _apply_upgrades() -> void:
 				if fx.has(key):
 					set(key, fx[key])
 			if fx.has("evade"):
-				evade = maxf(evade, fx["evade"])   # Afterimage and Limit Break don't stack: the better one counts
+				evade = maxf(evade, fx["evade"])   # Afterimage and Iron Will don't stack: the better one counts
 			if fx.has("cleave"):
 				cleave = fx["cleave"]
 			dual = fx.get("dual", dual)
@@ -482,7 +482,7 @@ func _high_paths() -> Array:
 ## The combined outfit for two paths both at tier 3, or "".
 func _combo_sprite() -> String:
 	var high := _high_paths()
-	return Sprites.combo(kind, high[0], high[1]) if high.size() >= 2 else ""
+	return Sprites.combo(kind, high[0], high[1], Sprites.look_kind(kind)) if high.size() >= 2 else ""
 
 
 ## Paths that add an accent to the look: every upgraded path except the one (or two)
@@ -516,12 +516,12 @@ func sprite_name() -> String:
 	if combo != "":
 		return combo
 	var p := _look_path()
-	var look := "%s_p%d" % [kind, p]
-	return look if p >= 0 and Sprites.SPRITES.has(look) else kind
+	var look := "%s_p%d" % [Sprites.look_kind(kind), p]
+	return look if p >= 0 and Sprites.SPRITES.has(look) else Sprites.look_kind(kind)
 
 
 ## The unit kind this unit's deeds train (campaign XP): its own, its summoner's for a
-## raised skeleton, the real one's for a Multiform copy; none for the castle's wall guards.
+## raised skeleton, the real one's for a Mirror Self copy; none for the castle's wall guards.
 func xp_kind() -> String:
 	if wall_guard:
 		return ""
@@ -597,7 +597,7 @@ func _power() -> float:
 	return (surge["damage"] if surge_left > 0.0 else 1.0) * _form("damage") * (1.0 + buff["damage"]) * _body_share()
 
 
-## Multiform: the share of the Martial Artist's power each of his bodies has right
+## Mirror Self: the share of the Martial Artist's power each of his bodies has right
 ## now. Split between him and his copies; all of it back with him once they're gone.
 func _body_share() -> float:
 	var real = clone_of if clone_of != null else self
@@ -615,7 +615,7 @@ func _rate() -> float:
 	return (surge["rate"] if surge_left > 0.0 else 1.0) * _form("rate") * (1.0 + buff["rate"]) * (1.0 - (1.0 - _goo_factor()) * 0.5)
 
 
-## Martial Artist Power path: what Limit Break, the crimson aura and the golden form
+## Martial Artist Discipline path: what Iron Will, the crimson aura and the golden form
 ## multiply `key` (damage, rate or speed) by right now.
 func _form(key: String) -> float:
 	var m := 1.0
@@ -910,7 +910,7 @@ func stats_text() -> String:
 	if combo_hits > 0:
 		s += "   Combo %d hits" % combo_hits
 	if not blast.is_empty():
-		s += "   Ki %.0f x%d / %.1fs, range %s" % [blast["damage"], blast_count, blast["cooldown"], Data.ft(blast["range"])]
+		s += "   Spirit %.0f x%d / %.1fs, range %s" % [blast["damage"], blast_count, blast["cooldown"], Data.ft(blast["range"])]
 	if not beam.is_empty():
 		s += "   Beam %.0f / %.0fs" % [beam["damage"], beam["cooldown"]]
 	if knockback_chance > 0.0:
@@ -969,12 +969,12 @@ static func _pct(f: float) -> String:
 func _extra_stats() -> String:
 	var s := ""
 	if clone_of != null:
-		s += "   Multiform copy: fades when it falls or the wave ends"
+		s += "   Mirror Self copy: fades when it falls or the wave ends"
 	elif summoned:
 		s += "   Raised by Necromancy: crumbles when the wave ends"
 	if not multiform.is_empty():
 		var bodies := 1 + _clones().size()
-		s += "   Multiform: %d bod%s, %d%% power each" % [bodies, "y" if bodies == 1 else "ies", roundi(_body_share() * 100)]
+		s += "   Mirror Self: %d bod%s, %d%% power each" % [bodies, "y" if bodies == 1 else "ies", roundi(_body_share() * 100)]
 	if not dash.is_empty():
 		s += "   Dash %.0fx%s" % [dash["damage"], " (bowls through)" if dash["through"] else ""]
 	if pierce > 0:
@@ -996,7 +996,7 @@ func _extra_stats() -> String:
 		if frost_aura["freeze_every"] > 0.0:
 			s += ", freezes %.1fs / %.1fs" % [frost_aura["freeze_time"], frost_aura["freeze_every"]]
 	if not rage.is_empty():
-		s += "   Limit Break below %d%% HP" % roundi(rage["below"] * 100)
+		s += "   Iron Will below %d%% HP" % roundi(rage["below"] * 100)
 	if golden_left > 0.0:
 		s += "   GOLDEN %ds" % ceili(golden_left)
 	elif not golden.is_empty():
@@ -1206,7 +1206,7 @@ func _process(delta: float) -> void:
 			_blink_to(target)
 			gap = _gap_to(target)
 		if not blast.is_empty():
-			# Ki users hold at blast range and fire volleys; they still punch anything that closes in.
+			# Spirit users hold at blast range and fire volleys; they still punch anything that closes in.
 			var r: float = blast["range"]
 			if not _sees(target):
 				_chase_move(target.position, gap, delta)   # a wall's in the way: go round it
@@ -1313,7 +1313,7 @@ func _in_combat() -> bool:
 	return target != null and _is_valid(target) and _gap_to(target) <= reach
 
 
-# Ki path: a volley of homing blasts at enemies outside punching reach.
+# Spirit path: a volley of homing blasts at enemies outside punching reach.
 func _start_volley() -> bool:
 	if _blast_target() == null:
 		return false
@@ -1354,7 +1354,7 @@ func _continue_volley(delta: float) -> void:
 	p.target_pos = e.position
 	p.position = position + facing * 16.0 + facing.orthogonal() * volley_hand * 6.0
 	p.damage = blast["damage"] * _power()
-	p.splash = blast.get("splash", 0.0)   # Starburst Barrage: every blast explodes
+	p.splash = blast.get("splash", 0.0)   # Sunburst Volley: every blast explodes
 	# Like the punch combo, only the volley's last blast can knock back.
 	p.knockback_chance = knockback_chance if volley_left == 0 else 0.0
 	p.knockback_force = knockback_force
@@ -1369,7 +1369,7 @@ func _continue_volley(delta: float) -> void:
 	_hold_pose("punch", COMBO_GAP)
 
 
-# Techniques tier 4: a beam to the edge of the field hitting every enemy along the line.
+# Secret Arts tier 4: a beam to the edge of the field hitting every enemy along the line.
 func _beam_target():
 	var r: float = beam.get("range", blast.get("range", 200.0) * 1.3)
 	return _pick(main.get_enemies().filter(func(x): return _is_valid(x) and _gap_to(x) <= r and _sees(x)))
@@ -1398,9 +1398,9 @@ func _fire_beam() -> void:
 	_hold_pose("punch", 0.35)
 
 
-# Techniques tier 2: vanish and reappear near a far-off target: right beside it for
-# brawlers, or just inside blast range for Ki users.
-## Flash Step is used once the target is out of range and either far away or already
+# Secret Arts tier 2: vanish and reappear near a far-off target: right beside it for
+# brawlers, or just inside blast range for Spirit users.
+## Shadow Step is used once the target is out of range and either far away or already
 ## past this warrior on its way to the goal.
 func _should_blink(e, gap: float) -> bool:
 	if zoned() and not _in_zone(_blink_spot(e), 4.0):
@@ -1408,7 +1408,7 @@ func _should_blink(e, gap: float) -> bool:
 	var reach: float = attack_range if blast.is_empty() else blast["range"]
 	if gap <= reach and _sees(e):
 		return false
-	# Flash Step is also the way through walls.
+	# Shadow Step is also the way through walls.
 	return gap > teleport["min_dist"] or e.position.y > position.y or not _sees(e)
 
 
@@ -1421,8 +1421,8 @@ func _blink_to(e) -> void:
 	route = PackedVector2Array()
 
 
-## Where a Flash Step toward `e` lands: between the enemy and the goal (the bottom line),
-## right below it for brawlers, or just inside blast range below it for Ki users.
+## Where a Shadow Step toward `e` lands: between the enemy and the goal (the bottom line),
+## right below it for brawlers, or just inside blast range below it for Spirit users.
 func _blink_spot(e) -> Vector2:
 	var gap_after: float = 2.0 if blast.is_empty() else blast["range"] * 0.8
 	var spot: Vector2 = e.position + Vector2(0, RADIUS + e.radius + gap_after)
@@ -1496,7 +1496,7 @@ func _clear_of_walls(spot: Vector2, toward: Vector2) -> Vector2:
 	return main.paths.open_spot(spot)   # never onto terrain or somewhere troops can't get to
 
 
-# Techniques tier 3: a blinding flash that stuns everything close by.
+# Secret Arts tier 3: a blinding flash that stuns everything close by.
 func _flash() -> bool:
 	var r: float = stun["radius"]
 	var victims: Array = main.get_enemies().filter(func(x): return _is_valid(x) and position.distance_to(x.position) <= r + x.radius)
@@ -1696,7 +1696,7 @@ static func priorities_for(m) -> Array:
 	return PRIORITIES + [OBJECTIVE_PRIORITY] if m.rules != null and m.rules.guards() else PRIORITIES
 
 
-## Takes on another unit's orders (a Multiform copy, its original's).
+## Takes on another unit's orders (a Mirror Self copy, its original's).
 func copy_orders(w) -> void:
 	priority = w.priority
 	commit = w.commit
@@ -2606,13 +2606,13 @@ func _forms_step(delta: float) -> void:
 	if not golden.is_empty() and golden_timer <= 0.0 and fighting:
 		golden_left = golden["duration"]
 		golden_timer = golden["cooldown"]
-		main.spawn_text(position + Vector2(0, -50), "Golden Warrior!", Color(1.0, 0.88, 0.3))
+		main.spawn_text(position + Vector2(0, -50), "Golden Ascension!", Color(1.0, 0.88, 0.3))
 		main.sfx("powerup", 1.25)
 		main.spawn_flash(position + Vector2(0, -16), 46.0)
 	if not crimson.is_empty() and crimson_timer <= 0.0 and fighting:
 		crimson_left = crimson["duration"]
 		crimson_timer = crimson["cooldown"]
-		main.spawn_text(position + Vector2(0, -64), "Tenfold Aura!", Color(1.0, 0.3, 0.25))
+		main.spawn_text(position + Vector2(0, -64), "Crimson Aura!", Color(1.0, 0.3, 0.25))
 		main.sfx("powerup", 0.8)
 		main.spawn_burst(position + Vector2(0, -16), 40.0, Color(1.0, 0.25, 0.2))
 	if crimson_left > 0.0:
@@ -2634,7 +2634,7 @@ func _summon_step(delta: float) -> void:
 		raise_skeleton(position + side * (RADIUS * 2.0 + 4.0))
 
 
-## Multiform: once fighting in a wave, split off copies (again a while after one falls).
+## Mirror Self: once fighting in a wave, split off copies (again a while after one falls).
 func _multiform_step(delta: float) -> void:
 	if not main.wave_active:
 		multiform_timer = 0.0
@@ -2661,7 +2661,7 @@ func _multiform_step(delta: float) -> void:
 	main.add_summon(w)
 	main.spawn_burst(position, 26.0, Color(0.7, 0.9, 1.0))
 	main.spawn_burst(spot, 26.0, Color(0.7, 0.9, 1.0))
-	main.spawn_text(position + Vector2(0, -50), "Multiform!", Color(0.75, 0.9, 1.0))
+	main.spawn_text(position + Vector2(0, -50), "Mirror Self!", Color(0.75, 0.9, 1.0))
 	main.sfx("flash", 1.3)
 
 
@@ -2699,7 +2699,7 @@ func raise_from_corpse(at: Vector2) -> void:
 	main.spawn_text(at + Vector2(0, -30), "Rise!", Color(0.55, 0.95, 0.45))
 
 
-## A skeleton falls apart (or a Multiform copy fades out, its power going back to the
+## A skeleton falls apart (or a Mirror Self copy fades out, its power going back to the
 ## real fighter): when it's beaten, when the wave ends, or when its maker is gone.
 func _crumble() -> void:
 	if is_queued_for_deletion():
@@ -3333,7 +3333,7 @@ func _draw() -> void:
 	if goo_timer > 0.0 and hurt <= 0.0:
 		tint = Color(0.7, 1.15, 0.6)   # slimed: green and sticky
 	if clone_of != null:
-		# A Multiform copy: see-through, tinted blue and flickering, so it's never taken for the real one.
+		# A Mirror Self copy: see-through, tinted blue and flickering, so it's never taken for the real one.
 		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))
 	var charging := beam_charge > 0.0
 	var tex: Texture2D = frames[int(walk) % 2 if moving else 0]

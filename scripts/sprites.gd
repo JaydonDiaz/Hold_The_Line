@@ -690,7 +690,160 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"martial_p0": {  # Ki: flame-tall hair, blue bodysuit, white armor
+	# The Martial Artist's own path outfits (tier 3). (The Dragon Ball ones are a skin:
+	# see SKINS.) Each keeps "h" for hair, which the golden form turns gold.
+	"martial_p0": {  # Spirit: a mystic: a black top-knot, a sleeveless teal robe, an orange sash, glowing wrist wraps
+		"base": "martial",
+		"palette": {
+			"h": Color(0.12, 0.1, 0.14), "T": Color(0.15, 0.47, 0.52), "t": Color(0.09, 0.33, 0.38),
+			"o": Color(0.97, 0.52, 0.15), "w": Color(0.7, 0.95, 1.0), "W": Color(0.9, 0.9, 0.85),
+			"b": Color(0.22, 0.17, 0.14),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.7, 0.95, 1.0),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.9, 0.9, 0.85), "U": Color(0.22, 0.17, 0.14),
+		},
+		"rows": [
+			"......kk........",
+			".....khhk.......",
+			"....kkhhkk......",
+			"...khhhhhhk.....",
+			"...khhhhhhk.....",
+			"...kskssksk.....",
+			"....kssssk......",
+			"..kkTTsTTTkk....",
+			".kskTTTsTTTksk..",
+			".kskTtTTTtTksk..",
+			".kwkoooooookwk..",
+			".kskTTTTToTksk..",
+			"...kWWWkWWWk....",
+			"...kWWWkWWWk....",
+			"...kbbk.kbbk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kWWkWWk.....",
+			"....kbbkbbk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p1": {  # Brawling: a street brawler: a wild auburn mane, a tiger-striped vest, red-wrapped fists
+		"base": "martial",
+		"palette": {
+			"h": Color(0.5, 0.24, 0.12), "Y": Color(0.95, 0.62, 0.18), "n": Color(0.25, 0.15, 0.1),
+			"r": Color(0.82, 0.2, 0.2), "d": Color(0.25, 0.2, 0.18), "P": Color(0.3, 0.3, 0.37),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.82, 0.2, 0.2),
+			"F": Color(0.82, 0.2, 0.2), "L": Color(0.3, 0.3, 0.37), "U": Color(0.3, 0.19, 0.12),
+		},
+		"rows": [
+			"................",
+			"...k.kk.kk......",
+			"..khkhhkhhk.....",
+			".khhhhhhhhhk....",
+			"..khhhhhhhhk....",
+			"..khskssksk.....",
+			"..khkssssk......",
+			"..kkYYYYYYkk....",
+			".kskYnYYnYYksk..",
+			".kskYYnYYnYksk..",
+			".krkdddddddkrk..",
+			".krkYnYYYnYkrk..",
+			"...kPPPkPPPk....",
+			"...kPPPkPPPk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kPPkPPk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p2": {  # Secret Arts: a shadow monk: an indigo hood, a grey mask, a plum sash, wrapped shins
+		"base": "martial",
+		"palette": {
+			"N": Color(0.22, 0.2, 0.4), "n": Color(0.14, 0.13, 0.28), "M": Color(0.62, 0.62, 0.68),
+			"m": Color(0.52, 0.25, 0.55), "b": Color(0.12, 0.1, 0.14),
+			"A": Color(0.22, 0.2, 0.4), "Z": Color(0.22, 0.2, 0.4), "X": Color(0.62, 0.62, 0.68),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.22, 0.2, 0.4), "U": Color(0.12, 0.1, 0.14),
+		},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkk......",
+			"....kNNNNNk.....",
+			"...kNNNNNNNk....",
+			"...kNkssksNk....",
+			"...kNMMMMMNk....",
+			"..kkNNmNNNkk....",
+			".kNkNnNNNnNkNk..",
+			".kNkNNnNnNNkNk..",
+			".kMkmmmmmmmkMk..",
+			".kskNNNNNNNksk..",
+			"...kNNNkNNNk....",
+			"...kMMMkMMMk....",
+			"...kbbk.kbbk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kMMkMMk.....",
+			"....kbbkbbk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p3": {  # Discipline: a mountain hermit: long hair tied back in a white band, an open crimson vest, iron bracers
+		"base": "martial",
+		"palette": {
+			"h": Color(0.16, 0.12, 0.12), "W": Color(0.95, 0.95, 0.92), "R": Color(0.62, 0.12, 0.14),
+			"I": Color(0.55, 0.57, 0.63), "b": Color(0.12, 0.1, 0.12), "D": Color(0.5, 0.36, 0.22),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.55, 0.57, 0.63),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.5, 0.36, 0.22), "U": Color(0.3, 0.19, 0.12),
+		},
+		"rows": [
+			"................",
+			"....kkkk........",
+			"...khhhhk.......",
+			"..khhhhhhk......",
+			"..khWWWWWWk.....",
+			"..khskssksk.....",
+			"..khkssssk......",
+			"..kkRssssRkk....",
+			".kskRsssssRksk..",
+			".kskRssssRRksk..",
+			".kIkbbbbbbbkIk..",
+			".kskRRRRRRRksk..",
+			"...kDDDkDDDk....",
+			"...kDDDkDDDk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kDDkDDk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_dbz": {  # The Dragon Ball skin's plain Martial Artist: as the unit's own
+		"base": "martial",
+		"palette": {},
+		"rows": [
+			"................",
+			"....k.k..k......",
+			"...khkhkkhk.....",
+			"...khhhhhhk.....",
+			"...krrrrrrkr....",
+			"...kskssksk.r...",
+			"....kssssk......",
+			"..kkGggggGkk....",
+			".kskgggggggksk..",
+			".kskgGgggGgksk..",
+			".krkbbbbbbbkrk..",
+			".kskgggggggksk..",
+			"...kgggkgggk....",
+			"...kgggkgggk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"martial_dbz_p0": {  # Dragon Ball skin, Spirit (a Vegeta nod): flame-tall hair, blue bodysuit, white armor
 		"base": "martial",
 		"palette": {
 			"h": Color(0.22, 0.2, 0.3), "b": Color(0.22, 0.3, 0.72), "W": Color(0.96, 0.96, 0.96),
@@ -722,7 +875,7 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"martial_p2": {  # Techniques (a Krillin nod): his Orin Temple gi: mustard wrap top, maroon belt, orange pants, leg wraps
+	"martial_dbz_p2": {  # Dragon Ball skin, Secret Arts (a Krillin nod): his Orin Temple gi: mustard wrap top, maroon belt, orange pants, leg wraps
 		"poses": {
 			"punch": {
 				8: "................kk",
@@ -2527,7 +2680,7 @@ const SPRITES := {
 			"................",
 		],
 	},
-	"martial_p1": {  # Combat (a Yamcha nod): his desert-bandit look: long shaggy hair, green tunic, orange scarf, white sash
+	"martial_dbz_p1": {  # Dragon Ball skin, Brawling (a Yamcha nod): his desert-bandit look: long shaggy hair, green tunic, orange scarf, white sash
 		"base": "martial",
 		"palette": {
 			"h": Color(0.15, 0.13, 0.18), "V": Color(0.25, 0.55, 0.28), "O": Color(0.95, 0.55, 0.15),
@@ -2560,7 +2713,7 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"martial_p1p2": {  # Combat and Techniques both at tier 3: Krillin's head on Yamcha's desert-bandit outfit
+	"martial_dbz_p1p2": {  # Dragon Ball skin, Brawling and Secret Arts both at tier 3: Krillin's head on Yamcha's desert-bandit outfit
 		"poses": {
 			"punch": {
 				8: "................kk",
@@ -2601,7 +2754,7 @@ const SPRITES := {
 			"....kkkkkkk.....",
 		],
 	},
-	"martial_p3": {  # Power (a Goku nod): wild spiky hair, orange gi, blue undershirt and belt
+	"martial_dbz_p3": {  # Dragon Ball skin, Discipline (a Goku nod): wild spiky hair, orange gi, blue undershirt and belt
 		"base": "martial",
 		"palette": {
 			"h": Color(0.2, 0.17, 0.25), "o": Color(0.95, 0.55, 0.15), "B": Color(0.2, 0.3, 0.75),
@@ -3446,7 +3599,7 @@ const COMBOS := {
 	"frost": {"map": "figure", "head_rows": 5, "left_col": 1, "right_col": 13, "right_full": true,
 		"lead": "head", "order": {"head": [3, 0, 2, 1], "left": [3, 1], "right": [2, 3, 0, 1]}},
 	"martial": {"map": "figure", "head_rows": 6, "left_col": -1, "right_col": 16, "right_full": false,
-		"lead": "head", "order": {"head": [3, 0, 1, 2]}, "head_rows_by_body": {2: 7}},
+		"lead": "head", "order": {"head": [3, 0, 1, 2]}, "head_rows_by_body": {"martial_dbz": {2: 7}}},
 	"healer": {"map": "figure", "head_rows": 6, "left_col": 1, "right_col": 13, "right_full": true,
 		"lead": "head", "order": {"head": [0, 3, 2, 1], "left": [3], "right": [2, 0, 1, 3]}},
 	"bard": {"map": "figure", "head_rows": 4, "left_col": -1, "right_col": 10, "right_full": false,
@@ -3465,15 +3618,33 @@ const COMBO_SYMBOLS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijlmnopqrstuvwxyz"
 static var _generated := {}
 
 
+## Unlockable looks for a unit: each skin is a set of outfits drawn in place of the
+## unit's own ("<kind>_<skin>" for the plain unit, "<kind>_<skin>_p<n>" for each path's
+## at tier 3, combinations made from those). Its name is what a player would see.
+const SKINS := {
+	"martial": {"dbz": "Dragon Ball"},
+}
+static var skin := {}   # kind -> the skin it's wearing ("" or missing: its own outfits)
+
+
+## The name a unit's outfits go by: its kind, or "<kind>_<skin>" in a skin.
+static func look_kind(kind: String) -> String:
+	var sk: String = skin.get(kind, "")
+	return kind if sk == "" or not SKINS.get(kind, {}).has(sk) else "%s_%s" % [kind, sk]
+
+
 ## The sprite for a unit with paths a and b (a < b) both at tier 3: a hand-drawn one
 ## if there is one, else made up from the two outfits. "" if the unit has no combos.
-static func combo(kind: String, a: int, b: int) -> String:
-	var sprite_name := "%s_p%dp%d" % [kind, a, b]
+## `look` is a skin's outfits (see look_kind) to use instead of the unit's own.
+static func combo(kind: String, a: int, b: int, look := "") -> String:
+	if look == "":
+		look = kind
+	var sprite_name := "%s_p%dp%d" % [look, a, b]
 	if SPRITES.has(sprite_name) or _generated.has(sprite_name):
 		return sprite_name
 	if not COMBOS.has(kind):
 		return ""
-	_generated[sprite_name] = _build_combo(kind, a, b)
+	_generated[sprite_name] = _build_combo(kind, a, b, {}, look)
 	return sprite_name
 
 
@@ -3518,7 +3689,9 @@ static func combo_forced(kind: String, a: int, b: int, force: Dictionary, sprite
 	return sprite_name
 
 
-static func _build_combo(kind: String, a: int, b: int, force := {}) -> Dictionary:
+static func _build_combo(kind: String, a: int, b: int, force := {}, look := "") -> Dictionary:
+	if look == "":
+		look = kind
 	var spec: Dictionary = COMBOS[kind]
 	var order: Dictionary = spec["order"]
 	var pair := [a, b]
@@ -3537,12 +3710,12 @@ static func _build_combo(kind: String, a: int, b: int, force := {}) -> Dictionar
 	for part in force:
 		src[part] = force[part] if force[part] is int else src[force[part]]
 	var head_rows: int = spec.get("head_rows", 0)
-	head_rows = spec.get("head_rows_by_body", {}).get(src["body"], head_rows)
+	head_rows = spec.get("head_rows_by_body", {}).get(look, {}).get(src["body"], head_rows)
 	# Rename every color letter so the two outfits' palettes can't clash.
 	var palette := {}
 	var from := {}
 	var symbol := {}   # "outfit|letter" -> new letter
-	var outfits := {a: _outfit_of(kind, a), b: _outfit_of(kind, b)}
+	var outfits := {a: _outfit_of(look, a), b: _outfit_of(look, b)}
 	var unify := func(outfit: String, rows: Array) -> Array:
 		var pal := _palette(outfit)
 		var out := []

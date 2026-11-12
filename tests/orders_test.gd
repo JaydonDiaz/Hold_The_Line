@@ -303,7 +303,7 @@ func _ranged() -> void:
 # --- Special moves stay in the zone ------------------------------------------------------
 
 ## A Swordsman's Charge dash (Unstoppable: chaining on as each foe falls), a Martial Artist's
-## Flash Step and its Multiform copy, and a Healer going to a hurt ally: none leave the area.
+## Shadow Step and its Mirror Self copy, and a Healer going to a hurt ally: none leave the area.
 func _specials() -> void:
 	await _fresh()
 	var post := Vector2(320, 600)
@@ -325,10 +325,10 @@ func _specials() -> void:
 	var ma = _hire("martial", post, "guard", 110.0)
 	main.selected = ma
 	main.upgrade_selected(2)
-	main.upgrade_selected(2)   # Multiform, Flash Step
+	main.upgrade_selected(2)   # Mirror Self, Shadow Step
 	main.selected = null
 	for p in [Vector2(320, 460), Vector2(200, 260), Vector2(520, 380)]:
-		_foe("orc", p)   # one it can reach from its area (Flash Step lands inside), two it can't
+		_foe("orc", p)   # one it can reach from its area (Shadow Step lands inside), two it can't
 	far = 0.0
 	var copies := 0
 	for f in 60 * 10:
@@ -338,7 +338,7 @@ func _specials() -> void:
 				far = maxf(far, w.position.distance_to(post))
 				if w.clone_of != null:
 					copies = maxi(copies, 1)
-	check(not ma.teleport.is_empty() and far <= 114.0, "Martial Artist with Flash Step on Guard Area: never blinks out of it (furthest %d of 110px%s)" % [roundi(far), ", its Multiform copy too" if copies > 0 else ""])
+	check(not ma.teleport.is_empty() and far <= 114.0, "Martial Artist with Shadow Step on Guard Area: never blinks out of it (furthest %d of 110px%s)" % [roundi(far), ", its Mirror Self copy too" if copies > 0 else ""])
 	await _fresh()
 	var healer = _hire("healer", post, "guard", 80.0)
 	var near_ally = _hire("swordsman", post + Vector2(60, -70))

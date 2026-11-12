@@ -151,7 +151,7 @@ func _slimes() -> void:
 	var ki = _hire("martial", Vector2(600, 640))
 	_hold(ki)
 	main.selected = ki
-	main.upgrade_selected(0)   # Ki Blast
+	main.upgrade_selected(0)   # Spirit Bolts
 	main.selected = null
 	var tower = _hire("tower", Vector2(320, 700))
 	sl = _spawn("slime", Vector2(320, 520))
@@ -160,10 +160,10 @@ func _slimes() -> void:
 	for k in units:
 		check(units[k].can_hurt(sl) == (k in ["mage", "frost", "bard"]),
 				"S  %s %s go after a Slime" % [k.capitalize(), "does" if units[k].can_hurt(sl) else "doesn't"])
-	check(ki.can_hurt(sl), "S  a Martial Artist with Ki Blast does")
+	check(ki.can_hurt(sl), "S  a Martial Artist with Spirit Bolts does")
 	check(not tower.can_hurt(sl), "S  an Archer Tower doesn't")
 	await _frames(240)
-	check(sl.hp < sl.max_hp, "S  the magic users and the Ki Blaster wear it down (%.0f damage)" % (sl.max_hp - sl.hp))
+	check(sl.hp < sl.max_hp, "S  the magic users and the Spirit Bolt user wear it down (%.0f damage)" % (sl.max_hp - sl.hp))
 	check(units["swordsman"].target != sl and units["archer"].target != sl, "S  the Swordsman and Archer leave it alone")
 	sl.ice_crust = 3.0
 	sl.set_process(true)

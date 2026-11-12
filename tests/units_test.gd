@@ -145,7 +145,7 @@ func _wants(s: String) -> bool:
 
 
 func _run() -> void:
-	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group", "knight"]:
+	for s in ["upgrades", "statue", "horn", "heal", "care", "kite", "aggro", "commit", "wyvern", "spawn", "engineer", "route", "group", "knight", "martial"]:
 		if _wants(s):
 			await call("_" + s)
 	if main != null:
@@ -442,3 +442,62 @@ func _knight() -> void:
 	axe.position = Vector2(320, 560)
 	await _frames(240)
 	check(not is_instance_valid(orc) or orc.dead or orc.hp < e_hp, "...and a charging axe-and-spear Knight still runs in and hits")
+
+
+## The Martial Artist's paths go by their own names now (the same effects as ever), its
+## tier-III outfits are its own, and the Dragon Ball ones are kept as a skin.
+func _martial() -> void:
+	await _fresh()
+	var paths: Array = Data.WARRIORS["martial"]["paths"]
+	var names: Array = paths.map(func(p): return p["name"])
+	check(names == ["Spirit", "Brawling", "Secret Arts", "Discipline"], "Martial Artist: the paths are Spirit, Brawling, Secret Arts and Discipline (%s)" % ", ".join(names))
+	var tiers := []
+	for p in paths:
+		for t in p["tiers"]:
+			tiers.append(t["name"])
+	check(tiers == ["Spirit Bolts", "Bolt Volley", "Blazing Spirit", "Sunburst Volley", "Quick Hands", "Tiger Claw", "Fighting Instinct",
+			"Thousand Fists", "Mirror Self", "Shadow Step", "Blinding Flash", "Piercing Light", "Mountain Training", "Iron Will",
+			"Crimson Aura", "Golden Ascension"], "...with new names for every tier (%s)" % ", ".join(tiers))
+	var text := ""
+	for p in paths:
+		text += str(p.get("note", "")) + " "
+		for t in p["tiers"]:
+			text += t["name"] + " " + t["desc"] + " "
+	var old := ["Ki", "Prince", "Turtle", "Wolf Fang", "Multiform", "Tenfold", "Limit Break", "Kamehameha", "Desert Bandit", "Starburst"]
+	check(old.all(func(o): return not (" " + text).contains(" " + o)), "...and nothing left of the old Dragon Ball names")
+	# The effects are what they were.
+	check(paths[0]["tiers"][3]["effect"]["blast"] == {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 40.0}
+			and paths[1]["tiers"][3]["effect"] == {"combo": 2, "knockback": [0.25, 60.0], "damage": 1.4}
+			and paths[2]["tiers"][0]["effect"]["multiform"]["copies"] == 1 and paths[2]["tiers"][3]["effect"]["beam"]["damage"] == 350.0
+			and paths[3]["tiers"][3]["effect"]["golden"]["damage"] == 2.5, "...with the same effects")
+	# Tier III wears the path's own outfit; two at tier III mix them.
+	var ma = _hire("martial", Vector2(320, 560))
+	main.selected = ma
+	for i in 3:
+		main.upgrade_selected(3)
+	check(ma.sprite_name() == "martial_p3", "A Discipline III Martial Artist wears its own outfit (%s)" % ma.sprite_name())
+	for i in 3:
+		main.upgrade_selected(1)
+	main.selected = null
+	check(ma.sprite_name() == "martial_p1p3", "...Brawling III too: the two outfits mixed (%s)" % ma.sprite_name())
+	var own := true
+	for p in 4:
+		var rows: Array = Sprites._entry("martial_p%d" % p)["rows"]
+		own = own and rows != Sprites._entry("martial_dbz_p%d" % p)["rows"] and rows != Sprites._entry("martial")["rows"]
+	check(own, "...each path's outfit is new, not the Dragon Ball one")
+	# The Dragon Ball outfits are a skin: wearing it, the same unit looks as it used to.
+	check(Sprites.SKINS["martial"].has("dbz"), "The Dragon Ball outfits are kept as a skin")
+	Sprites.skin["martial"] = "dbz"
+	ma._look_cache = {}
+	check(ma.sprite_name() == "martial_dbz_p1p3", "...wearing it, the outfits are the Dragon Ball ones (%s)" % ma.sprite_name())
+	var two = _hire("martial", Vector2(200, 560))
+	main.selected = two
+	for p in [1, 1, 1, 2, 2, 2]:
+		main.upgrade_selected(p)
+	main.selected = null
+	check(two.sprite_name() == "martial_dbz_p1p2", "...with its hand-drawn mix of two (%s)" % two.sprite_name())
+	Sprites.skin.erase("martial")
+	check(two.sprite_name() == "martial_p1p2" and Sprites.look_kind("martial") == "martial", "...and without it, the unit's own outfits again")
+	Sprites.skin["martial"] = "nothing"
+	check(Sprites.look_kind("martial") == "martial", "...an unknown skin is ignored")
+	Sprites.skin.erase("martial")

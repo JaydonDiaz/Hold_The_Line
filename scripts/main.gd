@@ -2505,7 +2505,7 @@ func _draw_overlay() -> void:
 		overlay.draw_circle(selected.position, reach, Color(col, 0.1), true, -1.0, true)
 		overlay.draw_arc(selected.position, reach, 0, TAU, 64, Color(col, 0.8), 2.0, true)
 		if not selected.blast.is_empty():
-			# Ki blast range, for Martial Artists who have learned it.
+			# Spirit bolt range, for Martial Artists who have learned it.
 			var ki: float = selected.blast["range"] + Warrior.RADIUS
 			overlay.draw_arc(selected.position, ki, 0, TAU, 64, Color(Warrior.KI_COLOR, 0.6), 1.5, true)
 		if selected.position.distance_to(post) > reach:

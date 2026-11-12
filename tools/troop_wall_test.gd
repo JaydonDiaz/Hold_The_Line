@@ -5,7 +5,7 @@ extends SceneTree
 ## Run: godot --headless --path . --fixed-fps 60 -s tools/troop_wall_test.gd
 ##   swordsman, archer, mage, frost, ki: have to walk around the wall's end first
 ##   tower, alchemist: fire over it straight away
-##   flashstep: a Martial Artist with Flash Step teleports across a wall with no way around
+##   flashstep: a Martial Artist with Shadow Step teleports across a wall with no way around
 
 const Data = preload("res://scripts/data.gd")
 const CASES := [

@@ -138,12 +138,12 @@ static func level_growth(level: int, growth: float, late: float) -> float:
 #   chain                  mage chain lightning: damage, jumps, cooldown
 #   lance                  mage arcane lance on the toughest enemy in range: damage, cooldown
 #   breath                 mage flame breath: damage per puff, interval, burn damage/s, burn seconds
-#   combo                  extra hits per melee combo (extra blasts per volley if Ki is also taken)
+#   combo                  extra hits per melee combo (extra bolts per volley if Spirit is also taken)
 #   knockback              [chance per combo finisher or ki blast, push distance]
 #   blast                  ki blasts at range, thrown one after another: damage, count per volley, range, cooldown
 #   beam                   line beam hitting every enemy in its path: damage, cooldown, width, range (aiming reach)
 #   evade                  chance to dodge an enemy attack (the best one a unit has counts)
-#   multiform              martial Techniques 1: once fighting in a wave, splits into copies that share his
+#   multiform              martial Secret Arts 1 (Mirror Self): once fighting in a wave, splits into copies that share his
 #                          power: copies (how many), power (all bodies together; each gets power / bodies,
 #                          and a lone body is back to 1), hp (a copy's share of max health), cooldown (to
 #                          split again after a copy falls). Copies can't be sold and merge back when the wave ends.
@@ -166,7 +166,7 @@ static func level_growth(level: int, growth: float, late: float) -> float:
 #   frost_aura             frost: enemies near it are slowed and chilled: radius, slow, dps,
 #                          freeze_every (0 = never), freeze_time
 #   rage / crimson / golden
-#                          martial Power path: rage {below, damage, rate} when hurt; crimson aura and
+#                          martial Discipline path: rage {below, damage, rate} when hurt; crimson aura and
 #                          golden form {cooldown, duration, damage, rate, speed, drain (HP share/s)}
 #   heal_aura              healer: allies near it regenerate and are guarded: radius, regen
 #                          (max HP share/s), defense, recover (downed allies hold on this much longer)
@@ -232,7 +232,7 @@ static func level_growth(level: int, growth: float, late: float) -> float:
 # break through only when there's no way past. Walls are solid to troops as well,
 # and block their attacks (until the Energy Wall path lets them through); emplacements
 # other than a plain Cannoneer, and lobbed flasks, fire over them (a Cannoneer needs
-# the Mortar path), and a Martial Artist's Flash Step can carry it across.
+# the Mortar path), and a Martial Artist's Shadow Step can carry it across.
 # Mage and Frost Witch upgrade paths, shared with the Mage Tower and Frost Tower.
 const MAGE_PATHS := [
 	{"name": "Storm", "tiers": [
@@ -402,42 +402,42 @@ const WARRIORS := {
 		"damage": 14.0, "range": 8.0, "cooldown": 1.0, "attack": "combo", "combo": 3,
 		"desc": "Strong close-range brawler: lightning-fast three-hit combos.",
 		"paths": [
-			{"name": "Ki", "tiers": [
-				{"name": "Ki Blast", "cost": 90, "desc": "Volleys of 3 ki blasts at range, 10 dmg each / 1.4s",
+			{"name": "Spirit", "tiers": [
+				{"name": "Spirit Bolts", "cost": 90, "desc": "Volleys of 3 spirit bolts at range, 10 dmg each / 1.4s",
 					"effect": {"blast": {"damage": 10.0, "count": 3, "range": 160.0, "cooldown": 1.4}}},
-				{"name": "Ki Barrage", "cost": 140, "desc": "Blasts hit for 15 dmg each, volley every 1.2s",
+				{"name": "Bolt Volley", "cost": 140, "desc": "Bolts hit for 15 dmg each, volley every 1.2s",
 					"effect": {"blast": {"damage": 15.0, "count": 3, "range": 175.0, "cooldown": 1.2}}},
-				{"name": "Prince's Pride", "cost": 230, "desc": "Blasts hit for 34 dmg each, volley every 1.0s",
+				{"name": "Blazing Spirit", "cost": 230, "desc": "Bolts hit for 34 dmg each, volley every 1.0s",
 					"effect": {"blast": {"damage": 34.0, "count": 3, "range": 190.0, "cooldown": 1.0}}},
-				{"name": "Starburst Barrage", "cost": 380, "desc": "Blasts hit for 42 dmg / 0.9s and explode, hitting everything in a 4\u00a0ft splash",
+				{"name": "Sunburst Volley", "cost": 380, "desc": "Bolts hit for 42 dmg / 0.9s and explode, hitting everything in a 4\u00a0ft splash",
 					"effect": {"blast": {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 40.0}}},
 			]},
-			{"name": "Combat", "note": "With Ki, extra hits become extra blasts per volley.", "tiers": [
-				{"name": "Desert Bandit", "cost": 80, "desc": "+1 hit per combo", "effect": {"combo": 1}},
-				{"name": "Wolf Fang Fist", "cost": 130, "desc": "+1 hit. 15% chance the finisher knocks back",
+			{"name": "Brawling", "note": "With Spirit, extra hits become extra bolts per volley.", "tiers": [
+				{"name": "Quick Hands", "cost": 80, "desc": "+1 hit per combo", "effect": {"combo": 1}},
+				{"name": "Tiger Claw", "cost": 130, "desc": "+1 hit. 15% chance the finisher knocks back",
 					"effect": {"combo": 1, "knockback": [0.15, 40.0]}},
-				{"name": "Battle Instinct", "cost": 220, "desc": "+1 hit, 20% finisher knockback, +30% dmg",
+				{"name": "Fighting Instinct", "cost": 220, "desc": "+1 hit, 20% finisher knockback, +30% dmg",
 					"effect": {"combo": 1, "knockback": [0.2, 50.0], "damage": 1.3}},
-				{"name": "Neo Wolf Fang Fist", "cost": 360, "desc": "+2 hits, 25% finisher knockback, +40% dmg",
+				{"name": "Thousand Fists", "cost": 360, "desc": "+2 hits, 25% finisher knockback, +40% dmg",
 					"effect": {"combo": 2, "knockback": [0.25, 60.0], "damage": 1.4}},
 			]},
-			{"name": "Techniques", "tiers": [
-				{"name": "Multiform", "cost": 85, "desc": "In battle, splits into 2 bodies sharing his power (60% each). A copy that falls gives its power back",
+			{"name": "Secret Arts", "tiers": [
+				{"name": "Mirror Self", "cost": 85, "desc": "In battle, splits into 2 bodies sharing his power (60% each). A copy that falls gives its power back",
 					"effect": {"multiform": {"copies": 1, "power": 1.2, "hp": 0.6, "cooldown": 10.0}}},
-				{"name": "Flash Step", "cost": 130, "desc": "Teleports straight to distant targets (every 4s)",
+				{"name": "Shadow Step", "cost": 130, "desc": "Teleports straight to distant targets (every 4s)",
 					"effect": {"teleport": {"cooldown": 4.0, "min_dist": 90.0}}},
-				{"name": "Radiant Flash", "cost": 220, "desc": "Blinds and stuns nearby enemies for 2s (every 9s)",
+				{"name": "Blinding Flash", "cost": 220, "desc": "Blinds and stuns nearby enemies for 2s (every 9s)",
 					"effect": {"stun": {"radius": 110.0, "duration": 2.0, "cooldown": 9.0}}},
-				{"name": "Turtle Wave", "cost": 360, "desc": "Every 5s, a beam that hits every enemy in a line: 350 dmg",
+				{"name": "Piercing Light", "cost": 360, "desc": "Every 5s, a beam that hits every enemy in a line: 350 dmg",
 					"effect": {"beam": {"damage": 350.0, "cooldown": 5.0, "width": 30.0, "range": 260.0}}},
 			]},
-			{"name": "Power", "note": "The crimson aura and the golden form stack.", "tiers": [
-				{"name": "Turtle Shell Training", "cost": 85, "desc": "+15% damage, attacks 10% faster", "effect": {"damage": 1.15, "rate": 0.9}},
-				{"name": "Limit Break", "cost": 130, "desc": "30% chance to dodge enemy attacks. Below half health: +40% damage, attacks 25% faster",
+			{"name": "Discipline", "note": "The crimson aura and the golden form stack.", "tiers": [
+				{"name": "Mountain Training", "cost": 85, "desc": "+15% damage, attacks 10% faster", "effect": {"damage": 1.15, "rate": 0.9}},
+				{"name": "Iron Will", "cost": 130, "desc": "30% chance to dodge enemy attacks. Below half health: +40% damage, attacks 25% faster",
 					"effect": {"evade": 0.3, "rage": {"below": 0.5, "damage": 1.4, "rate": 1.25}}},
-				{"name": "Tenfold Aura", "cost": 220, "desc": "Every 15s, a crimson aura for 5s: 2x dmg, 50% faster attacks and moves; burns 3% HP/s",
+				{"name": "Crimson Aura", "cost": 220, "desc": "Every 15s, a crimson aura for 5s: 2x dmg, 50% faster attacks and moves; burns 3% HP/s",
 					"effect": {"crimson": {"cooldown": 15.0, "duration": 5.0, "damage": 2.0, "rate": 1.5, "speed": 1.5, "drain": 0.03}}},
-				{"name": "Golden Warrior", "cost": 380, "desc": "Goes golden for 12s (every 30s): 2.5x dmg, 40% faster attacks, 30% faster moves",
+				{"name": "Golden Ascension", "cost": 380, "desc": "Goes golden for 12s (every 30s): 2.5x dmg, 40% faster attacks, 30% faster moves",
 					"effect": {"golden": {"cooldown": 30.0, "duration": 12.0, "damage": 2.5, "rate": 1.4, "speed": 1.3}}},
 			]},
 		],

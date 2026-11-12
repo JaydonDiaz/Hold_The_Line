@@ -30,7 +30,7 @@ const Data = preload("res://scripts/data.gd")
 const TEST_SAVE := "user://campaign_test.cfg"
 const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note"]   # Data "attack"s that can hit fliers
 const AIR_KEYS := ["path:1", "path:2"]   # wall archers and wall mages shoot fliers too
-# What can hurt a Slime: magic, ice and ki (Martial Artists' Ki Blast is a tier I path).
+# What can hurt a Slime: magic, ice and ki (Martial Artists' Spirit Bolts is a tier I path).
 const SLIME_ATTACKS := ["orb", "frost", "note", "combo"]
 const SLIME_KEYS := ["path:2", "ability:fireball", "ability:lightning", "ability:frost"]
 
