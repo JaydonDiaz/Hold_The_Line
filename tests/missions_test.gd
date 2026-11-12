@@ -482,6 +482,16 @@ func _forced_pace() -> void:
 	check(main.wave == w0 + 1, "...it comes once the 25s window is up, beaten or not")
 	check(Engine.time_scale == 1.0 and main.cycle_speed() == null and Engine.time_scale == 2.0, "...and the speed control still works")
 	Engine.time_scale = 1.0
+	# Pausing (the Menu) stops the clock too: the window doesn't run on behind it.
+	var clock0: float = main.wave_clock
+	main.hud.show_menu_confirm()
+	await create_timer(1.5, true).timeout   # (a timer that runs while paused)
+	check(paused and absf(main.wave_clock - clock0) < 0.01, "...and pausing holds the window (%.2fs passed on the clock)" % (main.wave_clock - clock0))
+	paused = false
+	if main.hud.menu_dim != null and is_instance_valid(main.hud.menu_dim):
+		main.hud.menu_dim.queue_free()
+	main.hud.menu_dim = null
+	await process_frame
 
 
 func _protect() -> void:
