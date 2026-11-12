@@ -44,10 +44,15 @@ var lull := 0          # seconds the wave's last few enemies have held out (see 
 var last_left := -1
 
 
+var slimes := false     # Slimes come in this battle: Frost Witches (anything that hurts them) take ranged slots
+
+
 func _init(m, s := "mixed") -> void:
 	main = m
 	style = s
 	type = main.mission.get("type", "castle")
+	slimes = JSON.stringify(main.mission.get("pool", {})).contains("slime") or JSON.stringify(main.mission.get("extra", {})).contains("slime") \
+			or JSON.stringify(main.mission.get("convoy", {})).contains("slime")
 
 
 func can(kind: String) -> bool:
@@ -89,6 +94,8 @@ func _restyle(out: Array) -> Array:
 					kind = RANGED
 		if kind == MELEE and can("martial") and style != "ranged" and res.filter(func(r): return r[0] in [MELEE, "martial"]).size() % 2 == 1:
 			kind = "martial"   # every other melee slot
+		if kind == RANGED and slimes and can("frost") and style != "knights" and res.filter(func(r): return r[0] in [RANGED, "frost"]).size() % 2 == 0:
+			kind = "frost"     # Slimes coming: every other ranged slot (the first one too) a Frost Witch
 		if not can(kind):
 			match kind:
 				"archer":

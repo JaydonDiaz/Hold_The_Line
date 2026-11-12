@@ -467,31 +467,90 @@ func _build_clearance() -> void:
 					shapes.append(e[2])
 		cell_edges[i] = list
 		cell_shapes[i] = shapes
-	# Troops: open ground below the enemy camp, flooded out from the castle gate.
+	_flood_troops()
+
+
+## Troops: open ground below the enemy camp, flooded out from the castle gate; melee
+## reach round it.
+func _flood_troops() -> void:
+	var n := cols * rows
+	troop_open.fill(0)
+	melee_reach.fill(0)
 	var top := int(ceilf((main.DEPLOY_TOP + TROOP_RADIUS) / float(CELL)))
 	var gate := _cell(Vector2(main.FIELD_W / 2.0, main.CASTLE_Y - TROOP_RADIUS))
-	var stack := [gate]
+	var stack := PackedInt32Array([gate.y * cols + gate.x])
 	while not stack.is_empty():
-		var c: Vector2i = stack.pop_back()
-		var i := _index(c)
-		if troop_open[i] == 1 or clear[i] < TROOP_RADIUS or c.y < top:
+		var i: int = stack[stack.size() - 1]
+		stack.resize(stack.size() - 1)
+		var cx := i % cols
+		var cy := i / cols
+		if troop_open[i] == 1 or clear[i] < TROOP_RADIUS or cy < top:
 			continue
 		troop_open[i] = 1
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var nb: Vector2i = c + d
-			if _inside(nb):
-				stack.append(nb)
-	# Melee reach: within MELEE_REACH of a cell a troop can stand in.
+		if cx + 1 < cols:
+			stack.append(i + 1)
+		if cx > 0:
+			stack.append(i - 1)
+		if cy + 1 < rows:
+			stack.append(i + cols)
+		if cy > 0:
+			stack.append(i - cols)
+	# Melee reach: within MELEE_REACH of a cell a troop can stand in. (The cells in reach
+	# of a cell are the same offsets everywhere: worked out once, then plain indices.)
 	var span := ceili(MELEE_REACH / CELL)
+	var offs: Array[Vector2i] = []
+	for dy in range(-span, span + 1):
+		for dx in range(-span, span + 1):
+			if Vector2(dx, dy).length() * CELL <= MELEE_REACH:
+				offs.append(Vector2i(dx, dy))
 	for i in n:
 		if troop_open[i] == 0:
 			continue
-		var c := Vector2i(i % cols, i / cols)
-		for dy in range(-span, span + 1):
-			for dx in range(-span, span + 1):
-				var nb := c + Vector2i(dx, dy)
-				if _inside(nb) and _center(nb).distance_to(_center(c)) <= MELEE_REACH:
-					melee_reach[_index(nb)] = 1
+		var cx := i % cols
+		var cy := i / cols
+		for o in offs:
+			var x := cx + o.x
+			var y := cy + o.y
+			if x >= 0 and y >= 0 and x < cols and y < rows:
+				melee_reach[y * cols + x] = 1
+
+
+## A shape (already laid out on the field as it is now) becomes terrain mid-battle: thin
+## ice gone through to open water (hazards.gd). Only what it changes is worked out again:
+## the clearance of the cells it can be nearest to, their nearby edges, where troops can
+## get to; the routes are rebuilt as they're next asked for (the old ones standing in
+## meanwhile), so there's no hitch the way laying the whole map out again would make.
+func add_terrain(kind: String, poly: PackedVector2Array) -> void:
+	var lo := poly[0]
+	var hi := poly[0]
+	for q in poly:
+		lo = Vector2(minf(lo.x, q.x), minf(lo.y, q.y))
+		hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
+	var box := Rect2(lo, hi - lo)
+	var k := terrain.size()
+	terrain.append({"kind": kind, "poly": poly, "box": box})
+	var reach := 2.0 * HALF_DIAG + 0.5
+	for i in cols * rows:
+		var c := _center(Vector2i(i % cols, i / cols))
+		var to_box := Vector2(maxf(maxf(box.position.x - c.x, c.x - box.end.x), 0.0), maxf(maxf(box.position.y - c.y, c.y - box.end.y), 0.0)).length()
+		if to_box > clear[i] + reach and to_box > HALF_DIAG:
+			continue   # too far for it to be the nearest terrain to anywhere in this cell
+		var edge := INF
+		for j in poly.size():
+			edge = minf(edge, Geometry2D.get_closest_point_to_segment(c, poly[j], poly[(j + 1) % poly.size()]).distance_to(c))
+		var gap := 0.0 if Geometry2D.is_point_in_polygon(c, poly) else edge
+		if edge <= clear[i] + reach or gap == 0.0 or to_box <= HALF_DIAG:
+			var list: PackedVector2Array = cell_edges[i]
+			for j in poly.size():
+				list.append(poly[j])
+				list.append(poly[(j + 1) % poly.size()])
+			cell_edges[i] = list
+			var shapes: Array = cell_shapes[i]
+			shapes.append(k)
+		clear[i] = minf(clear[i], gap)
+	_flood_troops()
+	enemy_grids.clear()
+	invalidate()
 
 
 ## Call whenever a barricade is built, destroyed, sold or moved.

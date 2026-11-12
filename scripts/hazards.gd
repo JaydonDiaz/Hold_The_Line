@@ -171,9 +171,11 @@ func _break(n: int) -> void:
 			w.position = safe
 			if Geometry2D.is_point_in_polygon(w.post, poly):
 				w.set_post(safe)   # its post was out on the ice: it's on the shore now
-	# The patch is water now: rebuild every route round it.
+	# The patch is water now: every route is worked out afresh round it (only what it
+	# changes, so there's no hitch), and it stays water if the field is laid out again.
 	raw["terrain"][p["i"]]["kind"] = "water"
-	main.paths.set_map(raw)
+	main.paths.add_terrain("water", poly)
+	main.paths._map = raw
 	main.warriors_changed()
 	main.sfx("splash")
 	main.spawn_burst(_centre(poly), 40, Color(0.75, 0.9, 1.0))
