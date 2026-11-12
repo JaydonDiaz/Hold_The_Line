@@ -445,6 +445,8 @@ func unlock(kind: String, p: int) -> bool:
 func bank_xp(gains: Dictionary, won: bool) -> void:
 	last_battle = {}
 	var share := 1.0 if won else CD.XP_LOSS_SHARE
+	if completed.has(mission_id):
+		share *= CD.XP_REPLAY_SHARE   # a mission already won, played again: half the training
 	var target := catch_up_xp()
 	for kind in gains:
 		if not Data.WARRIORS.has(kind) or gains[kind] <= 0.0:

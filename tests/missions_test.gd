@@ -453,7 +453,9 @@ func _forced_pace() -> void:
 		e.free()
 	main.enemies_changed()
 	await _frames(5)
-	check(not main.wave_active and main.auto_timer > 20.0 and main.auto_timer <= 25.0, "...beaten at once: most of the 25s window is a breather (%.1fs)" % main.auto_timer)
+	var win: float = main.pace_window()
+	check(is_equal_approx(win, 18.0), "...a Protect battle's window between waves is 18s (%.0fs)" % win)
+	check(not main.wave_active and main.auto_timer > win - 5.0 and main.auto_timer <= win, "...beaten at once: most of the %.0fs window is a breather (%.1fs)" % [win, main.auto_timer])
 	main.hud.refresh(main)
 	check("Rest" in main.hud.start_btn.text, "...the panel counts it down (%s)" % main.hud.start_btn.text)
 	main.gold = 999
@@ -474,12 +476,12 @@ func _forced_pace() -> void:
 	holdout.max_hp = 1e6
 	holdout.hp = 1e6
 	var w0: int = main.wave
-	await _frames(60 * 20)
+	await _frames(int(60 * (win - 4.0)))
 	main.hud.refresh(main)
 	check(main.wave == w0 and main.wave_active and "Wave %d in" % (w0 + 1) in main.hud.start_btn.text,
-			"With enemies still on the field, 20s on: the next wave hasn't come yet (%s)" % main.hud.start_btn.text)
+			"With enemies still on the field, %.0fs on: the next wave hasn't come yet (%s)" % [win - 4.0, main.hud.start_btn.text])
 	await _frames(60 * 6)
-	check(main.wave == w0 + 1, "...it comes once the 25s window is up, beaten or not")
+	check(main.wave == w0 + 1, "...it comes once the %.0fs window is up, beaten or not" % win)
 	check(Engine.time_scale == 1.0 and main.cycle_speed() == null and Engine.time_scale == 2.0, "...and the speed control still works")
 	Engine.time_scale = 1.0
 	# Pausing (the Menu) stops the clock too: the window doesn't run on behind it.
@@ -775,6 +777,16 @@ func _escort() -> void:
 	wagon.leg = wagon.route.size() - 1
 	await _frames(5)
 	check(r.sprung >= 2 and main.get_enemies().size() > before, "Ambushes break out as the wagon passes their places on the road")
+	# Some of each ambush break out beside and behind the wagon, so a ring round it has to
+	# face every way.
+	var heading: Vector2 = wagon.position.direction_to(wagon.route[wagon.leg]) if wagon.leg < wagon.route.size() else Vector2.UP
+	var flanking := 0
+	for e in main.get_enemies().slice(before):
+		var off: Vector2 = e.position - wagon.position
+		if off.length() > 100.0 and off.length() < 260.0 and off.normalized().dot(heading) < 0.3:
+			flanking += 1
+	check(flanking >= 2, "...some of them beside and behind the wagon, not only ahead (%d flanking)" % flanking)
+	check(is_equal_approx(main.pace_window(), 15.0) and main.MIN_BREAK == 5.0, "An escort's forced pace gives 15s between waves (breaks of at least 5s)")
 	check(r.zones().size() == 7 and main.map_id == "convoy_meadow" and r.zone_i == 0, "The road runs through seven zones, starting on %s" % main.map_id)
 	# Out of the top of the first zone: on into the next.
 	main.gold = 9999

@@ -33,6 +33,8 @@ func _run() -> void:
 	_gates()
 	_tier4()
 	_south_training()
+	_north_gate()
+	_replay_xp()
 	_saves()
 	_slots()
 	await _screens()
@@ -316,6 +318,57 @@ func _screens() -> void:
 ## keys, no beacon yet); the last required mission lights the beacon, which grants
 ## nothing but opens Tier IV, and only for a path at Tier III with a point to spend.
 ## Winning a mission again changes nothing; an optional mission's points come once.
+## The Arcane Spires open on two LIT northern beacons (every required mission of two
+## northern regions won), not on two northern peoples merely joined. (The north's
+## missions are stand-ins here until Phase 4 builds them.)
+func _north_gate() -> void:
+	var terr: Dictionary = CD.TERRITORIES.duplicate(true)
+	var mis: Dictionary = CD.MISSIONS.duplicate(true)
+	var north := {"frostmarch": ["fm_1", "fm_2"], "monastery": ["mo_1", "mo_2"], "freecities": ["fc_1", "fc_2"]}
+	for t in north:
+		terr[t]["missions"] = north[t]
+		for m in north[t]:
+			mis[m] = {"name": m, "territory": t, "waves": 1, "gold": 100}
+	campaign.territories = terr
+	campaign.missions = mis
+	for pair in [["frostmarch", "monastery"], ["monastery", "freecities"], ["frostmarch", "freecities"]]:
+		campaign.new_campaign("normal")
+		for m in ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops", "gw_exodus", "gw_watchfires", "mv_wounded", "mv_sanctuary", "sable_crossing"]:
+			_win(m)
+		check(campaign.territory_state("spires") != "attack" and not campaign.requirements_met("spires"), "North %s: the Spires are shut after Sable" % "+".join(pair))
+		for t in north:
+			_win(north[t][0])   # all three peoples join
+		check(not campaign.requirements_met("spires"), "...still shut with all three northern peoples joined but no beacon lit")
+		_win(north[pair[0]][1])
+		check(campaign.beacon_lit(pair[0]) and not campaign.requirements_met("spires"), "...still shut with one northern beacon lit (%s)" % pair[0])
+		_win(north[pair[1]][1])
+		check(campaign.requirements_met("spires"), "...open once a second northern beacon is lit (%s)" % pair[1])
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+
+
+## A mission already won, played again, trains at half the rate (a loss on a replay: a
+## quarter); a first win, the full rate.
+func _replay_xp() -> void:
+	campaign.territories = CD.TERRITORIES
+	campaign.missions = CD.MISSIONS
+	campaign.new_campaign("normal")
+	campaign.xp = {"swordsman": 1e6}   # (past catch-up, so no doubling muddies the sums)
+	campaign.mission_id = "ashwatch"
+	campaign.bank_xp({"swordsman": 1000.0}, true)
+	var first: float = campaign.xp["swordsman"] - 1e6
+	_win("ashwatch")
+	var before: float = campaign.xp["swordsman"]
+	campaign.mission_id = "ashwatch"
+	campaign.bank_xp({"swordsman": 1000.0}, true)
+	var replay: float = campaign.xp["swordsman"] - before
+	before = campaign.xp["swordsman"]
+	campaign.bank_xp({"swordsman": 1000.0}, false)
+	var replay_loss: float = campaign.xp["swordsman"] - before
+	check(is_equal_approx(first, 1000.0) and is_equal_approx(replay, 500.0) and is_equal_approx(replay_loss, 250.0),
+			"Replaying a won mission: half the XP (%d first win, %d replayed, %d replay lost)" % [first, replay, replay_loss])
+
+
 func _south_training() -> void:
 	campaign.territories = CD.TERRITORIES
 	campaign.missions = CD.MISSIONS

@@ -994,14 +994,15 @@ func auto_delay() -> float:
 
 
 const PACE_WINDOW := 25.0   # forced pace: seconds from the last of a wave arriving to the next wave
-const MIN_BREAK := 8.0      # ...and the shortest breather once a wave's beaten
+const PACE_WINDOWS := {"capture": 16.0, "escort": 15.0, "protect": 18.0, "retreat": 20.0, "evac": 25.0}   # ...by kind of battle
+const MIN_BREAK := 5.0      # ...and the shortest breather once a wave's beaten
 const REST_HEAL := 0.04     # share of its health a troop gets back each second of a breather
 
 
 ## A forced pace's window between waves: from the last of one wave arriving to the next
 ## wave ("pace": {"window"}), time to finish it off, let the troops recover and reset.
 func pace_window() -> float:
-	return float(mission.get("pace", {}).get("window", PACE_WINDOW))
+	return float(mission.get("pace", {}).get("window", PACE_WINDOWS.get(mission.get("type", ""), PACE_WINDOW)))
 
 
 ## Seconds until the next wave under a forced pace (or auto-play), -1 if it isn't counting.

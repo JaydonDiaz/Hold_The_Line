@@ -224,14 +224,34 @@ func process(delta: float) -> void:
 		sprung += 1
 		var k: float = main.FIELD_W / 640.0
 		var group: Array = a.get("group", [])
+		var flanks := 0
 		for i in group.size() + mini(loop() * 2, group.size() * 2):
 			var g: Array = group[i % group.size()]
 			var p: Vector2 = Vector2(g[1].x * k, g[1].y)
-			if i >= group.size():   # (more each time round, close by)
+			if i % 3 == 2:
+				# Every third breaks out beside or behind the wagon, so a ring round it has
+				# to face every way, not just ahead.
+				p = _flank_point(flanks)
+				flanks += 1
+			elif i >= group.size():   # (more each time round, close by)
 				p = main._clamp_post(p + Vector2(randf_range(-30, 30), randf_range(-24, 24)))
 			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), p)
 		main.hud.show_message(a.get("note", "Ambush!"))
 		main.sfx("horn")
+
+
+## Where the n-th flanking attacker of an ambush breaks out: to the wagon's left, behind
+## it, to its right, in turn, out of reach of a ring of troops round it (on open ground).
+const FLANK_GAP := 170.0
+
+func _flank_point(n: int) -> Vector2:
+	var ahead := Vector2.UP
+	if wagon.leg < wagon.route.size():
+		ahead = wagon.position.direction_to(wagon.route[wagon.leg])
+	var side := ahead.orthogonal()
+	var off: Vector2 = [side, -ahead, -side][n % 3] * FLANK_GAP
+	var p: Vector2 = main._clamp_post(wagon.position + off)
+	return main.paths.open_spot(p)
 
 
 ## The enemy is out for the wagon.

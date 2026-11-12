@@ -731,23 +731,26 @@ func _training() -> void:
 	on_disk.load(TEST_SAVE)
 	check(is_equal_approx(campaign.xp["archer"], had) and is_equal_approx(float(on_disk.get_value("state", "xp", {}).get("archer", 0.0)), had),
 			"T  closing the game mid-battle earns nothing, and the save keeps what it had")
-	# A won mission replayed banks its XP again (in full; Archers aren't behind here).
+	# A won mission replayed banks half its XP (Archers aren't behind here, so no catch-up).
 	campaign.xp["archer"] = CD.XP_FIRST * 40.0
 	had = campaign.xp["archer"]
 	campaign.mission_id = "ashwatch"
 	campaign.finish_mission(true, [], {"archer": 300.0})
-	check(is_equal_approx(campaign.xp["archer"], had + 300.0), "T  replaying a mission already won banks its XP in full")
+	check(is_equal_approx(campaign.xp["archer"], had + 300.0 * CD.XP_REPLAY_SHARE), "T  replaying a mission already won banks half its XP")
 	# Catch-up: a kind below the average level of those trained earns double, up to it.
 	campaign.xp = {"swordsman": Campaign_xp_for(6), "mine": Campaign_xp_for(2)}
 	var mark: float = campaign.catch_up_xp()
 	check(is_equal_approx(mark, Campaign_xp_for(4)), "T  catch-up mark: the average level of the kinds in use (6 and 2: level 4)")
-	campaign.mission_id = "ashwatch"
+	campaign.mission_id = "stonehollow"   # (not won yet: a first win, so no replay share)
+	campaign.completed.erase("stonehollow")
 	campaign.finish_mission(true, [], {"archer": 500.0, "swordsman": 500.0})
 	check(is_equal_approx(campaign.xp["archer"], 1000.0) and campaign.last_battle["archer"][2] == 500.0, "T  ...an Archer just joined earns double (500 -> 1000 XP)")
 	check(is_equal_approx(campaign.xp["swordsman"], Campaign_xp_for(6) + 500.0) and campaign.last_battle["swordsman"][2] == 0.0, "T  ...the leaders earn the usual")
 	var gap: float = campaign.catch_up_xp() - campaign.xp["mine"]
+	campaign.completed.erase("stonehollow")
 	campaign.finish_mission(true, [], {"mine": gap + 1000.0})
 	check(is_equal_approx(campaign.xp["mine"], Campaign_xp_for(2) + gap * 2.0 + 1000.0), "T  ...doubling stops at the mark: the rest counts once")
+	campaign.completed.erase("stonehollow")
 	campaign.finish_mission(false, [], {"archer": 400.0})
 	check(is_equal_approx(campaign.last_battle["archer"][0], 400.0 * CD.XP_LOSS_SHARE * 2.0), "T  ...a loss's half share is doubled too")
 	check(campaign.catching_up("archer") and not campaign.catching_up("swordsman"), "T  ...and the Training Grounds can tell who's catching up")
