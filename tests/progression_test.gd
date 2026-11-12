@@ -34,6 +34,7 @@ func _run() -> void:
 	_tier4()
 	_south_training()
 	_north_gate()
+	_north_any_order()
 	_north_heat()
 	_replay_xp()
 	_saves()
@@ -346,6 +347,48 @@ func _north_gate() -> void:
 		check(campaign.requirements_met("spires"), "...open once a second northern beacon is lit (%s)" % pair[1])
 	campaign.territories = CD.TERRITORIES
 	campaign.missions = CD.MISSIONS
+
+
+## The North as it ships, in every order: each region opens straight after Sable; its
+## first mission brings its people in (their units to hire), its second lights the
+## beacon, its optional one opens once they've joined; the enemy grows bolder as you go
+## (0, then +1, +1, +2...); the Spires open with the second beacon lit, not before.
+func _north_any_order() -> void:
+	var chains := {"frostmarch": ["fm_pass", "fm_vigil", "fm_whiteout", "frost"], "monastery": ["mo_steps", "mo_gate", "mo_dawn", "martial"],
+		"freecities": ["fc_market", "fc_council", "fc_carnival", "bard"]}
+	var orders := [["frostmarch", "monastery", "freecities"], ["frostmarch", "freecities", "monastery"], ["monastery", "frostmarch", "freecities"],
+		["monastery", "freecities", "frostmarch"], ["freecities", "frostmarch", "monastery"], ["freecities", "monastery", "frostmarch"]]
+	var want_heat := [0, 1, 1, 2, 2, 2]
+	for order in orders:
+		campaign.new_campaign("normal")
+		for m in ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops", "gw_exodus", "gw_watchfires", "mv_wounded", "mv_sanctuary", "sable_crossing"]:
+			_win(m)
+		var problems := []
+		var n := 0
+		var lit := 0
+		for t in order:
+			var c: Array = chains[t]
+			if campaign.optional_missions(t).has(c[2]):
+				problems.append("%s optional open before joining" % t)
+			for k in 2:
+				var m: String = c[k]
+				if not campaign.mission_open(m):
+					problems.append("%s not open in turn" % m)
+				if campaign.north_heat(m) != want_heat[n]:
+					problems.append("%s heat %d (wanted %d)" % [m, campaign.north_heat(m), want_heat[n]])
+				_win(m)
+				n += 1
+				if k == 0 and not (campaign.allied(CD.TERRITORIES[t]["faction"]) and campaign.allows(c[3])):
+					problems.append("%s didn't bring its people in" % m)
+				if k == 0 and not campaign.optional_missions(t).has(c[2]):
+					problems.append("%s's optional not open after joining" % t)
+			lit += 1
+			if not campaign.beacon_lit(t):
+				problems.append("%s beacon not lit" % t)
+			if campaign.requirements_met("spires") != (lit >= 2):
+				problems.append("Spires %s with %d beacon(s) lit" % ["open" if lit < 2 else "shut", lit])
+		check(problems.is_empty(), "North in the order %s: each region opens, recruits, lights its beacon; heat 0,1,1,2,2,2; the Spires open on the second beacon%s"
+				% [" > ".join(order), "" if problems.is_empty() else " (" + "; ".join(problems) + ")"])
 
 
 ## The North grows bolder: every two northern required missions won (the first counting)
