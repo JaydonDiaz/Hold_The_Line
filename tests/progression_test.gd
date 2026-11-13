@@ -288,7 +288,22 @@ func _screens() -> void:
 	for t in CD.TERRITORIES:
 		map.select(t)
 	map.select("greenwood")
-	check(map.info["state"].text.begins_with("Allied") and "Tier IV" in map.info["mission"].text, "Map: Greenwood shows as allied, 1/2, with what securing it brings (%s)" % map.info["state"].text)
+	check(map.info["state"].text.begins_with("Allied") and "Tier IV" in map.info["state"].tooltip_text, "Map: Greenwood shows as allied, 1/2, with what securing it brings (%s)" % map.info["state"].text)
+	check(not map.info["reward_title"].visible and map.reward_box.get_child_count() == 0 or map.reward_box.get_children().all(func(c): return c.is_queued_for_deletion()),
+			"Map: once a people has joined, what they bring isn't listed again (the Ledger has it)")
+	# Every mission of the region listed; a won one can be picked and played again, and its story watched.
+	var won_id: String = CD.TERRITORIES["greenwood"]["missions"][0]
+	check(map.rows_text().split("\n").size() >= 2 and CD.MISSIONS[won_id]["name"] in map.rows_text(), "Map: the region's missions are listed (%s)" % map.rows_text().replace("\n", " | "))
+	var had_won: bool = campaign.completed.has(won_id)
+	if not had_won:
+		campaign.completed.append(won_id)
+	map.chosen = won_id
+	map.select("greenwood")
+	var story_btn: Button = map.mission_rows.get_child(map.mission_rows.get_child_count() - map._region_missions("greenwood").size()).get_child(1)
+	check(map.info["defend"].text == "Replay" and not map.info["defend"].disabled and not story_btn.disabled,
+			"Map: a won mission can be picked and played again (%s), and its story watched" % map.info["defend"].text)
+	if not had_won:
+		campaign.completed.erase(won_id)
 	check("Beacons" in map.info["header"].text, "...the header counts beacons (%s)" % map.info["header"].text)
 	if map.overlay != null:   # (the Woodland Watch's joining is announced first)
 		map.overlay.queue_free()

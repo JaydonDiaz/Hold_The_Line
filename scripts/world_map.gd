@@ -43,6 +43,8 @@ var labels := {}
 var info: Dictionary = {}   # the panel's controls
 var reward_box: HBoxContainer
 var threat_box: HBoxContainer
+var mission_rows: VBoxContainer
+var chosen := ""          # the mission picked in the selected region's list (what Defend plays)
 const THREAT_W := 176.0   # the threats' column, left of what joining brings
 var overlay: Control = null   # the Ledger, a story scene or an announcement, while one is up
 var story_player := Callable()   # the HUD's play_story(lines, then): villains' lines get their own cutscenes
@@ -137,6 +139,12 @@ func _build_panel() -> void:
 	info["blurb"].autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	info["mission"] = _label(panel, Vector2(16, 110), Vector2(530, 40), Color(1, 0.85, 0.3), 14)
 	info["mission"].autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# The region's missions, one row each: pick one to play (or play again), or watch its story.
+	mission_rows = VBoxContainer.new()
+	mission_rows.position = Vector2(16, 108)
+	mission_rows.size = Vector2(608, 0)
+	mission_rows.add_theme_constant_override("separation", 3)
+	panel.add_child(mission_rows)
 	info["threat_title"] = _label(panel, Vector2(16, 152), Vector2(100, 18), Color(1, 0.55, 0.45), 12)
 	info["threat_title"].text = "THREATS"
 	threat_box = HBoxContainer.new()
@@ -198,32 +206,29 @@ func _show_info(k: String) -> void:
 	if leader != "":
 		info["leader"].texture = Portraits.texture(leader, CD.SPEAKERS[leader]["look"])
 		info["leader_frame"].tooltip_text = CD.SPEAKERS[leader]["name"]
-	var mid: String = _mission_here(k)
+	var listed := _region_missions(k)
+	if not listed.has(chosen):
+		chosen = _mission_here(k)
+	var mid: String = chosen
 	var m: Dictionary = campaign.missions.get(mid, {})
-	var optional: bool = mid != "" and mid != campaign.playable_mission(k)
+	var optional: bool = mid != "" and (d.get("optional", []) as Array).has(mid)
+	info["state"].tooltip_text = ("Light its beacon to open Tier IV training for %s." if st != "secured" else "Its beacon burns: Tier IV training is open for %s.") \
+			% _kind_names(campaign.tier4_kinds(k)) if f != "" and not campaign.tier4_kinds(k).is_empty() else ""
+	for c in mission_rows.get_children():
+		c.queue_free()
+	var rows := st in ["attack", "unfinished", "secured"] and not listed.is_empty()
+	info["mission"].visible = not rows
+	mission_rows.visible = rows
 	match st:
 		"locked":
 			info["mission"].text = "To reach it: " + campaign.requirement_text(k)
 		"available":
 			info["mission"].text = "No battle here yet. This territory's story arrives in a later update."
-		"attack", "unfinished":
-			if optional:
-				info["mission"].text = _optional_text(mid)
-			elif not m.is_empty():
-				info["mission"].text = "Mission %d of %d: %s  ·  %s  ·  %d gold" % [prog[0] + 1, prog[1], m["name"], campaign.length_text(m), m["gold"]]
-				if not (m["lend"] as Array).is_empty():
-					info["mission"].text += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
-			else:
-				var nxt: Dictionary = campaign.missions.get(campaign.next_mission(k), {})
-				info["mission"].text = ("Next: %s. Opens when you: %s." % [nxt["name"], campaign.req_text(nxt.get("requires", {}))]) if not nxt.is_empty() \
-						else "Its next battle arrives in a later update."
-			if st == "unfinished":
-				info["mission"].text += "\nSecure the region to light its beacon and open Tier IV training for %s." % _kind_names(campaign.tier4_kinds(k))
 		"secured":
-			info["mission"].text = ("Secured: its beacon burns. Tier IV training open for %s." % _kind_names(campaign.tier4_kinds(k))) if not campaign.tier4_kinds(k).is_empty() else "Secured."
-			if optional:
-				info["mission"].text += "
-" + _optional_text(mid)
+			info["mission"].text = "Secured."
+	if rows:
+		for id in listed:
+			mission_rows.add_child(_mission_row(k, id))
 	# Threats: the enemies the mission sends.
 	for c in threat_box.get_children():
 		c.queue_free()
@@ -248,6 +253,8 @@ func _show_info(k: String) -> void:
 	var tall: float = font.get_multiline_string_size(ml.text, HORIZONTAL_ALIGNMENT_LEFT, ml.size.x, ml.get_theme_font_size("font_size"), -1,
 			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND).y
 	var row_y := 110.0 + maxf(tall, 38.0) + 4.0
+	if mission_rows.visible:
+		row_y = 112.0 + listed.size() * 29.0
 	info["threat_title"].position.y = row_y
 	info["reward_title"].position.y = row_y
 	threat_box.position.y = row_y + 18.0
@@ -255,19 +262,111 @@ func _show_info(k: String) -> void:
 	# Rewards: what joining brings.
 	for c in reward_box.get_children():
 		c.queue_free()
-	var unlocks: Array = CD.FACTIONS[f]["unlocks"] if f != "" else []
+	var unlocks: Array = CD.FACTIONS[f]["unlocks"] if f != "" and not campaign.joined(k) else []   # (once they've joined, it's in the Ledger)
 	info["reward_title"].visible = not unlocks.is_empty()
 	info["reward_title"].text = "JOINED THE LINE, THEY BRING" if campaign.joined(k) else "IF THEY JOIN THE LINE"
 	for key in unlocks:
 		reward_box.add_child(_reward(key))
-	info["defend"].disabled = mid == ""
-	info["defend"].text = "Optional" if optional else ("Secured" if st == "secured" else ("Defend" if mid != "" or st == "attack" else ("Allied" if f != "" else "Held")))
+	info["defend"].disabled = mid == "" or not _can_play(k, mid)
+	info["defend"].text = ("Replay" if campaign.completed.has(mid) else ("Play" if optional else "Defend")) if mid != "" \
+			else ("Secured" if st == "secured" else ("Allied" if f != "" else "Held"))
 
 
 func _on_defend() -> void:
-	var mid := _mission_here(selected)
-	if mid != "":
-		defend.emit(mid)
+	if chosen != "" and _can_play(selected, chosen):
+		defend.emit(chosen)
+
+
+## Territory k's missions, as the list shows them: the required ones in order, then the
+## optional ones once its people have joined.
+func _region_missions(k: String) -> Array:
+	var out: Array = (CD.TERRITORIES[k]["missions"] as Array).duplicate()
+	if campaign.joined(k):
+		out += CD.TERRITORIES[k].get("optional", [])
+	return out.filter(func(id): return campaign.missions.has(id))
+
+
+## Whether mission id (in territory k) can be played now: won already (to play again), the
+## next required one, or an optional one that's open.
+func _can_play(k: String, id: String) -> bool:
+	if campaign.completed.has(id):
+		return campaign.mission_open(id)
+	if id == campaign.playable_mission(k):
+		return true
+	return campaign.optional_missions(k).has(id)
+
+
+## One row of the region's mission list: its state, name and length, picked by a click;
+## and a Story button to watch its scenes again (the intro once seen, the outro once won).
+func _mission_row(k: String, id: String) -> Control:
+	var m: Dictionary = campaign.missions[id]
+	var optional: bool = (CD.TERRITORIES[k].get("optional", []) as Array).has(id)
+	var won: bool = campaign.completed.has(id)
+	var state := "Won" if won else ("Next" if id == campaign.playable_mission(k) else ("Optional" if optional else "Later"))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var pick := Button.new()
+	pick.focus_mode = Control.FOCUS_NONE
+	pick.custom_minimum_size = Vector2(500, 26)
+	pick.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	pick.add_theme_font_size_override("font_size", 13)
+	var extra := ""
+	var bonus: Dictionary = m.get("bonus_points", {})
+	if optional and not bonus.is_empty() and not won:
+		extra = "  ·  first win: " + ", ".join(bonus.keys().map(func(kind): return "+%d %s point" % [bonus[kind], Data.WARRIORS[kind]["name"]]))
+	pick.text = "%s   %s  ·  %s%s" % [{"Won": "✓", "Next": "▶", "Optional": "◇", "Later": "·"}[state], m["name"], campaign.length_text(m), extra]
+	var col: Color = {"Won": Color(0.75, 0.95, 0.6), "Next": Color(1, 0.85, 0.3), "Optional": Color(0.85, 0.8, 1.0), "Later": Color(0.6, 0.58, 0.55)}[state]
+	pick.add_theme_color_override("font_color", col)
+	pick.add_theme_color_override("font_hover_color", col.lightened(0.2))
+	var sel := StyleBoxFlat.new()
+	sel.bg_color = Color(0.32, 0.26, 0.16) if id == chosen else Color(0.18, 0.15, 0.13)
+	sel.border_color = Color(1, 0.85, 0.35) if id == chosen else Color(0.3, 0.25, 0.2)
+	sel.set_border_width_all(1)
+	sel.set_corner_radius_all(3)
+	sel.content_margin_left = 8
+	for st_name in ["normal", "hover", "pressed"]:
+		pick.add_theme_stylebox_override(st_name, sel)
+	var tip := "Won: play it again any time (replays earn half XP)." if won else ("Play it now." if state != "Later" else "Win the missions before it first.")
+	if not (m.get("lend", []) as Array).is_empty():
+		tip += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
+	pick.tooltip_text = tip
+	pick.pressed.connect(func():
+		chosen = id
+		sound.emit("click")
+		_show_info(k))
+	row.add_child(pick)
+	var story := Button.new()
+	story.focus_mode = Control.FOCUS_NONE
+	story.custom_minimum_size = Vector2(96, 26)
+	story.add_theme_font_size_override("font_size", 13)
+	story.text = "Story"
+	var keys := []
+	if m.get("intro", "") != "" and (won or campaign.seen.has(m["intro"])):
+		keys.append(m["intro"])
+	if won and m.get("outro", "") != "":
+		keys.append(m["outro"])
+	story.disabled = keys.is_empty()
+	story.tooltip_text = "Watch this mission's scenes again" if not keys.is_empty() else "Its scenes play when you first take it on"
+	story.pressed.connect(func(): _replay_story(keys))
+	row.add_child(story)
+	return row
+
+
+## The mission list as text, one row a line (for tests and tooltips).
+func rows_text() -> String:
+	var out := []
+	for row in mission_rows.get_children():
+		if not row.is_queued_for_deletion():
+			out.append(row.get_child(0).text)
+	return "\n".join(out)
+
+
+## Plays story keys one after another (the intro, then the outro).
+func _replay_story(keys: Array) -> void:
+	if keys.is_empty() or overlay != null:
+		return
+	var rest := keys.slice(1)
+	play_story(keys[0], func(): _replay_story(rest) if not rest.is_empty() else null)
 
 
 ## The mission Defend plays in territory k: the next required one if it can be played;
@@ -382,6 +481,8 @@ func territory_at(p: Vector2) -> String:
 
 
 func select(k: String) -> void:
+	if k != selected:
+		chosen = ""
 	selected = k
 	_show_info(k)
 

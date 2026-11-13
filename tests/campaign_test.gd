@@ -515,14 +515,14 @@ func _missions() -> void:
 	await process_frame
 	check(map.overlay != null, "M  after the outro, the map announces who joined")
 	map.select("greenwood")
-	check(not map.info["defend"].disabled and "Forest Exodus" in map.info["mission"].text and "an evacuation" in map.info["mission"].text,
-			"M  Greenwood offers the Forest Exodus (%s)" % map.info["mission"].text.replace("\n", " "))
+	check(not map.info["defend"].disabled and map.chosen == "gw_exodus" and "Forest Exodus" in map.rows_text() and "an evacuation" in map.rows_text(),
+			"M  Greenwood offers the Forest Exodus (%s)" % map.rows_text().replace("\n", " | "))
 	map.select("frostmarch")
 	check(map.info["defend"].disabled, "M  a territory with no battle yet can't be defended")
 	map.select("stonehollow")
-	check(not map.info["defend"].disabled and "Protect the Workshops" in map.info["mission"].text, "M  Stonehollow offers its second mission, Protect the Workshops")
+	check(not map.info["defend"].disabled and map.chosen == "stonehollow_workshops", "M  Stonehollow offers its second mission, Protect the Workshops")
 	map.select("ashwatch")
-	check(not map.info["defend"].disabled and "Armoury Wagon" in map.info["mission"].text, "M  ...while Ashwatch now offers its second mission, the Armoury Wagon")
+	check(not map.info["defend"].disabled and map.chosen == "ashwatch_road", "M  ...while Ashwatch now offers its second mission, the Armoury Wagon")
 	# Any 2 of 3 southern territories opens Sable Crossing (checked on the data, ahead of Phase 3).
 	campaign.completed = ["ashwatch", "stonehollow"]
 	check(_sable_opens_with(["greenwood", "deepdelve"]) and _sable_opens_with(["mercyvale", "greenwood"]) and not _sable_opens_with(["deepdelve"]),
