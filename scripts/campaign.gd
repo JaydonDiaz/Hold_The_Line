@@ -27,6 +27,7 @@ var save_path := "user://campaign.cfg":
 			slot = 1
 var base_path := "user://campaign.cfg"   # Save 1's file; Save n's is <base>_n.cfg
 var slot := 1                            # the save slot in use (1..SLOTS)
+var started_once := false   # the start screen (the splash and its Start button) has been passed this run
 var _to_slot := false
 var difficulty := "normal"
 var completed: Array = []   # mission ids won

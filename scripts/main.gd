@@ -444,7 +444,7 @@ func _process(delta: float) -> void:
 	if hud.scene_music != "":
 		audio.set_track(hud.scene_music)   # a cutscene's own music
 	elif not started:
-		audio.set_track("map" if hud.world_map != null else "title")   # the campaign map's own, or the title screen's
+		audio.set_track("" if hud.splash != null else ("map" if hud.world_map != null else "title"))   # (silent on the start screen) the campaign map's own, or the title screen's
 	elif not game_over:
 		layer_timer -= delta
 		if layer_timer <= 0.0:
@@ -1161,6 +1161,13 @@ func _open_start_screen() -> void:
 		open_world_map()
 	elif where == "battle" and not Campaign.mission().is_empty():
 		choose_mode("campaign")
+	elif not Campaign.started_once and DisplayServer.get_name() != "headless":   # (tests run headless, straight to the title)
+		# The very first screen of a run: the splash picture and a Start button (the
+		# title music waits for that click, which a browser needs before any sound).
+		_lock_portrait(false)
+		hud.show_splash(func():
+			Campaign.started_once = true
+			hud.show_mode_select())
 	else:
 		_lock_portrait(false)
 		hud.show_mode_select()

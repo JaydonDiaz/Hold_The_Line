@@ -1151,6 +1151,46 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 ## The title screen. Cards fly in one after another; hovering lifts a card, and
 ## picking a mode makes it pulse and burst while the others fall away, then the screen
 ## fades into the game (Classic and the Campaign open a second set of cards first).
+var splash: Control = null   # the start screen, while it's up
+
+
+## The start screen: the splash picture, and a Start Game button (Enter or Space too)
+## that leads to the title screen. `then` is called once it's pressed.
+func show_splash(then: Callable) -> void:
+	splash = Control.new()
+	splash.size = Vector2(WIDTH, HEIGHT)
+	add_child(splash)
+	_center(splash)
+	var dark := ColorRect.new()
+	dark.color = Color(0.04, 0.03, 0.06)
+	dark.size = Vector2(WIDTH, HEIGHT)
+	splash.add_child(dark)
+	_bleed(dark)   # (the night sky's colour all round, on a wide or tall window)
+	var pic := TextureRect.new()
+	pic.texture = load("res://splash.png")
+	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	pic.size = Vector2(WIDTH, HEIGHT)
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	splash.add_child(pic)
+	var go := _button(splash, Vector2(WIDTH / 2.0 - 130, 88), Vector2(260, 66), "Start Game")
+	go.add_theme_font_size_override("font_size", 28)
+	for state in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color"]:
+		go.add_theme_color_override(state, Color(1, 0.85, 0.35) if state != "font_hover_color" else Color(1, 0.93, 0.6))
+	go.focus_mode = Control.FOCUS_ALL
+	go.grab_focus.call_deferred()   # (so Enter or Space press it)
+	go.pressed.connect(func():
+		var tw := create_tween()
+		tw.tween_property(splash, "modulate:a", 0.0, 0.35)
+		tw.tween_callback(func():
+			splash.queue_free()
+			splash = null
+			then.call()))
+	splash.modulate.a = 0.0
+	create_tween().tween_property(splash, "modulate:a", 1.0, 0.4)
+
+
 func show_mode_select() -> void:
 	picking = false
 	mode_screen = ColorRect.new()
