@@ -218,7 +218,7 @@ func _ready() -> void:
 	target_btn.add_theme_font_size_override("font_size", 12)
 	target_btn.tooltip_text = ("This unit's orders [O]: which enemy it picks, how firmly it sticks to it,\n"
 			+ "and how far from its post it may go to fight.\n"
-			+ "T: next target priority.  N: Focused / Reactive.  M: next movement mode.")
+			+ "T: next target priority.  M: Hold / Guard area / Free.  D: draw a guard area.")
 	target_btn.pressed.connect(func(): orders_pressed.emit())
 	song_btn = _button(panel, Vector2(326, 212), Vector2(84, 48), "")
 	song_btn.add_theme_font_size_override("font_size", 12)
@@ -2081,7 +2081,7 @@ func _open_orders(main, units: Array) -> void:
 	who.tooltip_text = "%d troops get these orders" % units.size()
 	var tips := {"focused": "Sticks to the enemy it picked until it falls, gets out of reach or leaves this unit's area (recommended)",
 			"reactive": "Looks again a few times a second and switches to whichever enemy is now the best pick",
-			"hold": "Stays at its post and fights only what it can reach from there",
+			"hold": "Stays at its post and fights only what it can reach from there (it doesn't leave it for others' calls for help)",
 			"guard": "Fights anywhere in its area: pick one below, or draw your own on the field",
 			"free": "Chases enemies anywhere on the field",
 			"closest": "The enemy nearest this unit", "first": "The enemy closest to the castle",
@@ -2106,27 +2106,15 @@ func _open_orders(main, units: Array) -> void:
 	if not healers.is_empty():
 		_order_row(box, y, "Focus [T]" if fighters.is_empty() else "Healers", "care", Warrior.HEAL_PRIORITIES, Warrior.PRIORITY_NAMES, tips)
 		y += ORDER_ROW
-	if not fighters.is_empty():
-		_order_row(box, y, "Commit [N]", "commit", Warrior.COMMITS, Warrior.COMMIT_NAMES, tips)
-		y += ORDER_ROW
 	if not movers.is_empty():
-		_order_row(box, y, "Movement [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "guard": "Guard area", "free": "Free"}, tips)
+		_order_row(box, y, "Position [M]", "move_mode", Warrior.MOVE_MODES, {"hold": "Hold", "guard": "Guard area", "free": "Free"}, tips)
 		y += ORDER_ROW
-		var keys: Array = main.AREA_PRESETS.keys() + ["draw"]
-		var names: Dictionary = {"front": "Front", "left": "Left", "center": "Centre", "right": "Right", "back": "Back", "draw": "Draw…"}
-		_order_row(box, y, "Area [D]", "area", keys, names, tips)
-		y += ORDER_ROW
-		var span := box.size.x - ORDER_X0 - ORDER_RIGHT
-		_order_row(box, y, "In danger", "danger_mode", Warrior.DANGER_MODES, Warrior.DANGER_NAMES, tips, ORDER_X0, span * 0.62)
-		var call := _button(box, Vector2(ORDER_X0 + span * 0.62, y), Vector2(span * 0.38 - 4.0, ORDER_ROW - 2.0), "Call for help")
-		call.toggle_mode = true
-		call.add_theme_font_size_override("font_size", 12)
-		call.tooltip_text = "In danger, it calls for help: the troops set to answer calls come to its aid (and Healers on In danger)"
-		call.pressed.connect(func(): _order_from_box("call_help", call.button_pressed))
-		orders_ui["call_help"] = call
-		y += ORDER_ROW
-	if not fighters.is_empty():
-		_order_row(box, y, "Answer calls", "answer", Warrior.ANSWERS, Warrior.ANSWER_NAMES, tips)
+		if movers.any(func(w): return w.move_mode == "guard"):
+			var keys: Array = main.AREA_PRESETS.keys() + ["draw"]
+			var names: Dictionary = {"front": "Front", "left": "Left", "center": "Centre", "right": "Right", "back": "Back", "draw": "Draw…"}
+			_order_row(box, y, "Area [D]", "area", keys, names, tips)
+			y += ORDER_ROW
+		_order_row(box, y, "When hurt", "danger_mode", Warrior.DANGER_MODES, Warrior.DANGER_NAMES, tips)
 		y += ORDER_ROW
 	# Something on the field to follow (a wagon, villagers): a row to follow it, or not.
 	var to_follow: Array = main.rules.followable() if not movers.is_empty() else []
@@ -2204,6 +2192,9 @@ func _refresh_orders(main, _w) -> void:
 	var fighters := now.filter(func(w): return w.uses_targeting())
 	var healers := now.filter(func(w): return w.is_mobile_healer())
 	var movers := now.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
+	if orders_ui.has("area") != movers.any(func(w): return w.move_mode == "guard"):
+		_open_orders(main, now)   # (the Area row comes and goes with Guard area)
+		return
 	var answering := fighters.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
 	var current := {
 		"priority": _common(fighters.filter(func(w): return not w.is_mobile_healer()), func(w): return w.priority),

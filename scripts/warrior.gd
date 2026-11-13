@@ -30,10 +30,10 @@ const WINDUP := 0.18      # melee troops rear back over the last moment before a
 const ARCHER_DRAW := 0.9  # Archer idle: draw an arrow out of the quiver (seconds)...
 const ARCHER_LOOP := 3.3  # ...then twirl it, flip it, one lazy turn, over and over while she stands idle...
 const ARCHER_STOW := 0.7  # ...and put it back only once she moves off (seconds)
-const PRIORITIES := ["closest", "first", "strongest", "weakest"]
+const PRIORITIES := ["closest", "first", "strongest"]   # (on offer; "weakest" still works for anything set to it)
 const PRIORITY_NAMES := {
 	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
-	"revive": "Revive", "heal": "Heal", "stay": "Stay with", "danger": "In danger",
+	"revive": "Heal", "heal": "Heal the hurt", "stay": "Stay with", "danger": "In danger",
 }
 # A Healer's own priorities: who it looks after first. "revive": the downed first (they're
 # on a clock), then the hurt; "heal": the hurt first, then the downed; "stay": it keeps
@@ -41,7 +41,7 @@ const PRIORITY_NAMES := {
 # within reach without leaving them; "danger": allies in danger (see in_danger) first,
 # wherever they are on the field, then the downed, then the hurt. Where there are
 # villagers on the field, they're among the hurt it heals.
-const HEAL_PRIORITIES := ["revive", "heal", "stay", "danger"]
+const HEAL_PRIORITIES := ["revive", "stay"]   # on offer: Heal (the downed first, then the hurt) or Stay with; the others still work
 const WARD_GAP := Vector2(0, 34)   # where a Healer keeps itself from its ward (just behind it)
 # In a battle with something to protect (rules.guards()), one more: "objective", the enemy
 # nearest to getting at it. New troops start on it there.
@@ -97,7 +97,7 @@ var move_mode := "free"        # Orders: see MOVE_MODES
 var guard_area := Rect2()      # Guard Area: where it fights, on the field (empty: none drawn yet; see zone_rect)
 var danger_mode := "fight"     # Orders: in danger, it fights on or falls back (DANGER_MODES)
 var call_help := true          # Orders: in danger, it calls for help
-var answer := "ignore"         # Orders: how it answers others' calls for help (ANSWERS)
+var answer := "ignore"         # how it answers others' calls for help (ANSWERS); no longer on the orders panel, so troops keep their line (answering by default pulled them off it)
 var danger_t := 0.0            # seconds since it was last hit, counting down from DANGER_HIT
 var retreating := false        # falling back, in danger
 var safe_t := 0.0              # falling back: how long no enemy has come near
@@ -753,7 +753,7 @@ func is_mobile_healer() -> bool:
 
 ## Who a Healer looks after first ("revive", "heal" or "stay"; anything else: "revive").
 func care() -> String:
-	return priority if priority in HEAL_PRIORITIES else "revive"
+	return priority if priority in ["revive", "heal", "stay", "danger"] else "revive"
 
 
 func set_post(p: Vector2) -> void:
@@ -1758,6 +1758,13 @@ static func threat(e) -> float:
 ## The priorities `w` can be given: a Healer's own, or the target priorities on offer.
 static func priorities_for_unit(w) -> Array:
 	return HEAL_PRIORITIES if w.is_mobile_healer() else priorities_for(w.main)
+
+
+## Every priority unit w understands (the offered ones, and the others it still knows).
+static func known_priorities(w) -> Array:
+	if w.is_mobile_healer():
+		return ["revive", "heal", "stay", "danger"]
+	return priorities_for(w.main) + ["weakest"]
 
 
 ## The target priorities on offer in this battle.
@@ -3206,7 +3213,7 @@ func _fall_back_spot(near: Array) -> Vector2:
 ## once its own enemy's dealt with, and keeps on it till the caller's safe (or there's
 ## no enemy left by them). While answering its area doesn't hold it (free_run).
 func _update_answer() -> void:
-	if answer == "ignore" or is_emplacement() or wall_guard or summoned or retreating:
+	if answer == "ignore" or move_mode == "hold" or is_healer() or is_emplacement() or wall_guard or summoned or retreating:   # (Healers go to the hurt their own way)
 		answering = null
 		free_run = false
 		return

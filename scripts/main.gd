@@ -2025,7 +2025,7 @@ func give_order(field: String, value, units: Array = []) -> void:
 	for w in units:
 		match field:
 			"priority":
-				if not Warrior.priorities_for_unit(w).has(value):
+				if not Warrior.known_priorities(w).has(value):
 					continue   # (a Healer takes its own; the rest, target priorities)
 				if w.is_mobile_healer():
 					if value == "stay":
@@ -2444,8 +2444,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					rules.action()
 			KEY_J:
 				toggle_follow()
-			KEY_N:
-				toggle_commit()
 			KEY_O:
 				hud.toggle_orders(self)
 			KEY_G:

@@ -405,7 +405,7 @@ func _persistence() -> void:
 	check(w.move_mode == "guard" and w.zone_rect() == main.area_preset("left") and main.hud.orders_ui["area"]["left"].button_pressed,
 			"...a preset area (Left flank) is given and shown lit")
 	main.hud.orders_ui["move_mode"]["hold"].emit_signal("pressed")
-	check(w.move_mode == "hold" and not main.hud.orders_ui["area"]["left"].button_pressed, "...Hold: no area lit")
+	check(w.move_mode == "hold" and not main.hud.orders_ui.has("area"), "...Hold: the Area row goes")
 	main.hud.toggle_orders(main)
 	check(main.hud.orders_box == null, "...and O closes it")
 
@@ -677,18 +677,23 @@ func _group_panel() -> void:
 	var ui: Dictionary = main.hud.orders_ui
 	check(main.hud.orders_box != null and main.hud.orders_units.size() == 3 and ui.has("priority") and ui.has("care"),
 			"...the panel opens for all three, with a Target row and a Healers row")
-	check(not ui["priority"]["weakest"].button_pressed and not ui["priority"]["closest"].button_pressed, "...differing targets: nothing lit in that row")
+	check(not ui["priority"]["strongest"].button_pressed and not ui["priority"]["closest"].button_pressed, "...differing targets: nothing lit in that row")
 	ui["priority"]["strongest"].emit_signal("pressed")
 	check(a.priority == "strongest" and b.priority == "strongest" and h.priority == "revive" and ui["priority"]["strongest"].button_pressed,
 			"...Target goes to the fighters at once (not the Healer)")
-	ui["care"]["danger"].emit_signal("pressed")
-	check(h.priority == "danger", "...the Healers row goes to the Healer")
+	main.give_order("priority", "heal", [h])
+	ui["care"]["revive"].emit_signal("pressed")
+	check(h.priority == "revive", "...the Healers row goes to the Healer")
+	check(ui.has("priority") and ui.has("care") and ui.has("move_mode") and ui.has("danger_mode") and not ui.has("commit") and not ui.has("answer") and not ui.has("call_help"),
+			"...just the basics: Target, Healers, Position, When hurt (no Commit, Answer calls or Call for help rows)")
+	check(not ui["priority"].has("weakest") and not ui["care"].has("danger") and ui["care"].has("revive") and ui["care"].has("stay"),
+			"...Target is Closest/First/Strongest; Healers is Heal/Stay with")
 	ui["danger_mode"]["fall_back"].emit_signal("pressed")
-	ui["answer"]["now"].emit_signal("pressed")
-	ui["call_help"].button_pressed = false
-	ui["call_help"].emit_signal("pressed")
-	check([a, b, h].all(func(w): return w.danger_mode == "fall_back" and not w.call_help) and a.answer == "now" and b.answer == "now",
-			"...In danger, Call for help and Answer calls go to them all")
+	check([a, b, h].all(func(w): return w.danger_mode == "fall_back"), "...When hurt goes to them all")
+	check(not ui.has("area"), "...no Area row until Guard area is picked")
+	ui["move_mode"]["guard"].emit_signal("pressed")
+	ui = main.hud.orders_ui
+	check(ui.has("area"), "...picking Guard area brings the Area row up")
 	ui["area"]["center"].emit_signal("pressed")
 	check([a, b, h].all(func(w): return w.move_mode == "guard" and w.zone_rect() == main.area_preset("center")), "...and a preset area")
 	ui["area"]["draw"].emit_signal("pressed")
