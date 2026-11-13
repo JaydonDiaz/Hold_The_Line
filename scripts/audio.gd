@@ -197,8 +197,48 @@ func _ready() -> void:
 	# are ready first, and play() skips any that aren't yet.
 	_pick_up()
 	if _picked < _piece_count():
-		_thread = Thread.new()
-		_thread.start(_compose_all)
+		_start_composer()
+
+
+## Starts the composer thread, if this build can run one. A web build without thread
+## support can't (nothing would ever be composed): it makes the effects on the main
+## thread instead, a few a frame (each takes a few milliseconds; the music, seconds a
+## piece, is left out there).
+func _start_composer() -> void:
+	if not _threads_ok():
+		_main_thread_effects = true
+		return
+	_thread = Thread.new()
+	if _thread.start(_compose_all) != OK:
+		_main_thread_effects = true
+
+
+static func _threads_ok() -> bool:
+	if OS.has_environment("HTL_NO_THREADS"):
+		return false   # (to try the web's fallback on the desktop)
+	return not OS.has_feature("web") or OS.has_feature("threads")
+
+
+var _main_thread_effects := false
+const EFFECTS_BUDGET_MS := 8.0   # main-thread effects: at most this much of a frame on them
+
+
+## The fallback: effects made on the main thread, as many as fit in a few milliseconds.
+func _make_effects_here() -> void:
+	var start := Time.get_ticks_msec()
+	for sound_name in SOUNDS:
+		if Time.get_ticks_msec() - start > EFFECTS_BUDGET_MS:
+			return
+		_cache_lock.lock()
+		var have := _cache.has("fx:" + sound_name)
+		_cache_lock.unlock()
+		if have:
+			continue
+		var made: AudioStreamWAV = _render_effect(SOUNDS[sound_name])
+		_cache_lock.lock()
+		_cache["fx:" + sound_name] = made
+		_cache_lock.unlock()
+	_main_thread_effects = false   # (all made)
 
 
 func _exit_tree() -> void:
@@ -266,7 +306,7 @@ func prepare(track: String) -> void:
 			_wanted_first.append(piece)
 			missing = true
 	_cache_lock.unlock()
-	if missing and (_thread == null or not _thread.is_alive()):
+	if missing and _threads_ok() and (_thread == null or not _thread.is_alive()):
 		if _thread != null and _thread.is_started():
 			_thread.wait_to_finish()
 		_thread = Thread.new()
@@ -274,6 +314,8 @@ func prepare(track: String) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _main_thread_effects:
+		_make_effects_here()
 	_pick_up()
 	var want := _wanted_track
 	if on_demand(want) and not _music.has(want):
