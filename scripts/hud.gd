@@ -1187,6 +1187,16 @@ func show_mode_select() -> void:
 
 	mode_title = title
 	mode_sub = sub
+	# Which build this is (to tell an itch.io build from another), and on the web, why
+	# it's silent at first (browsers hold sound back until the page is clicked).
+	var ver := _label(mode_screen, Vector2(WIDTH - 210, HEIGHT - 26), Vector2(200, 20), Color(1, 1, 1, 0.55), 12)
+	ver.text = "v%s" % ProjectSettings.get_setting("application/config/version", "")
+	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	ver.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if OS.has_feature("web"):
+		var hint := _label(mode_screen, Vector2(10, HEIGHT - 26), Vector2(320, 20), Color(1, 1, 1, 0.7), 12)
+		hint.text = "Sound starts with your first click or key"
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_show_cards("top")
 
 
@@ -1973,8 +1983,7 @@ func orders_meaning(w) -> String:
 				"strongest": "the toughest kind of enemy", "weakest": "the weakest kind of enemy",
 				"objective": "the enemy nearest to getting at what you're protecting"}[w.priority]
 		out += "Picks %s, " % pick
-		out += ("and sees it through: no switching until it falls, gets out of reach or leaves this unit's area. "
-				if w.commit == "focused" else "and switches whenever a better one comes along. ")
+		out += ("and sticks with it until it falls or gets away. " if w.commit == "focused" else "and switches whenever a better one comes along. ")
 	if w.is_emplacement() or w.wall_guard:
 		out += "Never moves: fights what comes in range."
 	else:
@@ -1987,11 +1996,9 @@ func orders_meaning(w) -> String:
 				out += "Chases enemies anywhere on the field."
 		if w.uses_targeting() and w.move_mode != "hold":
 			out += " Strikes anything it passes on the way."
-		out += " In danger (badly hurt and under attack) it %s%s." % ["falls back to a Healer, its post or the castle" if w.danger_mode == "fall_back" else "fights on",
-				" and calls for help" if w.call_help else ""]
-		if not w.is_mobile_healer():
-			out += {"ignore": " Doesn't answer calls for help.", "after": " Answers calls for help once its own enemy's dealt with, going wherever it's needed.",
-					"now": " Answers calls for help at once, dropping its enemy and going wherever it's needed."}[w.answer]
+		out += " When badly hurt it %s." % ("falls back to a Healer, its post or the castle (still shooting or healing on the way, if it can)" if w.danger_mode == "fall_back" else "fights on")
+		if not w.is_mobile_healer() and w.answer != "ignore":
+			out += " Goes to others' calls for help."
 	return out
 
 
