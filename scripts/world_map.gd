@@ -314,7 +314,7 @@ func _mission_row(k: String, id: String) -> Control:
 	var bonus: Dictionary = m.get("bonus_points", {})
 	if optional and not bonus.is_empty() and not won:
 		extra = "  ·  first win: " + ", ".join(bonus.keys().map(func(kind): return "+%d %s point" % [bonus[kind], Data.WARRIORS[kind]["name"]]))
-	pick.text = "%s   %s  ·  %s%s" % [{"Won": "✓", "Next": "▶", "Optional": "◇", "Later": "·"}[state], m["name"], campaign.length_text(m), extra]
+	pick.text = "%s:  %s  ·  %s%s" % [state, m["name"], campaign.length_text(m), extra]   # (words, not symbols: the built-in font has no check marks or solid arrows)
 	var col: Color = {"Won": Color(0.75, 0.95, 0.6), "Next": Color(1, 0.85, 0.3), "Optional": Color(0.85, 0.8, 1.0), "Later": Color(0.6, 0.58, 0.55)}[state]
 	pick.add_theme_color_override("font_color", col)
 	pick.add_theme_color_override("font_hover_color", col.lightened(0.2))

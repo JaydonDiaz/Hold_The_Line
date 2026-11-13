@@ -92,8 +92,9 @@ func _ready() -> void:
 	lock_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	lock_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	for side in [-1, 1]:
-		var arrow := _button(Vector2.ZERO, Vector2(52, 90), "◀" if side < 0 else "▶")
-		arrow.add_theme_font_size_override("font_size", 28)
+		var arrow := _button(Vector2.ZERO, Vector2(52, 90), "")
+		arrow.icon = _arrow_icon(side)   # (drawn, not a text arrow: the game's font has none, and the web has no system fonts to borrow one from)
+		arrow.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		arrow.tooltip_text = "Previous battlefield (Left)" if side < 0 else "Next battlefield (Right)"
 		arrow.pressed.connect(func(): show_map(at + side))
 		arrows.append(arrow)
@@ -244,3 +245,17 @@ func _button(pos: Vector2, sz: Vector2, text: String) -> Button:
 	b.add_theme_font_size_override("font_size", 22)
 	add_child(b)
 	return b
+
+
+## A solid arrowhead pointing left (side -1) or right (side 1), as a little texture.
+static func _arrow_icon(side: int) -> ImageTexture:
+	var w := 18
+	var h := 30
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		var half := 1.0 - absf(y - (h - 1) / 2.0) / ((h - 1) / 2.0)   # 0 at the top and bottom, 1 in the middle
+		for x in w:
+			var reach := float(x if side > 0 else w - 1 - x) / (w - 1)
+			if reach <= half:
+				img.set_pixel(x, y, Color(1, 0.95, 0.85))
+	return ImageTexture.create_from_image(img)
