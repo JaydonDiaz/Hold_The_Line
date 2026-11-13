@@ -1166,14 +1166,7 @@ func show_splash(then: Callable) -> void:
 	dark.size = Vector2(WIDTH, HEIGHT)
 	splash.add_child(dark)
 	_bleed(dark)   # (the night sky's colour all round, on a wide or tall window)
-	var pic := TextureRect.new()
-	pic.texture = load("res://splash.png")
-	pic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	pic.size = Vector2(WIDTH, HEIGHT)
-	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	splash.add_child(pic)
+	splash.add_child(preload("res://scripts/splash_art.gd").new())   # (the splash, drawn in code and animated)
 	var go := _button(splash, Vector2(WIDTH / 2.0 - 130, 88), Vector2(260, 66), "Start Game")
 	go.add_theme_font_size_override("font_size", 28)
 	for state in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color"]:

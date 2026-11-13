@@ -33,9 +33,9 @@ func _run() -> void:
 	for i in 10:
 		await process_frame
 	var buttons: Array = main.hud.splash.find_children("*", "Button", true, false)
-	var pics: Array = main.hud.splash.find_children("*", "TextureRect", true, false)
-	check(buttons.size() == 1 and buttons[0].text == "Start Game" and pics.size() == 1 and pics[0].texture != null,
-			"The start screen: the splash picture and a Start Game button")
+	var art: Array = main.hud.splash.get_children().filter(func(c): return c.get_script() == preload("res://scripts/splash_art.gd"))
+	check(buttons.size() == 1 and buttons[0].text == "Start Game" and art.size() == 1,
+			"The start screen: the animated splash picture and a Start Game button")
 	check(main.audio._wanted_track == "", "...silent while it's up")
 	buttons[0].emit_signal("pressed")
 	for i in 40:
