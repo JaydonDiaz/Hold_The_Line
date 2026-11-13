@@ -11,9 +11,9 @@ const H := 1040.0
 const OUTLINE := Color(0.06, 0.04, 0.07)
 const SCALE := 6.0
 # The troops: [kind, centre x, foot y, facing left].
-const TROOPS := [["bard", 250.0, 724.0, false], ["alchemist", 392.0, 724.0, true],
-	["mage", 172.0, 852.0, false], ["healer", 320.0, 856.0, false], ["frost", 468.0, 852.0, true],
-	["archer", 188.0, 986.0, false], ["swordsman", 312.0, 1032.0, false], ["martial", 452.0, 986.0, true]]
+const TROOPS := [["bard", 250.0, 724.0, true], ["alchemist", 392.0, 724.0, false],
+	["mage", 172.0, 852.0, true], ["healer", 320.0, 856.0, false], ["frost", 468.0, 852.0, false],
+	["archer", 188.0, 986.0, true], ["swordsman", 312.0, 1032.0, false], ["martial", 452.0, 986.0, true]]
 const PIX := 4.0   # the Ogre King is drawn at a quarter size and shown 4x: chunky pixels, like the rest of the game
 
 var t := 0.0
@@ -180,7 +180,7 @@ func _troop(kind: String, foot: Vector2, left: bool) -> void:
 		"bard":
 			for i in 3:
 				var k := fmod(t * 0.5 + i / 3.0, 1.0)
-				var n := foot + Vector2(-50 + sin(k * 6.0 + i) * 12.0, -110 - k * 90.0)
+				var n := foot + Vector2((50.0 if left else -50.0) + sin(k * 6.0 + i) * 12.0, -110 - k * 90.0)
 				var col: Color = [Color(1, 0.85, 0.3), Color(0.5, 0.85, 1.0), Color(1, 0.6, 0.85)][i]
 				col.a = 1.0 - k
 				draw_rect(Rect2(n, Vector2(7, 6)), col)
@@ -188,7 +188,7 @@ func _troop(kind: String, foot: Vector2, left: bool) -> void:
 		"alchemist":
 			for i in 4:
 				var k := fmod(t * 0.8 + i * 0.25, 1.0)
-				var b := foot + Vector2(54 + sin(k * 9.0 + i) * 6.0, -120 - k * 50.0)
+				var b := foot + Vector2((54.0 if left else -54.0) + sin(k * 9.0 + i) * 6.0, -120 - k * 50.0)
 				draw_rect(Rect2(b, Vector2(5, 5)), Color(0.55, 1.0, 0.4, 1.0 - k))
 		"mage", "frost":
 			for i in 3:
