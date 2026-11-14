@@ -75,16 +75,15 @@ func _bake_ogre() -> ImageTexture:
 	var h := int(720 / PIX)
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var body := PackedVector2Array(BODY.map(func(p): return p / PIX))
-	var club := PackedVector2Array(CLUB.map(func(p): return p / PIX))
 	var crown := PackedVector2Array(CROWN.map(func(p): return p / PIX))
 	var inside := {}
 	for y in h:
 		for x in w:
 			var c := Vector2(x + 0.5, y + 0.5)
-			if Geometry2D.is_point_in_polygon(c, body) or Geometry2D.is_point_in_polygon(c, club) or Geometry2D.is_point_in_polygon(c, crown):
+			if Geometry2D.is_point_in_polygon(c, body) or Geometry2D.is_point_in_polygon(c, crown):
 				inside[Vector2i(x, y)] = true
-	var dark := Color(0.04, 0.025, 0.045)
-	var rim := Color(0.6, 0.09, 0.07)
+	var dark := Color(0.02, 0.015, 0.03)   # (barely there against the night: his eyes are what you see)
+	var rim := Color(0.2, 0.045, 0.05)
 	for p in inside:
 		var edge := false
 		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -96,14 +95,14 @@ func _bake_ogre() -> ImageTexture:
 	for i in [1, 3, 5, 7]:
 		var g: Vector2 = CROWN[i] / PIX
 		for d in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-			img.set_pixel(int(g.x) + d.x - 1, int(g.y) + d.y - 1, Color(0.72, 0.5, 0.18))
+			img.set_pixel(int(g.x) + d.x - 1, int(g.y) + d.y - 1, Color(0.3, 0.21, 0.09))
 	# Tusks.
 	for side in [-1.0, 1.0]:
 		var tx := int((320 + side * 52) / PIX)
 		for k in 7:
 			var half := 1 if k < 4 else 0
 			for dx in range(-half, half + 1):
-				img.set_pixel(tx + dx, int(440 / PIX) + k, Color(0.55, 0.5, 0.45))
+				img.set_pixel(tx + dx, int(440 / PIX) + k, Color(0.12, 0.11, 0.11))
 	return ImageTexture.create_from_image(img)
 
 
