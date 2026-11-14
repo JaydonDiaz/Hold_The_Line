@@ -1174,12 +1174,15 @@ func show_splash(then: Callable) -> void:
 	go.focus_mode = Control.FOCUS_ALL
 	go.grab_focus.call_deferred()   # (so Enter or Space press it)
 	go.pressed.connect(func():
+		go.disabled = true
+		var leaving := splash
+		splash = null   # (the title music may start)
+		then.call()   # the title screen, built underneath...
+		move_child(leaving, -1)   # ...while this stays on top until it's fully in, then fades away (nothing behind shows through)
 		var tw := create_tween()
-		tw.tween_property(splash, "modulate:a", 0.0, 0.35)
-		tw.tween_callback(func():
-			splash.queue_free()
-			splash = null
-			then.call()))
+		tw.tween_interval(0.45)
+		tw.tween_property(leaving, "modulate:a", 0.0, 0.35)
+		tw.tween_callback(leaving.queue_free))
 	splash.modulate.a = 0.0
 	create_tween().tween_property(splash, "modulate:a", 1.0, 0.4)
 
