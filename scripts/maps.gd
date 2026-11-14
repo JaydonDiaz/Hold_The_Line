@@ -85,18 +85,19 @@ const MAPS := {
 		"bot_posts": [Vector2(190, 470), Vector2(450, 470), Vector2(320, 580), Vector2(250, 600), Vector2(390, 600),
 			Vector2(190, 360), Vector2(450, 360), Vector2(280, 650), Vector2(360, 650)],
 	},
-	# Greenwood: three narrow roads through the forest (each about 72-100px), meeting in a
-	# clearing above the gate. Too many to wall off, too narrow for Swordsmen alone.
+	# Greenwood: three forest roads (each about 120-135px), between thin belts of trees on
+	# the flanks and two narrow stands between the roads, meeting in a clearing above the
+	# gate. Too many to wall off, too wide for a lone Swordsman.
 	"greenwood_roads": {
 		"name": "Greenwood Roads", "battle": "greenwood", "music": "forest",
 		"blurb": "Three forest\nroads meeting\nat the gate",
 		"biome": "meadow", "tint": Color(0.86, 0.96, 0.86),
-		"lanes": [[122, 184], [282, 358], [462, 518]],
+		"lanes": [[92, 196], [268, 372], [444, 548]],
 		"terrain": [
-			{"kind": "trees", "poly": [Vector2(0, -120), Vector2(110, -120), Vector2(110, 96), Vector2(140, 250), Vector2(110, 420), Vector2(60, 560), Vector2(0, 600)]},
-			{"kind": "trees", "poly": [Vector2(200, -120), Vector2(270, -120), Vector2(270, 96), Vector2(290, 220), Vector2(258, 380), Vector2(240, 480), Vector2(196, 420), Vector2(214, 260), Vector2(196, 96)]},
-			{"kind": "trees", "poly": [Vector2(370, -120), Vector2(450, -120), Vector2(450, 96), Vector2(436, 260), Vector2(452, 420), Vector2(400, 480), Vector2(382, 380), Vector2(362, 220), Vector2(370, 96)]},
-			{"kind": "trees", "poly": [Vector2(530, -120), Vector2(640, -120), Vector2(640, 600), Vector2(580, 560), Vector2(530, 420), Vector2(510, 260), Vector2(530, 96)]},
+			{"kind": "trees", "poly": [Vector2(0, -120), Vector2(80, -120), Vector2(80, 96), Vector2(96, 250), Vector2(80, 420), Vector2(40, 560), Vector2(0, 600)]},
+			{"kind": "trees", "poly": [Vector2(210, -120), Vector2(256, -120), Vector2(256, 96), Vector2(262, 220), Vector2(252, 380), Vector2(240, 480), Vector2(212, 420), Vector2(220, 260), Vector2(206, 96)]},
+			{"kind": "trees", "poly": [Vector2(384, -120), Vector2(430, -120), Vector2(434, 96), Vector2(420, 260), Vector2(428, 420), Vector2(400, 480), Vector2(388, 380), Vector2(378, 220), Vector2(384, 96)]},
+			{"kind": "trees", "poly": [Vector2(560, -120), Vector2(640, -120), Vector2(640, 600), Vector2(600, 560), Vector2(560, 420), Vector2(544, 250), Vector2(560, 96)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"trails": [[Vector2(155, 96), Vector2(170, 260), Vector2(160, 420), Vector2(250, 560), Vector2(320, 736)], [Vector2(320, 96), Vector2(320, 300), Vector2(320, 500), Vector2(320, 736)], [Vector2(490, 96), Vector2(475, 260), Vector2(480, 420), Vector2(390, 560), Vector2(320, 736)]],
