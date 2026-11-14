@@ -95,11 +95,11 @@ func _steps() -> void:
 	await _mission("mo_steps", ["mercyvale", "deepdelve"])
 	var paths = main.paths
 	check(main.map_id == "monastery_steps" and main.rules.lines().size() == 4, "S  the Thousand Steps: its map, four terraces to hold")
-	var walk := [Vector2(240, 266), Vector2(400, 266), Vector2(140, 408), Vector2(290, 408), Vector2(516, 408), Vector2(258, 540), Vector2(382, 540)]
-	var wall := [Vector2(100, 266), Vector2(560, 266), Vector2(50, 408), Vector2(210, 408), Vector2(400, 408), Vector2(100, 540), Vector2(530, 540)]
+	var walk := [Vector2(240, 266), Vector2(400, 266), Vector2(140, 408), Vector2(320, 408), Vector2(516, 408), Vector2(258, 540), Vector2(382, 540)]
+	var wall := [Vector2(100, 266), Vector2(560, 266), Vector2(50, 408), Vector2(220, 408), Vector2(420, 408), Vector2(100, 540), Vector2(530, 540)]
 	check(walk.all(func(p): return not paths.blocked(p, 8.0)), "S  ...every stair and the rope bridge can be walked")
 	check(wall.all(func(p): return paths.blocked(p, 8.0)), "S  ...the cliffs and the chasm can't")
-	check(paths.wade_factor(Vector2(240, 266)) < 1.0 and paths.wade_factor(Vector2(140, 408)) == 1.0, "S  ...stairs are slow going; the bridge isn't")
+	check(paths.wade_factor(Vector2(240, 266)) < 1.0 and paths.wade_factor(Vector2(320, 408)) == 1.0, "S  ...stairs are slow going; the bridge isn't")
 	var lent: Array = main.get_warriors().filter(func(w): return w.kind == "martial")
 	check(lent.size() == 3 and lent.all(func(w): return w.hits_air()), "S  three masters lent, trained in Spirit Bolts: they hit fliers")
 	check(main.allowed("martial") and not main.allowed("archer") and not main.allowed("mage"), "S  ...and with no Archers or magic of its own, this army can hire Martial Artists here")

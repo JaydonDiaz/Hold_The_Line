@@ -200,7 +200,7 @@ const MAPS := {
 			Vector2(240, 610), Vector2(400, 610)],
 	},
 	# The High Monastery, the Thousand Steps: four terraces down the mountain, each ledge
-	# crossed by stairs (and, on the middle one, a rope bridge over a chasm on the left).
+	# crossed by stairs (and, on the middle one, a rope bridge over a chasm in the centre).
 	# The Fighting Retreat's lines hold just below each ledge, where the enemy has to come
 	# down the stairs; the camp is at the foot.
 	"monastery_steps": {
@@ -214,11 +214,11 @@ const MAPS := {
 			{"kind": "cliff", "poly": [Vector2(286, 250), Vector2(354, 250), Vector2(354, 282), Vector2(286, 282)]},
 			{"kind": "stairs", "poly": [Vector2(354, 246), Vector2(444, 246), Vector2(444, 286), Vector2(354, 286)]},
 			{"kind": "cliff", "poly": [Vector2(444, 250), Vector2(640, 250), Vector2(640, 282), Vector2(444, 282)]},
-			{"kind": "chasm", "poly": [Vector2(0, 392), Vector2(104, 392), Vector2(104, 424), Vector2(0, 424)]},
-			{"kind": "rope_bridge", "poly": [Vector2(104, 384), Vector2(176, 384), Vector2(176, 432), Vector2(104, 432)]},
-			{"kind": "chasm", "poly": [Vector2(176, 392), Vector2(250, 392), Vector2(250, 424), Vector2(176, 424)]},
-			{"kind": "stairs", "poly": [Vector2(250, 388), Vector2(330, 388), Vector2(330, 428), Vector2(250, 428)]},
-			{"kind": "cliff", "poly": [Vector2(330, 392), Vector2(476, 392), Vector2(476, 424), Vector2(330, 424)]},
+			{"kind": "cliff", "poly": [Vector2(0, 392), Vector2(104, 392), Vector2(104, 424), Vector2(0, 424)]},
+			{"kind": "stairs", "poly": [Vector2(104, 388), Vector2(176, 388), Vector2(176, 428), Vector2(104, 428)]},
+			{"kind": "chasm", "poly": [Vector2(176, 392), Vector2(282, 392), Vector2(282, 424), Vector2(176, 424)]},
+			{"kind": "rope_bridge", "poly": [Vector2(282, 384), Vector2(358, 384), Vector2(358, 432), Vector2(282, 432)]},
+			{"kind": "chasm", "poly": [Vector2(358, 392), Vector2(476, 392), Vector2(476, 424), Vector2(358, 424)]},
 			{"kind": "stairs", "poly": [Vector2(476, 388), Vector2(556, 388), Vector2(556, 428), Vector2(476, 428)]},
 			{"kind": "cliff", "poly": [Vector2(556, 392), Vector2(640, 392), Vector2(640, 424), Vector2(556, 424)]},
 			{"kind": "cliff", "poly": [Vector2(0, 524), Vector2(216, 524), Vector2(216, 556), Vector2(0, 556)]},
