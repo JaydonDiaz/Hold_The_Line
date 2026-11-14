@@ -61,28 +61,29 @@ const MAPS := {
 		"bot_posts": [Vector2(240, 440), Vector2(205, 470), Vector2(275, 470), Vector2(412, 440), Vector2(377, 470),
 			Vector2(447, 470), Vector2(320, 520), Vector2(240, 520), Vector2(412, 520)],
 	},
-	# Stonehollow: a mountain pass between cliffs, split by the old quarry pit into two
-	# lanes about 120px wide that meet again before the gate. Barricades across the
-	# lanes make Sappers blow through them.
+	# Stonehollow: a mountain pass between low cliffs, split by a great rock formation (the
+	# quarry's spoil heaped up) into two lanes about 130-150px wide that meet again before
+	# the gate. Barricades across the lanes make Sappers blow through them.
 	"stonehollow_quarry": {
 		"name": "Stonehollow Quarry", "battle": "quarry",
-		"blurb": "A mountain pass\nsplit by the\nquarry pit",
+		"blurb": "A mountain pass\nsplit by a\ngreat rock",
 		"biome": "mountain",
-		"lanes": [[214, 426]],
+		"lanes": [[160, 480]],
 		"terrain": [
-			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(204, -120), Vector2(204, 96), Vector2(188, 200), Vector2(172, 330),
-				Vector2(160, 470), Vector2(150, 600), Vector2(96, 636), Vector2(0, 648)]},
-			{"kind": "cliff", "poly": [Vector2(436, -120), Vector2(640, -120), Vector2(640, 648), Vector2(544, 636), Vector2(490, 600),
-				Vector2(480, 470), Vector2(468, 330), Vector2(452, 200), Vector2(436, 96)]},
-			{"kind": "pit", "poly": [Vector2(296, 378), Vector2(344, 378), Vector2(356, 392), Vector2(358, 512), Vector2(344, 530),
-				Vector2(296, 530), Vector2(282, 512), Vector2(284, 392)]},
+			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(150, -120), Vector2(150, 96), Vector2(138, 200), Vector2(126, 330),
+				Vector2(116, 470), Vector2(110, 600), Vector2(70, 636), Vector2(0, 648)]},
+			{"kind": "cliff", "poly": [Vector2(490, -120), Vector2(640, -120), Vector2(640, 648), Vector2(570, 636), Vector2(530, 600),
+				Vector2(524, 470), Vector2(514, 330), Vector2(502, 200), Vector2(490, 96)]},
+			{"kind": "rock", "poly": [Vector2(304, 236), Vector2(340, 230), Vector2(370, 258), Vector2(386, 320), Vector2(388, 400),
+				Vector2(372, 470), Vector2(352, 512), Vector2(320, 524), Vector2(288, 512), Vector2(268, 470), Vector2(252, 400),
+				Vector2(254, 320), Vector2(270, 258)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(320, 96), Vector2(296, 260), Vector2(236, 370), Vector2(222, 470), Vector2(252, 590), Vector2(320, 736)],
-			[Vector2(320, 96), Vector2(344, 260), Vector2(404, 370), Vector2(418, 470), Vector2(388, 590), Vector2(320, 736)]],
+		"trails": [[Vector2(320, 96), Vector2(290, 190), Vector2(200, 290), Vector2(186, 420), Vector2(214, 560), Vector2(320, 736)],
+			[Vector2(320, 96), Vector2(350, 190), Vector2(440, 290), Vector2(454, 420), Vector2(426, 560), Vector2(320, 736)]],
 		"castle": "guildhall",
-		"bot_posts": [Vector2(226, 560), Vector2(266, 590), Vector2(414, 560), Vector2(374, 590), Vector2(320, 610),
-			Vector2(226, 470), Vector2(414, 470), Vector2(280, 640), Vector2(360, 640)],
+		"bot_posts": [Vector2(190, 470), Vector2(450, 470), Vector2(320, 580), Vector2(250, 600), Vector2(390, 600),
+			Vector2(190, 360), Vector2(450, 360), Vector2(280, 650), Vector2(360, 650)],
 	},
 	# Greenwood: three narrow roads through the forest (each about 72-100px), meeting in a
 	# clearing above the gate. Too many to wall off, too narrow for Swordsmen alone.
