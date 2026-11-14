@@ -145,28 +145,26 @@ const MAPS := {
 			Vector2(440, 560), Vector2(320, 600), Vector2(260, 640), Vector2(380, 640)],
 	},
 	# --- The North (Phase 4) ---------------------------------------------------------------
-	# Frostmarch, the Frozen Pass: ice cliffs close in on both sides; a rock splits the way in;
-	# a frozen lake fills the pass, its middle solid (130px) and thin ice either side. A Troll
-	# that strays onto the thin ice takes it down with it, and then only the middle is left.
-	# The pass narrows to 180px above the camp.
+	# Frostmarch, the Frozen Pass: open snowfield, a rock splitting the way in, and a frozen
+	# lake right across the field: solid in the middle (170px) and thin ice out to either
+	# edge. A Troll that strays onto the thin ice takes it down with it, and then only the
+	# middle is left to cross.
 	"frostmarch_pass": {
 		"name": "The Frozen Pass", "battle": "frostpass", "music": "snow",
-		"blurb": "Ice cliffs and a\nfrozen lake in\nthe pass",
+		"blurb": "A frozen lake\nright across\nthe pass",
 		"biome": "snow",
-		"lanes": [[180, 460]],
+		"lanes": [[60, 580]],
 		"terrain": [
-			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(160, -120), Vector2(150, 180), Vector2(166, 300), Vector2(152, 480),
-				Vector2(200, 600), Vector2(230, 660), Vector2(206, 736), Vector2(0, 736)]},
-			{"kind": "cliff", "poly": [Vector2(640, -120), Vector2(480, -120), Vector2(490, 180), Vector2(474, 300), Vector2(488, 480),
-				Vector2(440, 600), Vector2(410, 660), Vector2(434, 736), Vector2(640, 736)]},
 			{"kind": "rock", "poly": [Vector2(292, 196), Vector2(330, 186), Vector2(352, 204), Vector2(348, 236), Vector2(318, 248),
 				Vector2(290, 232)]},
-			{"kind": "ice", "poly": [Vector2(172, 318), Vector2(468, 318), Vector2(474, 470), Vector2(168, 470)]},
-			{"kind": "thin_ice", "poly": [Vector2(180, 330), Vector2(255, 330), Vector2(255, 460), Vector2(180, 460)]},
-			{"kind": "thin_ice", "poly": [Vector2(385, 330), Vector2(460, 330), Vector2(460, 460), Vector2(385, 460)]},
+			{"kind": "ice", "poly": [Vector2(0, 322), Vector2(160, 314), Vector2(480, 314), Vector2(640, 322), Vector2(640, 466),
+				Vector2(480, 474), Vector2(160, 474), Vector2(0, 466)]},
+			{"kind": "thin_ice", "poly": [Vector2(0, 334), Vector2(235, 328), Vector2(235, 462), Vector2(0, 456)]},
+			{"kind": "thin_ice", "poly": [Vector2(405, 328), Vector2(640, 334), Vector2(640, 456), Vector2(405, 462)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(320, 96), Vector2(320, 170), Vector2(270, 270), Vector2(320, 400), Vector2(320, 560), Vector2(320, 736)]],
+		"trails": [[Vector2(320, 96), Vector2(320, 170), Vector2(270, 270), Vector2(320, 400), Vector2(320, 560), Vector2(320, 736)],
+			[Vector2(110, 96), Vector2(130, 260), Vector2(250, 300)], [Vector2(530, 96), Vector2(510, 260), Vector2(390, 300)]],
 		"castle": "fort",
 		"bot_posts": [Vector2(320, 500), Vector2(260, 540), Vector2(380, 540), Vector2(320, 600), Vector2(250, 600),
 			Vector2(390, 600), Vector2(320, 650)],
