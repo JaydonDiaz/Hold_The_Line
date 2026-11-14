@@ -104,25 +104,27 @@ const MAPS := {
 		"bot_posts": [Vector2(250, 600), Vector2(320, 580), Vector2(390, 600), Vector2(200, 640), Vector2(440, 640),
 			Vector2(320, 650), Vector2(160, 560), Vector2(480, 560), Vector2(320, 520)],
 	},
-	# Deepdelve: a mine canyon. Cliff spurs from either side make one long road zig-zag
-	# down to the gate (enemies walk about three times as far, bunching at the turns).
+	# Deepdelve: a mine canyon. Three cliff spurs from alternate sides make one long road
+	# zig-zag down to the gate (enemies walk about four times as far, bunching at the
+	# turns); the last, nearest the castle, sends everything round by the right.
 	"deepdelve_switchbacks": {
 		"name": "Deepdelve Canyon", "battle": "deepdelve",
 		"blurb": "A mine canyon\nthat zig-zags\ndown to the gate",
 		"biome": "mountain",
-		"lanes": [[232, 408]],
+		"lanes": [[172, 468]],
 		"terrain": [
-			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(222, -120), Vector2(222, 96), Vector2(212, 400), Vector2(200, 640), Vector2(0, 640)]},
-			{"kind": "cliff", "poly": [Vector2(418, -120), Vector2(640, -120), Vector2(640, 640), Vector2(440, 640), Vector2(428, 400), Vector2(418, 96)]},
-			{"kind": "cliff", "poly": [Vector2(210, 226), Vector2(346, 246), Vector2(346, 292), Vector2(210, 302)]},
-			{"kind": "cliff", "poly": [Vector2(430, 396), Vector2(292, 416), Vector2(292, 462), Vector2(430, 472)]},
-			{"kind": "rock", "poly": [Vector2(210, 560), Vector2(250, 556), Vector2(256, 600), Vector2(210, 604)]},
+			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(160, -120), Vector2(160, 96), Vector2(152, 400), Vector2(144, 640), Vector2(0, 640)]},
+			{"kind": "cliff", "poly": [Vector2(480, -120), Vector2(640, -120), Vector2(640, 640), Vector2(496, 640), Vector2(488, 400), Vector2(480, 96)]},
+			{"kind": "cliff", "poly": [Vector2(150, 210), Vector2(380, 226), Vector2(380, 270), Vector2(150, 282)]},
+			{"kind": "cliff", "poly": [Vector2(490, 360), Vector2(260, 376), Vector2(260, 420), Vector2(490, 432)]},
+			{"kind": "cliff", "poly": [Vector2(146, 506), Vector2(380, 520), Vector2(380, 558), Vector2(146, 568)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(320, 96), Vector2(330, 180), Vector2(390, 215), Vector2(390, 270), Vector2(330, 330), Vector2(250, 370), Vector2(245, 430), Vector2(300, 500), Vector2(310, 620), Vector2(320, 736)]],
+		"trails": [[Vector2(320, 96), Vector2(330, 160), Vector2(420, 195), Vector2(430, 260), Vector2(360, 315), Vector2(230, 335),
+			Vector2(205, 400), Vector2(240, 465), Vector2(400, 480), Vector2(436, 540), Vector2(400, 610), Vector2(320, 736)]],
 		"castle": "guildgate",
-		"bot_posts": [Vector2(320, 560), Vector2(290, 616), Vector2(370, 600), Vector2(320, 640), Vector2(380, 520),
-			Vector2(260, 520), Vector2(300, 360), Vector2(380, 340), Vector2(320, 680)],
+		"bot_posts": [Vector2(436, 590), Vector2(390, 620), Vector2(320, 640), Vector2(260, 650), Vector2(436, 470),
+			Vector2(300, 470), Vector2(230, 320), Vector2(400, 320), Vector2(320, 680)],
 	},
 	# Mercy Vale: farmland broken by hedgerows with gaps, enemies down both flanks, and the
 	# shrine in the middle (nothing can be built on it or by it).
