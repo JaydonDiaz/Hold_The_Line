@@ -1226,10 +1226,6 @@ func show_mode_select() -> void:
 	ver.text = "v%s" % ProjectSettings.get_setting("application/config/version", "")
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ver.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if OS.has_feature("web"):
-		var hint := _label(mode_screen, Vector2(10, HEIGHT - 26), Vector2(320, 20), Color(1, 1, 1, 0.7), 12)
-		hint.text = "Sound starts with your first click or key"
-		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_show_cards("top")
 
 

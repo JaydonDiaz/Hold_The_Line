@@ -67,8 +67,8 @@ const BODY := [Vector2(0, 600), Vector2(40, 540), Vector2(120, 488), Vector2(196
 	Vector2(426, 252), Vector2(448, 300), Vector2(444, 380), Vector2(430, 430), Vector2(444, 462), Vector2(520, 488),
 	Vector2(600, 540), Vector2(640, 570), Vector2(640, 720), Vector2(0, 720)]
 const CLUB := [Vector2(540, 500), Vector2(590, 236), Vector2(606, 226), Vector2(632, 240), Vector2(578, 506)]
-const CROWN := [Vector2(222, 230), Vector2(222, 190), Vector2(260, 218), Vector2(284, 172), Vector2(320, 216),
-	Vector2(356, 172), Vector2(380, 218), Vector2(418, 190), Vector2(418, 230)]
+const CROWN := [Vector2(250, 236), Vector2(248, 184), Vector2(278, 212), Vector2(298, 164), Vector2(320, 206),
+	Vector2(342, 164), Vector2(362, 212), Vector2(392, 184), Vector2(390, 236)]   # a solid crown sitting on his head
 
 func _bake_ogre() -> ImageTexture:
 	var w := int(W / PIX)
@@ -76,11 +76,12 @@ func _bake_ogre() -> ImageTexture:
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	var body := PackedVector2Array(BODY.map(func(p): return p / PIX))
 	var club := PackedVector2Array(CLUB.map(func(p): return p / PIX))
+	var crown := PackedVector2Array(CROWN.map(func(p): return p / PIX))
 	var inside := {}
 	for y in h:
 		for x in w:
 			var c := Vector2(x + 0.5, y + 0.5)
-			if Geometry2D.is_point_in_polygon(c, body) or Geometry2D.is_point_in_polygon(c, club):
+			if Geometry2D.is_point_in_polygon(c, body) or Geometry2D.is_point_in_polygon(c, club) or Geometry2D.is_point_in_polygon(c, crown):
 				inside[Vector2i(x, y)] = true
 	var dark := Color(0.04, 0.025, 0.045)
 	var rim := Color(0.6, 0.09, 0.07)
@@ -91,13 +92,7 @@ func _bake_ogre() -> ImageTexture:
 			if q.x >= 0 and q.x < w and q.y >= 0 and q.y < h - 4 and not inside.has(q):
 				edge = true
 		img.set_pixelv(p, rim if edge else dark)
-	# The crown: its outline as pixel lines, gold studs on the points.
-	for i in CROWN.size() - 1:
-		var a2: Vector2 = CROWN[i] / PIX
-		var b2: Vector2 = CROWN[i + 1] / PIX
-		for k in 24:
-			var q := a2.lerp(b2, k / 23.0)
-			img.set_pixel(int(q.x), int(q.y), rim)
+	# Gold studs on the crown's points (the crown itself is part of the silhouette, rimmed like the rest).
 	for i in [1, 3, 5, 7]:
 		var g: Vector2 = CROWN[i] / PIX
 		for d in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
@@ -112,10 +107,10 @@ func _bake_ogre() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## The Ogre King over the hills, breathing a pixel at a time; his eyes smoulder, and
+## The Ogre King over the hills, breathing slowly; his eyes smoulder, and
 ## every few seconds flare.
 func _ogre() -> void:
-	var rise := roundf(sin(t * 0.6) * 1.0) * PIX
+	var rise := sin(t * 0.6) * 3.0   # (smooth: the pixels keep their size, the whole figure glides)
 	draw_texture_rect(ogre_tex, Rect2(0, rise, W, 720), false)
 	var flare := clampf(1.0 - absf(fmod(t, 5.0) - 4.6) * 4.0, 0.0, 1.0)
 	var glow := 0.65 + 0.2 * sin(t * 2.2) + 0.35 * flare
