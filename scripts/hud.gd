@@ -753,7 +753,8 @@ func refresh(main) -> void:
 	if not w.uses_targeting():
 		how += "  (no targeting)"
 	info_label.text = "%s - %s   Upgrades %d/%d\n%s" % [w.data["name"], how, w.total_upgrades(), Warrior.MAX_UPGRADES, w.stats_text()]
-	sell_btn.text = "Sell +%dg" % w.sell_value()
+	sell_btn.text = "Downed" if w.down_timer > 0.0 else "Sell +%dg" % w.sell_value()
+	sell_btn.disabled = w.down_timer > 0.0   # (no selling a downed troop)
 	target_btn.text = "Orders [O]\n%s" % _orders_short(w)
 	info_label.text += "\nOrders: " + orders_summary(w)
 	song_btn.text = "Song [G]\n%s" % ("On" if main.song_on else "Off")

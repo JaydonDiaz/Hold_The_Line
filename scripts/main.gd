@@ -683,7 +683,7 @@ const FOE_HINTS := {
 	"wolf": ["Wolf", "Fast. Runs past your troops to bite at the walls."],
 	"bat": ["Bat", "Flies over troops and walls: only ranged troops and spells reach it."],
 	"skeleton_archer": ["Skeleton Archer", "Hangs back and shoots: rush it down, or outrange it."],
-	"slime": ["Slime", "Blades and arrows can't hurt it. Use magic, ki or ice (ice lets steel bite)."],
+	"slime": ["Slime", "Blades and arrows can't hurt it. Use magic, ki, alchemy or ice (ice lets steel bite)."],
 	"sapper": ["Sapper", "Carries a bomb for your walls. Stop it before it gets there."],
 	"troll": ["Troll", "Huge and slow, and knocks troops back. Gang up on it."],
 	"warlord": ["Warlord", "A champion. Shrugs off stuns and hits like a falling tree."],
@@ -2249,6 +2249,9 @@ func sell_selected() -> void:
 		return
 	if selected.summoned:
 		hud.show_message("Skeletons can't be sold")
+		return
+	if selected.down_timer > 0.0:
+		hud.show_message("A downed troop can't be sold")
 		return
 	gold += selected.sell_value()
 	sfx("sell")

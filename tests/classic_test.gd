@@ -232,6 +232,23 @@ func _walls() -> void:
 	main.sell_selected()
 	await _frames(3)
 	check(main.get_barricades().is_empty() and main.gold > g, "...and selling it gives some gold back")
+	# A downed troop can't be sold (no cashing in the fallen); back on its feet, it can.
+	main._on_hire_pressed("swordsman")
+	main.hire_at(Vector2(320, 560))
+	main.placing_type = ""
+	var sw = main.get_warriors().filter(func(w): return w.kind == "swordsman")[-1]
+	sw.take_damage(1e9)
+	g = main.gold
+	main.selected = sw
+	main.sell_selected()
+	await _frames(3)
+	check(is_instance_valid(sw) and sw.down_timer > 0.0 and main.gold == g and main.hud.sell_btn.disabled, "A downed troop can't be sold (the Sell button says so)")
+	sw.down_timer = 0.0
+	sw.hp = sw.max_hp
+	main.selected = sw
+	main.sell_selected()
+	await _frames(3)
+	check(not is_instance_valid(sw) and main.gold > g, "...and once it's back up, it can")
 
 
 func _modes() -> void:
