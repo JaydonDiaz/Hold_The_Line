@@ -951,6 +951,22 @@ func _cutscene() -> void:
 			and box_story.lines.any(func(l): return l["who"] == "marshal"), "C  ...so the whole intro is one dialogue, the Marshal's line in it (%d lines)" % sable.size())
 	box_story.skip()
 	await process_frame
+	# The Marshal falls at Sable Crossing: after that, the Ogre King speaks in his place
+	# (the north always comes after; a third southern region may too).
+	var saved: Array = campaign.completed.duplicate()
+	campaign.completed = []
+	var speakers := func(key: String) -> Array:
+		return campaign.story_lines(key).map(func(l): return l["who"])
+	check(speakers.call("gw_exodus_outro").has("marshal") and not speakers.call("gw_exodus_outro").has("ogre"), "C  before Sable Crossing, the Marshal answers the elves joining")
+	campaign.completed = ["sable_crossing"]
+	var late := []
+	for key in CD.STORY:
+		var before_sable: bool = (key as String).begins_with("ashwatch") or (key as String).begins_with("stonehollow") or (key as String).begins_with("sable")
+		if not before_sable and speakers.call(key).has("marshal"):
+			late.append(key)
+	check(late.is_empty() and speakers.call("gw_exodus_outro").has("ogre") and speakers.call("fm_pass_outro").has("ogre"),
+			"C  ...and once he's fallen, only the Ogre King speaks%s" % ("" if late.is_empty() else " (the Marshal still in: %s)" % ", ".join(late)))
+	campaign.completed = saved
 	main.hud.play_story([{"who": "hale", "text": "a"}, {"who": "marshal", "text": "b"}])
 	await process_frame
 	main.hud.story.advance()

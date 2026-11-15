@@ -577,7 +577,8 @@ const STORY := {
 	"gw_exodus_outro": [
 		{"who": "thorne", "text": "They're through. You held three roads with what you had. The Watch has seen a promise kept."},
 		{"who": "thorne", "text": "The Woodland Watch stands with the Line. Our archers will shoot from your walls, and our towers will rise where you need them."},
-		{"who": "marshal", "text": "Elves, now. Then the trees can burn with them."},
+		{"who": "marshal", "text": "Elves, now. Then the trees can burn with them.", "if": {"not_won": "sable_crossing"}},
+		{"who": "ogre", "text": "Elves, now. I have felled older forests than theirs, and I did not need an axe.", "if": {"won": "sable_crossing"}},
 	],
 	"gw_watchfires_intro": [
 		{"who": "thorne", "text": "Before the beacons, the Watch spoke with fire: three watchfires at the edge of the clearing, each answering the next."},
@@ -596,7 +597,7 @@ const STORY := {
 		{"who": "ysra", "text": "The pass held. My sisters say you fought like someone who meant to keep a promise."},
 		{"who": "ysra", "text": "Two still stand who stood beside you. The Covenant will not forget it.", "if": {"flag": "witches_stood"}},
 		{"who": "ysra", "text": "The Northern Covenant stands with the Line. Our witches will freeze your enemies, and our towers will hold your walls."},
-		{"who": "marshal", "text": "Witches. Ice melts, old woman, and so will you."},
+		{"who": "ogre", "text": "Witches. The north froze my road once before. The thaw came, and so did I."},
 	],
 	"fm_vigil_intro": [
 		{"who": "ysra", "text": "Frostmarch's beacon has never been lit by fire. It is lit by the rite of the stones, three of them, round the frozen lake."},
@@ -622,7 +623,7 @@ const STORY := {
 		{"who": "kaito", "text": "You brought your people down the mountain and left none you didn't have to. That is a kind of discipline."},
 		{"who": "kaito", "text": "My masters came back with you, all three. The novices will speak of it for years.", "if": {"flag": "masters_stood"}},
 		{"who": "kaito", "text": "The Martial Order will walk with the Line. Not for your crown: for the ones on the steps."},
-		{"who": "marshal", "text": "Monks. They'll find their ki is no use against my iron."},
+		{"who": "ogre", "text": "Monks. Bare hands against a king. Let them come down from their mountain."},
 	],
 	"mo_gate_intro": [
 		{"who": "kaito", "text": "Our beacon is not lit with fire either. It is lit by the three bells, rung at dawn after a night's vigil."},
@@ -648,7 +649,7 @@ const STORY := {
 	"fc_market_outro": [
 		{"who": "coralie", "text": "You got them out. The Guild counted, of course. Then it voted, rather quickly for once."},
 		{"who": "coralie", "text": "The Free Cities will stand with the Line. Our bards, our alchemists and our statues are yours. Do try to return the statues."},
-		{"who": "marshal", "text": "Merchants. They'll sell you to the King the moment the price is right."},
+		{"who": "ogre", "text": "Merchants. They will sell you to me the moment the price is right."},
 	],
 	"fc_council_intro": [
 		{"who": "coralie", "text": "The Council must vote to light the beacon, and it votes in the Exchange. The King knows it, and he's sent the Warlord."},
@@ -679,7 +680,8 @@ const STORY := {
 	"mv_wounded_outro": [
 		{"who": "ilse", "text": "You brought them home. The Sanctuary has sworn to turn no one away, and now it will not turn you away either."},
 		{"who": "ilse", "text": "Our healers will walk with your troops. Keep them alive, and they will keep your line alive."},
-		{"who": "marshal", "text": "Healers. The King's army does not need patching. Neither will theirs, when I am done."},
+		{"who": "marshal", "text": "Healers. The King's army does not need patching. Neither will theirs, when I am done.", "if": {"not_won": "sable_crossing"}},
+		{"who": "ogre", "text": "Healers. Mend them as fast as you like. I break things faster.", "if": {"won": "sable_crossing"}},
 	],
 	"mv_sanctuary_intro": [
 		{"who": "ilse", "text": "They are coming for the hospice itself. Long waves, Commander, and archers among them to wear us down."},
@@ -696,7 +698,8 @@ const STORY := {
 	"dd_entrance_outro": [
 		{"who": "dagna", "text": "That's how you hold a canyon! Deepdelve's gold and Deepdelve's guns are yours, Commander."},
 		{"who": "dagna", "text": "You'll get mines that dig while you fight, and cannon crews that hit like falling rock."},
-		{"who": "marshal", "text": "Gold buys swords. Swords can be broken. Cut their roads to the foundries."},
+		{"who": "marshal", "text": "Gold buys swords. Swords can be broken. Cut their roads to the foundries.", "if": {"not_won": "sable_crossing"}},
+		{"who": "ogre", "text": "Gold buys swords, and I have broken every sword it ever bought. Let them dig.", "if": {"won": "sable_crossing"}},
 	],
 	"dd_orerun_intro": [
 		{"who": "dagna", "text": "The foundries need ore and the roads are crawling with them. One cart, over the ridge and through the pass."},

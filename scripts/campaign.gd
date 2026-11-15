@@ -769,6 +769,10 @@ func _holds(cond: Dictionary) -> bool:
 		return false
 	if cond.has("difficulty") and difficulty != cond["difficulty"]:
 		return false
+	if cond.has("won") and not completed.has(cond["won"]):
+		return false
+	if cond.has("not_won") and completed.has(cond["not_won"]):
+		return false
 	return true
 
 
