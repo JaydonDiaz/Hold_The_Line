@@ -28,12 +28,14 @@ const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
 const EnemyShot = preload("res://scripts/enemy_shot.gd")
-# Damage schools: what a hit is made of. Only Slimes care.
-const PHYSICAL := "physical"   # blades, fists, arrows, shells, traps, thorns, fire
+# Damage schools: what a hit is made of. Only Slimes care: they shrug off physical hits
+# unless iced over (or frozen); anything else, explosive or magical, hurts them as normal.
+const PHYSICAL := "physical"   # blades, fists, arrows, thorns, fire
 const MAGIC := "magic"         # arcane orbs, lightning, flame breath, rot, songs, holy light
 const KI := "ki"               # a Martial Artist's ki blasts and beam
 const ICE := "ice"             # frost bolts, frost auras, the Frost Orb
 const ALCHEMY := "alchemy"     # an Alchemist's flasks (splash, acid, blasts), toxic clouds and poison
+const EXPLOSIVE := "explosive" # cannon shells and their bomblets, an Alchemist's charges
 const ICE_BONUS := 2.0         # ice does this much more to a Slime...
 const CRUST_TIME := 2.5        # ...and ices it over for this long: physical hits land, it moves slower
 const CRUST_SLOW := 0.4

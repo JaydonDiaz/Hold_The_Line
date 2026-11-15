@@ -35,7 +35,7 @@ func _explode() -> void:
 	for e in main.get_enemies():
 		if e.flying or e.position.distance_to(position) > radius + e.radius:
 			continue
-		e.take_damage(damage)
+		e.take_damage(damage, true, "explosive")   # (a blast: it hurts a Slime too)
 		if e.dead:
 			continue
 		if stun > 0.0:

@@ -598,6 +598,8 @@ func school() -> String:
 			return "ice"
 		"flask":
 			return "alchemy"
+		"shell":
+			return "explosive"
 	return "physical"
 
 

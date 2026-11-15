@@ -133,6 +133,8 @@ func _slimes() -> void:
 	main.wave_active = true
 	var sl = _spawn("slime", Vector2(320, 300))
 	sl.set_process(false)
+	sl.max_hp = 1000.0   # (enough to take every hit below)
+	sl.hp = 1000.0
 	var hp: float = sl.hp
 	sl.take_damage(50.0)
 	check(sl.hp == hp, "S  a physical hit does nothing to a Slime")
@@ -142,6 +144,9 @@ func _slimes() -> void:
 	check(is_equal_approx(sl.hp, hp - 20.0), "S  ki hurts it")
 	sl.take_damage(10.0, true, "alchemy")
 	check(is_equal_approx(sl.hp, hp - 30.0) and sl.ice_crust <= 0.0, "S  an Alchemist's flasks hurt it as normal")
+	hp -= 10.0
+	sl.take_damage(10.0, true, "explosive")
+	check(is_equal_approx(sl.hp, hp - 30.0), "S  so does a cannon shell's blast")
 	hp -= 10.0
 	sl.take_damage(10.0, true, "ice")
 	check(is_equal_approx(sl.hp, hp - 40.0) and sl.ice_crust > 0.0, "S  ice does double (20 for 10) and ices it over")
@@ -192,6 +197,7 @@ func _slimes() -> void:
 	main.upgrade_selected(0)   # Spirit Bolts
 	main.selected = null
 	var tower = _hire("tower", Vector2(320, 700))
+	var cannon = _hire("cannon", Vector2(160, 700))
 	sl = _spawn("slime", Vector2(320, 520))
 	sl.set_process(false)
 	_hold_enemy(sl)
@@ -200,6 +206,7 @@ func _slimes() -> void:
 				"S  %s %s go after a Slime" % [k.capitalize(), "does" if units[k].can_hurt(sl) else "doesn't"])
 	check(ki.can_hurt(sl), "S  a Martial Artist with Spirit Bolts does")
 	check(not tower.can_hurt(sl), "S  an Archer Tower doesn't")
+	check(cannon.can_hurt(sl), "S  a Cannoneer does (its shells explode)")
 	await _frames(240)
 	check(sl.hp < sl.max_hp, "S  the magic users and the Spirit Bolt user wear it down (%.0f damage)" % (sl.max_hp - sl.hp))
 	check(units["swordsman"].target != sl and units["archer"].target != sl, "S  the Swordsman and Archer leave it alone")

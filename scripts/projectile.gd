@@ -257,7 +257,7 @@ func _scatter() -> void:
 		var at := position + Vector2.from_angle(i * TAU / cluster["count"] + randf_range(-0.3, 0.3)) * (splash + randf_range(5.0, 25.0))
 		for e in main.get_enemies():
 			if not e.flying and e.position.distance_to(at) <= r + e.radius:
-				e.take_damage(damage * cluster["damage"])
+				e.take_damage(damage * cluster["damage"], true, school)
 				if not e.dead and not burn.is_empty():
 					e.apply_burn(burn[0], burn[1])
 		main.spawn_burst(at, r, Color(1.0, 0.6, 0.25))
