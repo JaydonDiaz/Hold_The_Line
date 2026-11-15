@@ -167,39 +167,60 @@ const MAPS := {
 			{"kind": "thin_ice", "poly": [Vector2(405, 328), Vector2(640, 334), Vector2(640, 456), Vector2(405, 462)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(320, 96), Vector2(320, 170), Vector2(270, 270), Vector2(320, 400), Vector2(320, 560), Vector2(320, 736)],
-			[Vector2(110, 96), Vector2(130, 260), Vector2(250, 300)], [Vector2(530, 96), Vector2(510, 260), Vector2(390, 300)]],
+		"trails": [[Vector2(320, 96), Vector2(312, 140), Vector2(274, 190), Vector2(266, 240), Vector2(290, 290), Vector2(320, 330),
+				Vector2(320, 560), Vector2(320, 736)],
+			[Vector2(120, 96), Vector2(124, 160), Vector2(146, 220), Vector2(196, 268), Vector2(262, 296), Vector2(310, 318)],
+			[Vector2(520, 96), Vector2(516, 160), Vector2(494, 220), Vector2(444, 268), Vector2(378, 296), Vector2(330, 318)]],
 		"castle": "fort",
 		"bot_posts": [Vector2(320, 500), Vector2(260, 540), Vector2(380, 540), Vector2(320, 600), Vector2(250, 600),
 			Vector2(390, 600), Vector2(320, 650)],
 	},
-	# Frostmarch, the Covenant's Vigil: a frozen lake with the middle standing stone out on it
-	# (on solid ice), thin ice to the north of it and either side; the other two stones on
-	# the shores. Every stone stays reachable with all the thin ice gone (from the south).
+	# Frostmarch, the Stone Lake (the Covenant's Vigil): a snowfield of frozen ponds and
+	# crags. A pond in the north-west and one in the east, each thin ice ringed by solid;
+	# crags in the north-east, the north and the west; and the great lake in the middle
+	# with the middle standing stone out on it (on solid ice), thin ice north and south-west
+	# of it. The other two stones stand on the shore, and every stone stays reachable with
+	# all the thin ice gone. Any way through is at least 64px wide, ice or not.
 	"frostmarch_lake": {
 		"name": "The Stone Lake", "battle": "frostlake", "music": "snow",
-		"blurb": "Three standing\nstones round a\nfrozen lake",
+		"blurb": "Frozen ponds\nand crags round\nthe standing stones",
 		"biome": "snow",
 		"lanes": [[40, 600]],
 		"terrain": [
-			{"kind": "trees", "poly": [Vector2(0, 150), Vector2(80, 140), Vector2(140, 170), Vector2(150, 230), Vector2(110, 270),
-				Vector2(40, 280), Vector2(0, 276)]},
-			{"kind": "trees", "poly": [Vector2(640, 140), Vector2(560, 136), Vector2(500, 166), Vector2(496, 222), Vector2(540, 256),
-				Vector2(610, 262), Vector2(640, 258)]},
-			{"kind": "rock", "poly": [Vector2(560, 330), Vector2(600, 318), Vector2(630, 340), Vector2(626, 390), Vector2(584, 400),
-				Vector2(556, 372)]},
-			{"kind": "ice", "poly": [Vector2(200, 356), Vector2(440, 356), Vector2(472, 470), Vector2(432, 566), Vector2(208, 566),
-				Vector2(168, 470)]},
-			{"kind": "thin_ice", "poly": [Vector2(248, 366), Vector2(392, 366), Vector2(392, 420), Vector2(248, 420)]},
-			{"kind": "thin_ice", "poly": [Vector2(184, 440), Vector2(262, 440), Vector2(262, 530), Vector2(196, 530)]},
-			{"kind": "thin_ice", "poly": [Vector2(378, 440), Vector2(456, 440), Vector2(444, 530), Vector2(378, 530)]},
+			# The north-west pond.
+			{"kind": "ice", "poly": [Vector2(60, 156), Vector2(200, 150), Vector2(236, 200), Vector2(220, 270), Vector2(130, 286),
+				Vector2(56, 250)]},
+			{"kind": "thin_ice", "poly": [Vector2(88, 176), Vector2(192, 172), Vector2(204, 220), Vector2(184, 256), Vector2(104, 260),
+				Vector2(80, 226)]},
+			# Crags: the north, the north-east, the west, and two low ones by the castle.
+			{"kind": "rock", "poly": [Vector2(296, 146), Vector2(338, 138), Vector2(364, 160), Vector2(356, 198), Vector2(316, 210),
+				Vector2(284, 186)]},
+			{"kind": "cliff", "poly": [Vector2(452, 136), Vector2(560, 124), Vector2(604, 170), Vector2(584, 236), Vector2(504, 250),
+				Vector2(456, 206)]},
+			{"kind": "rock", "poly": [Vector2(0, 336), Vector2(90, 330), Vector2(150, 356), Vector2(142, 408), Vector2(80, 426),
+				Vector2(0, 420)]},
+			{"kind": "rock", "poly": [Vector2(570, 554), Vector2(610, 546), Vector2(640, 560), Vector2(640, 610), Vector2(590, 614)]},
+			{"kind": "rock", "poly": [Vector2(0, 560), Vector2(50, 546), Vector2(70, 580), Vector2(46, 614), Vector2(0, 610)]},
+			# The east pond.
+			{"kind": "ice", "poly": [Vector2(472, 304), Vector2(600, 296), Vector2(626, 350), Vector2(604, 408), Vector2(486, 414),
+				Vector2(454, 360)]},
+			{"kind": "thin_ice", "poly": [Vector2(494, 320), Vector2(584, 316), Vector2(600, 356), Vector2(582, 392), Vector2(500, 396),
+				Vector2(480, 358)]},
+			# The great lake and the Lake Stone on it.
+			{"kind": "ice", "poly": [Vector2(236, 396), Vector2(404, 396), Vector2(440, 470), Vector2(410, 560), Vector2(232, 560),
+				Vector2(200, 476)]},
+			{"kind": "thin_ice", "poly": [Vector2(256, 406), Vector2(384, 406), Vector2(384, 450), Vector2(256, 450)]},
+			{"kind": "thin_ice", "poly": [Vector2(214, 478), Vector2(270, 478), Vector2(270, 544), Vector2(234, 544)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(150, 96), Vector2(130, 330), Vector2(150, 560)], [Vector2(500, 96), Vector2(510, 330), Vector2(490, 560)],
-			[Vector2(320, 736), Vector2(320, 600), Vector2(320, 520)]],
+		"trails": [[Vector2(250, 96), Vector2(258, 150), Vector2(256, 236), Vector2(222, 300), Vector2(178, 370), Vector2(166, 450),
+				Vector2(146, 500), Vector2(170, 600), Vector2(250, 670), Vector2(320, 736)],
+			[Vector2(400, 96), Vector2(410, 176), Vector2(428, 276), Vector2(446, 350), Vector2(470, 440), Vector2(494, 500),
+				Vector2(470, 600), Vector2(390, 670), Vector2(320, 736)],
+			[Vector2(320, 736), Vector2(320, 640), Vector2(320, 566)]],
 		"castle": "keep",
-		"bot_posts": [Vector2(150, 500), Vector2(320, 600), Vector2(490, 500), Vector2(110, 420), Vector2(530, 440),
-			Vector2(240, 610), Vector2(400, 610)],
+		"bot_posts": [Vector2(140, 470), Vector2(320, 600), Vector2(500, 470), Vector2(200, 610), Vector2(440, 610),
+			Vector2(190, 330), Vector2(420, 350)],
 	},
 	# The High Monastery, the Thousand Steps: four terraces down the mountain, each ledge
 	# crossed by stairs (and, on the middle one, a rope bridge over a chasm in the centre).
