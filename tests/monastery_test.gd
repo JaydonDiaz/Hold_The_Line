@@ -11,7 +11,8 @@ extends SceneTree
 ##                  stuns the enemies round it (a boss for half as long) and not the far
 ##                  ones; then it's rung till the next wave; a fallen tower can't be rung;
 ##                  K rings the ready ones with enemies round them. Bells of Dawn: a free
-##                  standing tower is yours only with a troop by it
+##                  standing tower is yours only with a troop by it. Classic on the Gate:
+##                  its three towers stand free, to ring with a troop by them
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://monastery_test_campaign.cfg"
@@ -80,6 +81,7 @@ func _run() -> void:
 	await _steps()
 	await _retreat()
 	await _bells()
+	await _classic_bells()
 	if main != null:
 		main.free()
 	if FileAccess.file_exists(TEST_SAVE):
@@ -171,6 +173,31 @@ func _retreat() -> void:
 	check(stuck.is_empty(), "R  Fall back [Y] took every troop down the stairs, terrace by terrace, to the camp%s" % ("" if stuck.is_empty() else ": " + "; ".join(stuck.slice(0, 4))))
 	check(areas_ok, "R  ...and a guard area fell back with its troop")
 	check(rules.in_camp().size() >= troops.size(), "R  ...all of them in the camp at the end (%d)" % rules.in_camp().size())
+
+
+## Classic on the Monastery Gate: the map's own three bell towers, free-standing.
+func _classic_bells() -> void:
+	main._on_mode_chosen("normal|monastery_gate")
+	await _frames(3)
+	var bells = main.bells
+	var towers: Array = bells.towers
+	check(not main.campaign and main.map_id == "monastery_gate" and bells.active() and towers.size() == 3 and towers.all(func(b): return b["obj"] == null),
+			"B  Classic on the Monastery Gate: its three bell towers, standing free")
+	main.wave = 1
+	main.wave_active = true
+	var p: Vector2 = bells.pos(towers[1])
+	check(not bells.ready(towers[1]), "B  ...not yours with no troop by it")
+	main.gold = 99999
+	main._on_hire_pressed("swordsman")
+	main.hire_at(p + Vector2(0, 40))
+	main.placing_type = ""
+	for w in main.get_warriors():
+		w.position = w.post   # (on its post now, not walking out from the gate)
+	var near = _foe("orc", p + Vector2(60, -20))
+	check(bells.ready(towers[1]) and bells.ring(towers[1]) and near.stun_timer > 2.0, "B  ...a troop by one, and ringing it stuns the enemies round it")
+	main._on_mode_chosen("normal")
+	await _frames(3)
+	check(main.map_id == "" and not main.bells.active(), "B  Classic on the open meadow: no bells")
 
 
 func _clear_foes() -> void:

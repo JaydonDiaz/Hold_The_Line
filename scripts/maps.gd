@@ -25,6 +25,8 @@ extends RefCounted
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ##   camp       false: no enemy camp drawn along the top (the road just goes on)
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
+##   bells      free-standing bell towers (bells.gd) in any battle on the map whose mission
+##              has no bells of its own (Classic, Battle Modes)
 ## ZONES are fields only Battle Modes use: the stretches of road a convoy passes through
 ## (Convoy Escort), and the like. Maps like the rest, but never Classic battlefields.
 ## Terrain along the top edge reaches well above it (y -120), since enemies come in
@@ -277,6 +279,7 @@ const MAPS := {
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"trails": [[Vector2(320, 96), Vector2(320, 300), Vector2(320, 736)]],
+		"bells": [Vector2(150, 480), Vector2(320, 430), Vector2(490, 480)],
 		"castle": "keep",
 		"bot_posts": [Vector2(150, 520), Vector2(320, 470), Vector2(490, 520), Vector2(220, 400), Vector2(420, 400),
 			Vector2(320, 600), Vector2(160, 620)],

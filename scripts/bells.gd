@@ -2,7 +2,9 @@ extends Node2D
 ## The High Monastery's temple bells (Phase 4). A mission with "bells" has bell towers on
 ## the field: the mission's own objectives of kind "bell" (Trial of the Gate: towers to
 ## keep standing), and/or towers standing on their own ("bells": {"at": [...]}, Bells of
-## Dawn). A bell can be rung:
+## Dawn). A map can stand towers of its own too ("bells" in maps.gd: the Monastery Gate's
+## three), for any battle on it whose mission has none (Classic, Battle Modes). A bell can
+## be rung:
 ##   - when it's yours: a bell objective while it stands; a free-standing tower while one
 ##     of your troops is within HOLD of it;
 ##   - once a wave (it's ready again when the next wave starts).
@@ -23,9 +25,11 @@ var towers: Array = []       # {"at": Vector2 (drawn up 640 wide), "obj": the ob
 var t := 0.0
 
 
-func setup(m, mission: Dictionary) -> void:
+func setup(m, mission: Dictionary, map := {}) -> void:
 	main = m
 	spec = mission.get("bells", {})
+	if spec.is_empty() and not map.get("bells", []).is_empty():
+		spec = {"at": map["bells"]}
 	towers.clear()
 	if spec.is_empty():
 		visible = false

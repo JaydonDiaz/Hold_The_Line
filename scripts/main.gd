@@ -337,7 +337,7 @@ func choose_mode(mode: String) -> void:
 	_lock_portrait(false)
 	paths.set_map(Maps.get_map(map_id))
 	hazards.setup(self, Maps.get_map(map_id), mission)
-	bells.setup(self, mission)
+	bells.setup(self, mission, Maps.get_map(map_id))
 	contracts.setup(self, mission)
 	night.setup(self, mission)
 	if paths.has_terrain():
