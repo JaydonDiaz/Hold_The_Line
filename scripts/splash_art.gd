@@ -13,7 +13,7 @@ const SCALE := 6.0
 # The troops: [kind, centre x, foot y, facing left].
 const TROOPS := [["bard", 250.0, 724.0, true], ["alchemist", 392.0, 724.0, false],
 	["mage", 172.0, 852.0, true], ["healer", 320.0, 856.0, false], ["frost", 468.0, 852.0, false],
-	["archer", 188.0, 986.0, true], ["swordsman", 312.0, 1032.0, false], ["martial", 452.0, 986.0, true]]
+	["archer", 188.0, 986.0, true], ["swordsman", 312.0, 984.0, false], ["martial", 452.0, 986.0, true]]
 const PIX := 4.0   # the Ogre King is drawn at a quarter size and shown 4x: chunky pixels, like the rest of the game
 
 var t := 0.0

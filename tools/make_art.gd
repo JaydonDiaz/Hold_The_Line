@@ -40,7 +40,7 @@ func _make_splash() -> void:
 		[362, [["bard", "serenade", 112, true], ["alchemist", "catch", 208, false]], 0.78],
 		[430, [["mage", "", 66, true], ["healer", "raise", 160, false], ["frost", "", 254, false]], 0.9],
 		[490, [["archer", "draw", 62, true], ["martial", "stance", 258, false]], 1.0],
-		[516, [["swordsman", "plant", 160, false]], 1.0],   # out in front of the others
+		[492, [["swordsman", "plant", 160, false]], 1.0],   # in the middle of the front row
 	]
 	for row in rows:
 		var feet: int = row[0]
@@ -108,21 +108,20 @@ func _sky() -> void:
 					canvas.set_pixelv(q, Color(b * 0.6, b * 0.6, b * 0.65))
 
 
-## The Ogre King looming in the dark behind the army: crown, head, shoulders and club as
-## one huge shadow, lit at the rim by the red horizon, and his eyes burning.
+## The Ogre King looming in the dark behind the army: crown, head and shoulders (no club,
+## as on the start screen) as one huge shadow, lit at the rim by the red horizon, and his eyes burning.
 func _ogre_king() -> void:
 	var shade := Color(0.02, 0.01, 0.02)   # darker than the sky behind him
 	var rim := Color(0.3, 0.08, 0.08)
 	var crown := PackedVector2Array([Vector2(110, 132), Vector2(112, 96), Vector2(128, 118), Vector2(142, 88), Vector2(160, 112),
 		Vector2(178, 88), Vector2(192, 118), Vector2(208, 96), Vector2(210, 132)])
-	var club := PackedVector2Array([Vector2(258, 292), Vector2(278, 302), Vector2(304, 160), Vector2(318, 126), Vector2(298, 112), Vector2(280, 146)])
 	var tusks := [PackedVector2Array([Vector2(130, 236), Vector2(138, 238), Vector2(132, 214)]),
 		PackedVector2Array([Vector2(182, 238), Vector2(190, 236), Vector2(188, 214)])]
 	var inside := func(p: Vector2) -> bool:
 		return ((p - Vector2(160, 305)) / Vector2(172, 82)).length_squared() <= 1.0 \
 				or ((p - Vector2(160, 182)) / Vector2(66, 60)).length_squared() <= 1.0 \
 				or ((p - Vector2(160, 228)) / Vector2(60, 32)).length_squared() <= 1.0 \
-				or Geometry2D.is_point_in_polygon(p, crown) or Geometry2D.is_point_in_polygon(p, club)
+				or Geometry2D.is_point_in_polygon(p, crown)
 	for y in H:
 		for x in W:
 			var p := Vector2(x + 0.5, y + 0.5) / K
