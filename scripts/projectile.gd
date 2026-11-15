@@ -113,7 +113,7 @@ func _next_target(p: Vector2):
 
 func _hit() -> void:
 	if melt > 0.0 and is_instance_valid(target) and not target.dead:
-		target.take_damage(target.max_hp * melt * target.cc_mult, false)   # bosses resist it
+		target.take_damage(target.max_hp * melt * target.cc_mult, false, school)   # bosses resist it
 	var struck := []   # enemies this hit damaged (for burning, rot, confusion and arcane bursts)
 	var blown := []   # where Chain Reaction kills went off
 	if splash > 0.0:
@@ -145,7 +145,7 @@ func _hit() -> void:
 		for at in blown:
 			for e in main.get_enemies():
 				if e.position.distance_to(at) <= 40.0 + e.radius:
-					e.take_damage(damage * burst)
+					e.take_damage(damage * burst, true, school)
 			main.spawn_burst(at, 40.0, Color(1.0, 0.6, 0.2))
 			main.spawn_burst(at, 22.0, Color(1.0, 0.95, 0.6))
 		if not cloud.is_empty():
@@ -187,6 +187,8 @@ func _hit() -> void:
 			victims = [target]
 		for e in victims:
 			e.apply_slow(slow, slow_time)
+			if slow_radius > 0.0:
+				e.ice_over()   # (Frost Nova's chill ices a Slime over, as the bolt itself does)
 			if randf() < freeze_chance:
 				e.apply_freeze(freeze_time)
 	if pierce > 0 and splash <= 0.0 and is_instance_valid(target):

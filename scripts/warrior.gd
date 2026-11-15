@@ -596,6 +596,8 @@ func school() -> String:
 			return "magic"
 		"frost":
 			return "ice"
+		"flask":
+			return "alchemy"
 	return "physical"
 
 

@@ -49,7 +49,7 @@ func _process(delta: float) -> void:
 				if style == "plants":
 					e.apply_thorns(dps, 0.3)
 				else:
-					e.take_damage(dps * delta, false)
+					e.take_damage(dps * delta, false, "alchemy" if style == "toxic" else "physical")
 	queue_redraw()
 
 

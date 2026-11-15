@@ -140,6 +140,9 @@ func _slimes() -> void:
 	check(is_equal_approx(sl.hp, hp - 10.0), "S  magic hurts it")
 	sl.take_damage(10.0, true, "ki")
 	check(is_equal_approx(sl.hp, hp - 20.0), "S  ki hurts it")
+	sl.take_damage(10.0, true, "alchemy")
+	check(is_equal_approx(sl.hp, hp - 30.0) and sl.ice_crust <= 0.0, "S  an Alchemist's flasks hurt it as normal")
+	hp -= 10.0
 	sl.take_damage(10.0, true, "ice")
 	check(is_equal_approx(sl.hp, hp - 40.0) and sl.ice_crust > 0.0, "S  ice does double (20 for 10) and ices it over")
 	sl.take_damage(10.0)
@@ -150,6 +153,29 @@ func _slimes() -> void:
 	sl.take_damage(5.0)
 	check(is_equal_approx(sl.hp, hp - 55.0), "S  frozen solid, a physical hit lands")
 	sl.freeze_timer = 0.0
+	# A Frost Witch's Frost Nova (the Blizzard path): her bolt's chill area ices over every
+	# Slime it catches, not just the one hit, so blades and arrows bite on all of them.
+	sl.position = Vector2(320, 300)
+	var by = _spawn("slime", Vector2(350, 300))
+	by.set_process(false)
+	var witch = _hire("frost", Vector2(320, 560))
+	main.selected = witch
+	main.upgrade_selected(1)   # Frost Nova
+	main.selected = null
+	var bolt = load("res://scripts/projectile.gd").new()
+	bolt.main = main
+	bolt.target = sl
+	bolt.position = sl.position
+	bolt.damage = 1.0
+	bolt.school = "ice"
+	bolt.slow = witch.slow
+	bolt.slow_time = witch.slow_time
+	bolt.slow_radius = witch.slow_radius
+	main.add_child(bolt)
+	bolt._hit()
+	check(witch.slow_radius > 0.0 and by.ice_crust > 0.0 and not by.resists("physical"),
+			"S  Frost Nova's area slow ices over a Slime beside the one hit: blades and arrows hurt it")
+	by.queue_free()
 	sl.queue_free()
 	await process_frame
 
@@ -170,7 +196,7 @@ func _slimes() -> void:
 	sl.set_process(false)
 	_hold_enemy(sl)
 	for k in units:
-		check(units[k].can_hurt(sl) == (k in ["mage", "frost", "bard"]),
+		check(units[k].can_hurt(sl) == (k in ["mage", "frost", "bard", "alchemist"]),
 				"S  %s %s go after a Slime" % [k.capitalize(), "does" if units[k].can_hurt(sl) else "doesn't"])
 	check(ki.can_hurt(sl), "S  a Martial Artist with Spirit Bolts does")
 	check(not tower.can_hurt(sl), "S  an Archer Tower doesn't")
