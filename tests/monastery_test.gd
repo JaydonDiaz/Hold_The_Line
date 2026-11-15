@@ -173,6 +173,16 @@ func _retreat() -> void:
 	check(stuck.is_empty(), "R  Fall back [Y] took every troop down the stairs, terrace by terrace, to the camp%s" % ("" if stuck.is_empty() else ": " + "; ".join(stuck.slice(0, 4))))
 	check(areas_ok, "R  ...and a guard area fell back with its troop")
 	check(rules.in_camp().size() >= troops.size(), "R  ...all of them in the camp at the end (%d)" % rules.in_camp().size())
+	# One of them steps out to fight at the camp's gate: it still gets out with the rest.
+	# One that was never sent down (posted on the Gate Terrace) doesn't.
+	var cy := float(rules._x()["y"])
+	var fighter = troops.filter(func(w): return is_instance_valid(w))[0]
+	fighter.position.y = cy - 50.0
+	var straggler = troops.filter(func(w): return is_instance_valid(w))[1]
+	straggler.post = Vector2(straggler.post.x, cy - 92.0)
+	straggler.position = straggler.post
+	var out: Array = rules.in_camp()
+	check(out.has(fighter) and not out.has(straggler), "R  a troop fighting at the camp's gate counts as getting out; one left on the terrace above doesn't")
 
 
 ## Classic on the Monastery Gate: the map's own three bell towers, free-standing.

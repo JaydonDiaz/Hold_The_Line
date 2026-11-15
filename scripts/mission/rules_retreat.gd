@@ -24,6 +24,7 @@ extends "res://scripts/mission/rules_pass.gd"
 
 const Objective = preload("res://scripts/mission/objective.gd")
 const SETTLE := 8.0      # seconds on new ground before the enemy catches up
+const GATE := 70.0       # a troop posted in the camp still counts this far out of it (fighting at its gate)
 const REGROUP := 5       # how many of those that got past are forgiven on each new stretch
 const STREAM_START := 7.0   # seconds between stragglers when they first turn up...
 const STREAM_STEP := 0.7    # ...that much less each wave, down to "stream"
@@ -134,9 +135,15 @@ func process(delta: float) -> void:
 	main.call_deferred("_finish", extracted >= int(_x()["need"]))
 
 
-## Your troops in the camp (emplacements stay where they're built).
+## Your troops in the camp (emplacements stay where they're built): in it, or posted in it
+## and just outside, fighting off whatever's come down to its gate.
 func in_camp() -> Array:
-	return main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and w.position.y >= float(_x()["y"]) - 10.0)
+	var y := float(_x()["y"])
+	var out := []
+	for w in main.get_warriors():
+		if w.is_active() and not w.is_emplacement() and (w.position.y >= y - 10.0 or (w.post.y >= y - 10.0 and w.position.y >= y - GATE)):
+			out.append(w)
+	return out
 
 
 ## Endless: out of the camp and on across the next stretch of ground.
