@@ -219,6 +219,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_building(ci, poly, tint, rng)
 			"canal":
 				_canal(ci, poly, tint, rng)
+			"fountain":
+				_fountain(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
@@ -355,6 +357,45 @@ static func _building(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng
 		var cx := roof.position.x + roof.size.x * rng.randf_range(0.15, 0.85)
 		ci.draw_rect(Rect2(cx - 4, roof.position.y - 6, 8, 10), OUTLINE)
 		ci.draw_rect(Rect2(cx - 3, roof.position.y - 5, 6, 8), Color(0.55, 0.5, 0.46) * tint)
+
+
+## A fountain in a paved plaza: a ring of flagstones round it, a stone basin of water,
+## and a pillar in the middle with water spilling from its bowl.
+static func _fountain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var c := Vector2.ZERO
+	for q in poly:
+		c += q
+	c /= poly.size()
+	var r := 0.0
+	for q in poly:
+		r = maxf(r, q.distance_to(c))
+	var stone := Color(0.74, 0.71, 0.64) * tint
+	# The plaza's paving, out round the basin.
+	ci.draw_circle(c, r + 46.0, Color(0.6, 0.57, 0.5, 0.55) * tint)
+	ci.draw_circle(c, r + 42.0, Color(0.7, 0.67, 0.6, 0.55) * tint)
+	for i in 40:
+		var a := rng.randf() * TAU
+		var p := c + Vector2.from_angle(a) * rng.randf_range(r + 6.0, r + 40.0)
+		ci.draw_rect(Rect2(p, Vector2(8, 5)), Color(0.62, 0.59, 0.52, 0.6) * tint, false, 1.0)
+	# The basin.
+	ci.draw_circle(c + Vector2(0, 4), r + 2.0, Color(0, 0, 0, 0.22))
+	ci.draw_circle(c, r + 1.5, OUTLINE)
+	ci.draw_circle(c, r, stone)
+	ci.draw_circle(c, r - 6.0, OUTLINE)
+	ci.draw_circle(c, r - 7.0, Color(0.22, 0.42, 0.55) * tint)
+	ci.draw_circle(c, r - 12.0, Color(0.28, 0.5, 0.62) * tint)
+	for i in 6:
+		var a := rng.randf() * TAU
+		var p := c + Vector2.from_angle(a) * rng.randf_range(10.0, r - 12.0)
+		ci.draw_line(p, p + Vector2(rng.randf_range(4, 8), 0), Color(0.7, 0.85, 0.92, 0.7) * tint, 1.5)
+	# The pillar and its bowl, water spilling down.
+	ci.draw_rect(Rect2(c + Vector2(-5, -18), Vector2(10, 20)), OUTLINE)
+	ci.draw_rect(Rect2(c + Vector2(-4, -17), Vector2(8, 18)), stone.lightened(0.1))
+	ci.draw_rect(Rect2(c + Vector2(-12, -22), Vector2(24, 7)), OUTLINE)
+	ci.draw_rect(Rect2(c + Vector2(-11, -21), Vector2(22, 5)), stone.lightened(0.15))
+	for x in [-10.0, -4.0, 4.0, 10.0]:
+		ci.draw_line(c + Vector2(x, -16), c + Vector2(x * 1.4, -2), Color(0.75, 0.9, 1.0, 0.8) * tint, 1.5)
+	ci.draw_circle(c + Vector2(0, -26), 3.0, Color(0.75, 0.9, 1.0, 0.85) * tint)
 
 
 ## A canal: water between stone embankments.

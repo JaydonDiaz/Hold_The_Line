@@ -11,7 +11,8 @@ extends RefCounted
 ##   biome      which ground painter and palette (field_art.gd): "meadow" or "mountain"
 ##   lanes      [x from, x to] stretches of the top edge where enemies come in
 ##   terrain    shapes that block walking (not flying, not shots): {"kind", "poly"} with
-##              kind "rock", "cliff", "trees", "pit", "water", "ruin", "house" or "hedge" (it
+##              kind "rock", "cliff", "trees", "pit", "water", "ruin", "house", "hedge",
+##              "building", "canal", "fountain" or "stall" (it
 ##              only changes the art); and two that don't block: "ford" (shallow water,
 ##              waded slowly and weighed as costly by every route) and "bridge" (art only:
 ##              a bridge is a gap left in the water)
@@ -285,18 +286,29 @@ const MAPS := {
 			Vector2(320, 600), Vector2(160, 620)],
 	},
 	# The Free Cities, the Market Road: the market square at the top, three streets down
-	# between the townhouses, a canal across with a bridge on each street, and the camp at
-	# the bottom. The townsfolk come down the streets (the mission's routes).
+	# between townhouses of every size, a canal across with a bridge on each street, and
+	# the camp at the bottom. Between the middle and right streets the houses open onto a
+	# plaza with a fountain; tight alleys (about 44px: room for a troop or a goblin, not a
+	# Troll) cut between some of the houses. The townsfolk come down the three streets
+	# (the mission's routes), which stay clear.
 	"city_market": {
 		"name": "The Market Road", "battle": "market", "music": "city",
-		"blurb": "Three streets\nand a canal\ndown to the gate",
+		"blurb": "Streets, alleys\nand a fountain\nplaza by a canal",
 		"biome": "city",
 		"lanes": [[40, 600]],
 		"terrain": [
-			{"kind": "building", "poly": [Vector2(0, 220), Vector2(68, 220), Vector2(68, 370), Vector2(0, 370)]},
-			{"kind": "building", "poly": [Vector2(150, 220), Vector2(280, 220), Vector2(280, 370), Vector2(150, 370)]},
-			{"kind": "building", "poly": [Vector2(360, 220), Vector2(490, 220), Vector2(490, 370), Vector2(360, 370)]},
-			{"kind": "building", "poly": [Vector2(572, 220), Vector2(640, 220), Vector2(640, 370), Vector2(572, 370)]},
+			# Above the canal: the left edge, the block between the left and middle streets
+			# (an alley across it), the fountain plaza, the right edge.
+			{"kind": "building", "poly": [Vector2(0, 206), Vector2(62, 206), Vector2(62, 280), Vector2(0, 280)]},
+			{"kind": "building", "poly": [Vector2(0, 300), Vector2(70, 296), Vector2(70, 372), Vector2(0, 372)]},
+			{"kind": "building", "poly": [Vector2(150, 204), Vector2(224, 204), Vector2(224, 286), Vector2(150, 286)]},
+			{"kind": "building", "poly": [Vector2(232, 216), Vector2(280, 216), Vector2(280, 286), Vector2(232, 286)]},
+			{"kind": "building", "poly": [Vector2(154, 330), Vector2(250, 330), Vector2(250, 372), Vector2(154, 372)]},
+			{"kind": "building", "poly": [Vector2(256, 336), Vector2(280, 336), Vector2(280, 372), Vector2(256, 372)]},
+			{"kind": "fountain", "poly": [Vector2(453, 297), Vector2(436, 314), Vector2(414, 314), Vector2(397, 297), Vector2(397, 275), Vector2(414, 258), Vector2(436, 258), Vector2(453, 275)]},
+			{"kind": "building", "poly": [Vector2(572, 214), Vector2(640, 214), Vector2(640, 330), Vector2(580, 330)]},
+			{"kind": "building", "poly": [Vector2(586, 342), Vector2(640, 342), Vector2(640, 372), Vector2(586, 372)]},
+			# The canal, a bridge on each street.
 			{"kind": "canal", "poly": [Vector2(0, 392), Vector2(70, 392), Vector2(70, 428), Vector2(0, 428)]},
 			{"kind": "canal", "poly": [Vector2(150, 392), Vector2(280, 392), Vector2(280, 428), Vector2(150, 428)]},
 			{"kind": "canal", "poly": [Vector2(360, 392), Vector2(490, 392), Vector2(490, 428), Vector2(360, 428)]},
@@ -304,11 +316,18 @@ const MAPS := {
 			{"kind": "bridge", "poly": [Vector2(66, 386), Vector2(154, 386), Vector2(154, 434), Vector2(66, 434)]},
 			{"kind": "bridge", "poly": [Vector2(276, 386), Vector2(364, 386), Vector2(364, 434), Vector2(276, 434)]},
 			{"kind": "bridge", "poly": [Vector2(486, 386), Vector2(576, 386), Vector2(576, 434), Vector2(486, 434)]},
-			{"kind": "building", "poly": [Vector2(150, 456), Vector2(280, 456), Vector2(280, 580), Vector2(150, 580)]},
-			{"kind": "building", "poly": [Vector2(360, 456), Vector2(490, 456), Vector2(490, 580), Vector2(360, 580)]}],
+			# Below it: the left edge, a block with an alley across it, a row of narrow
+			# houses of different heights, the right edge.
+			{"kind": "building", "poly": [Vector2(0, 452), Vector2(60, 452), Vector2(64, 560), Vector2(0, 560)]},
+			{"kind": "building", "poly": [Vector2(150, 452), Vector2(276, 452), Vector2(276, 512), Vector2(150, 512)]},
+			{"kind": "building", "poly": [Vector2(164, 556), Vector2(226, 556), Vector2(222, 600), Vector2(168, 600)]},
+			{"kind": "building", "poly": [Vector2(360, 450), Vector2(400, 450), Vector2(400, 556), Vector2(360, 556)]},
+			{"kind": "building", "poly": [Vector2(406, 470), Vector2(446, 470), Vector2(446, 574), Vector2(406, 574)]},
+			{"kind": "building", "poly": [Vector2(452, 452), Vector2(490, 452), Vector2(490, 536), Vector2(452, 536)]},
+			{"kind": "building", "poly": [Vector2(580, 456), Vector2(640, 456), Vector2(640, 580), Vector2(576, 580)]}],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"castle": "fort",
-		"bot_posts": [Vector2(110, 460), Vector2(320, 460), Vector2(530, 460), Vector2(110, 300), Vector2(320, 300), Vector2(530, 300),
+		"bot_posts": [Vector2(110, 460), Vector2(320, 460), Vector2(530, 460), Vector2(110, 300), Vector2(320, 300), Vector2(425, 350),
 			Vector2(220, 640), Vector2(420, 640)],
 	},
 	# The Free Cities, the Exchange: the Council's great Exchange in its square, a canal
