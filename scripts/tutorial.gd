@@ -48,15 +48,19 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	panel = Panel.new()
 	panel.add_theme_stylebox_override("panel", preload("res://scripts/forge.gd").box("dialog"))
-	panel.position = Vector2(20, 48)
-	panel.size = Vector2(WIDTH - 40, 128)
+	# On a phone the box spans the narrower screen and stands taller, its words wrapping more.
+	var phone: bool = hud.compact
+	var pw: float = hud.ui_w - 16.0 if phone else WIDTH - 40.0
+	var ph := 168.0 if phone else 128.0
+	panel.position = Vector2(8 if phone else 20, 48)
+	panel.size = Vector2(pw, ph)
 	add_child(panel)
-	title = _label(Vector2(14, 8), Vector2(WIDTH - 200, 26), Color(1.0, 0.85, 0.3), 20)
-	body = _label(Vector2(14, 36), Vector2(WIDTH - 72, 60), Color(0.92, 0.92, 0.88), 15)
+	title = _label(Vector2(14, 8), Vector2(pw - 140, 26), Color(1.0, 0.85, 0.3), 20)
+	body = _label(Vector2(14, 36), Vector2(pw - 32, ph - 76), Color(0.92, 0.92, 0.88), 15)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	next_btn = _button(Vector2(WIDTH - 156, 88), Vector2(100, 32), "Next")
+	next_btn = _button(Vector2(pw - 116, ph - 40), Vector2(100, 32), "Next")
 	next_btn.pressed.connect(_advance)
-	skip_btn = _button(Vector2(WIDTH - 156, 6), Vector2(100, 26), "Skip tutorial")
+	skip_btn = _button(Vector2(pw - 116, 6), Vector2(100, 26), "Skip tutorial")
 	skip_btn.add_theme_font_size_override("font_size", 12)
 	skip_btn.pressed.connect(_finish)
 	outline = Panel.new()
@@ -92,7 +96,7 @@ func _process(delta: float) -> void:
 		return
 	shown += delta
 	# Keep the panel in the middle of a wide screen, like the other overlays.
-	position.x = (hud.ui_w - WIDTH) / 2.0
+	position.x = 0.0 if hud.compact else (hud.ui_w - WIDTH) / 2.0
 	var s: Array = steps[step]
 	if s[3] != "" and s[3] != "end" and shown >= MIN_SHOW and _done(s[3]):
 		_advance()

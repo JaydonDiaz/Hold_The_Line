@@ -47,10 +47,10 @@ const TOP := 768.0
 # (The castle's own upgrades come up when the castle is clicked, not on a tab.)
 const TABS := [["troops", "Troops", "Z"], ["emplacements", "Emplacements", "X"],
 		["abilities", "Abilities", "V"], ["repair", "Repair", "B"]]
-const TAB_W := 108.0
-const CONTENT_X := 126.0   # the tabs' contents start right of the tab column
-const CONTENT_Y := 50.0
-const CONTENT_H := 128.0
+var TAB_W := 108.0
+var CONTENT_X := 126.0   # the tabs' contents start right of the tab column
+var CONTENT_Y := 50.0
+var CONTENT_H := 128.0
 const WIDTH := 640.0
 const HEIGHT := 1040.0
 
@@ -104,6 +104,10 @@ var freeplay_spawn_buttons := {}
 var boss_bar: Control       # the Ogre King's health, across the top of the field
 var boss_fill: ColorRect
 var boss_name: Label
+var compact := false       # a phone (a tall, narrow screen): the HUD drawn larger (ui_scale), laid out narrower
+var ui_scale := 1.0
+var ui_h := HEIGHT          # the screen's height in HUD units
+var panel_top := TOP        # where the bottom panel starts, in HUD units
 var ui_w := WIDTH           # screen width the HUD is laid out for (wider on a wide screen; see layout)
 var panel: Panel
 var menu_btn: Button
@@ -125,7 +129,7 @@ func _ready() -> void:
 	panel = Panel.new()
 	panel.add_theme_stylebox_override("panel", Forge.box("bar"))
 	panel.position = Vector2(0, TOP)
-	panel.size = Vector2(WIDTH, HEIGHT - TOP)
+	panel.size = Vector2(WIDTH, _panel_h())
 	add_child(panel)
 
 	# What you have: a small caption ("GOLD") over the figure in big numerals.
@@ -155,10 +159,7 @@ func _ready() -> void:
 	for i in TABS.size():
 		var t: Array = TABS[i]
 		var tb := _button(panel, Vector2(12, CONTENT_Y + i * 42.0), Vector2(TAB_W, 38), "%s  [%s]" % [t[1], t[2]])
-		var tsize := 14
-		while tsize > 9 and Forge.font.get_string_size(tb.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x > TAB_W - 16.0:
-			tsize -= 1
-		tb.add_theme_font_size_override("font_size", tsize)
+		_fit_text(tb, 14, TAB_W - 16.0)
 		tb.tooltip_text = "Show %s [%s]  (Tab cycles through the tabs)" % [t[1].to_lower(), t[2]]
 		tb.toggle_mode = true
 		tb.pressed.connect(func(): show_tab(t[0]))
@@ -296,16 +297,18 @@ func _ready() -> void:
 ## The bottom panel spans the whole width: the counters on the left, the wave
 ## buttons on the right, and the hire buttons, upgrade cards and info spread
 ## across; overlays stay 640 wide in the middle.
-func layout(w: float) -> void:
-	ui_w = maxf(w, WIDTH)
-	panel.size = Vector2(ui_w, HEIGHT - TOP)
-	start_btn.position.x = ui_w - 130
-	auto_btn.position.x = ui_w - 190
-	speed_btn.position.x = ui_w - 236
-	menu_btn.position.x = ui_w - 298
-	sell_btn.position.x = ui_w - 114
-	target_btn.position.x = ui_w - 226
-	song_btn.position.x = ui_w - 314
+func layout(w: float, h := HEIGHT, phone := false) -> void:
+	compact = phone
+	# On a phone the HUD is drawn half as large again, in a narrower space: the field keeps
+	# the top of the screen (TOP game pixels), and the panel all the rest of it.
+	ui_scale = clampf((h - TOP) / 410.0, 1.2, 1.6) if phone else 1.0
+	scale = Vector2(ui_scale, ui_scale)
+	ui_w = w / ui_scale if phone else maxf(w, WIDTH)
+	ui_h = h / ui_scale if phone else HEIGHT
+	panel_top = TOP / ui_scale if phone else TOP
+	panel.position = Vector2(0, panel_top)
+	panel.size = Vector2(ui_w, _panel_h())
+	_layout_bar()
 	for p in path_cards.size():
 		_layout_card(path_cards[p], p)
 	_layout_hire()
@@ -317,9 +320,90 @@ func layout(w: float) -> void:
 	status_label.position.x = ui_w - 340
 	for c in centered:
 		if is_instance_valid(c):
-			c.position.x = (ui_w - WIDTH) / 2.0
+			_place_centered(c)
 	if freeplay_bar:
 		_layout_freeplay()
+
+
+func _panel_h() -> float:
+	return ui_h - panel_top
+
+
+## The top of the panel (the figures and the battle's buttons), the tabs, and where the
+## tabs' contents go. On a phone: the figures on a row of their own, the buttons under
+## them, the tabs across, and everything under those.
+func _layout_bar() -> void:
+	if compact:
+		var bw := (ui_w - 24.0 - 3 * 6.0) / 4.0
+		for i in 4:
+			var b: Button = [menu_btn, speed_btn, auto_btn, start_btn][i]
+			b.position = Vector2(12 + i * (bw + 6), 46)
+			b.size = Vector2(bw, 38)
+		var sw := (ui_w - 24.0) / 3.0
+		for i in 3:
+			var l: Label = [gold_label, lives_label, wave_label][i]
+			l.position = Vector2(12 + i * sw, 14)
+			l.size.x = sw - 4
+			(l.get_meta("cap") as Label).position = Vector2(12 + i * sw, 6)
+		TAB_W = (ui_w - 24.0 - 3 * 6.0) / 4.0
+		var tabs := TABS.map(func(t): return t[0])
+		for i in tabs.size():
+			var tb: Button = tab_buttons[tabs[i]]
+			tb.position = Vector2(12 + i * (TAB_W + 6), 92)
+			tb.size = Vector2(TAB_W, 34)
+			tb.text = (TABS[i][1] as String).replace("Emplacements", "Emplace")
+			_fit_text(tb, 15, TAB_W - 14.0)
+		CONTENT_X = 12.0
+		CONTENT_Y = 134.0
+		CONTENT_H = 156.0
+		ORDERS_TOP = 90.0
+		sell_btn.size = Vector2(130, 50)
+		target_btn.size = Vector2(130, 50)
+		song_btn.size = Vector2(110, 50)
+		var y := _panel_h() - 60.0
+		sell_btn.position = Vector2(ui_w - 142, y)
+		target_btn.position = Vector2(ui_w - 280, y)
+		song_btn.position = Vector2(12, y)
+		for b in [sell_btn, target_btn, song_btn]:
+			b.add_theme_font_size_override("font_size", 15)
+	else:
+		menu_btn.position = Vector2(ui_w - 298, 8)
+		speed_btn.position = Vector2(ui_w - 236, 8)
+		auto_btn.position = Vector2(ui_w - 190, 8)
+		start_btn.position = Vector2(ui_w - 130, 8)
+		for i in 3:
+			var l: Label = [gold_label, lives_label, wave_label][i]
+			var x: float = [12.0, 122.0, 236.0][i]
+			l.position = Vector2(x, 16)
+			(l.get_meta("cap") as Label).position = Vector2(x, 8)
+		TAB_W = 108.0
+		var tabs := TABS.map(func(t): return t[0])
+		for i in tabs.size():
+			var tb: Button = tab_buttons[tabs[i]]
+			tb.position = Vector2(12, 50 + i * 42.0)
+			tb.size = Vector2(TAB_W, 38)
+			tb.text = "%s  [%s]" % [TABS[i][1], TABS[i][2]]
+			_fit_text(tb, 14, TAB_W - 16.0)
+		CONTENT_X = 126.0
+		CONTENT_Y = 50.0
+		CONTENT_H = 128.0
+		ORDERS_TOP = 46.0
+		sell_btn.size = Vector2(102, 48)
+		target_btn.size = Vector2(106, 48)
+		song_btn.size = Vector2(84, 48)
+		sell_btn.position = Vector2(ui_w - 114, 212)
+		target_btn.position = Vector2(ui_w - 226, 212)
+		song_btn.position = Vector2(ui_w - 314, 212)
+		sell_btn.add_theme_font_size_override("font_size", 16)
+		for b in [target_btn, song_btn]:
+			b.add_theme_font_size_override("font_size", 12)
+
+
+## Shrinks a button's font from `size` until its text fits `room`.
+func _fit_text(b: Button, size: int, room: float) -> void:
+	while size > 9 and Forge.font.get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > room:
+		size -= 1
+	b.add_theme_font_size_override("font_size", size)
 
 
 ## Hire buttons: one row (name over price) when they fit, two rows of shorter
@@ -421,6 +505,10 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	var b: Button = card["button"]
 	b.position = Vector2(left + p * (cw + 6.0), CONTENT_Y)
 	b.size = Vector2(cw, 104)
+	if compact:
+		cw = (ui_w - 24.0 - 6.0) / 2.0
+		b.position = Vector2(12 + (p % 2) * (cw + 6.0), 92 + (p / 2) * 100.0)
+		b.size = Vector2(cw, 94)
 	card["title"].size.x = cw - 12.0
 	card["cost"].position.x = cw - 76.0
 	card["tier"].size.x = cw - 12.0
@@ -429,6 +517,9 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	card["tier"].add_theme_font_size_override("font_size", 14 if wide else 13)
 	card["desc"].add_theme_font_size_override("font_size", 12)
 	card["desc"].max_lines_visible = 3
+	if compact:
+		card["desc"].size = Vector2(cw - 12.0, 34)
+		card["desc"].max_lines_visible = 2   # (a phone's cards are shorter)
 
 
 ## A price at this difficulty (see Data.scaled_price).
@@ -692,7 +783,7 @@ func refresh(main) -> void:
 	_refresh_orders(main, w)
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
 	if grave != null:
-		info_label.position = Vector2(14, 162)
+		info_label.position = Vector2(14, 296 if compact else 162)
 		info_label.size = Vector2(ui_w - 26, 100)
 		info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
 		info_label.text = grave.info_text()
@@ -701,14 +792,14 @@ func refresh(main) -> void:
 		return
 	if in_group:
 		info_label.position = Vector2(14, CONTENT_Y + CONTENT_H + 8.0)
-		info_label.size = Vector2(ui_w - (26 if not target_btn.visible else ui_w - target_btn.position.x + 8.0), HEIGHT - TOP - CONTENT_Y - CONTENT_H - 12.0)
+		info_label.size = Vector2(ui_w - (26 if not target_btn.visible else ui_w - target_btn.position.x + 8.0), _panel_h() - CONTENT_Y - CONTENT_H - 12.0)
 		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
 		info_label.text = "%d troops selected. Right-click to move them together (they keep their formation)%s. Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them." % [
 				main.group.size(), "" if main.wave_active else "; or drag one of them to move the group"]
 		target_btn.text = "Orders [O]\n%d troops" % main.group.filter(_takes_orders).size()
 		return
 	if castle_sel:
-		info_label.position = Vector2(14, 162)
+		info_label.position = Vector2(14, 296 if compact else 162)
 		info_label.size = Vector2(ui_w - 26, 100)
 		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
 		var guards := {}
@@ -720,7 +811,7 @@ func refresh(main) -> void:
 		return
 	if w == null:
 		info_label.position = Vector2(CONTENT_X, CONTENT_Y + CONTENT_H + 8.0)
-		info_label.size = Vector2(ui_w - CONTENT_X - 12.0, HEIGHT - TOP - CONTENT_Y - CONTENT_H - 12.0)
+		info_label.size = Vector2(ui_w - CONTENT_X - 12.0, _panel_h() - CONTENT_Y - CONTENT_H - 12.0)
 		info_label.add_theme_font_size_override("font_size", 14)
 		if main.placing_type == "barricade":
 			var d: Dictionary = Data.WARRIORS["barricade"]
@@ -744,6 +835,9 @@ func refresh(main) -> void:
 		return
 	info_label.position = Vector2(14, 162)
 	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 100)
+	if compact:
+		info_label.position = Vector2(14, 296)
+		info_label.size = Vector2(ui_w - 28, _panel_h() - 296 - 66)
 	info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
 	var how := "right-click to send it somewhere" if main.wave_active else "drag to reposition"
 	if w.is_emplacement():
@@ -1187,10 +1281,17 @@ func show_mode_select() -> void:
 	mode_screen.color = Color(0, 0, 0, 0.0)
 	mode_screen.size = Vector2(WIDTH, HEIGHT)
 	add_child(mode_screen)
+	# On a phone the title lays itself out: the castle scene across the top (as wide as
+	# the screen), the cards two to a row under it, on the dark ground.
+	if compact:
+		mode_screen.set_meta("phone", true)
+		mode_screen.color = Color(0.11, 0.08, 0.06)
 	_center(mode_screen)
 	# The castle scene, with the title banner drawn on it, fills the screen.
 	title_scene = TitleScene.new()
 	title_scene.size = Vector2(WIDTH, HEIGHT)
+	if compact:
+		title_scene.scale = Vector2.ONE * (ui_w / WIDTH)
 	mode_screen.add_child(title_scene)
 	mode_screen.modulate.a = 0.0
 	create_tween().tween_property(mode_screen, "modulate:a", 1.0, 0.4)
@@ -1212,6 +1313,9 @@ func show_mode_select() -> void:
 	sub.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.1))
 	sub.add_theme_constant_override("outline_size", 6)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if compact:
+		sub.position = Vector2(0, 62)
+		sub.size.x = ui_w
 	sub.modulate.a = 0.0
 	create_tween().tween_property(sub, "modulate:a", 1.0, 0.4).set_delay(0.35)
 
@@ -1223,6 +1327,8 @@ func show_mode_select() -> void:
 	ver.text = "v%s" % ProjectSettings.get_setting("application/config/version", "")
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ver.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if compact:
+		ver.position = Vector2(ui_w - 210, ui_h - 22)
 	_show_cards("top")
 
 
@@ -1340,7 +1446,17 @@ func _show_cards(set_name: String) -> void:
 		spots = top + [Vector2(225, 834)]
 	var cards := []
 	for i in modes.size():
-		cards.append(_mode_card(modes[i], spots[i], 0.1 + i * 0.07, NARROW_W if narrow else 190.0))
+		var cw := NARROW_W if narrow else 190.0
+		var at: Vector2 = spots[i]
+		if compact:
+			# A phone: two cards to a row (three for the narrow ones), the rows filling the
+			# ground under the castle scene.
+			var per := 3 if narrow else 2
+			cw = (ui_w - 24.0 - 8.0 * (per - 1)) / per if narrow else 190.0
+			var rows := ceili(modes.size() / float(per))
+			var x0 := (ui_w - (per * cw + 8.0 * (per - 1))) / 2.0
+			at = Vector2(x0 + (i % per) * (cw + 8.0), ui_h - rows * 192.0 - 14.0 + (i / per) * 192.0)
+		cards.append(_mode_card(modes[i], at, 0.1 + i * 0.07, cw))
 	mode_cards = cards.duplicate()
 	for i in cards.size():
 		var key: String = modes[i][0]
@@ -1433,8 +1549,8 @@ func show_battlefields(diff: String) -> void:
 		v.queue_free())
 	# It covers the whole screen (not just the 640-wide middle), above the title screen.
 	var view := get_viewport().get_visible_rect().size
-	v.position = Vector2(-offset.x, -offset.y)
-	v.size = view
+	v.position = Vector2(-offset.x, -offset.y) / ui_scale
+	v.size = view / ui_scale
 	add_child(v)
 
 
@@ -1628,8 +1744,44 @@ func hide_mode_select() -> void:
 ## Keeps a 640-wide overlay in the middle of the screen (and above the hover card).
 func _center(c: Control) -> void:
 	centered.append(c)
-	c.position.x = (ui_w - WIDTH) / 2.0
+	_place_centered(c)
 	hide_hover()
+
+
+## Where a 640-wide overlay goes. On the desktop: in the middle. On a phone, one of three:
+##   meta "phone": it lays itself out for the phone (the title, the story box): put at the
+##     top-left, the size of the screen;
+##   meta "fit_w" (a dialog's board width): drawn as large as it can be with the board
+##     still on the screen (no larger than on the desktop);
+##   anything else (the campaign map, cutscenes): shrunk to the phone's width, in the
+##     middle of the screen, so none of it is cut off.
+func _place_centered(c: Control) -> void:
+	if not compact:
+		c.scale = Vector2.ONE
+		c.position.x = (ui_w - WIDTH) / 2.0
+		return
+	if c.get_meta("phone", false):
+		c.scale = Vector2.ONE
+		c.position = Vector2.ZERO
+		c.size = Vector2(ui_w, ui_h)
+		return
+	var k := ui_w / WIDTH
+	if c.has_meta("fit_w"):
+		k = minf(1.0, (ui_w - 8.0) / float(c.get_meta("fit_w")))
+	elif not c.has_meta("backdrop"):
+		# Shrunk to fit, it doesn't reach the top and bottom of a phone: a dark backdrop
+		# behind it covers the rest (and keeps clicks off the game underneath).
+		var back := ColorRect.new()
+		back.color = Color(0.06, 0.05, 0.04)
+		back.position = Vector2(-2000, -2000)
+		back.size = Vector2(WIDTH + 4000, HEIGHT + 4000)
+		back.mouse_filter = Control.MOUSE_FILTER_STOP
+		back.show_behind_parent = true
+		c.add_child(back)
+		c.move_child(back, 0)
+		c.set_meta("backdrop", back)
+	c.scale = Vector2(k, k)
+	c.position = Vector2((ui_w - WIDTH * k) / 2.0, maxf(0.0, (ui_h - HEIGHT * k) / 2.0))
 
 
 ## A copy of a full-screen dim's colour reaching well past the game's 640x960, so
@@ -1675,6 +1827,8 @@ func _board_behind(dim: Control, pad := Vector2(36, 28)) -> void:
 	board.add_theme_stylebox_override("panel", Forge.box("dialog"))
 	board.position = r.position
 	board.size = r.size
+	dim.set_meta("fit_w", r.size.x)
+	_place_centered(dim)
 	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	dim.add_child(board)
 	dim.move_child(board, 0)
@@ -1756,6 +1910,8 @@ func show_settings() -> void:
 	panel.position = Vector2(90, 330)
 	panel.size = Vector2(460, 250)
 	dim.add_child(panel)
+	dim.set_meta("fit_w", 470.0)
+	_place_centered(dim)
 	var title := _label(panel, Vector2(0, 16), Vector2(460, 40), Color(1, 0.85, 0.3), 30)
 	title.text = "Settings"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1863,6 +2019,10 @@ func play_story(lines: Array, then: Callable = Callable()) -> void:
 		return
 	var s := Story.new()
 	s.setup(lines.slice(0, n))
+	if compact:
+		s.phone = true
+		s.phone_size = Vector2(ui_w, ui_h)
+		s.set_meta("phone", true)
 	story = s
 	s.finished.connect(func():
 		next.call(s.skipped))
@@ -2123,8 +2283,8 @@ func _close_orders() -> void:
 
 ## The orders window's layout: it takes the place of the upgrade cards in the bottom
 ## panel (under its top bar), in compact rows, a close button at the top right.
-const ORDERS_TOP := 46.0      # below the panel's gold / wave / buttons bar
-const ORDER_ROW := 26.0       # one row of buttons (24 high, 2 apart)
+var ORDERS_TOP := 46.0      # below the panel's gold / wave / buttons bar
+var ORDER_ROW := 26.0         # one row of buttons (24 high, 2 apart; 40 on a phone)
 const ORDER_X0 := 104.0       # where the buttons start, right of the row's label
 const ORDER_RIGHT := 44.0     # room kept clear on the right for the close button
 
@@ -2132,7 +2292,7 @@ const ORDER_RIGHT := 44.0     # room kept clear on the right for the close butto
 ## A row of toggle buttons: `keys` labelled by `names`, giving order `field`.
 func _order_row(box: Panel, y: float, label: String, field: String, keys: Array, names: Dictionary, tips: Dictionary, x0 := ORDER_X0, width := -1.0) -> void:
 	if label != "":
-		var lab := _label(box, Vector2(10, y + 2), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
+		var lab := _label(box, Vector2(10, y + (10 if compact else 2)), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
 		lab.text = label
 	var span := (box.size.x - x0 - ORDER_RIGHT) if width < 0.0 else width
 	var bw := span / keys.size() - 4.0
@@ -2141,7 +2301,7 @@ func _order_row(box: Panel, y: float, label: String, field: String, keys: Array,
 		var key = keys[i]
 		var b := _button(box, Vector2(x0 + i * (bw + 4.0), y), Vector2(bw, ORDER_ROW - 2.0), names[key])
 		b.toggle_mode = true
-		b.add_theme_font_size_override("font_size", 11 if bw < 70.0 else 12)
+		b.add_theme_font_size_override("font_size", (13 if bw < 70.0 else 14) if compact else (11 if bw < 70.0 else 12))
 		b.tooltip_text = tips.get(key, "")
 		b.pressed.connect(func(): _order_from_box(field, key))
 		btns[key] = b
@@ -2161,10 +2321,11 @@ func _open_orders(main, units: Array) -> void:
 	box.add_theme_stylebox_override("panel", Forge.box("bar"))
 	box.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing under it can be clicked while it's open
 	box.position = Vector2(0, ORDERS_TOP)
-	box.size = Vector2(ui_w, HEIGHT - TOP - ORDERS_TOP)
+	box.size = Vector2(ui_w, _panel_h() - ORDERS_TOP)
+	ORDER_ROW = 42.0 if compact else 26.0   # (finger-sized rows on a phone)
 	panel.add_child(box)
 	orders_box = box
-	var close := _button(box, Vector2(box.size.x - 36, 4), Vector2(28, 24), "X")
+	var close := _button(box, Vector2(box.size.x - 40, 4), Vector2(34, 34), "X") if compact else _button(box, Vector2(box.size.x - 36, 4), Vector2(28, 24), "X")
 	close.tooltip_text = "Close the orders, back to the upgrades [O]"
 	close.pressed.connect(_close_orders)
 	var who := _label(box, Vector2(box.size.x - 40, 30), Vector2(36, 40), Color(1, 0.85, 0.3), 11)

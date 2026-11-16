@@ -31,25 +31,38 @@ func setup(story_lines: Array) -> void:
 	lines = story_lines
 
 
+## A phone (the HUD laid out narrow): the box fills the bottom of the screen, as wide as
+## it is, the portrait smaller. Set by the HUD before the story is added.
+var phone := false
+var phone_size := Vector2(W, H)
+
+
 func _ready() -> void:
-	size = Vector2(W, H)
+	size = phone_size if phone else Vector2(W, H)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.35)
-	dim.size = Vector2(W, H)
+	dim.size = size
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
 	box = Panel.new()
 	box.add_theme_stylebox_override("panel", preload("res://scripts/forge.gd").box("dialog"))
 	box.position = BOX.position
 	box.size = BOX.size
+	var pic := 124.0   # the portrait's frame
+	var tx := 152.0    # where the words start
+	if phone:
+		box.position = Vector2(8, size.y - 282)
+		box.size = Vector2(size.x - 16, 274)
+		pic = 88.0
+		tx = 112.0
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(box)
 	# The portrait sits in a framed square on the left.
 	var frame := ColorRect.new()
 	frame.color = Color(0.2, 0.17, 0.14)
 	frame.position = Vector2(14, 16)
-	frame.size = Vector2(124, 124)
+	frame.size = Vector2(pic, pic)
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(frame)
 	portrait = TextureRect.new()
@@ -57,16 +70,21 @@ func _ready() -> void:
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	portrait.position = Vector2(6, 6)
-	portrait.size = Vector2(112, 112)
+	portrait.size = Vector2(pic - 12, pic - 12)
 	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	frame.add_child(portrait)
-	name_label = _label(Vector2(152, 12), Vector2(450, 28), 22)
-	role_label = _label(Vector2(152, 40), Vector2(450, 20), 13)
+	var tw := box.size.x - tx - 14.0
+	name_label = _label(Vector2(tx, 12), Vector2(tw, 28), 22)
+	role_label = _label(Vector2(tx, 40), Vector2(tw, 20), 13)
 	role_label.add_theme_color_override("font_color", Color(0.7, 0.66, 0.6))
-	text_label = _label(Vector2(152, 66), Vector2(450, 150), 17)
+	text_label = _label(Vector2(tx, 66), Vector2(tw, 170 if phone else 150), 17)
+	if phone:
+		# Under the portrait the words can use the box's whole width.
+		text_label.position = Vector2(14, 112)
+		text_label.size = Vector2(box.size.x - 28, 132)
 	text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text_label.add_theme_color_override("font_color", Color(0.95, 0.93, 0.88))
-	hint = _label(Vector2(14, 222), Vector2(588, 22), 13)
+	hint = _label(Vector2(14, box.size.y - 32), Vector2(box.size.x - 28, 22), 13)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hint.add_theme_color_override("font_color", Color(0.6, 0.56, 0.5))
 	_next()

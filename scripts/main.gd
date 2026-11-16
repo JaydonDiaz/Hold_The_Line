@@ -270,10 +270,13 @@ func _size_window() -> void:
 func _fit_screen() -> void:
 	var view := get_viewport().get_visible_rect().size
 	var new_w := maxi(int(Hud.WIDTH), int(view.x))
-	margin = Vector2(0, maxf(0.0, floorf((view.y - Hud.HEIGHT) / 2.0)))
+	# A phone held upright (a tall, narrow screen): the field at the top and the panel,
+	# drawn larger, filling everything under it. Elsewhere a tall screen centres the game.
+	var phone := view.y / maxf(view.x, 1.0) >= 1.8
+	margin = Vector2.ZERO if phone else Vector2(0, maxf(0.0, floorf((view.y - Hud.HEIGHT) / 2.0)))
 	position = margin
 	hud.offset = margin
-	hud.layout(new_w)
+	hud.layout(new_w, view.y if phone else Hud.HEIGHT, phone)
 	if new_w != FIELD_W:
 		var old_w := FIELD_W
 		var k := float(new_w) / old_w
