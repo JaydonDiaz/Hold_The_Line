@@ -461,7 +461,7 @@ func _missions() -> void:
 			"M  wave 4 adds its orcs and its trolls; no bats or warlords")
 	check(main.wave_level(1) == m["level"], "M  enemies start at level %d" % m["level"])
 	main.hud.refresh(main)
-	check(main.hud.wave_label.text == "Wave 0/%d" % m["waves"], "M  the HUD counts waves out of %d" % m["waves"])
+	check(main.hud.stat_text(main.hud.wave_label) == "Wave 0/%d" % m["waves"], "M  the HUD counts waves out of %d" % m["waves"])
 	# Leaving mid-mission changes nothing.
 	main.start_wave()
 	var before := FileAccess.get_md5(TEST_SAVE)
@@ -1102,7 +1102,7 @@ func _regression() -> void:
 	check(main.powers.owned.has("arrows"), "R  ...the ability hotkeys still buy")
 	check(main.last_wave() == Data.FINAL_WAVE and main._build_wave(5).has("warlord") and main.wave_level(7) == 7, "R  ...Classic's wave mix and levels")
 	main.hud.refresh(main)
-	check(main.survival() and main.hud.wave_label.text == "Wave 0", "R  ...a survival run: the HUD just counts the waves")
+	check(main.survival() and main.hud.stat_text(main.hud.wave_label) == "Wave 0", "R  ...a survival run: the HUD just counts the waves")
 	main.wave = Data.FINAL_WAVE - 1
 	main.start_wave()
 	await _clear_wave()

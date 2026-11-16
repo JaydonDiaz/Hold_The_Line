@@ -40,12 +40,7 @@ func _ready() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
 	box = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.08, 0.07, 0.97)
-	style.border_color = Color(1.0, 0.85, 0.3)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(6)
-	box.add_theme_stylebox_override("panel", style)
+	box.add_theme_stylebox_override("panel", preload("res://scripts/forge.gd").box("dialog"))
 	box.position = BOX.position
 	box.size = BOX.size
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE

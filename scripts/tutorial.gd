@@ -47,12 +47,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	panel = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.09, 0.08, 0.07, 0.92)
-	style.border_color = Color(1.0, 0.85, 0.3)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", preload("res://scripts/forge.gd").box("dialog"))
 	panel.position = Vector2(20, 48)
 	panel.size = Vector2(WIDTH - 40, 128)
 	add_child(panel)
@@ -65,12 +60,7 @@ func _ready() -> void:
 	skip_btn.add_theme_font_size_override("font_size", 12)
 	skip_btn.pressed.connect(_finish)
 	outline = Panel.new()
-	var ring := StyleBoxFlat.new()
-	ring.bg_color = Color(0, 0, 0, 0)
-	ring.border_color = Color(1.0, 0.85, 0.3)
-	ring.set_border_width_all(3)
-	ring.set_corner_radius_all(4)
-	outline.add_theme_stylebox_override("panel", ring)
+	outline.add_theme_stylebox_override("panel", preload("res://scripts/forge.gd").box("ring"))
 	outline.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(outline)
 	_show_step()

@@ -28,6 +28,7 @@ signal group_kind_pressed(kind: String)
 signal campaign_retry
 signal campaign_map
 
+const Forge = preload("res://scripts/forge.gd")
 const Data = preload("res://scripts/data.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 const Sprites = preload("res://scripts/sprites.gd")
@@ -112,7 +113,7 @@ var centered := []          # 640-wide overlays kept in the middle of the screen
 var freeplay_bar: Panel
 var freeplay_clear: Button
 var hover_card: PanelContainer   # description of the unit under the mouse
-var hover_style: StyleBoxFlat
+var hover_style: StyleBox
 var hover_title: Label
 var hover_sub: Label
 var hover_body: Label
@@ -122,18 +123,15 @@ const CARD_W := 300.0
 
 func _ready() -> void:
 	panel = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.13, 0.11, 0.1)
-	style.border_color = Color(0.45, 0.35, 0.2)
-	style.border_width_top = 3
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", Forge.box("bar"))
 	panel.position = Vector2(0, TOP)
 	panel.size = Vector2(WIDTH, HEIGHT - TOP)
 	add_child(panel)
 
-	gold_label = _label(panel, Vector2(12, 11), Vector2(116, 30), Color(1, 0.85, 0.3), 18)
-	lives_label = _label(panel, Vector2(130, 12), Vector2(104, 30), Color(1, 0.5, 0.5), 17)
-	wave_label = _label(panel, Vector2(238, 11), Vector2(104, 30), Color(0.8, 0.85, 1), 18)
+	# What you have: a small caption ("GOLD") over the figure in big numerals.
+	gold_label = _stat_label(Vector2(12, 8), 104.0, Color(1, 0.8, 0.32))
+	lives_label = _stat_label(Vector2(122, 8), 108.0, Color(1, 0.5, 0.42))
+	wave_label = _stat_label(Vector2(236, 8), 100.0, Color(0.72, 0.82, 1.0))
 	menu_btn = _button(panel, Vector2(342, 8), Vector2(58, 34), "Menu")
 	menu_btn.tooltip_text = "Leave this game and go back to mode select"
 	menu_btn.pressed.connect(show_menu_confirm)
@@ -148,6 +146,7 @@ func _ready() -> void:
 	auto_btn.pressed.connect(func(): auto_pressed.emit())
 	start_btn = _button(panel, Vector2(510, 8), Vector2(118, 34), "Start Wave 1")
 	start_btn.add_theme_font_size_override("font_size", 14)
+	start_btn.theme_type_variation = "ForgePrimary"
 	start_btn.tooltip_text = "Send the next wave [Space]"
 	start_btn.pressed.connect(func(): start_wave_pressed.emit())
 
@@ -156,7 +155,10 @@ func _ready() -> void:
 	for i in TABS.size():
 		var t: Array = TABS[i]
 		var tb := _button(panel, Vector2(12, CONTENT_Y + i * 42.0), Vector2(TAB_W, 38), "%s  [%s]" % [t[1], t[2]])
-		tb.add_theme_font_size_override("font_size", 14 if t[0] != "emplacements" else 12)
+		var tsize := 14
+		while tsize > 9 and Forge.font.get_string_size(tb.text, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x > TAB_W - 16.0:
+			tsize -= 1
+		tb.add_theme_font_size_override("font_size", tsize)
 		tb.tooltip_text = "Show %s [%s]  (Tab cycles through the tabs)" % [t[1].to_lower(), t[2]]
 		tb.toggle_mode = true
 		tb.pressed.connect(func(): show_tab(t[0]))
@@ -213,6 +215,7 @@ func _ready() -> void:
 	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sell_btn = _button(panel, Vector2(526, 212), Vector2(102, 48), "Sell")
 	sell_btn.tooltip_text = "Sell for 60% of everything spent on this unit [S]"
+	sell_btn.theme_type_variation = "ForgePrimary"
 	sell_btn.pressed.connect(func(): sell_pressed.emit())
 	target_btn = _button(panel, Vector2(414, 212), Vector2(106, 48), "")
 	target_btn.add_theme_font_size_override("font_size", 12)
@@ -354,7 +357,7 @@ func _layout_hire() -> void:
 			text = "%s\n%s  [%d]" % [label, price, i + 1]
 			# Then anything still too wide gets a smaller font until it fits.
 			var widest := 0.0
-			for line in label.split("\n"):
+			for line in (label + "\n%s  [%d]" % [price, i + 1]).split("\n"):
 				widest = maxf(widest, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 			while widest > room and font_size > 9:
 				widest *= (font_size - 1.0) / font_size
@@ -464,11 +467,7 @@ func _setup_hire_button(b: Button, kind: String, d: Dictionary) -> void:
 
 func _make_hover_card() -> void:
 	hover_card = PanelContainer.new()
-	hover_style = StyleBoxFlat.new()
-	hover_style.bg_color = Color(0.09, 0.08, 0.07, 0.95)
-	hover_style.set_border_width_all(2)
-	hover_style.set_corner_radius_all(5)
-	hover_style.set_content_margin_all(10)
+	hover_style = Forge.box("card")
 	hover_card.add_theme_stylebox_override("panel", hover_style)
 	hover_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hover_card.visible = false
@@ -489,7 +488,6 @@ func _make_hover_card() -> void:
 func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
 	hover_title.text = title
 	hover_title.add_theme_color_override("font_color", color)
-	hover_style.border_color = Color(color, 0.8)
 	hover_sub.text = sub
 	hover_sub.visible = sub != ""
 	hover_body.text = body
@@ -631,21 +629,21 @@ func refresh(main) -> void:
 	merc_btn.tooltip_text = deals.merc_tip()
 	merc_btn.position.y = top + (36.0 if contract_btn.visible else 0.0)
 	if main.freeplay:
-		gold_label.text = "Gold: free"
-		lives_label.text = "Freeplay"   # the castle can't fall here
-		wave_label.text = "Level %d" % main.freeplay_level
+		_set_stat(gold_label, "Gold: free")
+		_set_stat(lives_label, "Freeplay")   # the castle can't fall here
+		_set_stat(wave_label, "Level %d" % main.freeplay_level)
 		start_btn.disabled = false
 		start_btn.text = "Spawn Wave %d" % main.freeplay_level
 		freeplay_level_label.text = "Lv %d" % main.freeplay_level
 		for kind in freeplay_spawn_buttons:
 			freeplay_spawn_buttons[kind].tooltip_text = "Spawn one %s at level %d" % [kind.capitalize(), main.freeplay_level]
 	else:
-		gold_label.text = "Gold %d" % main.gold
-		lives_label.text = "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status()
+		_set_stat(gold_label, "Gold %d" % main.gold)
+		_set_stat(lives_label, "Castle %d" % ceili(main.castle_hp) if main.rules.has_castle() else main.rules.panel_status())
 		# A castle about to fall: its health pulses.
 		var low: bool = main.rules.has_castle() and not main.game_over and main.castle_hp <= main.castle_max * 0.25
 		lives_label.modulate = Color(1, 1, 1).lerp(Color(1.6, 0.6, 0.6), 0.5 + 0.5 * sin(Time.get_ticks_msec() / 130.0)) if low else Color.WHITE
-		wave_label.text = main.rules.wave_text()
+		_set_stat(wave_label, main.rules.wave_text())
 		start_btn.disabled = main.wave_active or main.game_over
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
 		var next_in: float = main.next_wave_in()
@@ -1106,12 +1104,7 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 		foe_queue.append([kind, title, tip])
 		return
 	foe_card = Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.08, 0.07, 0.85)
-	style.border_color = Color(0.75, 0.3, 0.25)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(4)
-	foe_card.add_theme_stylebox_override("panel", style)
+	foe_card.add_theme_stylebox_override("panel", Forge.box("card"))
 	foe_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	foe_card.size = Vector2(262, 60)
 	var below := 100.0   # (under the Free Cities' deal buttons, when they're up)
@@ -1588,10 +1581,7 @@ func fade_through_black(then: Callable) -> void:
 func show_freeplay_bar() -> void:
 	var bar := Panel.new()
 	freeplay_bar = bar
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.12, 0.16, 0.85)
-	style.set_corner_radius_all(4)
-	bar.add_theme_stylebox_override("panel", style)
+	bar.add_theme_stylebox_override("panel", Forge.box("card"))
 	bar.position = Vector2(2, 2)
 	add_child(bar)
 	var minus := _button(bar, Vector2(4, 4), Vector2(28, 30), "-")
@@ -1656,6 +1646,40 @@ func _bleed(dim: ColorRect) -> ColorRect:
 	return r
 
 
+
+## Sets a Forge board behind everything on a dimmed screen (the menu box, the end
+## screens): framed round its contents, with room to spare.
+func _board_behind(dim: Control, pad := Vector2(36, 28)) -> void:
+	var r := Rect2()
+	var first := true
+	for c in dim.get_children():
+		if not c is Control or c.show_behind_parent or c.size.x >= WIDTH - 1.0 and c is Label and (c as Label).text == "":
+			continue
+		var cr := Rect2(c.position, c.size)
+		if c is Label:
+			# A label as wide as the screen only needs its words' width.
+			var l := c as Label
+			var tw := 0.0
+			for line in l.text.split("\n"):
+				tw = maxf(tw, l.get_theme_font("font").get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, l.get_theme_font_size("font_size")).x)
+			if l.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER:
+				cr = Rect2(c.position.x + (c.size.x - tw) / 2.0, c.position.y, tw, c.size.y)
+		r = cr if first else r.merge(cr)
+		first = false
+	if first:
+		return
+	r = r.grow_individual(pad.x, pad.y, pad.x, pad.y)
+	r.position.x = minf(r.position.x, (WIDTH - 420.0) / 2.0)
+	r.end.x = maxf(r.end.x, (WIDTH + 420.0) / 2.0)
+	var board := Panel.new()
+	board.add_theme_stylebox_override("panel", Forge.box("dialog"))
+	board.position = r.position
+	board.size = r.size
+	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.add_child(board)
+	dim.move_child(board, 0)
+
+
 ## Pauses the game and asks before throwing the current run away.
 func show_menu_confirm() -> void:
 	if menu_dim != null and is_instance_valid(menu_dim):
@@ -1686,6 +1710,7 @@ func show_menu_confirm() -> void:
 		get_tree().paused = false
 		dim.queue_free())
 	_volume_sliders(dim, 150.0, 550.0)
+	_board_behind(dim)
 
 
 ## Music and sound effects volume sliders (saved for next time), with a percentage
@@ -1727,12 +1752,7 @@ func show_settings() -> void:
 	_center(dim)
 	_bleed(dim)
 	var panel := Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.08, 0.96)
-	style.border_color = Color(1.0, 0.85, 0.3)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(8)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", Forge.box("dialog"))
 	panel.position = Vector2(90, 330)
 	panel.size = Vector2(460, 250)
 	dim.add_child(panel)
@@ -1774,6 +1794,7 @@ func show_end(won: bool, survived: int, previous: int, endless: bool, why := "")
 	rec.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var btn := _button(dim, Vector2(220, 480), Vector2(200, 56), "Play again")
 	btn.pressed.connect(func(): restart_pressed.emit())
+	_board_behind(dim)
 
 
 ## The end of a Battle Modes scenario: how it went, the best result, and Play again.
@@ -1802,6 +1823,7 @@ func show_battle_end(won: bool, name: String, summary: String, record: String, a
 	again.pressed.connect(func(): battle_again.emit(again_key))
 	var menu := _button(dim, Vector2(330, 470), Vector2(200, 56), "Main menu")
 	menu.pressed.connect(func(): restart_pressed.emit())
+	_board_behind(dim)
 
 
 # --- Campaign ----------------------------------------------------------------
@@ -1936,6 +1958,40 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary :=
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			if got[1] > 0:
 				line.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+	_board_behind(dim)
+
+
+## A figure in the top bar: its value label, with a caption label over it (its meta "cap").
+func _stat_label(pos: Vector2, w: float, color: Color) -> Label:
+	var cap := _label(panel, pos, Vector2(w, 12), Color(Forge.INK_DIM), 9)
+	cap.add_theme_font_override("font", Forge.font_label)
+	var v := _label(panel, pos + Vector2(0, 8), Vector2(w, 30), color, 28)
+	v.add_theme_font_override("font", Forge.font_num)
+	v.set_meta("cap", cap)
+	return v
+
+
+## Fills a top-bar figure from text like "Gold 540": the first word becomes the caption,
+## the rest the figure (one word on its own is all figure). The whole text is kept as
+## its meta "full" (stat_text).
+func _set_stat(l: Label, text: String) -> void:
+	if l.get_meta("full", "") == text:
+		return
+	l.set_meta("full", text)
+	var cap: Label = l.get_meta("cap")
+	var cut := text.find(" ")
+	cap.text = text.substr(0, cut).trim_suffix(":").to_upper() if cut > 0 else ""
+	l.text = text.substr(cut + 1) if cut > 0 else text
+	# A long figure (a battle's own count, "Towers 3/3") shrinks to fit.
+	var size := 28
+	while size > 16 and Forge.font_num.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > l.size.x:
+		size -= 2
+	l.add_theme_font_size_override("font_size", size)
+
+
+## A top-bar figure's whole text ("Gold 540", "Wave 0/8").
+func stat_text(l: Label) -> String:
+	return l.get_meta("full", l.text)
 
 
 func _label(parent: Node, pos: Vector2, size: Vector2, color: Color, font_size: int) -> Label:
@@ -2102,11 +2158,7 @@ func _open_orders(main, units: Array) -> void:
 	var movers := units.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
 	# In the bottom panel, over the upgrade cards (and a group's make-up): the field stays clear.
 	var box := Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.13, 0.11, 0.1)
-	style.border_color = Color(0.45, 0.35, 0.2)
-	style.border_width_top = 1
-	box.add_theme_stylebox_override("panel", style)
+	box.add_theme_stylebox_override("panel", Forge.box("bar"))
 	box.mouse_filter = Control.MOUSE_FILTER_STOP   # nothing under it can be clicked while it's open
 	box.position = Vector2(0, ORDERS_TOP)
 	box.size = Vector2(ui_w, HEIGHT - TOP - ORDERS_TOP)

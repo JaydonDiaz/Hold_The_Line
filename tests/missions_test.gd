@@ -102,7 +102,7 @@ func _pass() -> void:
 	check(r.get_script().resource_path.ends_with("rules_pass.gd") and not r.has_castle(), "Pass: a Hold the Pass mission plays by its rules")
 	check(not main.castle.visible and main.camp != null and main.camp.is_inside_tree(), "...no castle: a work camp holds the bottom of the field")
 	main.hud.refresh(main)
-	check(not main.hud.tab_buttons["repair"].visible and main.hud.lives_label.text == "Past 0/10", "...no Repair tab; the panel counts who got past (%s)" % main.hud.lives_label.text)
+	check(not main.hud.tab_buttons["repair"].visible and main.hud.stat_text(main.hud.lives_label) == "Past 0/10", "...no Repair tab; the panel counts who got past (%s)" % main.hud.stat_text(main.hud.lives_label))
 	check(main.hud.status_label.visible and "0 of 10" in main.hud.status_label.text, "...and the field says how many may (%s)" % main.hud.status_label.text)
 	main.select_castle()
 	check(not main.castle_selected and not main.on_castle(Vector2(320, main.CASTLE_Y + 10)), "...there's no castle to click or upgrade")
@@ -345,8 +345,8 @@ func _battle_modes() -> void:
 	main.earn_xp("swordsman", 500.0)
 	check(main.battle_xp.is_empty() and campaign.xp.is_empty(), "...and no campaign XP is earned")
 	main.hud.refresh(main)
-	check(main.survival() and main.hud.wave_label.text == "Wave 0" and main.hud.lives_label.text == "Towers 3/3",
-			"...a survival battle: no last wave (%s, %s)" % [main.hud.wave_label.text, main.hud.lives_label.text])
+	check(main.survival() and main.hud.stat_text(main.hud.wave_label) == "Wave 0" and main.hud.stat_text(main.hud.lives_label) == "Towers 3/3",
+			"...a survival battle: no last wave (%s, %s)" % [main.hud.stat_text(main.hud.wave_label), main.hud.stat_text(main.hud.lives_label)])
 	var towers: Array = main.rules.objectives()
 	# A watchtower stands over whoever's behind it: its top is drawn over the troops (and
 	# goes see-through while someone's back there).

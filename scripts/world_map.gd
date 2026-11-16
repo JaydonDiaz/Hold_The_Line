@@ -17,6 +17,7 @@ signal menu
 signal sound(name: String)
 signal prologue
 
+const Forge = preload("res://scripts/forge.gd")
 const Sprites = preload("res://scripts/sprites.gd")
 const Data = preload("res://scripts/data.gd")
 const CD = preload("res://scripts/campaign_data.gd")
@@ -109,11 +110,7 @@ func _build_header() -> void:
 
 func _build_panel() -> void:
 	var panel := Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.13, 0.11, 0.1)
-	style.border_color = Color(0.45, 0.35, 0.2)
-	style.border_width_top = 3
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", Forge.box("bar"))
 	panel.position = Vector2(0, PANEL_Y)
 	panel.size = Vector2(W, H - PANEL_Y)
 	add_child(panel)
@@ -318,14 +315,11 @@ func _mission_row(k: String, id: String) -> Control:
 	var col: Color = {"Won": Color(0.75, 0.95, 0.6), "Next": Color(1, 0.85, 0.3), "Optional": Color(0.85, 0.8, 1.0), "Later": Color(0.6, 0.58, 0.55)}[state]
 	pick.add_theme_color_override("font_color", col)
 	pick.add_theme_color_override("font_hover_color", col.lightened(0.2))
-	var sel := StyleBoxFlat.new()
-	sel.bg_color = Color(0.32, 0.26, 0.16) if id == chosen else Color(0.18, 0.15, 0.13)
-	sel.border_color = Color(1, 0.85, 0.35) if id == chosen else Color(0.3, 0.25, 0.2)
-	sel.set_border_width_all(1)
-	sel.set_corner_radius_all(3)
-	sel.content_margin_left = 8
-	for st_name in ["normal", "hover", "pressed"]:
-		pick.add_theme_stylebox_override(st_name, sel)
+	# The mission picked is lit like a button under the cursor; the others sit flat.
+	pick.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if id == chosen:
+		for st_name in ["normal", "hover", "pressed"]:
+			pick.add_theme_stylebox_override(st_name, Forge.theme().get_stylebox("hover", "Button"))
 	var tip := "Won: play it again any time (replays earn half XP)." if won else ("Play it now." if state != "Later" else "Win the missions before it first.")
 	if not (m.get("lend", []) as Array).is_empty():
 		tip += "\nThe locals lend you: " + ", ".join(m["lend"].filter(func(x): return x != CD.LEND_BUILDERS).map(unlock_name))
@@ -745,10 +739,7 @@ func _fill_training(dim: Control) -> void:
 			var path: Dictionary = d["paths"][p]
 			var y := top + 60.0 + p * row_h
 			var row := Panel.new()
-			var style := StyleBoxFlat.new()
-			style.bg_color = Color(0.18, 0.15, 0.13)
-			style.set_corner_radius_all(4)
-			row.add_theme_stylebox_override("panel", style)
+			row.add_theme_stylebox_override("panel", Forge.box("inset"))
 			row.position = Vector2(16, y)
 			row.size = Vector2(576, row_h - 6.0)
 			panel.add_child(row)
@@ -802,12 +793,7 @@ func _dim() -> ColorRect:
 
 func _panel(parent: Control, r: Rect2, border: Color) -> Panel:
 	var panel := Panel.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.08, 0.97)
-	style.border_color = border
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(8)
-	panel.add_theme_stylebox_override("panel", style)
+	panel.add_theme_stylebox_override("panel", Forge.box("dialog"))
 	panel.position = r.position
 	panel.size = r.size
 	parent.add_child(panel)

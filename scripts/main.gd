@@ -13,6 +13,7 @@ const Sprites = preload("res://scripts/sprites.gd")
 const Audio = preload("res://scripts/audio.gd")
 const Grave = preload("res://scripts/grave.gd")
 const FieldArt = preload("res://scripts/field_art.gd")
+const Forge = preload("res://scripts/forge.gd")
 const Ambience = preload("res://scripts/ambience.gd")
 const Tutorial = preload("res://scripts/tutorial.gd")
 const CastlePowers = preload("res://scripts/castle_powers.gd")
@@ -151,6 +152,12 @@ var layer_timer := 0.0
 var bard_instruments := []   # what the Bards on the field are playing (see _bard_instruments)
 var last_track := ""
 var song_on := true   # the player can switch the eight-Bard song off (from any Bard's panel)
+
+
+## The Forge's look goes on before anything is built (the HUD is made in its own _ready,
+## which runs before this node's).
+func _enter_tree() -> void:
+	Forge.apply(get_tree())
 
 
 func _ready() -> void:
