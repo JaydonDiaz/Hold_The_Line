@@ -42,6 +42,16 @@ func _run() -> void:
 		await process_frame
 	check(started[0] and main.hud.splash == null and main.hud.mode_screen != null and main.audio._wanted_track == "title",
 			"...Start leads to the title screen, and its music plays (%s)" % main.audio._wanted_track)
+	# On a phone the game is played upright: turned on its side, it waits behind a card.
+	main._turn_upright(Vector2(900, 420))
+	check(main._upright == null and not paused, "A desktop's wide window is just a wide window")
+	main.pretend_phone = true
+	main._turn_upright(Vector2(900, 420))
+	check(main._upright != null and paused, "A phone turned on its side: the game pauses behind a 'turn it upright' card")
+	main._turn_upright(Vector2(420, 900))
+	await process_frame
+	check(main._upright == null and not paused, "...and turned back upright, it carries on")
+	main.pretend_phone = false
 	main.free()
 	print("%d checks, %d failed" % [checks, fails])
 	quit(1 if fails > 0 else 0)

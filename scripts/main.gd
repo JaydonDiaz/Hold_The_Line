@@ -273,6 +273,7 @@ func _fit_screen() -> void:
 	# A phone held upright (a tall, narrow screen): the field at the top and the panel,
 	# drawn larger, filling everything under it. Elsewhere a tall screen centres the game.
 	var phone := view.y / maxf(view.x, 1.0) >= 1.8
+	_turn_upright(view)
 	margin = Vector2.ZERO if phone else Vector2(0, maxf(0.0, floorf((view.y - Hud.HEIGHT) / 2.0)))
 	position = margin
 	hud.offset = margin
@@ -1241,6 +1242,72 @@ func start_mission(id: String) -> void:
 ## Campaign maps and battles keep the 640-wide portrait field whatever the window's
 ## shape (scaled to fit, with bars at the sides); Classic and the rest widen the field
 ## on a wide window, as before.
+## A phone turned on its side: the game is played upright, so it waits behind a card
+## asking for the phone to be turned back (browsers mostly won't lock the screen's
+## rotation, an iPhone's never). Only on phones: a laptop's touchscreen isn't asked.
+var _upright: CanvasLayer = null
+var _upright_paused := false
+var pretend_phone := false   # (tests: behave as on a phone)
+
+
+func on_phone() -> bool:
+	return pretend_phone or OS.has_feature("web_android") or OS.has_feature("web_ios") or OS.has_feature("mobile")
+
+
+func _turn_upright(view: Vector2) -> void:
+	var sideways := on_phone() and view.x > view.y
+	if sideways == (_upright != null):
+		return
+	if sideways:
+		_upright = CanvasLayer.new()
+		_upright.layer = 128
+		_upright.process_mode = Node.PROCESS_MODE_ALWAYS
+		var back := ColorRect.new()
+		back.color = Color(0.06, 0.05, 0.04)
+		back.set_anchors_preset(Control.PRESET_FULL_RECT)
+		back.mouse_filter = Control.MOUSE_FILTER_STOP
+		_upright.add_child(back)
+		var art := UprightArt.new()
+		art.set_anchors_preset(Control.PRESET_FULL_RECT)
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		back.add_child(art)
+		add_child(_upright)
+		_upright_paused = get_tree().paused
+		get_tree().paused = true
+	else:
+		_upright.queue_free()
+		_upright = null
+		get_tree().paused = _upright_paused
+
+
+## The card: a phone turning from its side to upright, and the words.
+class UprightArt extends Control:
+	var t := 0.0
+
+	func _process(delta: float) -> void:
+		t += delta
+		queue_redraw()
+
+	func _draw() -> void:
+		# Drawn to the screen's size (a phone on its side is short: the game's scale is tiny there).
+		var k := minf(size.x, size.y) / 300.0
+		var c := size / 2.0 - Vector2(0, 30 * k)
+		var turn := clampf(fmod(t, 2.4) / 1.2 - 0.5, 0.0, 1.0)
+		draw_set_transform(c, -PI / 2.0 * (1.0 - turn), Vector2(k, k))
+		draw_rect(Rect2(-34, -60, 68, 120), Color(0.05, 0.035, 0.03))
+		draw_rect(Rect2(-31, -57, 62, 114), Color(0.58, 0.58, 0.63))
+		draw_rect(Rect2(-26, -48, 52, 92), Color(0.24, 0.17, 0.11))
+		draw_rect(Rect2(-6, 48, 12, 4), Color(0.36, 0.36, 0.4))
+		draw_set_transform(Vector2.ZERO)
+		var f: Font = ThemeDB.fallback_font
+		var line := "Turn your phone upright to play"
+		var fs := int(22 * k)
+		while fs > 12 and f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x > size.x - 24.0:
+			fs -= 1
+		var w := f.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		draw_string(f, Vector2((size.x - w) / 2.0, c.y + 100 * k), line, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1.0, 0.8, 0.32))
+
+
 func _lock_portrait(on: bool) -> void:
 	var root := get_tree().root
 	var want := Window.CONTENT_SCALE_ASPECT_KEEP if on else Window.CONTENT_SCALE_ASPECT_EXPAND
