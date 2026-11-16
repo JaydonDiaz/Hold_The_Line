@@ -221,6 +221,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_canal(ci, poly, tint, rng)
 			"fountain":
 				_fountain(ci, poly, tint, rng)
+			"stall":
+				_stall(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
@@ -233,6 +235,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_rope_bridge(ci, poly, tint, rng)
 			"stairs":
 				_stairs(ci, poly, tint, rng)
+	for l in m.get("lanterns", []):
+		_lantern(ci, l, tint)
 	snowy = false
 
 
@@ -396,6 +400,47 @@ static func _fountain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng
 	for x in [-10.0, -4.0, 4.0, 10.0]:
 		ci.draw_line(c + Vector2(x, -16), c + Vector2(x * 1.4, -2), Color(0.75, 0.9, 1.0, 0.8) * tint, 1.5)
 	ci.draw_circle(c + Vector2(0, -26), 3.0, Color(0.75, 0.9, 1.0, 0.85) * tint)
+
+
+## A market stall: a striped awning on two posts over a counter of goods.
+static func _stall(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	var stripe: Color = [Color(0.85, 0.25, 0.25), Color(0.25, 0.45, 0.8), Color(0.3, 0.65, 0.35), Color(0.9, 0.6, 0.2)][rng.randi() % 4]
+	var cream := Color(0.96, 0.92, 0.82)
+	var wood := Color(0.5, 0.33, 0.18)
+	ci.draw_rect(Rect2(box.position + Vector2(4, 6), box.size), Color(0, 0, 0, 0.22))
+	# The counter, with goods on it.
+	var counter := Rect2(box.position.x + 2, box.end.y - 12, box.size.x - 4, 12)
+	ci.draw_rect(counter.grow(1.5), OUTLINE)
+	ci.draw_rect(counter, wood * tint)
+	ci.draw_rect(Rect2(counter.position, Vector2(counter.size.x, 2)), wood.lightened(0.25) * tint)
+	for x in range(int(counter.position.x) + 4, int(counter.end.x) - 4, 6):
+		ci.draw_rect(Rect2(x, counter.position.y - 3, 4, 4), OUTLINE)
+		ci.draw_rect(Rect2(x + 1, counter.position.y - 2, 2, 2), [Color(0.95, 0.4, 0.3), Color(1.0, 0.82, 0.3), Color(0.5, 0.8, 0.3), Color(0.7, 0.45, 0.9)][rng.randi() % 4] * tint)
+	# The posts.
+	for x in [box.position.x + 3, box.end.x - 6]:
+		ci.draw_rect(Rect2(x - 1, box.position.y + 8, 5, box.size.y - 12), OUTLINE)
+		ci.draw_rect(Rect2(x, box.position.y + 8, 3, box.size.y - 12), wood * tint)
+	# The striped awning, scalloped along its edge.
+	var aw := Rect2(box.position.x - 3, box.position.y, box.size.x + 6, 11)
+	ci.draw_rect(aw.grow(1.5), OUTLINE)
+	var n := int(aw.size.x / 6.0)
+	for i in n:
+		ci.draw_rect(Rect2(aw.position.x + i * aw.size.x / n, aw.position.y, aw.size.x / n + 0.5, aw.size.y), (stripe if i % 2 == 0 else cream) * tint)
+		ci.draw_circle(Vector2(aw.position.x + (i + 0.5) * aw.size.x / n, aw.end.y), aw.size.x / n * 0.5, (stripe if i % 2 == 0 else cream) * tint)
+
+
+## A lantern post: a pole with a paper lantern hung from it, glowing warm.
+static func _lantern(ci: CanvasItem, l: Vector2, tint: Color) -> void:
+	ci.draw_circle(l + Vector2(0, -26), 22.0, Color(1.0, 0.75, 0.35, 0.16))
+	ci.draw_circle(l + Vector2(0, -26), 13.0, Color(1.0, 0.8, 0.4, 0.2))
+	ci.draw_rect(Rect2(l + Vector2(-2, -24), Vector2(4, 26)), OUTLINE)
+	ci.draw_rect(Rect2(l + Vector2(-1, -23), Vector2(2, 24)), Color(0.4, 0.28, 0.18) * tint)
+	ci.draw_rect(Rect2(l + Vector2(-7, -36), Vector2(14, 14)), OUTLINE)
+	ci.draw_rect(Rect2(l + Vector2(-6, -35), Vector2(12, 12)), Color(1.0, 0.62, 0.3).lerp(Color(1, 0.95, 0.7), 0.3))
+	ci.draw_line(l + Vector2(-6, -29), l + Vector2(6, -29), Color(0.8, 0.45, 0.2), 1.0)
 
 
 ## A canal: water between stone embankments.

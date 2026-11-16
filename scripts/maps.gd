@@ -26,6 +26,8 @@ extends RefCounted
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ##   camp       false: no enemy camp drawn along the top (the road just goes on)
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
+##   lanterns   lantern posts stood about the field (just paint, lit; a night mission hangs
+##              its own, which light up the dark)
 ##   bells      free-standing bell towers (bells.gd) in any battle on the map whose mission
 ##              has no bells of its own (Classic, Battle Modes)
 ## ZONES are fields only Battle Modes use: the stretches of road a convoy passes through
@@ -369,7 +371,16 @@ const MAPS := {
 			{"kind": "building", "poly": [Vector2(0, 500), Vector2(130, 500), Vector2(130, 620), Vector2(0, 620)]},
 			{"kind": "building", "poly": [Vector2(210, 540), Vector2(270, 540), Vector2(270, 600), Vector2(210, 600)]},
 			{"kind": "building", "poly": [Vector2(370, 540), Vector2(430, 540), Vector2(430, 600), Vector2(370, 600)]},
-			{"kind": "building", "poly": [Vector2(510, 500), Vector2(640, 500), Vector2(640, 620), Vector2(510, 620)]}],
+			{"kind": "building", "poly": [Vector2(510, 500), Vector2(640, 500), Vector2(640, 620), Vector2(510, 620)]},
+			# Market stalls round the plaza (clear of the plaza itself and the lanterns).
+			{"kind": "stall", "poly": [Vector2(130, 128), Vector2(182, 128), Vector2(182, 156), Vector2(130, 156)]},
+			{"kind": "stall", "poly": [Vector2(458, 128), Vector2(510, 128), Vector2(510, 156), Vector2(458, 156)]},
+			{"kind": "stall", "poly": [Vector2(20, 350), Vector2(80, 350), Vector2(80, 378), Vector2(20, 378)]},
+			{"kind": "stall", "poly": [Vector2(560, 350), Vector2(620, 350), Vector2(620, 378), Vector2(560, 378)]},
+			{"kind": "stall", "poly": [Vector2(54, 640), Vector2(106, 640), Vector2(106, 668), Vector2(54, 668)]},
+			{"kind": "stall", "poly": [Vector2(534, 640), Vector2(586, 640), Vector2(586, 668), Vector2(534, 668)]}],
+		"lanterns": [Vector2(320, 330), Vector2(230, 420), Vector2(410, 420), Vector2(320, 510), Vector2(160, 400), Vector2(480, 400),
+			Vector2(320, 200), Vector2(140, 660), Vector2(500, 660)],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"castle": "fort",
 		"bot_posts": [Vector2(320, 340), Vector2(230, 420), Vector2(410, 420), Vector2(320, 500), Vector2(160, 400), Vector2(480, 400),
@@ -585,4 +596,6 @@ static func fitted(m: Dictionary, w: float) -> Dictionary:
 	out["bot_posts"] = out.get("bot_posts", []).map(sx)
 	if out.has("route"):
 		out["route"] = (out["route"] as Array).map(sx)
+	if out.has("lanterns"):
+		out["lanterns"] = (out["lanterns"] as Array).map(sx)
 	return out
