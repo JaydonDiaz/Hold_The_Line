@@ -181,6 +181,10 @@ func _ready() -> void:
 		for i in VOICES:
 			var p := AudioStreamPlayer.new()
 			p.bus = "SFX"
+			# Mixed by the engine, as on the desktop: a web build otherwise hands short
+			# sounds to the browser as "samples", which skips the SFX bus made here (and
+			# the effects made in code), and they never play.
+			p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 			add_child(p)
 			voices.append(p)
 		_players[sound_name] = voices
@@ -189,6 +193,7 @@ func _ready() -> void:
 	for i in 2:
 		var m := AudioStreamPlayer.new()
 		m.bus = "Music"
+		m.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 		m.volume_db = -80.0
 		add_child(m)
 		_music_players.append(m)
