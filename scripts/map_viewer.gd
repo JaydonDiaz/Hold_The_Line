@@ -1,7 +1,8 @@
 extends Control
 ## Classic's battlefield viewer, after the difficulty, covering the whole screen: the whole
-## battlefield as it will be played (its ground, trails and terrain, the enemy camp, the
-## castle wall) shown as large as fits, over a darkened copy of it filling the rest,
+## battlefield as it will be played (its ground, trails and terrain, the enemy camp, its
+## bell towers and lanterns, and the castle itself in the map's own style, flags flying,
+## all in the light of the difficulty picked) shown as large as fits, over a darkened copy of it filling the rest,
 ## with its name and a few words. The arrows (or Left and Right) go through them; Start
 ## (or Enter) begins on the one showing; Back (or Esc) returns to the difficulties.
 ## Maps the campaign hasn't reached yet show too, greyed, locked, and can't be started.
@@ -12,9 +13,33 @@ signal back
 const FieldArt = preload("res://scripts/field_art.gd")
 const Maps = preload("res://scripts/maps.gd")
 const CD = preload("res://scripts/campaign_data.gd")
+const Castle = preload("res://scripts/castle.gd")
+const Bells = preload("res://scripts/bells.gd")
+const Ambience = preload("res://scripts/ambience.gd")
 const FIELD := Vector2(640, 768)
-const STONE := {"keep": [Color(0.6, 0.58, 0.56), Color(0.44, 0.42, 0.42), Color(0.75, 0.15, 0.15)],
-	"guildhall": [Color(0.47, 0.45, 0.47), Color(0.32, 0.3, 0.33), Color(0.62, 0.36, 0.16)]}
+
+
+## What the castle needs to know to draw itself, as the battle would tell it: the field's
+## size, a castle at full health, the difficulty's light, and no troops behind it.
+class Stand extends RefCounted:
+	var FIELD_W := 640.0
+	var CASTLE_Y := 736.0
+	var FIELD_H := 768.0
+	var castle_hp := 1.0
+	var castle_max := 1.0
+	var ambience := Light.new()
+
+	func get_warriors() -> Array:
+		return []
+
+	class Light extends RefCounted:
+		var mood := "normal"
+
+		func glow() -> float:
+			return Ambience.MOODS[mood]["glow"]
+
+var stand := Stand.new()
+var castle: Node2D
 
 var maps: Array = []        # "" (the meadow) and every campaign map, in order
 var open_maps: Array = []   # the ones the campaign has reached
@@ -56,10 +81,19 @@ func _ready() -> void:
 	vp.size = Vector2i(FIELD)
 	vp.disable_3d = true
 	vp.transparent_bg = false
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS   # (the castle's flags and torches move)
 	painter = Node2D.new()
 	painter.draw.connect(_paint)
 	vp.add_child(painter)
+	# The castle itself, as the battle draws it.
+	stand.ambience.mood = difficulty if Ambience.MOODS.has(difficulty) else "normal"
+	castle = Castle.new()
+	castle.main = stand
+	vp.add_child(castle)
+	castle.top_part.castle = castle
+	vp.add_child(castle.top_part)
+	castle.modulate = Ambience.MOODS[stand.ambience.mood]["castle"]
+	castle.top_part.modulate = castle.modulate
 	add_child(vp)
 	# Behind everything, the same battlefield, darkened, filling the whole screen; in
 	# front, the battlefield itself as large as fits between the top bar and the panel.
@@ -167,8 +201,8 @@ func show_map(i: int) -> void:
 	picture.modulate = Color.WHITE if opened else Color(0.45, 0.45, 0.45)
 	backdrop.modulate = Color(0.2, 0.2, 0.2) if opened else Color(0.12, 0.12, 0.12)
 	start_button.disabled = not opened
+	castle.set_style(Maps.get_map(id).get("castle", "keep"))
 	painter.queue_redraw()
-	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _start() -> void:
@@ -180,24 +214,11 @@ func _start() -> void:
 func _paint() -> void:
 	var id: String = maps[at]
 	var m: Dictionary = Maps.get_map(id)
-	FieldArt.paint_field(painter, FIELD.x, FIELD.y, Color.WHITE, m)
-	# The castle wall along the bottom, in its style.
-	var pal: Array = STONE.get(m.get("castle", "keep"), STONE["keep"])
-	var top := 736.0
-	painter.draw_rect(Rect2(0, top, FIELD.x, FIELD.y - top), Color(0.1, 0.07, 0.1))
-	painter.draw_rect(Rect2(0, top + 2, FIELD.x, FIELD.y - top - 2), pal[1])
-	for y in range(int(top) + 3, int(FIELD.y), 8):
-		for x in range(-8 * ((y / 8) % 2), int(FIELD.x), 16):
-			painter.draw_rect(Rect2(x + 1, y, 14, 7), pal[0])
-	for x in range(6, int(FIELD.x), 26):
-		painter.draw_rect(Rect2(x, top - 9, 14, 11), pal[1])
-	for tx in [0.0, FIELD.x - 60.0, FIELD.x / 2.0 - 48.0]:
-		var wide := 96.0 if tx == FIELD.x / 2.0 - 48.0 else 60.0
-		painter.draw_rect(Rect2(tx, top - 40, wide, 72), pal[1])
-		painter.draw_rect(Rect2(tx + 3, top - 37, wide - 6, 66), pal[0])
-		painter.draw_rect(Rect2(tx + wide / 2.0 - 8, top - 70, 2, 30), Color(0.25, 0.2, 0.15))
-		painter.draw_rect(Rect2(tx + wide / 2.0 - 6, top - 70, 16, 10), pal[2])
-	painter.draw_rect(Rect2(FIELD.x / 2.0 - 20, top - 4, 40, 36), Color(0.42, 0.26, 0.14))
+	# The ground in the light the battle has (the difficulty's mood, and the map's own tint).
+	FieldArt.paint_field(painter, FIELD.x, FIELD.y, Ambience.MOODS[stand.ambience.mood]["ground"] * m.get("tint", Color.WHITE), m)
+	# The map's bell towers (the Monastery Gate's), as the battle stands them.
+	for p in m.get("bells", []):
+		Bells.draw_bell_tower(painter, p, 0.0)
 
 
 func _territory(map: String) -> String:
