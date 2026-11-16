@@ -27,6 +27,7 @@ const FIELD_H := 768
 const CASTLE_Y := 736      # top of the castle wall: enemies that reach it get in
 const TILE := 64
 const DEPLOY_TOP := 96     # warriors can't be posted in the enemy entry zone
+const TOUCH_PICK := 34.0   # how near a tap has to be to a troop to pick it (a fingertip is wider than a cursor)
 const MIN_POST_GAP := 30.0
 
 const FREEPLAY_GOLD := 999999
@@ -122,6 +123,7 @@ var ward_pick := []         # Healers waiting for a click on the troop they're t
 var box_start = null        # where a left-drag on open field started (Vector2), while the button's held
 var box_active := false     # it's been dragged far enough to be a selection box
 var box_add := false        # Shift was held: the box adds to the group
+var box_touch := false     # the selection box was started by a tap on a touchscreen
 var group_drag := false     # dragging the whole group to new posts (between waves)
 var group_from := {}        # warrior -> its post when the group drag started
 var mouse := Vector2.ZERO
@@ -1807,6 +1809,8 @@ func _finish_box() -> void:
 		_set_group(now)
 		if now.is_empty():
 			selected = null
+	elif box_touch and wave_active and (selected != null or not group.is_empty()):
+		_order_at(box_start)   # a tap on open ground, on a touchscreen: send them there
 	else:
 		# Just a click on open field: clear the selection.
 		_cancel()
@@ -2288,9 +2292,9 @@ func _cancel() -> void:
 	selected_grave = null
 
 
-func _warrior_at(p: Vector2) -> Warrior:
+func _warrior_at(p: Vector2, reach := Warrior.RADIUS + 6.0) -> Warrior:
 	var best: Warrior = null
-	var best_d := Warrior.RADIUS + 6.0
+	var best_d := reach
 	for w in get_warriors():
 		if w.summoned:
 			continue   # skeletons can't be picked up, moved or sold
@@ -2318,161 +2322,184 @@ func _unhandled_input(event: InputEvent) -> void:
 		var p := get_local_mouse_position()
 		if p.y > FIELD_H or p.y < 0.0 or p.x < 0.0 or p.x > FIELD_W:
 			return   # off the field (the panel, or the scenery around a full screen)
-		if powers.aiming != "":
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				powers.aim_click(p)
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
-				powers.aiming = ""
-			return
-		if bells.active() and event.button_index == MOUSE_BUTTON_LEFT and placing_type == "" and bells.click(p):
-			return   # a temple bell, rung
-		if not area_pick.is_empty():
-			# Drawing a Guard Area: left-drag it out; right-click cancels.
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				area_start = p
-			else:
-				area_pick = []
-				area_start = null
-			return
-		if not ward_pick.is_empty():
-			# Healers waiting to be told who to stay with: that troop (anything else cancels).
-			var ward := _warrior_at(p)
-			var healers := ward_pick.filter(func(h): return is_instance_valid(h))
-			ward_pick = []
-			if ward != null and not healers.has(ward) and ward.kind != "barricade":
-				stay_with(healers, [ward])
-			else:
-				hud.show_message("No troop there: the Healer keeps to what it was doing")
-			return
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			# Healers alone, right-clicking one of your troops: stay with it.
-			var sel := order_units()
-			var ally := _warrior_at(p)
-			if ally != null and not sel.is_empty() and not sel.has(ally) and ally.kind != "barricade" \
-					and sel.all(func(w): return w.is_mobile_healer()):
-				stay_with(sel, [ally])
-				return
-			var mover = null
-			for o in rules.followable():
-				if o.position.distance_to(p) < o.RADIUS + 10.0:
-					mover = o
-			if mover != null and (not group.is_empty() or selected != null):
-				set_follow(mover)   # right-click a wagon (or civilians): follow it
-			elif not group.is_empty():
-				order_group(p)
-			elif selected != null:
-				order_move(p)
-			else:
-				_cancel()
-		elif event.button_index == MOUSE_BUTTON_LEFT:
-			if placing_type != "":
-				hire_at(p)
-				return
-			var w := _warrior_at(p)
-			if event.shift_pressed and w != null and _groupable(w):
-				_toggle_in_group(w)   # Shift+click: add or remove one troop
-				return
-			if w != null and group.has(w) and not wave_active:
-				_start_group_drag()   # drag the whole group between waves
-				return
-			if w == null and not on_castle(p) and _grave_at(p) == null:
-				# Open field: a click clears the selection, a drag draws a selection box.
-				box_start = p
-				box_active = false
-				box_add = event.shift_pressed
-				return
-			group.clear()
-			if w != null and w != selected and not w is Barricade and w.lift <= 0.0:
-				w.land_t = Warrior.LAND_TIME * 0.6   # picked out: a little springy "yes?"
-			selected = w
-			selected_grave = _grave_at(p) if selected == null else null
-			castle_selected = selected == null and selected_grave == null and on_castle(p)
-			if selected != null and not wave_active:
-				_start_drag(selected)
+		# (A touchscreen's taps come in as left clicks, marked as made up from the touch.)
+		pointer_down(p, event.button_index, event.shift_pressed, event.device == InputEvent.DEVICE_ID_EMULATION)
 	elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if area_start != null:
 			_finish_area()
 		elif box_start != null:
 			_finish_box()
 	elif event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
-				# Number keys pick from whichever hire tab is showing.
-				var i: int = event.keycode - KEY_1
-				if castle_selected and selected == null:
-					if i < Data.CASTLE_PATHS.size():
-						castle_upgrade(i)
+		_key(event)
+
+
+## A press on the field at p: a left or right click (button), with Shift held or not,
+## or a tap on a touchscreen (touch). On a touchscreen there's no right-click, so in a
+## wave a tap on open ground with troops selected sends them there (what right-click
+## does), and a tap on the selected troop lets it go.
+func pointer_down(p: Vector2, button: int, shift := false, touch := false) -> void:
+	if powers.aiming != "":
+		if button == MOUSE_BUTTON_LEFT:
+			powers.aim_click(p)
+		elif button == MOUSE_BUTTON_RIGHT:
+			powers.aiming = ""
+		return
+	if bells.active() and button == MOUSE_BUTTON_LEFT and placing_type == "" and bells.click(p):
+		return   # a temple bell, rung
+	if not area_pick.is_empty():
+		# Drawing a Guard Area: left-drag it out; right-click cancels.
+		if button == MOUSE_BUTTON_LEFT:
+			area_start = p
+		else:
+			area_pick = []
+			area_start = null
+		return
+	if not ward_pick.is_empty():
+		# Healers waiting to be told who to stay with: that troop (anything else cancels).
+		var ward := _warrior_at(p, TOUCH_PICK if touch else Warrior.RADIUS + 6.0)
+		var healers := ward_pick.filter(func(h): return is_instance_valid(h))
+		ward_pick = []
+		if ward != null and not healers.has(ward) and ward.kind != "barricade":
+			stay_with(healers, [ward])
+		else:
+			hud.show_message("No troop there: the Healer keeps to what it was doing")
+		return
+	if button == MOUSE_BUTTON_RIGHT:
+		_order_at(p)
+	elif button == MOUSE_BUTTON_LEFT:
+		if placing_type != "":
+			hire_at(p)
+			return
+		var w := _warrior_at(p, TOUCH_PICK if touch else Warrior.RADIUS + 6.0)
+		if touch and wave_active and w != null and w == selected and group.is_empty():
+			_cancel()   # a tap on the selected troop: let it go
+			return
+		if shift and w != null and _groupable(w):
+			_toggle_in_group(w)   # Shift+click: add or remove one troop
+			return
+		if w != null and group.has(w) and not wave_active:
+			_start_group_drag()   # drag the whole group between waves
+			return
+		if w == null and not on_castle(p) and _grave_at(p) == null:
+			# Open field: a click clears the selection, a drag draws a selection box.
+			box_start = p
+			box_active = false
+			box_add = shift
+			box_touch = touch
+			return
+		group.clear()
+		if w != null and w != selected and not w is Barricade and w.lift <= 0.0:
+			w.land_t = Warrior.LAND_TIME * 0.6   # picked out: a little springy "yes?"
+		selected = w
+		selected_grave = _grave_at(p) if selected == null else null
+		castle_selected = selected == null and selected_grave == null and on_castle(p)
+		if selected != null and not wave_active:
+			_start_drag(selected)
+
+
+## Right-click at p (a tap on open ground, on a touchscreen in a wave): the selected
+## troops' orders. Healers alone, on one of your troops: stay with it; on a wagon (or
+## civilians): follow it; anywhere else: go there. With nothing selected, it cancels.
+func _order_at(p: Vector2) -> void:
+	var sel := order_units()
+	var ally := _warrior_at(p)
+	if ally != null and not sel.is_empty() and not sel.has(ally) and ally.kind != "barricade" \
+			and sel.all(func(w): return w.is_mobile_healer()):
+		stay_with(sel, [ally])
+		return
+	var mover = null
+	for o in rules.followable():
+		if o.position.distance_to(p) < o.RADIUS + 10.0:
+			mover = o
+	if mover != null and (not group.is_empty() or selected != null):
+		set_follow(mover)   # right-click a wagon (or civilians): follow it
+	elif not group.is_empty():
+		order_group(p)
+	elif selected != null:
+		order_move(p)
+	else:
+		_cancel()
+
+
+func _key(event: InputEventKey) -> void:
+	match event.keycode:
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
+			# Number keys pick from whichever hire tab is showing.
+			var i: int = event.keycode - KEY_1
+			if castle_selected and selected == null:
+				if i < Data.CASTLE_PATHS.size():
+					castle_upgrade(i)
+				return
+			match hud.hire_tab:
+				"abilities":
+					if i < Data.ABILITIES.size():
+						ability_item(Data.ABILITIES.keys()[i])
 					return
-				match hud.hire_tab:
-					"abilities":
-						if i < Data.ABILITIES.size():
-							ability_item(Data.ABILITIES.keys()[i])
-						return
-					"repair":
-						if i < Data.REPAIR_CHUNKS.size():
-							repair_castle(i)
-						return
-				var kinds: Array = hud.tab_kinds(hud.hire_tab)
-				if i < kinds.size():
-					_on_hire_pressed(kinds[i])
-			KEY_TAB:
-				var order: Array = hud.TABS.map(func(t): return t[0])
-				switch_tab(order[(order.find(hud.hire_tab) + 1) % order.size()])
-			KEY_C:
-				select_castle()
-			KEY_A:
-				if event.ctrl_pressed or event.meta_pressed:
-					select_all_troops()
-				else:
-					toggle_auto()
-			KEY_V:
-				switch_tab("abilities")
-			KEY_B:
-				switch_tab("repair")
-			KEY_Z:
-				switch_tab("troops")
-			KEY_X:
-				switch_tab("emplacements")
-			KEY_SPACE:
-				start_wave()
-			KEY_Q:
-				upgrade_selected(0)
-			KEY_W:
-				upgrade_selected(1)
-			KEY_E:
-				upgrade_selected(2)
-			KEY_R:
-				upgrade_selected(3)
-			KEY_S:
-				sell_selected()
-			KEY_T:
-				cycle_target_priority()
-			KEY_M:
-				cycle_move_mode()
-			KEY_Y:
-				if rules.action_label() != "":
-					rules.action()
-			KEY_J:
-				toggle_follow()
-			KEY_O:
-				hud.toggle_orders(self)
-			KEY_G:
-				toggle_song()
-			KEY_D:
-				start_area_pick()
-			KEY_K:
-				if bells.active():
-					bells.ring_all()
-			KEY_U:
-				if contracts.active():
-					contracts.sign()
-			KEY_H:
-				if contracts.active():
-					contracts.hire()
-			KEY_F:
-				cycle_speed()
-			KEY_ESCAPE:
-				_cancel()
+				"repair":
+					if i < Data.REPAIR_CHUNKS.size():
+						repair_castle(i)
+					return
+			var kinds: Array = hud.tab_kinds(hud.hire_tab)
+			if i < kinds.size():
+				_on_hire_pressed(kinds[i])
+		KEY_TAB:
+			var order: Array = hud.TABS.map(func(t): return t[0])
+			switch_tab(order[(order.find(hud.hire_tab) + 1) % order.size()])
+		KEY_C:
+			select_castle()
+		KEY_A:
+			if event.ctrl_pressed or event.meta_pressed:
+				select_all_troops()
+			else:
+				toggle_auto()
+		KEY_V:
+			switch_tab("abilities")
+		KEY_B:
+			switch_tab("repair")
+		KEY_Z:
+			switch_tab("troops")
+		KEY_X:
+			switch_tab("emplacements")
+		KEY_SPACE:
+			start_wave()
+		KEY_Q:
+			upgrade_selected(0)
+		KEY_W:
+			upgrade_selected(1)
+		KEY_E:
+			upgrade_selected(2)
+		KEY_R:
+			upgrade_selected(3)
+		KEY_S:
+			sell_selected()
+		KEY_T:
+			cycle_target_priority()
+		KEY_M:
+			cycle_move_mode()
+		KEY_Y:
+			if rules.action_label() != "":
+				rules.action()
+		KEY_J:
+			toggle_follow()
+		KEY_O:
+			hud.toggle_orders(self)
+		KEY_G:
+			toggle_song()
+		KEY_D:
+			start_area_pick()
+		KEY_K:
+			if bells.active():
+				bells.ring_all()
+		KEY_U:
+			if contracts.active():
+				contracts.sign()
+		KEY_H:
+			if contracts.active():
+				contracts.hire()
+		KEY_F:
+			cycle_speed()
+		KEY_ESCAPE:
+			_cancel()
 
 
 # --- Effects -------------------------------------------------------------

@@ -2,7 +2,8 @@ extends SceneTree
 ## Unit orders: target commitment (Focused / Reactive), movement zones (Hold, Guard Area:
 ## a rectangle drawn on the field or picked from the presets, Free Roam), blows struck in
 ## passing, danger reactions (falling back, calling for help), answering calls, Healers
-## getting to the hurt past enemies, and the orders panel for one troop or a group.
+## getting to the hurt past enemies, the orders panel for one troop or a group, and
+## touchscreen taps (a tap on open ground in a wave sends the selected troops there).
 ## Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/orders_test.gd
 ## Classic on the open meadow, the field held at 640 wide. Exits 1 if anything failed.
@@ -91,6 +92,7 @@ func _run() -> void:
 	await _answers()
 	await _healers()
 	await _group_panel()
+	await _touch()
 	main.free()
 	print("%d checks, %d failed" % [checks, fails])
 	quit(1 if fails > 0 else 0)
@@ -701,3 +703,37 @@ func _group_panel() -> void:
 	main._cancel()
 	main.hud.refresh(main)
 	check(main.hud.orders_box == null, "...and with nothing selected the panel closes")
+
+
+# --- Touch -------------------------------------------------------------------------------
+
+## On a touchscreen, with no right-click: in a wave, a tap on open ground sends the
+## selected troop (or group) there, and a tap on the selected troop lets it go. A mouse
+## click on open ground still just clears the selection, and between waves a tap does too.
+func _touch() -> void:
+	await _fresh()
+	var w = _hire("swordsman", Vector2(320, 560))
+	main.pointer_down(w.position + Vector2(28, 0), MOUSE_BUTTON_LEFT, false, true)
+	check(main.selected == w, "T  a tap near a troop selects it (a fingertip's width away)")
+	main.pointer_down(Vector2(200, 420), MOUSE_BUTTON_LEFT, false, true)
+	main._finish_box()
+	check(main.selected == w and w.post.distance_to(Vector2(200, 420)) < 30.0, "T  in a wave, a tap on open ground sends it there (%s)" % str(w.post.round()))
+	main.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, true)
+	check(main.selected == null, "T  a tap on the selected troop lets it go")
+	main.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, false)
+	main.pointer_down(Vector2(440, 420), MOUSE_BUTTON_LEFT, false, false)
+	main._finish_box()
+	check(main.selected == null and w.post.distance_to(Vector2(440, 420)) > 60.0, "T  a mouse click on open ground still just clears the selection")
+	var v = _hire("archer", Vector2(380, 600))
+	main._set_group([w, v])
+	main.pointer_down(Vector2(320, 360), MOUSE_BUTTON_LEFT, false, true)
+	main._finish_box()
+	var mid: Vector2 = (w.post + v.post) / 2.0
+	check(mid.distance_to(Vector2(320, 360)) < 30.0, "T  ...and a tap sends a whole group there, in formation (its middle at %s)" % str(mid.round()))
+	main._cancel()
+	main.wave_active = false
+	main.pointer_down(v.position, MOUSE_BUTTON_LEFT, false, true)
+	main._end_drag()
+	main.pointer_down(Vector2(120, 300), MOUSE_BUTTON_LEFT, false, true)
+	main._finish_box()
+	check(main.selected == null, "T  between waves, a tap on open ground just clears the selection (troops are dragged then)")
