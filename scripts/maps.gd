@@ -87,8 +87,8 @@ const MAPS := {
 		"trails": [[Vector2(320, 96), Vector2(290, 190), Vector2(200, 290), Vector2(186, 420), Vector2(214, 560), Vector2(320, 736)],
 			[Vector2(320, 96), Vector2(350, 190), Vector2(440, 290), Vector2(454, 420), Vector2(426, 560), Vector2(320, 736)]],
 		"castle": "guildhall",
-		"bot_posts": [Vector2(190, 470), Vector2(450, 470), Vector2(320, 580), Vector2(250, 600), Vector2(390, 600),
-			Vector2(190, 360), Vector2(450, 360), Vector2(280, 650), Vector2(360, 650)],
+		"bot_posts": [Vector2(165, 440), Vector2(225, 440), Vector2(415, 440), Vector2(475, 440), Vector2(320, 600),
+			Vector2(195, 500), Vector2(445, 500), Vector2(280, 640), Vector2(360, 640)],
 	},
 	# Greenwood: three forest roads (each about 120-135px), between thin belts of trees on
 	# the flanks and two narrow stands between the roads, meeting in a clearing above the
