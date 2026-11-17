@@ -1,7 +1,7 @@
 extends Node2D
 ## The Arcane Spires' conduits (Phase 5, F1): rune circles set in the ground, each charged
-## with one of the Mage's four arts in its colour (Storm purple, Arcane Lance gold, Fire
-## red, Necromancy green). A Mage stationed on one (its post on the sigil: it keeps the
+## with one of the Mage's four arts in its colour (Storm blue, like a Storm Mage's orb;
+## Arcane Lance gold, Fire red, Necromancy green). A Mage stationed on one (its post on the sigil: it keeps the
 ## power while it steps off to fight, but not one just passing over), or a Mage Tower built
 ## on one, draws on it:
 ##   - the conduit of its own art (the path it's furthest along) powers it up a good deal:
@@ -17,7 +17,7 @@ extends Node2D
 const STATION := 34.0         # a Mage whose post is this near a sigil's middle is stationed on it
 const MATCH := {"damage": 0.35, "rate": 0.25}
 const OTHER := {"damage": 0.1}
-const COLORS := [Color(0.68, 0.45, 1.0), Color(1.0, 0.82, 0.38), Color(1.0, 0.36, 0.22), Color(0.5, 0.95, 0.42)]
+const COLORS := [Color(0.38, 0.68, 1.0), Color(1.0, 0.82, 0.38), Color(1.0, 0.36, 0.22), Color(0.5, 0.95, 0.42)]
 const NAMES := ["Storm", "Arcane Lance", "Fire", "Necromancy"]
 const OUTLINE := Color(0.1, 0.07, 0.1)
 const MAGES := ["mage", "magetower"]
