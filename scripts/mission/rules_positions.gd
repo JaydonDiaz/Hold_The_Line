@@ -15,6 +15,7 @@ extends "res://scripts/mission/rules.gd"
 ## enter, the rest for any other still standing, so the attack spreads but has a weight.
 
 const Objective = preload("res://scripts/mission/objective.gd")
+const Maps = preload("res://scripts/maps.gd")
 
 var objs: Array = []
 var lost := 0
@@ -61,6 +62,8 @@ func enemy_goal(e):
 		return null
 	if has_castle() and randf() < float(mission.get("castle_share", 0.25)):
 		return null
+	if Maps.get_map(main.map_id).has("islands"):
+		return _near_goal(e, alive)
 	if randf() < 0.7:
 		var best = alive[0]
 		for o in alive:
@@ -68,6 +71,22 @@ func enemy_goal(e):
 				best = o
 		return best
 	return alive.pick_random()
+
+
+## On floating islands each position has its own bridges, and the camp is the only way
+## between them: an enemy goes for the one nearest by the way it has to walk (so up the
+## bridge in front of it), and the share that spreads out only to ones about as near,
+## never off along the camp to a bridge across the map.
+func _near_goal(e, alive: Array):
+	var cost := {}
+	var best = null
+	for o in alive:
+		cost[o] = main.paths.route_length(e.position, e.radius, o)
+		if best == null or cost[o] < cost[best]:
+			best = o
+	if randf() < 0.7 or cost[best] == INF:
+		return best
+	return alive.filter(func(o): return cost[o] <= cost[best] + 160.0).pick_random()
 
 
 func wave_cleared(n: int) -> bool:

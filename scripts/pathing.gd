@@ -700,6 +700,15 @@ func _free_near(g: AStarGrid2D, c: Vector2i) -> Vector2i:
 					return n
 	return c
 
+## How far an enemy of this size at `pos` has to walk to reach objective `goal`, in
+## pixels, round the terrain (a straight line on open ground). INF if there's no way.
+func route_length(pos: Vector2, radius: float, goal) -> float:
+	if terrain.is_empty():
+		return pos.distance_to(goal.position)
+	var d: float = _field(radius, goal)["dist"][_index(_cell(pos))]
+	return d * CELL if d < 1e15 else INF
+
+
 ## The mission's objectives (enemies walk round them, and to the one they're sent for).
 func set_objectives(list: Array) -> void:
 	objectives = list

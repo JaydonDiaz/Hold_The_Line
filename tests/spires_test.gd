@@ -21,6 +21,11 @@ const CD = preload("res://scripts/campaign_data.gd")
 const Maps = preload("res://scripts/maps.gd")
 const Conduits = preload("res://scripts/conduits.gd")
 
+## A stand-in for an enemy coming in: all the rules look at to pick its objective.
+class Foe:
+	var position := Vector2.ZERO
+	var radius := 12.0
+
 var main
 var fails := 0
 var checks := 0
@@ -179,6 +184,26 @@ func _missions() -> void:
 	var objs: Array = main.rules.objectives()
 	check(main.map_id == "spires_relight" and objs.size() == 3 and objs.all(func(o): return o.kind == "spire") and int(CD.MISSIONS["sp_relight"]["can_lose"]) == 1,
 			"M  Relight the Spires: three spires to keep standing, one may fall")
+	# On a wide field, an enemy coming in over one side's bridge goes for that side's spire
+	# (or one about as near), never off along the camp to the spire across the map.
+	root.size = Vector2i(1500, 800)
+	main._lock_portrait(false)
+	await _frames(3)
+	var left = objs[0]
+	var right = objs[0]
+	for o in objs:
+		left = o if o.position.x < left.position.x else left
+		right = o if o.position.x > right.position.x else right
+	var foe := Foe.new()
+	var crossed := 0
+	for i in 60:
+		foe.position = Vector2(main.FIELD_W - 70.0, -12.0)
+		crossed += 1 if main.rules.enemy_goal(foe) == left else 0
+		foe.position = Vector2(70.0, -12.0)
+		crossed += 1 if main.rules.enemy_goal(foe) == right else 0
+	check(main.FIELD_W >= 1000 and crossed == 0,
+			"M  ...enemies go for the spire up the bridge in front of them, not across the map (field %d wide, %d crossed)" % [main.FIELD_W, crossed])
+	main._lock_portrait(true)
 	await _mission("sp_archive")
 	objs = main.rules.objectives()
 	check(main.map_id == "spires_archive" and objs.size() == 1 and CD.MISSIONS["sp_archive"]["type"] == "protect"
