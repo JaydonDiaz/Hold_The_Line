@@ -8,6 +8,7 @@ extends RefCounted
 ## The animated parts (fire, torches, weather) are in ambience.gd.
 
 const Sprites = preload("res://scripts/sprites.gd")
+const CampArt = preload("res://scripts/camp_art.gd")   # the enemy camp, dressed for the map's region
 const OUTLINE := Color(0.1, 0.07, 0.1)
 const TOP := 96.0          # main.DEPLOY_TOP: where the enemy entry zone ends
 const BOTTOM := 690.0      # above here the castle's towers start
@@ -26,14 +27,20 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 				var hh := (x * 73856093) ^ (y * 19349663)
 				variant = 3 if hh % 11 == 0 else absi(hh) % 3
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * tile, y * tile, tile, tile), false, tint)
-	ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
+	var camp: bool = map.get("camp", true)
+	var th := CampArt.theme(map) if camp else ""
+	var themed := camp and CampArt.paint_ground(ci, w, tint, th)
+	if not themed:
+		ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
 	if map.get("biome", "") == "snow":
 		ci.draw_rect(Rect2(0, 0, w, TOP), Color(Color(0.88, 0.91, 0.95) * tint, 0.78))   # the enemy's ground snowed over too
 		ci.draw_rect(Rect2(0, 736.0, w, h - 736.0), Color(0.88, 0.91, 0.95) * tint)        # ...and the strip behind your line
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
-	var camp: bool = map.get("camp", true)
-	draw_spawn(ci, w, tint, camp)
+	if themed or th == "frostkeep":
+		CampArt.draw_camp(ci, w, tint, th, props(w)["fire"], props(w)["torches"])
+	else:
+		draw_spawn(ci, w, tint, camp)
 	if camp:
 		for x in range(0, int(w), 16):
 			ci.draw_rect(Rect2(x, TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
