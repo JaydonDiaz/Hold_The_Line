@@ -286,6 +286,8 @@ func _draw_body() -> void:
 			preload("res://scripts/bells.gd").draw_bell_tower(cv, Vector2.ZERO, t, 1.0 if hit > 0.0 else 0.0)
 		"exchange":
 			_draw_exchange()
+		"spire":
+			_draw_spire()
 		_:
 			_draw_workshop()
 	cv.draw_set_transform(Vector2.ZERO)
@@ -315,6 +317,8 @@ func _top() -> float:
 			return -104.0
 		"exchange":
 			return -100.0
+		"spire":
+			return -112.0
 	return -62.0
 
 
@@ -431,6 +435,44 @@ func _draw_exchange() -> void:
 	if worn > 0.66:
 		cv.draw_line(Vector2(6, -21) * PX, Vector2(9, -13) * PX, OUTLINE, 2.0)
 		cv.draw_line(Vector2(9, -13) * PX, Vector2(7, -9) * PX, OUTLINE, 2.0)
+
+
+## A spire of the Arcane Spires: a tower of pale stone banded in violet, a great crystal
+## held at its crown in a cradle of iron, alight while the Conclave's rite goes on; it
+## cracks and its crystal dims as it's worn down.
+func _draw_spire() -> void:
+	var stone := Color(0.72, 0.7, 0.78)
+	var dark := Color(0.5, 0.48, 0.58)
+	var band := Color(0.48, 0.32, 0.8)
+	var worn := 1.0 - hp / max_hp
+	# The plinth and the tower, narrowing as it rises.
+	_b(-10, -4, 20, 5, OUTLINE)
+	_b(-9, -3, 18, 3, dark)
+	_b(-7, -26, 14, 23, OUTLINE)
+	_b(-6, -25, 12, 22, stone)
+	_b(2, -25, 4, 22, dark)
+	_b(-5, -34, 10, 9, OUTLINE)
+	_b(-4, -33, 8, 8, stone)
+	_b(1, -33, 3, 8, dark)
+	for y in [-22, -14, -30]:
+		_b(-6 if y > -26 else -4, y, 12 if y > -26 else 8, 2, band)
+	# The cradle and the crystal.
+	_b(-5, -36, 10, 2, OUTLINE)
+	var lit := 0.0 if main == null else (0.75 + 0.25 * sin(t * 3.0) if main.wave_active else 0.5)
+	lit *= 1.0 - worn * 0.6
+	var glow := Color(0.7, 0.5, 1.0)
+	cv.draw_colored_polygon(PackedVector2Array([Vector2(0, -150), Vector2(10, -120), Vector2(0, -104), Vector2(-10, -120)]), OUTLINE)
+	cv.draw_colored_polygon(PackedVector2Array([Vector2(0, -146), Vector2(8, -120), Vector2(0, -107), Vector2(-8, -120)]), glow.darkened(0.45 - 0.45 * lit))
+	cv.draw_colored_polygon(PackedVector2Array([Vector2(0, -146), Vector2(8, -120), Vector2(0, -107)]), glow.lightened(0.25 * lit))
+	if lit > 0.6:
+		cv.draw_circle(Vector2(0, -124), 26.0, Color(glow, 0.12 * lit))
+	# Cracks as it's worn down.
+	if worn > 0.33:
+		_b(-3, -20, 1, 5, OUTLINE)
+		_b(-2, -15, 1, 4, OUTLINE)
+	if worn > 0.66:
+		_b(3, -11, 1, 5, OUTLINE)
+		_b(-4, -31, 2, 1, OUTLINE)
 
 
 func _draw_stone() -> void:

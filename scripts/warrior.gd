@@ -721,6 +721,10 @@ func _update_buffs() -> void:
 	# The castle's Rally Horn.
 	for key in ["damage", "rate", "speed"]:
 		buff[key] += main.powers.rally(key)
+	# A Mage on one of the Spires' conduits draws on it.
+	var drawn: Dictionary = main.conduits.boost(self)
+	for key in drawn:
+		buff[key] += drawn[key]
 	# A Healer's halo: the best one covering this unit guards it (on top of statues and songs).
 	var guard := 0.0
 	for w in main.get_warriors():
@@ -877,6 +881,10 @@ func stats_text() -> String:
 	if build_left > 0.0:
 		return "Under construction - an Engineer has %.1fs of work left on it" % build_left
 	var s := "HP %d/%d   Damage %.0f   Every %.2fs" % [ceili(hp), ceili(max_hp), damage, cooldown]
+	var src: Dictionary = main.conduits.source(self)
+	if not src.is_empty():
+		var full: bool = int(src["path"]) == main.conduits.art_of(self)
+		s += "   Sigil: %s (%s%s)" % [main.conduits.NAMES[int(src["path"])], main.conduits.words(main.conduits.boost(self)), "" if full else ", not its art"]
 	if is_support():
 		match data["attack"]:
 			"mine":

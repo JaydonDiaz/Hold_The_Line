@@ -50,6 +50,7 @@ var grave_layer := Node2D.new()
 var hazards := preload("res://scripts/hazards.gd").new()   # thin ice and blizzards (the North), over the ground
 var gust := 0.0                    # how hard a blizzard is blowing now (0-1; see hazards.gd)
 var bells := preload("res://scripts/bells.gd").new()   # the High Monastery's temple bells
+var conduits := preload("res://scripts/conduits.gd").new()   # the Arcane Spires' rune circles
 var contracts := preload("res://scripts/contracts.gd").new()   # the Free Cities' contracts and sellswords
 var night := preload("res://scripts/night.gd").new()   # a night battle's darkness and lanterns (Carnival Night)
 var corpse_layer := Node2D.new()   # enemies falling as they die (see spawn_corpse), on the ground under the troops
@@ -204,7 +205,7 @@ func _ready() -> void:
 	add_child(ground_sprite)
 	castle.top_part.castle = castle
 	add_child(contracts)
-	for layer in [hazards, grave_layer, corpse_layer, wall_layer, warrior_layer, bells, castle, castle.top_part, enemy_layer, night, powers, fx_layer, ambience, overlay]:
+	for layer in [hazards, conduits, grave_layer, corpse_layer, wall_layer, warrior_layer, bells, castle, castle.top_part, enemy_layer, night, powers, fx_layer, ambience, overlay]:
 		add_child(layer)
 	overlay.draw.connect(_draw_overlay)
 	for sig in [enemy_layer.child_entered_tree, enemy_layer.child_exiting_tree]:
@@ -363,6 +364,7 @@ func choose_mode(mode: String) -> void:
 	paths.set_map(Maps.get_map(map_id))
 	hazards.setup(self, Maps.get_map(map_id), mission)
 	bells.setup(self, mission, Maps.get_map(map_id))
+	conduits.setup(self, Maps.get_map(map_id))
 	contracts.setup(self, mission)
 	night.setup(self, mission)
 	if paths.has_terrain():
@@ -490,8 +492,11 @@ func _process(delta: float) -> void:
 	var hovered: Warrior = null
 	if started and not game_over and dragging == null and placing_type == "" and mouse.y <= FIELD_H:
 		hovered = _warrior_at(mouse)
+	var sigil: Dictionary = conduits.at_point(mouse) if hovered == null and started and mouse.y <= FIELD_H else {}
 	if hovered == null and not castle_selected and _castle_hovered():
 		hud.show_castle_card(self, mouse)
+	elif not sigil.is_empty():
+		hud.show_card_at(conduits.card_text(sigil), mouse)
 	else:
 		hud.show_unit_card(hovered, mouse)
 	overlay.queue_redraw()

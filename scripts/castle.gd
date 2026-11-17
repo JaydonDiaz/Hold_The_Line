@@ -77,6 +77,12 @@ const STYLES := {
 		"wood": Color(0.4, 0.25, 0.15), "iron": Color(0.8, 0.65, 0.3), "banner": Color(0.45, 0.25, 0.55),
 		"banner_trim": Color(0.95, 0.78, 0.3), "left_banner": Color(0.2, 0.5, 0.55), "ivy": false,
 		"emblem": "coin", "roof": "tile", "extras": ["shields"]},
+	# The Arcane Spires' Conclave wall: pale starstone banded in violet, crystal spires
+	# on the towers, rune-stones in the wall, the Conclave's violet with a star.
+	"conclave": {"stone": Color(0.72, 0.7, 0.78), "stone_dark": Color(0.5, 0.48, 0.58), "stone_light": Color(0.84, 0.82, 0.9),
+		"wood": Color(0.3, 0.22, 0.36), "iron": Color(0.62, 0.5, 0.9), "banner": Color(0.48, 0.32, 0.8),
+		"banner_trim": Color(0.95, 0.85, 0.5), "left_banner": Color(0.48, 0.32, 0.8), "ivy": false,
+		"emblem": "star", "roof": "crystal", "extras": ["runes"]},
 }
 const TOWER_W := 60.0
 const TOWER_RISE := 48.0     # how far the corner towers stand above the wall
@@ -393,6 +399,11 @@ func _banner(ci: CanvasItem, top: Vector2, blue: bool) -> void:
 				ci.draw_colored_polygon(PackedVector2Array([c + Vector2(k * 4.0, 3), c + Vector2(k * 4.0 - 2.5 + k, -2 + absf(k) * 2.0),
 						c + Vector2(k * 5.0, -6 + absf(k) * 3.0), c + Vector2(k * 4.0 + 2.5 + k, -2 + absf(k) * 2.0)]), trim)
 			ci.draw_line(c + Vector2(-6, 4), c + Vector2(6, 4), trim, 1.0)
+		"star":     # the Conclave's star
+			for k in 4:
+				var d := Vector2.from_angle(k * PI / 4.0) * (6.0 if k % 2 == 0 else 4.0)
+				ci.draw_line(c - d, c + d, trim, 1.5)
+			Sprites.disc(ci, c, 1.5, Color(1, 1, 1))
 		"coin":     # the merchants' coin
 			Sprites.disc(ci, c, 5.0, trim)
 			Sprites.disc(ci, c, 3.0, trim.darkened(0.25))
@@ -582,6 +593,18 @@ func _roof(ci: CanvasItem, r: Rect2) -> float:
 			ci.draw_line(Vector2(mid, base - 32), Vector2(mid, base - 44), Color(0.9, 0.7, 0.28), 1.5)
 			Sprites.disc(ci, Vector2(mid, base - 44), 2.5, Color(0.95, 0.78, 0.35))
 			return 46.0
+		"crystal":
+			# A spire of violet crystal standing out of the tower, lit along one face.
+			var tip := Vector2(mid, base - 46)
+			var body := PackedVector2Array([Vector2(mid - half * 0.55, base), Vector2(mid - half * 0.4, base - 24), tip,
+					Vector2(mid + half * 0.4, base - 24), Vector2(mid + half * 0.55, base)])
+			ci.draw_colored_polygon(body, Color(0.52, 0.36, 0.86))
+			ci.draw_colored_polygon(PackedVector2Array([Vector2(mid, base), Vector2(mid, base - 24), tip, Vector2(mid + half * 0.4, base - 24), Vector2(mid + half * 0.55, base)]), Color(0.68, 0.5, 1.0))
+			ci.draw_polyline(body + PackedVector2Array([body[0]]), OUTLINE, 2.0)
+			ci.draw_line(Vector2(mid + 3, base - 6), tip + Vector2(1, 6), Color(0.9, 0.8, 1.0), 1.5)
+			var glow := 0.5 + 0.5 * sin(t * 2.0 + mid)
+			ci.draw_circle(tip + Vector2(0, 8), 7.0 + glow * 2.0, Color(0.75, 0.6, 1.0, 0.18))
+			return 50.0
 		"tile", "snow":
 			# A cone of terracotta tiles, or of slate with snow on it.
 			var col := Color(0.72, 0.36, 0.22) if pal["roof"] == "tile" else Color(0.36, 0.4, 0.48)

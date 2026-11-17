@@ -8,7 +8,8 @@ extends RefCounted
 ## window makes it (like the open meadow): every x is a share of the width (fitted()). Each map has:
 ##   name       what Classic's battlefield cards call it
 ##   blurb      a few words for its card
-##   biome      which ground painter and palette (field_art.gd): "meadow" or "mountain"
+##   biome      which ground painter and palette (field_art.gd): "meadow", "mountain", "snow",
+##              "city", or "void" (floating islands: see islands)
 ##   lanes      [x from, x to] stretches of the top edge where enemies come in
 ##   terrain    shapes that block walking (not flying, not shots): {"kind", "poly"} with
 ##              kind "rock", "cliff", "trees", "pit", "water", "ruin", "house", "hedge",
@@ -28,6 +29,12 @@ extends RefCounted
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
 ##   lanterns   lantern posts stood about the field (just paint, lit; a night mission hangs
 ##              its own, which light up the dark)
+##   islands    floating islands ({"at", "r", "path": the sigil's art on it, or -1}), joined
+##              by "bridges" ({"from", "to", "w", "path": the colour they glow}) and "lands"
+##              (rectangles: the camp's ground, the castle's); the rest is the void, which
+##              nothing walks on (worked out by fitted())
+##   conduits   the Arcane Spires' rune circles ({"at", "path"}: conduits.gd), lending
+##              their power to Mages standing on them
 ##   bells      free-standing bell towers (bells.gd) in any battle on the map whose mission
 ##              has no bells of its own (Classic, Battle Modes)
 ## ZONES are fields only Battle Modes use: the stretches of road a convoy passes through
@@ -386,6 +393,111 @@ const MAPS := {
 		"bot_posts": [Vector2(320, 340), Vector2(230, 420), Vector2(410, 420), Vector2(320, 500), Vector2(160, 400), Vector2(480, 400),
 			Vector2(320, 640)],
 	},
+	# The Arcane Spires, the Broken Circle: the Circle (the ground to take and hold) on a great
+	# floating island, four small islands round it with a sigil each (one of each art), glowing
+	# bridges in their sigils' colours between them, the camp above and the castle below.
+	"spires_circle": {
+		"name": "The Broken Circle", "battle": "spires", "music": "mountain",
+		"blurb": "Floating islands\nround the broken\nCircle",
+		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
+		"lanes": [[60, 580]],
+		"islands": [
+			{"at": Vector2(150, 228), "r": 64, "path": 0},
+			{"at": Vector2(490, 228), "r": 64, "path": 1},
+			{"at": Vector2(108, 522), "r": 60, "path": 2},
+			{"at": Vector2(532, 522), "r": 60, "path": 3},
+			{"at": Vector2(320, 440), "r": 142, "path": -1}],
+		"bridges": [
+			{"from": Vector2(150, 80), "to": Vector2(150, 178), "w": 84, "path": 0},
+			{"from": Vector2(490, 80), "to": Vector2(490, 178), "w": 84, "path": 1},
+			{"from": Vector2(320, 80), "to": Vector2(320, 312), "w": 84, "path": -1},
+			{"from": Vector2(187, 274), "to": Vector2(238, 338), "w": 84, "path": 0},
+			{"from": Vector2(453, 274), "to": Vector2(402, 338), "w": 84, "path": 1},
+			{"from": Vector2(159, 502), "to": Vector2(198, 487), "w": 84, "path": 2},
+			{"from": Vector2(481, 502), "to": Vector2(442, 487), "w": 84, "path": 3},
+			{"from": Vector2(108, 568), "to": Vector2(108, 704), "w": 84, "path": 2},
+			{"from": Vector2(532, 568), "to": Vector2(532, 704), "w": 84, "path": 3},
+			{"from": Vector2(320, 568), "to": Vector2(320, 704), "w": 90, "path": -1}],
+		"lands": [Rect2(-60, -150, 760, 250), Rect2(-60, 684, 760, 120)],
+		"terrain": [
+			{"kind": "crystal", "poly": [Vector2(204, 413), Vector2(219, 416), Vector2(224, 440), Vector2(217, 460), Vector2(204, 470), Vector2(191, 461), Vector2(184, 440), Vector2(190, 417)]},
+			{"kind": "crystal", "poly": [Vector2(436, 406), Vector2(451, 416), Vector2(453, 440), Vector2(448, 459), Vector2(436, 473), Vector2(422, 463), Vector2(416, 440), Vector2(423, 420)]},
+			{"kind": "crystal", "poly": [Vector2(104, 217), Vector2(114, 221), Vector2(117, 236), Vector2(114, 251), Vector2(104, 258), Vector2(96, 249), Vector2(92, 236), Vector2(94, 220)]},
+			{"kind": "crystal", "poly": [Vector2(536, 217), Vector2(544, 223), Vector2(549, 236), Vector2(545, 249), Vector2(536, 254), Vector2(527, 250), Vector2(521, 236), Vector2(526, 220)]}],
+		"conduits": [{"at": Vector2(156, 224), "path": 0}, {"at": Vector2(484, 224), "path": 1}, {"at": Vector2(116, 522), "path": 2}, {"at": Vector2(524, 522), "path": 3}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [],
+		"castle": "conclave",
+		"bot_posts": [Vector2(320, 440), Vector2(268, 400), Vector2(372, 400), Vector2(320, 500), Vector2(150, 228), Vector2(490, 228), Vector2(320, 640)],
+	},
+	# The Arcane Spires, Relight the Spires: three floating islands with a spire each (to keep
+	# standing) and a sigil by it, bridges glowing in their sigils' colours down to a great
+	# island before the castle, which has a sigil of its own.
+	"spires_relight": {
+		"name": "The Three Spires", "battle": "relight", "music": "mountain",
+		"blurb": "Three spire\nislands round\nthe Conclave's",
+		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
+		"lanes": [[60, 580]],
+		"islands": [
+			{"at": Vector2(130, 420), "r": 80, "path": 2},
+			{"at": Vector2(320, 262), "r": 80, "path": 0},
+			{"at": Vector2(510, 420), "r": 80, "path": 1},
+			{"at": Vector2(320, 566), "r": 104, "path": 3}],
+		"bridges": [
+			{"from": Vector2(320, 80), "to": Vector2(320, 196), "w": 84, "path": 0},
+			{"from": Vector2(130, 80), "to": Vector2(130, 354), "w": 84, "path": 2},
+			{"from": Vector2(510, 80), "to": Vector2(510, 354), "w": 84, "path": 1},
+			{"from": Vector2(320, 336), "to": Vector2(320, 470), "w": 84, "path": 0},
+			{"from": Vector2(188, 465), "to": Vector2(244, 508), "w": 84, "path": 2},
+			{"from": Vector2(452, 465), "to": Vector2(396, 508), "w": 84, "path": 1},
+			{"from": Vector2(320, 656), "to": Vector2(320, 704), "w": 90, "path": 3}],
+		"lands": [Rect2(-60, -150, 760, 250), Rect2(-60, 684, 760, 120)],
+		"terrain": [
+			{"kind": "crystal", "poly": [Vector2(76, 448), Vector2(86, 454), Vector2(90, 466), Vector2(86, 478), Vector2(76, 482), Vector2(66, 478), Vector2(62, 466), Vector2(66, 454)]},
+			{"kind": "crystal", "poly": [Vector2(564, 448), Vector2(574, 454), Vector2(578, 466), Vector2(574, 478), Vector2(564, 482), Vector2(554, 478), Vector2(550, 466), Vector2(554, 454)]},
+			{"kind": "crystal", "poly": [Vector2(232, 544), Vector2(241, 557), Vector2(248, 572), Vector2(242, 588), Vector2(232, 600), Vector2(223, 587), Vector2(215, 572), Vector2(221, 554)]},
+			{"kind": "crystal", "poly": [Vector2(408, 548), Vector2(419, 555), Vector2(423, 572), Vector2(419, 589), Vector2(408, 596), Vector2(397, 590), Vector2(394, 572), Vector2(397, 554)]}],
+		"conduits": [{"at": Vector2(144, 466), "path": 2}, {"at": Vector2(334, 308), "path": 0}, {"at": Vector2(496, 466), "path": 1}, {"at": Vector2(320, 586), "path": 3}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [],
+		"castle": "conclave",
+		"bot_posts": [Vector2(130, 470), Vector2(320, 312), Vector2(510, 470), Vector2(320, 566), Vector2(272, 600), Vector2(368, 600), Vector2(320, 690)],
+	},
+	# The Arcane Spires, the Lost Archive: the Archive (to keep standing while it's read) on a
+	# great floating island, a sigil on each of four small islands round it: a Mage has to
+	# leave the Archive's side to draw on one. Bridges glow in their sigils' colours.
+	"spires_archive": {
+		"name": "The Lost Archive", "battle": "archive", "music": "mountain",
+		"blurb": "The Archive on\na floating island,\nsigils round it",
+		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
+		"lanes": [[60, 580]],
+		"islands": [
+			{"at": Vector2(320, 456), "r": 140, "path": -1},
+			{"at": Vector2(112, 262), "r": 62, "path": 3},
+			{"at": Vector2(528, 262), "r": 62, "path": 1},
+			{"at": Vector2(100, 566), "r": 58, "path": 2},
+			{"at": Vector2(540, 566), "r": 58, "path": 0}],
+		"bridges": [
+			{"from": Vector2(112, 80), "to": Vector2(112, 214), "w": 100, "path": 3},
+			{"from": Vector2(528, 80), "to": Vector2(528, 214), "w": 100, "path": 1},
+			{"from": Vector2(320, 80), "to": Vector2(320, 330), "w": 100, "path": -1},
+			{"from": Vector2(154, 301), "to": Vector2(226, 368), "w": 100, "path": 3},
+			{"from": Vector2(486, 301), "to": Vector2(414, 368), "w": 100, "path": 1},
+			{"from": Vector2(148, 542), "to": Vector2(205, 514), "w": 100, "path": 2},
+			{"from": Vector2(492, 542), "to": Vector2(435, 514), "w": 100, "path": 0},
+			{"from": Vector2(100, 610), "to": Vector2(100, 704), "w": 100, "path": 2},
+			{"from": Vector2(540, 610), "to": Vector2(540, 704), "w": 100, "path": 0},
+			{"from": Vector2(320, 582), "to": Vector2(320, 704), "w": 90, "path": -1}],
+		"lands": [Rect2(-60, -150, 760, 250), Rect2(-60, 684, 760, 120)],
+		"terrain": [
+			{"kind": "crystal", "poly": [Vector2(64, 249), Vector2(73, 255), Vector2(77, 270), Vector2(71, 282), Vector2(64, 289), Vector2(56, 283), Vector2(53, 270), Vector2(57, 258)]},
+			{"kind": "crystal", "poly": [Vector2(576, 250), Vector2(585, 255), Vector2(586, 270), Vector2(585, 285), Vector2(576, 287), Vector2(568, 284), Vector2(566, 270), Vector2(567, 256)]}],
+		"conduits": [{"at": Vector2(120, 262), "path": 3}, {"at": Vector2(520, 262), "path": 1}, {"at": Vector2(106, 566), "path": 2}, {"at": Vector2(534, 566), "path": 0}],
+		"no_build": [Rect2(272, 688, 96, 48)],
+		"trails": [],
+		"castle": "conclave",
+		"bot_posts": [Vector2(320, 400), Vector2(260, 456), Vector2(380, 456), Vector2(320, 530), Vector2(112, 262), Vector2(528, 262), Vector2(320, 650)],
+	},
 	# Sable Crossing: a river across the field, two bridges (80px, room for the Marshal) and
 	# a shallow ford between them that slows anyone wading it.
 	"sable_crossing": {
@@ -583,7 +695,7 @@ static func get_map(id: String) -> Dictionary:
 ## Map `m` stretched across a field `w` wide: every x (terrain, lanes, trails, no-build
 ## zones, the bot's posts) scaled by w / BASE_W; heights stay as they are.
 static func fitted(m: Dictionary, w: float) -> Dictionary:
-	if m.is_empty() or is_equal_approx(w, BASE_W):
+	if m.is_empty() or (is_equal_approx(w, BASE_W) and not m.has("islands")):
 		return m
 	var k := w / BASE_W
 	var out := m.duplicate(true)
@@ -598,4 +710,72 @@ static func fitted(m: Dictionary, w: float) -> Dictionary:
 		out["route"] = (out["route"] as Array).map(sx)
 	if out.has("lanterns"):
 		out["lanterns"] = (out["lanterns"] as Array).map(sx)
+	if out.has("islands"):
+		# Floating islands: stretched with the field (a circle becomes as much wider as the
+		# field is), their bridges and lands with them; and everything else is the void,
+		# which nothing walks on (added to the terrain, worked out once for each width).
+		out["islands"] = (out["islands"] as Array).map(func(i): return {"at": sx.call(i["at"]), "r": i["r"], "rx": i["r"] * k, "path": i.get("path", -1)})
+		out["bridges"] = (out.get("bridges", []) as Array).map(func(b): return {"from": sx.call(b["from"]), "to": sx.call(b["to"]), "w": b["w"], "path": b.get("path", -1)})
+		out["lands"] = (out.get("lands", []) as Array).map(func(r: Rect2): return Rect2(r.position.x * k, r.position.y, r.size.x * k, r.size.y))
+		out["terrain"] = (out["terrain"] as Array) + _void(out, w)
 	return out
+
+
+## The floating islands' walkable shapes: each island (an ellipse of 28 sides), each
+## bridge (a band `w` wide from end to end, reaching a little into the islands it joins),
+## and each land (a rectangle: the camp's ground, the castle's).
+static func walkable(m: Dictionary) -> Array:
+	var out := []
+	for i in m.get("islands", []):
+		var poly := PackedVector2Array()
+		for n in 28:
+			var a := n * TAU / 28.0
+			poly.append(i["at"] + Vector2(cos(a) * float(i.get("rx", i["r"])), sin(a) * float(i["r"])))
+		out.append(poly)
+	for b in m.get("bridges", []):
+		var a: Vector2 = b["from"]
+		var z: Vector2 = b["to"]
+		var d := (z - a).normalized()
+		var n := Vector2(-d.y, d.x) * float(b["w"]) / 2.0
+		a -= d * 14.0
+		z += d * 14.0
+		out.append(PackedVector2Array([a + n, z + n, z - n, a - n]))
+	for r in m.get("lands", []):
+		out.append(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]))
+	return out
+
+
+static var _void_cache := {}
+
+
+## The void: the field (and a margin round it) less every walkable shape, as terrain
+## nothing walks on. Cut in thin horizontal bands, so no piece ever has a hole in it.
+static func _void(m: Dictionary, w: float) -> Array:
+	var key := "%s@%d" % [m.get("name", ""), roundi(w)]
+	if _void_cache.has(key):
+		return _void_cache[key]
+	var walk := walkable(m)
+	var out := []
+	var band := 24.0
+	var y := -150.0
+	while y < 800.0:
+		var pieces := [PackedVector2Array([Vector2(-60, y), Vector2(w + 60, y), Vector2(w + 60, y + band), Vector2(-60, y + band)])]
+		for shape in walk:
+			var next := []
+			for piece in pieces:
+				for cut in Geometry2D.clip_polygons(piece, shape):
+					if absf(_area(cut)) > 6.0:   # (thin bands: never a hole, only slivers to drop)
+						next.append(cut)
+			pieces = next
+		for piece in pieces:
+			out.append({"kind": "void", "poly": Array(piece)})
+		y += band
+	_void_cache[key] = out
+	return out
+
+
+static func _area(poly: PackedVector2Array) -> float:
+	var a := 0.0
+	for i in poly.size():
+		a += poly[i].cross(poly[(i + 1) % poly.size()])
+	return a / 2.0

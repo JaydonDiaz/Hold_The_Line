@@ -522,6 +522,11 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	if compact:
 		card["desc"].size = Vector2(cw - 12.0, 34)
 		card["desc"].max_lines_visible = 2   # (a phone's cards are shorter)
+	card["desc_lines"] = card["desc"].max_lines_visible
+	if card.has("glow"):
+		card["glow"].size = b.size
+		card["sigil"].position = Vector2(6, b.size.y - 18)
+		card["sigil"].size.x = b.size.x - 12.0
 
 
 ## A price at this difficulty (see Data.scaled_price).
@@ -638,6 +643,17 @@ func show_castle_card(main, at: Vector2) -> void:
 			ceili(main.castle_hp), roundi(main.castle_max), roundi(main.powers.armor() * 100)]
 	_fill_card("Castle", Color(1.0, 0.85, 0.35), "Click to upgrade [C]", body)
 	var pos := at + Vector2(22, -hover_card.size.y - 10)
+	pos.x = clampf(pos.x, 4.0, ui_w - hover_card.size.x - 4.0)
+	pos.y = maxf(pos.y, 4.0)
+	hover_card.position = pos
+
+
+## A card for something on the field (a conduit): [title, colour, sub, body], by `at`.
+func show_card_at(card: Array, at: Vector2) -> void:
+	if hover_kind != "":
+		return
+	_fill_card(card[0], card[1], card[2], card[3])
+	var pos := at / ui_scale + Vector2(22, -hover_card.size.y - 10)
 	pos.x = clampf(pos.x, 4.0, ui_w - hover_card.size.x - 4.0)
 	pos.y = maxf(pos.y, 4.0)
 	hover_card.position = pos
@@ -1134,6 +1150,17 @@ func _path_card(parent: Node, p: int) -> Dictionary:
 	card["desc"].max_lines_visible = 2
 	card["desc"].text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	card["desc"].clip_text = true
+	# A Mage on one of the Spires' sigils: the card of the path that sigil feeds glows in its
+	# colour, and says under the description what the sigil gives.
+	var glow := Panel.new()
+	glow.add_theme_stylebox_override("panel", Forge.box("ring"))
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glow.visible = false
+	b.add_child(glow)
+	card["glow"] = glow
+	card["sigil"] = _label(b, Vector2(6, 84), Vector2(138, 16), Color.WHITE, 11)
+	card["sigil"].clip_text = true
+	card["sigil"].visible = false
 	return card
 
 
@@ -1177,6 +1204,30 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	b.disabled = state != "ok" or not affordable
 	b.modulate.a = 0.45 if state == "full" or state == "untrained" else 1.0
+	_refresh_sigil(card, w, p)
+
+
+## The path card's sigil marking: glowing in the sigil's colour, with what it gives, when
+## the Mage stands on the sigil of this path's art (brightly if it's the Mage's own art,
+## its furthest path: the full boost; faintly if not: the little one, and what it'd get).
+func _refresh_sigil(card: Dictionary, w, p: int) -> void:
+	if not card.has("glow"):
+		return
+	var src: Dictionary = w.main.conduits.source(w)
+	var on: bool = not src.is_empty() and int(src["path"]) == p
+	card["glow"].visible = on
+	card["sigil"].visible = on
+	card["desc"].max_lines_visible = int(card.get("desc_lines", 2)) - (1 if on else 0)
+	if not on:
+		return
+	var C = w.main.conduits
+	var full: bool = C.art_of(w) == p
+	var col: Color = C.COLORS[p]
+	var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 220.0)
+	card["glow"].modulate = Color(col.lightened(0.2), pulse if full else 0.35 + 0.15 * pulse)
+	card["sigil"].add_theme_color_override("font_color", col.lightened(0.35))
+	card["sigil"].text = ("Sigil: " + C.words(C.MATCH, true)) if full \
+			else "Sigil: %s (more as its main path)" % C.words(C.OTHER, true)
 
 
 ## A unit kind's name in the plural ("Archers", "Archer Towers").

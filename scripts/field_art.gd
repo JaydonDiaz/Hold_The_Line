@@ -170,6 +170,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 			draw_snow(ci, w, tint)
 		"city":
 			draw_city(ci, w, tint)
+		"void":
+			draw_islands(ci, w, tint, m)
 		_:
 			draw_meadow(ci, w, tint, false, clear)
 	for tr in m.get("trails", []):
@@ -223,6 +225,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_fountain(ci, poly, tint, rng)
 			"stall":
 				_stall(ci, poly, tint, rng)
+			"crystal":
+				_crystal(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
@@ -400,6 +404,207 @@ static func _fountain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng
 	for x in [-10.0, -4.0, 4.0, 10.0]:
 		ci.draw_line(c + Vector2(x, -16), c + Vector2(x * 1.4, -2), Color(0.75, 0.9, 1.0, 0.8) * tint, 1.5)
 	ci.draw_circle(c + Vector2(0, -26), 3.0, Color(0.75, 0.9, 1.0, 0.85) * tint)
+
+
+## A crystal outcrop (the Arcane Spires): a dark plinth of rock with shards of violet
+## crystal standing out of it, lit along one face, a few small ones round their feet.
+static func _crystal(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	ci.draw_colored_polygon(_shifted(poly, Vector2(4, 6)), Color(0, 0, 0, 0.25))
+	ci.draw_colored_polygon(poly, OUTLINE)
+	for p in Geometry2D.offset_polygon(poly, -2.0):
+		ci.draw_colored_polygon(p, Color(0.27, 0.24, 0.32) * tint)
+	for p in Geometry2D.offset_polygon(poly, -6.0):
+		ci.draw_colored_polygon(p, Color(0.33, 0.3, 0.4) * tint)
+	# Shards, back to front: tall ones in the middle, shorter towards the edges.
+	var n := clampi(int(box.size.x / 12.0), 3, 9)
+	var shards := []
+	for i in n:
+		var f := (i + 0.5) / n
+		var x := box.position.x + box.size.x * (0.12 + 0.76 * f) + rng.randf_range(-4, 4)
+		var foot := box.position.y + box.size.y * rng.randf_range(0.55, 0.85)
+		var h := box.size.y * (0.7 + 0.6 * (1.0 - absf(f - 0.5) * 2.0)) * rng.randf_range(0.8, 1.15)
+		shards.append([x, foot, h, rng.randf_range(6, 11), rng.randf_range(-0.25, 0.25)])
+	shards.sort_custom(func(a, b): return a[1] < b[1])
+	var hues := [Color(0.62, 0.42, 0.95), Color(0.5, 0.45, 1.0), Color(0.75, 0.5, 1.0)]
+	for s in shards:
+		var col: Color = hues[rng.randi() % hues.size()] * tint
+		var base := Vector2(s[0], s[1])
+		var w: float = s[3]
+		var tip: Vector2 = base + Vector2(s[4] * s[2], -s[2])
+		var body := PackedVector2Array([base + Vector2(-w, 0), base + Vector2(-w * 0.8, -s[2] * 0.75), tip, base + Vector2(w * 0.8, -s[2] * 0.75), base + Vector2(w, 0)])
+		ci.draw_colored_polygon(PackedVector2Array([body[0] + Vector2(-1.5, 1), body[1] + Vector2(-1.5, 0), body[2] + Vector2(0, -2), body[3] + Vector2(1.5, 0), body[4] + Vector2(1.5, 1)]), OUTLINE)
+		ci.draw_colored_polygon(body, col.darkened(0.2))
+		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(-w * 0.1, 0), base + Vector2(-w * 0.15, -s[2] * 0.75), tip, base + Vector2(w * 0.8, -s[2] * 0.75), base + Vector2(w, 0)]), col)
+		ci.draw_line(base + Vector2(w * 0.35, -2), tip.lerp(base + Vector2(w * 0.35, 0), 0.15), col.lightened(0.45), 1.5)
+	for i in 4:
+		var q := box.position + Vector2(rng.randf_range(0.1, 0.9) * box.size.x, box.size.y * rng.randf_range(0.75, 0.95))
+		ci.draw_colored_polygon(PackedVector2Array([q + Vector2(-3, 0), q + Vector2(0, -8), q + Vector2(3, 0)]), Color(0.7, 0.55, 1.0) * tint)
+
+
+## The Arcane Spires' floating islands (biome "void"): a night sky of violet haze and
+## stars under the camp's ground, great crystal spires drifting in it, the bridges
+## glowing in their sigils' colours, and the islands themselves, pale flagstones on top
+## of rock that tapers away beneath them; the castle's ground along the bottom.
+static func draw_islands(ci: CanvasItem, w: float, tint: Color, m: Dictionary) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var top := 100.0
+	var h := 768.0
+	# The sky: bands from deep indigo to violet, haze, stars.
+	for i in 12:
+		var y0 := top + i * (h - top) / 12.0
+		ci.draw_rect(Rect2(0, y0, w, (h - top) / 12.0 + 1), Color(0.07, 0.05, 0.16).lerp(Color(0.2, 0.12, 0.32), i / 11.0) * tint)
+	for i in 9:
+		var c := Vector2(rng.randf_range(0, w), rng.randf_range(top + 40, h - 60))
+		for k in 4:
+			ci.draw_circle(c, rng.randf_range(60, 120) * (1.0 - k * 0.2), Color(Color(0.45, 0.3, 0.75) * tint, 0.05))
+	for i in 140:
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(top, h))
+		var b := rng.randf_range(0.4, 1.0)
+		ci.draw_rect(Rect2(p, Vector2(2, 2) if rng.randf() < 0.2 else Vector2(1, 1)), Color(Color(0.85, 0.8, 1.0) * tint, b))
+	# Great crystal spires drifting in the void, far below and between the islands.
+	var walk: Array = preload("res://scripts/maps.gd").walkable(m)
+	var placed := 0
+	var tries := 0
+	while placed < 7 and tries < 200:
+		tries += 1
+		var at := Vector2(rng.randf_range(20, w - 20), rng.randf_range(top + 60, h - 40))
+		var clear := true
+		for shape in walk:
+			if Geometry2D.is_point_in_polygon(at, shape) or Geometry2D.is_point_in_polygon(at + Vector2(0, -50), shape):
+				clear = false
+				break
+		if clear:
+			_drifting_spire(ci, at, rng.randf_range(0.6, 1.1), tint, rng)
+			placed += 1
+	# The lands: the camp's ground hangs over the void at its foot; the castle's ground.
+	for land in m.get("lands", []):
+		var r: Rect2 = land
+		if r.position.y > 300.0:
+			_island_rock(ci, PackedVector2Array([Vector2(r.position.x, r.position.y), Vector2(r.end.x, r.position.y), Vector2(r.end.x, r.position.y + 18), Vector2(r.position.x, r.position.y + 18)]), tint, false)
+			_flagstones(ci, Rect2(r.position.x, r.position.y + 2, r.size.x, r.size.y), tint, rng, func(_p): return true)
+		else:
+			var lip := PackedVector2Array()
+			for i in 24:
+				var x: float = r.position.x + r.size.x * i / 23.0
+				lip.append(Vector2(x, r.end.y + 14.0 + sin(x * 0.11) * 6.0 + rng.randf_range(0, 6)))
+			var hang := PackedVector2Array([Vector2(r.position.x, r.end.y - 2), Vector2(r.end.x, r.end.y - 2)])
+			lip.reverse()
+			hang.append_array(lip)
+			ci.draw_colored_polygon(hang, Color(0.22, 0.18, 0.26) * tint)
+			ci.draw_polyline(hang + PackedVector2Array([hang[0]]), OUTLINE, 2.0)
+	# The islands, back to front.
+	var isles: Array = (m.get("islands", []) as Array).duplicate()
+	isles.sort_custom(func(a, b): return a["at"].y < b["at"].y)
+	for i in isles:
+		var c: Vector2 = i["at"]
+		var rx: float = i.get("rx", i["r"])
+		var ry: float = i["r"]
+		# Underneath: rock in strata, tapering to a point far below.
+		var pts := PackedVector2Array()
+		for n in 24:
+			var a := n * TAU / 24.0
+			pts.append(c + Vector2(cos(a) * rx * 0.96, sin(a) * ry * 0.9 + ry * 0.3))
+		pts.append(c + Vector2(rx * 0.2, ry * 1.55))
+		pts.append(c + Vector2(-rx * 0.05, ry * 1.8))
+		pts.append(c + Vector2(-rx * 0.3, ry * 1.5))
+		var under := Geometry2D.convex_hull(pts)   # (always a shape that draws)
+		under.remove_at(under.size() - 1)   # (the hull repeats its first point at the end)
+		_island_rock(ci, under, tint, true)
+	# The bridges: over the rock beneath the islands, under their tops.
+	var colors: Array = preload("res://scripts/conduits.gd").COLORS
+	for b in m.get("bridges", []):
+		var col: Color = colors[int(b["path"])] if int(b["path"]) >= 0 else Color(0.78, 0.66, 1.0)
+		_arcane_bridge(ci, b["from"], b["to"], float(b["w"]), col * tint)
+	for i in isles:
+		var c: Vector2 = i["at"]
+		var rx: float = i.get("rx", i["r"])
+		var ry: float = i["r"]
+		# The top: pale flagstones within its edge, a lit rim.
+		var disc := PackedVector2Array()
+		for n in 32:
+			var a := n * TAU / 32.0
+			disc.append(c + Vector2(cos(a) * rx, sin(a) * ry))
+		ci.draw_colored_polygon(disc, OUTLINE)
+		var inner := PackedVector2Array()
+		for q in disc:
+			inner.append(c + (q - c) * ((rx - 3.0) / rx))
+		ci.draw_colored_polygon(inner, Color(0.56, 0.53, 0.62) * tint)
+		_flagstones(ci, Rect2(c - Vector2(rx, ry), Vector2(rx, ry) * 2.0), tint, rng,
+				func(p: Vector2): return Vector2((p.x - c.x) / (rx - 8.0), (p.y - c.y) / (ry - 8.0)).length() < 1.0)
+		ci.draw_polyline(inner + PackedVector2Array([inner[0]]), Color(0.78, 0.74, 0.88) * tint, 2.0)
+		var path: int = int(i.get("path", -1))
+		if path >= 0:
+			ci.draw_arc(c, ry - 6.0, PI * 1.1, PI * 1.9, 20, Color(colors[path] * tint, 0.35), 2.0, true)
+
+
+## Rock seen from beside: dark strata with lighter seams and an outline.
+static func _island_rock(ci: CanvasItem, poly: PackedVector2Array, tint: Color, strata: bool) -> void:
+	ci.draw_colored_polygon(poly, Color(0.25, 0.21, 0.3) * tint)
+	if strata:
+		# Darker rock inside, layer on layer, each within the last.
+		for k in [1, 2, 3]:
+			for inner in Geometry2D.offset_polygon(poly, -7.0 * k):
+				ci.draw_colored_polygon(inner, (Color(0.25, 0.21, 0.3).darkened(0.12 * k)) * tint)
+	ci.draw_polyline(poly + PackedVector2Array([poly[0]]), OUTLINE, 2.0)
+
+
+## Pale flagstones over `r`, only where `inside` says (an island's top, the castle's ground).
+static func _flagstones(ci: CanvasItem, r: Rect2, tint: Color, rng: RandomNumberGenerator, inside: Callable) -> void:
+	var y := r.position.y + 4.0
+	var row := 0
+	while y < r.end.y - 4.0:
+		var x := r.position.x + (0.0 if row % 2 == 0 else 9.0)
+		while x < r.end.x - 4.0:
+			var stone := Rect2(x, y, rng.randf_range(12, 20), 9)
+			if inside.call(stone.get_center()):
+				var shade := rng.randf_range(-0.05, 0.05)
+				ci.draw_rect(stone.grow(-1), (Color(0.62, 0.59, 0.68) + Color(shade, shade, shade, 0)) * tint)
+				ci.draw_rect(Rect2(stone.position + Vector2(1, 1), Vector2(stone.size.x - 2, 1)), Color(0.72, 0.69, 0.78) * tint)
+			x += stone.size.x
+		y += 10.0
+		row += 1
+
+
+## A bridge of rune-stone and light between islands: dark slabs edged in its colour, a
+## band of glow down the middle, runes along it.
+static func _arcane_bridge(ci: CanvasItem, a: Vector2, b: Vector2, w: float, col: Color) -> void:
+	var d := (b - a).normalized()
+	var n := Vector2(-d.y, d.x) * w / 2.0
+	ci.draw_colored_polygon(PackedVector2Array([a + n * 1.35, b + n * 1.35, b - n * 1.35, a - n * 1.35]), Color(col, 0.12))
+	var deck := PackedVector2Array([a + n, b + n, b - n, a - n])
+	ci.draw_colored_polygon(deck, OUTLINE)
+	ci.draw_colored_polygon(PackedVector2Array([a + n * 0.9, b + n * 0.9, b - n * 0.9, a - n * 0.9]), Color(0.18, 0.15, 0.24))
+	var steps := int(a.distance_to(b) / 12.0)
+	for i in steps:
+		var p := a.lerp(b, (i + 0.5) / steps)
+		ci.draw_line(p + n * 0.85, p - n * 0.85, Color(0.12, 0.1, 0.16), 1.0)
+	ci.draw_colored_polygon(PackedVector2Array([a + n * 0.28, b + n * 0.28, b - n * 0.28, a - n * 0.28]), Color(col, 0.55))
+	ci.draw_colored_polygon(PackedVector2Array([a + n * 0.1, b + n * 0.1, b - n * 0.1, a - n * 0.1]), Color(col.lightened(0.4), 0.85))
+	ci.draw_line(a + n * 0.9, b + n * 0.9, col, 2.0)
+	ci.draw_line(a - n * 0.9, b - n * 0.9, col, 2.0)
+	for i in range(1, steps, 3):
+		var p := a.lerp(b, float(i) / steps)
+		ci.draw_rect(Rect2(p + n * 0.55 - Vector2(2, 2), Vector2(4, 4)), col.lightened(0.3))
+		ci.draw_rect(Rect2(p - n * 0.55 - Vector2(2, 2), Vector2(4, 4)), col.lightened(0.3))
+
+
+## A great crystal spire drifting in the void: a tall shard and its smaller kin, glowing.
+static func _drifting_spire(ci: CanvasItem, at: Vector2, s: float, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_circle(at + Vector2(0, -30 * s), 34.0 * s, Color(Color(0.6, 0.4, 1.0) * tint, 0.08))
+	for k in 3:
+		var off := Vector2([0.0, -14.0, 13.0][k] * s, [0.0, 10.0, 8.0][k] * s)
+		var hh: float = [80.0, 46.0, 38.0][k] * s
+		var ww: float = [10.0, 7.0, 6.0][k] * s
+		var base := at + off
+		var tip := base + Vector2(rng.randf_range(-4, 4) * s, -hh)
+		var body := PackedVector2Array([base + Vector2(-ww, 0), base + Vector2(-ww * 0.8, -hh * 0.7), tip, base + Vector2(ww * 0.8, -hh * 0.7), base + Vector2(ww, 0), base + Vector2(0, ww * 1.4)])
+		ci.draw_colored_polygon(body, Color(0.36, 0.26, 0.62) * tint)
+		ci.draw_colored_polygon(PackedVector2Array([base + Vector2(0, ww * 1.4), base + Vector2(0, -hh * 0.7), tip, base + Vector2(ww * 0.8, -hh * 0.7), base + Vector2(ww, 0)]), Color(0.52, 0.4, 0.86) * tint)
+		ci.draw_polyline(body + PackedVector2Array([body[0]]), Color(0.08, 0.05, 0.14), 1.5)
 
 
 ## A market stall: a striped awning on two posts over a counter of goods.
