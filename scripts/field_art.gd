@@ -20,27 +20,38 @@ const BOTTOM := 690.0      # above here the castle's towers start
 ## bakes it into a texture), and by the Classic battlefield viewer.
 static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Dictionary) -> void:
 	var tile := 64
+	var camp: bool = map.get("camp", true)
 	for x in ceili(w / tile):
 		for y in int(h) / tile:
 			var variant := 4
-			if (y + 1) * tile > TOP:
+			if (y + 1) * tile > TOP or not camp:   # (no camp: the grass runs on up into the trees)
 				var hh := (x * 73856093) ^ (y * 19349663)
 				variant = 3 if hh % 11 == 0 else absi(hh) % 3
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * tile, y * tile, tile, tile), false, tint)
-	var camp: bool = map.get("camp", true)
 	var th := CampArt.theme(map) if camp else ""
 	var themed := camp and CampArt.paint_ground(ci, w, tint, th)
-	if not themed:
+	if camp and not themed:
 		ci.draw_rect(Rect2(0, tile, w, TOP - tile), Color(Color(0.4, 0.3, 0.2) * tint, 0.55))
-	if map.get("biome", "") == "snow":
+	if map.get("biome", "") == "snow" and camp:
 		ci.draw_rect(Rect2(0, 0, w, TOP), Color(Color(0.88, 0.91, 0.95) * tint, 0.78))   # the enemy's ground snowed over too
-		ci.draw_rect(Rect2(0, 736.0, w, h - 736.0), Color(0.88, 0.91, 0.95) * tint)        # ...and the strip behind your line
+	# The region's own ground, from under the camp (or the top edge, where there's no camp:
+	# the road goes on) right down to the bottom edge (under the castle, or your camp).
+	var y0 := TOP if camp else 0.0
+	match String(map.get("biome", "")):
+		"mountain":
+			draw_mountain(ci, w, tint, y0, h)
+		"snow":
+			draw_snow(ci, w, tint, y0, h)
+		"city":
+			draw_city(ci, w, tint, y0, h)
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
 	if themed or th == "frostkeep":
 		CampArt.draw_camp(ci, w, tint, th, props(w)["fire"], props(w)["torches"])
+	elif not camp and map.get("biome", "") == "snow":
+		CampArt._backdrop(ci, w, tint, "frostkeep", RandomNumberGenerator.new())   # snow-laden pines
 	else:
-		draw_spawn(ci, w, tint, camp)
+		draw_spawn(ci, w, tint, camp, map.get("biome", "") == "mountain")
 	if camp:
 		for x in range(0, int(w), 16):
 			ci.draw_rect(Rect2(x, TOP - 2, 8, 4), Color(0.1, 0.05, 0.05, 0.6))
@@ -157,6 +168,65 @@ static func _worn_trail(ci: CanvasItem, trail: PackedVector2Array, tint: Color, 
 
 # --- Campaign battlefields (maps.gd) ---------------------------------------------------------
 
+## A map's own mood on its ground ("ground" in maps.gd), over the biome's:
+##   fen     marsh: dark sodden moss, standing mud, reeds in clumps away from the pools too
+##   burnt   a village burnt out: scorched earth round each ruin, ash, charred stumps, embers
+##   ash     grey ash fallen over the rock, drifted in the hollows
+static func _ground_mood(ci: CanvasItem, w: float, tint: Color, m: Dictionary, rng: RandomNumberGenerator) -> void:
+	var y0 := TOP if m.get("camp", true) else 0.0
+	match String(m.get("ground", "")):
+		"fen":
+			for i in int(26 * w / 640.0):
+				var c := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, 760))
+				var r := rng.randf_range(18, 46)
+				ci.draw_set_transform(c, 0, Vector2(1.0, 0.55))
+				ci.draw_circle(Vector2.ZERO, r, Color(Color(0.16, 0.26, 0.14) * tint, 0.35))
+				ci.draw_circle(Vector2(r * 0.2, 0), r * 0.55, Color(Color(0.3, 0.26, 0.16) * tint, 0.3))
+				ci.draw_set_transform(Vector2.ZERO)
+			for i in int(40 * w / 640.0):
+				var p := Vector2(rng.randf_range(6, w - 6), rng.randf_range(y0 + 16, 756))
+				for j in 4:
+					ci.draw_line(p + Vector2(j * 2.0 - 3.0, 0), p + Vector2(j * 2.5 - 4.0, -6.0 - rng.randf_range(0, 6)), Color(0.38, 0.48, 0.24) * tint, 1.0)
+				if rng.randf() < 0.5:
+					ci.draw_rect(Rect2(p + Vector2(0, -11), Vector2(2, 4)), Color(0.42, 0.28, 0.16) * tint)
+		"burnt":
+			# The whole village's ground dulled by smoke and ash, the grass gone brown.
+			ci.draw_rect(Rect2(0, y0, w, 768.0 - y0), Color(Color(0.36, 0.3, 0.22) * tint, 0.42))
+			for t in m.get("terrain", []):
+				if t["kind"] != "ruin":
+					continue
+				var poly := PackedVector2Array(t["poly"])
+				var c := Vector2.ZERO
+				for q in poly:
+					c += q
+				c /= poly.size()
+				for k in 5:
+					var off := Vector2(rng.randf_range(-40, 40), rng.randf_range(-24, 30))
+					ci.draw_set_transform(c + off, 0, Vector2(1.0, 0.65))
+					ci.draw_circle(Vector2.ZERO, rng.randf_range(40, 70), Color(Color(0.14, 0.11, 0.1) * tint, 0.3))
+					ci.draw_set_transform(Vector2.ZERO)
+			for i in int(160 * w / 640.0):
+				var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0, 760))
+				ci.draw_rect(Rect2(p, Vector2(2, 1)), Color(Color(0.62, 0.6, 0.58) * tint, 0.6) if i % 3 else Color(Color(0.12, 0.1, 0.1) * tint, 0.6))
+			for i in int(10 * w / 640.0):
+				var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(y0 + 30, 740))
+				ci.draw_rect(Rect2(p + Vector2(-3, -8), Vector2(6, 9)), OUTLINE)
+				ci.draw_rect(Rect2(p + Vector2(-2, -7), Vector2(4, 7)), Color(0.16, 0.12, 0.1) * tint)
+				ci.draw_rect(Rect2(p + Vector2(-1, -8), Vector2(2, 1)), Color(1.0, 0.45, 0.15))   # still smouldering
+			for i in int(24 * w / 640.0):
+				var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, 750))
+				ci.draw_rect(Rect2(p, Vector2(1, 1)), Color(1.0, 0.55, 0.2, 0.8))
+		"ash":
+			for i in int(14 * w / 640.0):
+				var c := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, 760))
+				ci.draw_set_transform(c, rng.randf_range(-0.3, 0.3), Vector2(1.0, 0.4))
+				ci.draw_circle(Vector2.ZERO, rng.randf_range(24, 54), Color(Color(0.72, 0.7, 0.7) * tint, 0.16))
+				ci.draw_set_transform(Vector2.ZERO)
+			for i in int(220 * w / 640.0):
+				var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0, 764))
+				ci.draw_rect(Rect2(p, Vector2(1, 1)), Color(Color(0.8, 0.78, 0.78) * tint, 0.7))
+
+
 ## A campaign map's ground: its biome, the trails worn through its gaps, then its terrain
 ## (rock, cliffs, trees, the quarry), all painted once into the field. Tall parts (rock
 ## tops, canopies) stay inside each shape, which is exactly where nothing can stand.
@@ -171,16 +241,13 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 		clear.append({"pts": tr, "poly": false})
 	snowy = m.get("biome", "meadow") == "snow"
 	match m.get("biome", "meadow"):
-		"mountain":
-			draw_mountain(ci, w, tint)
-		"snow":
-			draw_snow(ci, w, tint)
-		"city":
-			draw_city(ci, w, tint)
+		"mountain", "snow", "city":
+			pass   # (painted first, by paint_field: it reaches under the camp and the castle)
 		"void":
 			draw_islands(ci, w, tint, m)
 		_:
 			draw_meadow(ci, w, tint, false, clear)
+	_ground_mood(ci, w, tint, m, rng)
 	for tr in m.get("trails", []):
 		var pts := PackedVector2Array()
 		var src := PackedVector2Array(tr)
@@ -263,12 +330,12 @@ static var snowy := false   # painting a snow battlefield: trees and rocks wear 
 
 ## Snowfields: blue-white drifts in light and shadow, wind ripples, the odd frozen tuft
 ## and stone poking through, sparkles of frost.
-static func draw_snow(ci: CanvasItem, w: float, tint: Color) -> void:
+static func draw_snow(ci: CanvasItem, w: float, tint: Color, y0 := TOP, y1 := 736.0) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7272
-	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.88, 0.91, 0.95) * tint)
-	var y := TOP
-	while y < 736.0:
+	ci.draw_rect(Rect2(0, y0, w, y1 - y0), Color(0.88, 0.91, 0.95) * tint)
+	var y := y0
+	while y < y1:
 		var x := 0.0
 		while x < w:
 			var v := sin(x * 0.011 + 0.4) * sin(y * 0.015 + 0.9) + sin(x * 0.027 - y * 0.019) * 0.5
@@ -279,33 +346,33 @@ static func draw_snow(ci: CanvasItem, w: float, tint: Color) -> void:
 		y += 32.0
 	# Wind ripples: long shallow curves of shadow across the drifts.
 	for i in int(70 * w / 640.0):
-		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 6, 730))
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 6, y1 - 6))
 		var len := rng.randf_range(18, 46)
 		ci.draw_line(p, p + Vector2(len, rng.randf_range(-3, 3)), Color(0.7, 0.78, 0.9, 0.55) * tint, 1.5)
 		ci.draw_line(p + Vector2(2, 1.5), p + Vector2(len - 2, 1.5), Color(1, 1, 1, 0.5) * tint, 1.0)
 	for i in int(40 * w / 640.0):
-		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 10, 728))
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, y1 - 8))
 		var s := rng.randf_range(2.0, 4.0)
 		ci.draw_rect(Rect2(p, Vector2(s, s * 0.7)), Color(0.45, 0.48, 0.55) * tint)
 		ci.draw_rect(Rect2(p - Vector2(0, 1), Vector2(s, 1)), Color(1, 1, 1) * tint)
 	for i in int(30 * w / 640.0):
-		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 20, BOTTOM))
+		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(y0 + 20, y1 - 46))
 		for k in 3:
 			ci.draw_line(p + Vector2(k * 2 - 2, 0), p + Vector2(k * 3 - 3, -5), Color(0.5, 0.56, 0.44) * tint, 1.0)
 	for i in int(120 * w / 640.0):
-		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 4, 730))
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 4, y1 - 6))
 		ci.draw_rect(Rect2(p, Vector2(1, 1)), Color(1, 1, 1))
 
 
 ## A city's ground: cobbles laid in rows, worn paler down the middle of the streets,
 ## gutters and the odd drain grate.
-static func draw_city(ci: CanvasItem, w: float, tint: Color) -> void:
+static func draw_city(ci: CanvasItem, w: float, tint: Color, y0 := TOP, y1 := 736.0) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 6363
-	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.52, 0.48, 0.44) * tint)
-	var y := TOP
+	ci.draw_rect(Rect2(0, y0, w, y1 - y0), Color(0.52, 0.48, 0.44) * tint)
+	var y := y0
 	var row := 0
-	while y < 736.0:
+	while y < y1:
 		var x := -float(row % 2) * 7.0
 		while x < w:
 			var c := Color(0.6, 0.56, 0.5) if rng.randf() < 0.5 else Color(0.56, 0.52, 0.47)
@@ -317,7 +384,7 @@ static func draw_city(ci: CanvasItem, w: float, tint: Color) -> void:
 		y += 9.0
 		row += 1
 	for i in int(10 * w / 640.0):
-		var p := Vector2(rng.randf_range(20, w - 20), rng.randf_range(TOP + 30, BOTTOM))
+		var p := Vector2(rng.randf_range(20, w - 20), rng.randf_range(y0 + 30, y1 - 46))
 		ci.draw_rect(Rect2(p, Vector2(10, 8)), OUTLINE)
 		for k in 3:
 			ci.draw_rect(Rect2(p + Vector2(2 + k * 3, 1), Vector2(1, 6)), Color(0.32, 0.3, 0.3) * tint)
@@ -746,12 +813,12 @@ static func _rope_bridge(ci: CanvasItem, poly: PackedVector2Array, tint: Color, 
 
 ## Rocky mountain ground: grey-brown scree in light and dark patches, stones and the odd
 ## tough tuft of grass.
-static func draw_mountain(ci: CanvasItem, w: float, tint: Color) -> void:
+static func draw_mountain(ci: CanvasItem, w: float, tint: Color, y0 := TOP, y1 := 736.0) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5151
-	ci.draw_rect(Rect2(0, TOP, w, 736.0 - TOP), Color(0.47, 0.43, 0.38) * tint)
-	var y := TOP
-	while y < 736.0:
+	ci.draw_rect(Rect2(0, y0, w, y1 - y0), Color(0.47, 0.43, 0.38) * tint)
+	var y := y0
+	while y < y1:
 		var x := 0.0
 		while x < w:
 			var v := sin(x * 0.013 + 0.7) * sin(y * 0.017 + 1.1) + sin(x * 0.029 - y * 0.021) * 0.5
@@ -761,11 +828,11 @@ static func draw_mountain(ci: CanvasItem, w: float, tint: Color) -> void:
 			x += 32.0
 		y += 32.0
 	for i in int(260 * w / 640.0):
-		var p := Vector2(rng.randf_range(0, w), rng.randf_range(TOP + 4, 730))
+		var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 4, y1 - 6))
 		var s := rng.randf_range(1.5, 3.5)
 		ci.draw_rect(Rect2(p, Vector2(s, s * 0.7)), (Color(0.62, 0.58, 0.52) if rng.randf() < 0.6 else Color(0.3, 0.27, 0.24)) * tint)
 	for i in int(36 * w / 640.0):
-		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(TOP + 24, BOTTOM))
+		var p := Vector2(rng.randf_range(10, w - 10), rng.randf_range(y0 + 24, y1 - 46))
 		var g := Color(0.32, 0.4, 0.2) * tint
 		ci.draw_line(p, p + Vector2(-2, -5), g, 1.5)
 		ci.draw_line(p, p + Vector2(1, -6), g, 1.5)
@@ -1237,11 +1304,14 @@ static func _crowded(p: Vector2, clear: Array) -> bool:
 
 
 ## (Without the camp, just the trees along the top: the road goes on into them.)
-static func draw_spawn(ci: CanvasItem, w: float, tint: Color, camp := true) -> void:
+static func draw_spawn(ci: CanvasItem, w: float, tint: Color, camp := true, mountain := false) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 777
 	if not camp:
-		_treeline(ci, w, tint, rng)
+		if mountain:
+			_high_treeline(ci, w, tint, rng)
+		else:
+			_treeline(ci, w, tint, rng)
 		return
 	# Trampled ruts in the dirt.
 	for i in int(w / 30.0):
@@ -1299,6 +1369,24 @@ static func _treeline(ci: CanvasItem, w: float, tint: Color, rng: RandomNumberGe
 			var base_y := 22.0 + row * 9.0 + rng.randf_range(-3, 3)
 			_pine(ci, Vector2(x, base_y), h, dark * tint)
 			x += rng.randf_range(16, 26)
+
+
+## Where a mountain road goes on over the top: scattered hardy pines and boulders on the
+## rock, thinning out (no forest floor under them).
+static func _high_treeline(ci: CanvasItem, w: float, tint: Color, rng: RandomNumberGenerator) -> void:
+	var x := -6.0
+	while x < w + 10.0:
+		var b := Vector2(x, rng.randf_range(6, 30))
+		if rng.randf() < 0.3:
+			ci.draw_circle(b + Vector2(0, -3), rng.randf_range(4, 7), OUTLINE)
+			ci.draw_circle(b + Vector2(-0.5, -3.5), rng.randf_range(3, 5), Color(0.52, 0.48, 0.44) * tint)
+		else:
+			var h := rng.randf_range(18, 30)
+			ci.draw_set_transform(b + Vector2(0, 2), 0, Vector2(1, 0.4))
+			ci.draw_circle(Vector2.ZERO, h * 0.32, Color(0, 0, 0, 0.22))
+			ci.draw_set_transform(Vector2.ZERO)
+			_pine(ci, b, h, Color(0.16, 0.3, 0.2) * tint)
+		x += rng.randf_range(14, 34)
 
 
 static func _pine(ci: CanvasItem, base: Vector2, h: float, col: Color) -> void:

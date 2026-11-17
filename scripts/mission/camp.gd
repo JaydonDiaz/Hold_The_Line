@@ -101,8 +101,9 @@ func _draw_ground(ci: CanvasItem) -> void:
 			soil = Color(0.88, 0.91, 0.96); fleck = Color(0.74, 0.8, 0.88)
 		"temple", "cityhall", "conclave":
 			soil = pal["stone_dark"].lerp(pal["stone"], 0.4); fleck = pal["stone_light"]
-	ci.draw_rect(Rect2(0, top + 6, w, bottom - top - 6), soil)
-	if th in ["temple", "cityhall", "conclave"]:
+	if th != "conclave":   # (the Conclave's camp stands on the castle island's own flagstones)
+		ci.draw_rect(Rect2(0, top + 6, w, bottom - top - 6), soil)
+	if th in ["temple", "cityhall"]:
 		# Paving: rows of flags (or cobbles), joints showing.
 		var row := 0
 		for y in range(int(top + 6), int(bottom), 6):
@@ -112,7 +113,7 @@ func _draw_ground(ci: CanvasItem) -> void:
 				ci.draw_rect(Rect2(x + 1, y + 1, sw - 2, 4), soil.lerp(fleck, 0.35 + 0.1 * float(int(x / sw + row) % 2)))
 				x += sw
 			row += 1
-	else:
+	elif th != "conclave":
 		for i in int(w / 18.0):
 			var x := fposmod(i * 37.0, w)
 			_b(ci, x, top + 12 + fposmod(i * 13.0, bottom - top - 18), 2, 1, fleck)
@@ -132,10 +133,12 @@ func _line(ci: CanvasItem, w: float, top: float, th: String, pal: Dictionary) ->
 			var n := 0
 			while x < w:
 				if not gate.call(x + 6.0):
-					_b(ci, x, top - 6, 4, 3, OUTLINE)
-					_b(ci, x + PX * 0.0, top - 6, 4, 2, pal["stone"] if n % 2 else pal["stone_light"])
+					_b(ci, x, top - 9, 4, 4, OUTLINE)
+					_b(ci, x, top - 9, 4, 3, pal["stone"] if n % 2 else pal["stone_light"])
+					ci.draw_rect(Rect2(floorf(x / PX) * PX, floorf((top - 9) / PX) * PX, 4 * PX, 2), pal["stone_light"].lightened(0.2))
+					ci.draw_rect(Rect2(floorf(x / PX) * PX + 4 * PX - 1, floorf((top - 9) / PX) * PX, 1, 3 * PX), OUTLINE)
 					if th == "guildgate" and n % 4 == 0:
-						_b(ci, x + PX, top - 6, 2, 1, Color(0.95, 0.7, 0.3))
+						_b(ci, x + PX, top - 9, 2, 1, Color(0.95, 0.7, 0.3))
 				x += 4 * PX
 				n += 1
 		"timberhall":

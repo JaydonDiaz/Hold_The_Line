@@ -12,6 +12,8 @@ extends Node
 ##   river     Sable Crossing's between waves: a march by the river      } first needed
 ##   snow      Frostmarch's between waves: a cold, glassy air              }
 ##   city      the Free Cities' between waves: a market dance              }
+##   calm_*    every other map's own between waves (CALMS, by the map's "music"), composed
+##             when that map is first played on
 ##   battle    during waves on the open meadow (Classic, and battlefields without their own)
 ##   battle_*  during waves on each other map: its own battle piece (BATTLES, by the map's
 ##             "battle" style), composed when that map is first fought on (see prepare)
@@ -162,6 +164,76 @@ const BATTLES := {
 	"highpass": {"bpm": 134, "chords": [[50, "min"], [55, "maj"], [50, "min"], [48, "maj"], [50, "min"], [55, "maj"], [53, "maj"], [48, "maj"]],
 		"seed": 101, "lead": "saw", "bass": "offbeat", "drums": "tribal", "arp": "up", "range": [62, 82]},
 }
+# Each map's own peaceful music between waves, where it hasn't a piece composed by hand
+# (calm, mountain, forest, river, snow, city): a style for the calm composer, played as
+# "calm_<style>". "bpm", "chords" (as BATTLES), "seed" (the tune's turns), "lead" (its wave),
+# "range", "scale" ("major", "minor" or "penta": the notes the tune passes through),
+# "accomp" ("ripple" harp-like rising chords, "drone", "pluck" off-beat plucked chords,
+# "waltz" in three, "chimes" sparse high bells, "pads" held chords), "perc" ("none",
+# "hand" soft hand drum, "tambourine", "march" soft snare, "heartbeat"), "color" (touches
+# of the place: "birds", "wind", "water", "bells", "crackle", "shimmer", "frogs", "owl").
+const CALMS := {
+	# Ashwatch: the frontier at dawn, hopeful, a fife over a rising harp.
+	"ashwatch": {"bpm": 86, "chords": [[50, "maj"], [55, "maj"], [52, "min"], [57, "maj"], [50, "maj"], [47, "min"], [55, "maj"], [57, "maj"]],
+		"seed": 5, "lead": "square", "range": [66, 83], "scale": "major", "accomp": "ripple", "perc": "hand", "color": ["birds"]},
+	# Deepdelve: deep under the canyon walls, water dripping, an anvil far off.
+	"deepdelve": {"bpm": 70, "chords": [[45, "min"], [41, "maj"], [45, "min"], [40, "maj"], [43, "maj"], [41, "maj"], [40, "maj"], [45, "min"]],
+		"seed": 17, "lead": "tri", "range": [57, 74], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["water", "bells"]},
+	# Mercy Vale: a lullaby over the fields, gentle and warm.
+	"mercy": {"bpm": 78, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [45, "min"], [46, "maj"], [48, "maj"]],
+		"seed": 29, "lead": "sine", "range": [65, 84], "scale": "major", "accomp": "waltz", "perc": "none", "color": ["birds"]},
+	# The Stone Lake: glass and wind over the ice.
+	"lake": {"bpm": 64, "chords": [[47, "min"], [43, "maj"], [50, "maj"], [45, "maj"], [47, "min"], [52, "min"], [43, "maj"], [45, "maj"]],
+		"seed": 31, "lead": "sine", "range": [66, 88], "scale": "minor", "accomp": "chimes", "perc": "none", "color": ["wind", "shimmer"]},
+	# The Long Lake: a whiteout, the wind louder than the tune.
+	"whiteout": {"bpm": 76, "chords": [[44, "min"], [40, "maj"], [42, "maj"], [44, "min"], [47, "maj"], [42, "maj"], [40, "maj"], [44, "min"]],
+		"seed": 43, "lead": "tri", "range": [60, 79], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["wind"]},
+	# The Thousand Steps: a monk's bamboo flute, temple bells, the climb.
+	"steps": {"bpm": 74, "chords": [[45, "min"], [43, "maj"], [41, "maj"], [43, "maj"], [45, "min"], [40, "min"], [41, "maj"], [45, "min"]],
+		"seed": 47, "lead": "sine", "range": [64, 86], "scale": "penta", "accomp": "drone", "perc": "hand", "color": ["bells"]},
+	# The Monastery Gate: a plucked pipa in the courtyard, a wooden drum.
+	"gate": {"bpm": 92, "chords": [[50, "maj"], [47, "min"], [55, "maj"], [50, "maj"], [52, "min"], [55, "maj"], [57, "maj"], [50, "maj"]],
+		"seed": 59, "lead": "tri", "range": [62, 81], "scale": "penta", "accomp": "pluck", "perc": "hand", "color": ["bells"]},
+	# The Exchange: the council's stately harpsichord.
+	"exchange": {"bpm": 96, "chords": [[48, "min"], [43, "maj"], [44, "maj"], [41, "min"], [48, "min"], [46, "maj"], [43, "maj"], [43, "maj"]],
+		"seed": 61, "lead": "square", "range": [60, 79], "scale": "minor", "accomp": "pluck", "perc": "march", "color": []},
+	# The Carnival Plaza: a lantern-lit waltz at night.
+	"carnival": {"bpm": 104, "chords": [[53, "maj"], [48, "maj"], [50, "min"], [46, "maj"], [53, "maj"], [45, "min"], [46, "maj"], [48, "maj"]],
+		"seed": 73, "lead": "square", "range": [65, 86], "scale": "major", "accomp": "waltz", "perc": "tambourine", "color": []},
+	# The Broken Circle: the Spires' mystery, crystals humming.
+	"spires": {"bpm": 68, "chords": [[49, "min"], [45, "maj"], [52, "maj"], [47, "maj"], [49, "min"], [42, "min"], [44, "maj"], [44, "maj"]],
+		"seed": 79, "lead": "sine", "range": [64, 88], "scale": "minor", "accomp": "drone", "perc": "none", "color": ["shimmer"]},
+	# The Three Spires: the network waking, light rising.
+	"relight": {"bpm": 84, "chords": [[50, "maj"], [46, "maj"], [53, "maj"], [48, "maj"], [50, "maj"], [55, "min"], [46, "maj"], [45, "maj"]],
+		"seed": 89, "lead": "tri", "range": [62, 86], "scale": "major", "accomp": "ripple", "perc": "none", "color": ["shimmer"]},
+	# The Lost Archive: dust and pages, a music box in an empty hall.
+	"archive": {"bpm": 72, "chords": [[45, "min"], [48, "maj"], [43, "maj"], [50, "min"], [45, "min"], [41, "maj"], [43, "maj"], [44, "maj"]],
+		"seed": 97, "lead": "sine", "range": [69, 91], "scale": "minor", "accomp": "chimes", "perc": "none", "color": []},
+	# The Meadow Road: a walking song.
+	"road": {"bpm": 100, "chords": [[48, "maj"], [53, "maj"], [55, "maj"], [48, "maj"], [45, "min"], [53, "maj"], [55, "maj"], [55, "maj"]],
+		"seed": 101, "lead": "square", "range": [64, 83], "scale": "major", "accomp": "pluck", "perc": "march", "color": ["birds"]},
+	# The Darkwood: dark pines, an owl, something watching.
+	"darkwood": {"bpm": 66, "chords": [[47, "min"], [43, "maj"], [45, "min"], [42, "maj"], [47, "min"], [40, "min"], [43, "maj"], [42, "maj"]],
+		"seed": 103, "lead": "tri", "range": [59, 76], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["owl"]},
+	# The Village Fields: a country dance.
+	"village": {"bpm": 112, "chords": [[55, "maj"], [50, "maj"], [52, "min"], [48, "maj"], [55, "maj"], [50, "maj"], [48, "maj"], [50, "maj"]],
+		"seed": 107, "lead": "square", "range": [67, 86], "scale": "major", "accomp": "waltz", "perc": "tambourine", "color": ["birds"]},
+	# The High Pass: open fifths and thin air.
+	"highpass": {"bpm": 80, "chords": [[50, "min"], [48, "maj"], [50, "min"], [55, "maj"], [50, "min"], [53, "maj"], [48, "maj"], [50, "min"]],
+		"seed": 109, "lead": "saw", "range": [62, 81], "scale": "penta", "accomp": "pads", "perc": "none", "color": ["wind"]},
+	# The Old Ford: the river running over stones.
+	"ford": {"bpm": 90, "chords": [[52, "maj"], [49, "min"], [45, "maj"], [47, "maj"], [52, "maj"], [45, "maj"], [47, "maj"], [47, "maj"]],
+		"seed": 113, "lead": "tri", "range": [64, 83], "scale": "major", "accomp": "ripple", "perc": "none", "color": ["water", "birds"]},
+	# The Fens: mist, frogs, the road picking its way.
+	"fens": {"bpm": 72, "chords": [[49, "min"], [45, "maj"], [49, "min"], [44, "maj"], [42, "min"], [45, "maj"], [44, "maj"], [44, "maj"]],
+		"seed": 127, "lead": "sine", "range": [61, 78], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["frogs", "water"]},
+	# The Burnt Village: a lament over the embers.
+	"embers": {"bpm": 62, "chords": [[52, "min"], [48, "maj"], [45, "min"], [47, "maj"], [52, "min"], [50, "maj"], [48, "maj"], [47, "maj"]],
+		"seed": 131, "lead": "tri", "range": [59, 79], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["crackle"]},
+	# Ashen Ridge: grey rock and ash on the wind, the ore cart creaking.
+	"ashen": {"bpm": 82, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
+		"seed": 137, "lead": "square", "range": [61, 80], "scale": "minor", "accomp": "pluck", "perc": "heartbeat", "color": ["wind"]},
+}
 const SCENE_TRACKS := ["title", "map", "story", "villain"]    # the rest (menus, the campaign map, cutscenes)
 static var _cache_lock := Mutex.new()
 static var _wanted_first: Array = []   # pieces to make before anything else (a map's battle music, asked for by prepare)
@@ -298,7 +370,8 @@ const ON_DEMAND_CALM := ["forest", "river", "snow", "city"]   # stage tracks mad
 
 ## Whether `track` is made when it's first needed (prepare) rather than at startup.
 static func on_demand(track: String) -> bool:
-	return (track.begins_with("battle_") and BATTLES.has(track.substr(7))) or track in ON_DEMAND_CALM
+	return (track.begins_with("battle_") and BATTLES.has(track.substr(7))) or track in ON_DEMAND_CALM \
+			or (track.begins_with("calm_") and CALMS.has(track.substr(5)))
 
 
 ## The battle music for map `m` (maps.gd): its own piece, or the meadow's.
@@ -523,6 +596,8 @@ func _compose_all() -> void:
 			made = _compose_battle()
 		elif piece.begins_with("battle_") and not ":" in piece:
 			made = _compose_battle_style(piece.substr(7))
+		elif piece.begins_with("calm_") and not ":" in piece:
+			made = _compose_calm_style(piece.substr(5))
 		elif piece == "forest":
 			made = _compose_forest()
 		elif piece == "river":
@@ -568,6 +643,8 @@ func _pick_up() -> void:
 	var battles := ON_DEMAND_CALM.duplicate()
 	for style in BATTLES:
 		battles.append("battle_" + style)
+	for style in CALMS:
+		battles.append("calm_" + style)
 	for track in STAGE_TRACKS + battles + SCENE_TRACKS:
 		if not cache.has(track):
 			continue
@@ -656,6 +733,10 @@ static func _track_info(track: String) -> Dictionary:
 		"city":
 			return {"step": 60.0 / 120.0 / 4.0, "chords": [[55, maj], [48, maj], [50, maj], [55, maj], [52, mn], [48, maj], [50, maj], [50, maj],
 					[55, maj], [52, mn], [48, maj], [50, maj], [47, mn], [48, maj], [50, maj], [55, maj]]}
+	if track.begins_with("calm_"):
+		var cs: Dictionary = CALMS[track.substr(5)]
+		var cch: Array = cs["chords"].map(func(c): return [c[0], maj if c[1] == "maj" else mn])
+		return {"step": 60.0 / float(cs["bpm"]) / 4.0, "chords": cch + cch}
 	if track.begins_with("battle_"):
 		var st: Dictionary = BATTLES[track.substr(7)]
 		var ch: Array = st["chords"].map(func(c): return [c[0], maj if c[1] == "maj" else mn])
@@ -1193,6 +1274,141 @@ static func _compose_battle_style(name: String) -> AudioStreamWAV:
 					0.075 if lead == "tri" else (0.05 if lead == "saw" else 0.07), 0.9, 0.5)
 	return _to_stream(buf, true)
 
+
+
+## A map's own peaceful music from its style (CALMS): a slow tune in long notes, wandering
+## through the style's scale near the chord, round twice (a new line the second time),
+## over its accompaniment and percussion, with the touches of the place.
+static func _compose_calm_style(name: String) -> AudioStreamWAV:
+	var st: Dictionary = CALMS[name]
+	var info := _track_info("calm_" + name)
+	var step: float = info["step"]
+	var chords: Array = info["chords"]
+	var buf := _track_buffer(info)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(st["seed"]) * 7919
+	var lo: int = st["range"][0]
+	var hi: int = st["range"][1]
+	var scale: Array = {"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "penta": [0, 2, 4, 7, 9]}[st["scale"]]
+	var rhythms := [[[0, 6], [6, 2], [8, 8]], [[0, 4], [4, 4], [8, 6], [14, 2]], [[0, 8], [8, 4], [12, 4]],
+			[[0, 3], [3, 1], [4, 4], [8, 8]], [[0, 12], [12, 4]], [[0, 4], [4, 2], [6, 2], [8, 8]]]
+	var tune := []
+	var last := (lo + hi) / 2
+	var key: int = chords[0][0] % 12
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var bar := []
+		var rh: Array = rhythms[rng.randi() % rhythms.size()] if b % 4 != 3 else [[0, 12], [12, 4]]
+		for k in rh.size():
+			var on_beat: bool = int(rh[k][0]) % 8 == 0
+			var pick := last
+			var best := 99
+			for tries in 8:
+				var cand: int
+				if on_beat or rng.randf() < 0.5:
+					cand = root + tones[rng.randi() % tones.size()] + 12 * rng.randi_range(1, 3)
+				else:
+					cand = key + scale[rng.randi() % scale.size()] + 12 * rng.randi_range(4, 7)
+				if cand < lo or cand > hi:
+					continue
+				var d := absi(cand - last) + (6 if cand == last else 0)
+				if d < best:
+					best = d
+					pick = cand
+			if b % 4 == 3 and k == 0:
+				pick = root + 12 * int(round((last - root) / 12.0))   # a phrase comes to rest on the chord's root
+				pick = clampi(pick, lo, hi)
+			bar.append([pick, rh[k][1]])
+			last = pick
+		tune.append(bar)
+	var lead: String = st["lead"]
+	_melody(buf, step, tune, lead, 0.1 if lead == "sine" else (0.08 if lead == "tri" else 0.045), 0.8, 0.5 if lead != "square" else 0.25, 1.1)
+	for b in chords.size():
+		var root: int = chords[b][0]
+		var tones: Array = chords[b][1]
+		var t0: float = b * 16 * step
+		# The bass: a soft root under each bar (the drone holds its own).
+		if st["accomp"] != "drone":
+			_voice(buf, int(t0 * RATE), step * 8.0, _hz(root - 12), _hz(root - 12), "tri", 0.1, 0.8)
+		match st["accomp"]:
+			"ripple":
+				for i in 6:
+					var midi: int = root + 12 + tones[i % tones.size()] + 12 * (i / tones.size())
+					_voice(buf, int((t0 + i * 1.5 * step) * RATE), step * 6.0, _hz(midi), _hz(midi), "tri", 0.045, 2.2)
+			"drone":
+				_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 12), _hz(root - 12), "tri", 0.1, 0.25)
+				_voice(buf, int(t0 * RATE), step * 16.0, _hz(root - 5), _hz(root - 5), "sine", 0.045, 0.25)
+			"pluck":
+				for beat in 4:
+					for tone in tones:
+						var midi: int = root + 12 + tone
+						_voice(buf, int((t0 + (beat * 4 + 2) * step) * RATE), step * 1.5, _hz(midi), _hz(midi), "square", 0.022, 2.5, 0.25)
+			"waltz":
+				for k in 3:
+					var at := t0 + k * 16.0 / 3.0 * step
+					if k == 0:
+						continue
+					for tone in tones:
+						var midi: int = root + 12 + tone
+						_voice(buf, int(at * RATE), step * 2.5, _hz(midi), _hz(midi), "tri", 0.035, 2.0)
+			"chimes":
+				for i in [0, 6, 11]:
+					var midi: int = root + 24 + tones[(i / 5 + b) % tones.size()]
+					_voice(buf, int((t0 + i * step) * RATE), step * 8.0, _hz(midi), _hz(midi), "sine", 0.035, 3.0)
+			"pads":
+				for tone in tones:
+					var midi: int = root + tone
+					_voice(buf, int(t0 * RATE), step * 16.0, _hz(midi), _hz(midi), "tri", 0.035, 0.3)
+		match st["perc"]:
+			"hand":
+				for i in [0, 10]:
+					_voice(buf, int((t0 + i * step) * RATE), 0.16, 150.0, 70.0, "sine", 0.15, 2.0)
+			"tambourine":
+				for beat in 4:
+					_voice(buf, int((t0 + (beat * 4 + 2) * step) * RATE), 0.07, 7000.0, 5000.0, "noise", 0.05, 3.0, 0.5, [], 60 + beat)
+			"march":
+				for i in [4, 12]:
+					_voice(buf, int((t0 + i * step) * RATE), 0.06, 3000.0, 1500.0, "noise", 0.06, 3.0, 0.5, [], 21 + i)
+				_voice(buf, int(t0 * RATE), 0.14, 110.0, 55.0, "sine", 0.18, 2.0)
+			"heartbeat":
+				for i in [0, 2]:
+					_voice(buf, int((t0 + i * step) * RATE), 0.14, 80.0, 45.0, "sine", 0.18 if i == 0 else 0.12, 2.0)
+		for c in st["color"]:
+			match c:
+				"birds":
+					if b % 4 == 3:
+						for k in 3:
+							_voice(buf, int((t0 + (8 + k) * step) * RATE), 0.06, 2600.0 + k * 300.0, 3200.0, "sine", 0.03, 2.0)
+				"wind":
+					if b % 2 == 1:
+						_voice(buf, int((t0 + 4 * step) * RATE), step * 10.0, 900.0, 500.0, "noise", 0.028, 0.6, 0.5, [], 40 + b)
+				"water":
+					for k in 2:
+						var at := t0 + rng.randf_range(0, 15) * step
+						var f := rng.randf_range(900, 1500)
+						_voice(buf, int(at * RATE), 0.05, f, f * 1.6, "sine", 0.04, 2.5)
+				"bells":
+					if b % 2 == 0:
+						_voice(buf, int(t0 * RATE), step * 14.0, _hz(root), _hz(root), "sine", 0.06, 1.2)
+						_voice(buf, int(t0 * RATE), step * 10.0, _hz(root + 19), _hz(root + 19), "sine", 0.02, 1.6)
+				"crackle":
+					for k in 5:
+						_voice(buf, int((t0 + rng.randf_range(0, 15.5) * step) * RATE), 0.02, 5000.0, 3000.0, "noise", 0.04, 3.0, 0.5, [], 80 + b * 5 + k)
+				"shimmer":
+					if b % 2 == 0:
+						for k in 4:
+							var midi: int = root + 36 + tones[k % tones.size()]
+							_voice(buf, int((t0 + (4 + k) * step) * RATE), step * 3.0, _hz(midi), _hz(midi), "sine", 0.018, 2.5)
+				"frogs":
+					if b % 2 == 0:
+						for k in 2:
+							_voice(buf, int((t0 + (6 + k * 3) * step) * RATE), 0.09, 180.0, 140.0, "square", 0.03, 1.5, 0.3)
+				"owl":
+					if b % 4 == 1:
+						for k in 2:
+							_voice(buf, int((t0 + (6 + k * 3) * step) * RATE), 0.3 if k == 1 else 0.18, 420.0, 380.0, "sine", 0.05, 1.0)
+	return _to_stream(buf, true)
 
 
 ## Greenwood between waves: a woodland air in E minor. A breathy flute tune over harp-like

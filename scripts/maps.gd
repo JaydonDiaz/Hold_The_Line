@@ -20,12 +20,14 @@ extends RefCounted
 ##   no_build   rectangles nothing may be posted or built in (barricades aside)
 ##   trails     paths worn into the ground through the gaps (just paint)
 ##   castle     the castle's style (castle.gd STYLES)
-##   music      its peaceful music between waves (audio.gd STAGE_TRACKS; by default the
-##              biome's: "calm" for the meadow, "mountain" for the mountains)
+##   music      its peaceful music between waves: its own (audio.gd: "calm_<style>" from
+##              CALMS, or a piece by hand: "mountain", "forest", "river", "snow", "city");
+##              without one, the biome's ("calm" for the meadow, "mountain" for the mountains)
 ##   battle     its own battle music during waves (an audio.gd BATTLES style; without
 ##              one, the meadow's)
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ##   camp       false: no enemy camp drawn along the top (the road just goes on)
+##   ground     a mood laid over the biome's ground (field_art._ground_mood): "fen", "burnt", "ash"
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
 ##   lanterns   lantern posts stood about the field (just paint, lit; a night mission hangs
 ##              its own, which light up the dark)
@@ -50,7 +52,7 @@ const MAPS := {
 	# Ashwatch Keep: an open meadow with a rocky ridge across the middle, broken by two
 	# gaps (about 70 and 78px). Two short lines of Swordsmen can hold them.
 	"ashwatch_ridge": {
-		"name": "Ashwatch Ridge", "battle": "ridge",
+		"name": "Ashwatch Ridge", "battle": "ridge", "music": "calm_ashwatch",
 		"blurb": "A rocky ridge\nwith two gaps\nto hold",
 		"biome": "meadow",
 		"lanes": [[40, 600]],
@@ -121,7 +123,7 @@ const MAPS := {
 	# zig-zag down to the gate (enemies walk about four times as far, bunching at the
 	# turns); the last, nearest the castle, sends everything round by the right.
 	"deepdelve_switchbacks": {
-		"name": "Deepdelve Canyon", "battle": "deepdelve",
+		"name": "Deepdelve Canyon", "battle": "deepdelve", "music": "calm_deepdelve",
 		"blurb": "A mine canyon\nthat zig-zags\ndown to the gate",
 		"biome": "mountain",
 		"lanes": [[172, 468]],
@@ -142,7 +144,7 @@ const MAPS := {
 	# Mercy Vale: farmland broken by hedgerows with gaps, enemies down both flanks, and the
 	# shrine in the middle (nothing can be built on it or by it).
 	"mercy_fields": {
-		"name": "Mercy Vale Fields", "battle": "mercy",
+		"name": "Mercy Vale Fields", "battle": "mercy", "music": "calm_mercy",
 		"blurb": "Hedged fields\nand the shrine\nbetween them",
 		"biome": "meadow",
 		"lanes": [[40, 200], [440, 600]],
@@ -194,7 +196,7 @@ const MAPS := {
 	# of it. The other two stones stand on the shore, and every stone stays reachable with
 	# all the thin ice gone. Any way through is at least 64px wide, ice or not.
 	"frostmarch_lake": {
-		"name": "The Stone Lake", "battle": "frostlake", "music": "snow",
+		"name": "The Stone Lake", "battle": "frostlake", "music": "calm_lake",
 		"blurb": "Frozen ponds\nand crags round\nthe standing stones",
 		"biome": "snow",
 		"lanes": [[40, 600]],
@@ -239,7 +241,7 @@ const MAPS := {
 	# The Fighting Retreat's lines hold just below each ledge, where the enemy has to come
 	# down the stairs; the camp is at the foot.
 	"monastery_steps": {
-		"name": "The Thousand Steps", "battle": "steps", "music": "mountain",
+		"name": "The Thousand Steps", "battle": "steps", "music": "calm_steps",
 		"blurb": "Terraces and\nstairs down the\nmountain",
 		"biome": "mountain",
 		"lanes": [[40, 600]],
@@ -272,7 +274,7 @@ const MAPS := {
 	# sides, stairs up into it from the mountain road, rocks splitting the way; three bell
 	# towers stand across the courtyard (the missions put them there).
 	"monastery_gate": {
-		"name": "The Monastery Gate", "battle": "gate", "music": "mountain",
+		"name": "The Monastery Gate", "battle": "gate", "music": "calm_gate",
 		"blurb": "A courtyard of\nbell towers on\nthe mountain",
 		"biome": "mountain",
 		"lanes": [[120, 520]],
@@ -342,7 +344,7 @@ const MAPS := {
 	# The Free Cities, the Exchange: the Council's great Exchange in its square, a canal
 	# across the city above it with three bridges, townhouses on the flanks.
 	"city_exchange": {
-		"name": "The Exchange", "battle": "council", "music": "city",
+		"name": "The Exchange", "battle": "council", "music": "calm_exchange",
 		"blurb": "The Exchange\nbehind the\ncanal bridges",
 		"biome": "city",
 		"lanes": [[40, 600]],
@@ -366,7 +368,7 @@ const MAPS := {
 	# The Free Cities, Carnival Night: streets running into the carnival plaza in the middle
 	# of the city, stalls and townhouses round it (the mission hangs the lanterns).
 	"city_carnival": {
-		"name": "The Carnival Plaza", "battle": "carnival", "music": "city",
+		"name": "The Carnival Plaza", "battle": "carnival", "music": "calm_carnival",
 		"blurb": "A plaza of\nstalls and\nlanterns",
 		"biome": "city",
 		"lanes": [[40, 600]],
@@ -397,7 +399,7 @@ const MAPS := {
 	# floating island, four small islands round it with a sigil each (one of each art), glowing
 	# bridges in their sigils' colours between them, the camp above and the castle below.
 	"spires_circle": {
-		"name": "The Broken Circle", "battle": "spires", "music": "mountain",
+		"name": "The Broken Circle", "battle": "spires", "music": "calm_spires",
 		"blurb": "Floating islands\nround the broken\nCircle",
 		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
 		"lanes": [[60, 580]],
@@ -434,7 +436,7 @@ const MAPS := {
 	# standing) and a sigil by it, bridges glowing in their sigils' colours down to a great
 	# island before the castle, which has a sigil of its own.
 	"spires_relight": {
-		"name": "The Three Spires", "battle": "relight", "music": "mountain",
+		"name": "The Three Spires", "battle": "relight", "music": "calm_relight",
 		"blurb": "Three spire\nislands round\nthe Conclave's",
 		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
 		"lanes": [[60, 580]],
@@ -467,7 +469,7 @@ const MAPS := {
 	# great floating island, a sigil on each of four small islands round it: a Mage has to
 	# leave the Archive's side to draw on one. Bridges glow in their sigils' colours.
 	"spires_archive": {
-		"name": "The Lost Archive", "battle": "archive", "music": "mountain",
+		"name": "The Lost Archive", "battle": "archive", "music": "calm_archive",
 		"blurb": "The Archive on\na floating island,\nsigils round it",
 		"biome": "void", "tint": Color(0.92, 0.9, 1.0),
 		"lanes": [[60, 580]],
@@ -530,7 +532,7 @@ const ZONES := {
 	# Frostmarch, Whiteout: a long frozen lake the sled crosses on solid ice, thin ice well off
 	# its road on both sides, pinewoods along the shores.
 	"frostmarch_crossing": {
-		"name": "The Long Lake", "battle": "whiteout", "music": "snow", "camp": false,
+		"name": "The Long Lake", "battle": "whiteout", "music": "calm_whiteout", "camp": false,
 		"blurb": "A frozen lake\nin the snow",
 		"biome": "snow",
 		"lanes": [[40, 600]],
@@ -551,7 +553,7 @@ const ZONES := {
 	},
 	# Open farmland: a few copses, the road winding up the middle.
 	"convoy_meadow": {
-		"name": "The Meadow Road", "battle": "road", "biome": "meadow", "camp": false,
+		"name": "The Meadow Road", "battle": "road", "music": "calm_road", "biome": "meadow", "camp": false,
 		"lanes": [[40, 600]],
 		"terrain": [
 			{"kind": "trees", "poly": [Vector2(0, 180), Vector2(60, 170), Vector2(96, 200), Vector2(100, 250), Vector2(70, 290),
@@ -567,7 +569,7 @@ const ZONES := {
 	},
 	# A dark pinewood: thick trees close in on both sides, the road through a long clearing.
 	"convoy_forest": {
-		"name": "The Darkwood", "battle": "darkwood", "biome": "meadow", "camp": false, "tint": Color(0.78, 0.9, 0.8),
+		"name": "The Darkwood", "battle": "darkwood", "music": "calm_darkwood", "biome": "meadow", "camp": false, "tint": Color(0.78, 0.9, 0.8),
 		"lanes": [[186, 462]],
 		"terrain": [
 			{"kind": "trees", "poly": [Vector2(0, -120), Vector2(160, -120), Vector2(170, 60), Vector2(150, 200), Vector2(120, 260),
@@ -584,7 +586,7 @@ const ZONES := {
 	# A farming village up at the top of the field, its two roads running down to safety
 	# (the Village Road's evacuation: the villagers set out from the cottages).
 	"village_fields": {
-		"name": "The Village Fields", "battle": "village", "biome": "meadow",
+		"name": "The Village Fields", "battle": "village", "music": "calm_village", "biome": "meadow",
 		"lanes": [[200, 440], [30, 90], [550, 610]],
 		"terrain": [
 			{"kind": "house", "poly": [Vector2(28, 168), Vector2(92, 168), Vector2(92, 228), Vector2(28, 228)]},
@@ -599,7 +601,7 @@ const ZONES := {
 	},
 	# The high pass: bare rock, cliffs either side, the road climbing to the far end.
 	"convoy_pass": {
-		"name": "The High Pass", "battle": "highpass", "biome": "mountain", "camp": false, "tint": Color(1.0, 0.94, 0.9),
+		"name": "The High Pass", "battle": "highpass", "music": "calm_highpass", "biome": "mountain", "camp": false, "tint": Color(1.0, 0.94, 0.9),
 		"lanes": [[214, 434]],
 		"terrain": [
 			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(190, -120), Vector2(196, 80), Vector2(170, 220), Vector2(184, 360),
@@ -613,7 +615,7 @@ const ZONES := {
 	},
 	# A river across the road, crossed at the old ford in the middle; reeds along the banks.
 	"convoy_ford": {
-		"name": "The Old Ford", "battle": "ford", "biome": "meadow", "camp": false,
+		"name": "The Old Ford", "battle": "ford", "music": "calm_ford", "biome": "meadow", "camp": false,
 		"lanes": [[40, 600]],
 		"terrain": [
 			{"kind": "water", "poly": [Vector2(0, 372), Vector2(90, 380), Vector2(180, 368), Vector2(262, 384), Vector2(272, 420),
@@ -631,7 +633,7 @@ const ZONES := {
 	},
 	# Marshland: the road picks its way between pools, under a grey-green light.
 	"convoy_fens": {
-		"name": "The Fens", "battle": "fens", "biome": "meadow", "camp": false, "tint": Color(0.86, 0.95, 0.88),
+		"name": "The Fens", "battle": "fens", "music": "calm_fens", "biome": "meadow", "ground": "fen", "camp": false, "tint": Color(0.86, 0.95, 0.88),
 		"lanes": [[40, 600]],
 		"terrain": [
 			{"kind": "water", "poly": [Vector2(30, 230), Vector2(110, 214), Vector2(190, 236), Vector2(196, 290), Vector2(140, 318),
@@ -651,7 +653,7 @@ const ZONES := {
 	},
 	# A village the enemy got to first: burnt-out cottages either side of the street.
 	"convoy_village": {
-		"name": "The Burnt Village", "battle": "embers", "biome": "meadow", "camp": false, "tint": Color(1.0, 0.9, 0.84),
+		"name": "The Burnt Village", "battle": "embers", "music": "calm_embers", "biome": "meadow", "ground": "burnt", "camp": false, "tint": Color(1.0, 0.9, 0.84),
 		"lanes": [[40, 600]],
 		"terrain": [
 			{"kind": "ruin", "poly": [Vector2(60, 180), Vector2(150, 180), Vector2(150, 250), Vector2(60, 250)]},
@@ -667,7 +669,7 @@ const ZONES := {
 	},
 	# A wide ridge of grey rock, boulders strewn across the road.
 	"convoy_ridge": {
-		"name": "Ashen Ridge", "battle": "ashen", "biome": "mountain", "camp": false, "tint": Color(0.94, 0.92, 0.94),
+		"name": "Ashen Ridge", "battle": "ashen", "music": "calm_ashen", "biome": "mountain", "ground": "ash", "camp": false, "tint": Color(0.94, 0.92, 0.94),
 		"lanes": [[130, 510]],
 		"terrain": [
 			{"kind": "cliff", "poly": [Vector2(0, -120), Vector2(116, -120), Vector2(124, 120), Vector2(94, 300), Vector2(112, 480),

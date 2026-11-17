@@ -140,6 +140,17 @@ func _run() -> void:
 		distinct[styles[id]] = true
 	check(distinct.size() == styles.size(), "every map has its own battle music (%d maps, %d pieces)" % [styles.size(), distinct.size()])
 	check(main.battle_music == "battle_quarry", "...Stonehollow's is its own (%s)" % main.battle_music)
+	# ...and its own peaceful music between waves (the open meadow keeps the old calm one).
+	var calms := {"": "calm"}
+	for id in Maps.MAPS.keys() + Maps.ZONES.keys():
+		var m: Dictionary = Maps.get_map(id)
+		calms[id] = m.get("music", "mountain" if m.get("biome", "") == "mountain" else "calm")
+	var calm_distinct := {}
+	for id in calms:
+		calm_distinct[calms[id]] = true
+	var unknown: Array = calm_distinct.keys().filter(func(t): return not (t in main.audio.STAGE_TRACKS or main.audio.on_demand(t)))
+	check(calm_distinct.size() == calms.size() and unknown.is_empty(),
+			"every map has its own peaceful music too (%d maps, %d pieces, unknown: %s)" % [calms.size(), calm_distinct.size(), str(unknown)])
 	var t0 := Time.get_ticks_msec()
 	while not main.audio._music.has("battle_quarry") and Time.get_ticks_msec() - t0 < 150000:
 		await create_timer(0.2).timeout   # (composed while the battle's being set up)
@@ -170,9 +181,10 @@ func _run() -> void:
 				pair[0], pair[1], ms / 1000.0])
 	check(main.audio._cache.has("battle_quarry") and (main.audio._cache["battle"] as AudioStreamWAV).data != (main.audio._cache["battle_quarry"] as AudioStreamWAV).data,
 			"...and it isn't the meadow's")
-	# The North's peaceful music (Phase 4): Frostmarch's and the Free Cities', made on
-	# demand like the others, each with a part for every Bard instrument.
-	for track in ["snow", "city"]:
+	# The North's peaceful music (Phase 4): Frostmarch's and the Free Cities', and a map's
+	# own from its style (the Broken Circle's), made on demand like the others, each with a
+	# part for every Bard instrument.
+	for track in ["snow", "city", "calm_spires"]:
 		var c1 := Time.get_ticks_msec()
 		main.audio.prepare(track)
 		var n := 0
