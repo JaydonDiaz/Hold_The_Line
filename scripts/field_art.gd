@@ -248,12 +248,18 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 		_:
 			draw_meadow(ci, w, tint, false, clear)
 	_ground_mood(ci, w, tint, m, rng)
+	for d in m.get("decor", []):
+		if d["kind"] == "plaza":
+			_plaza(ci, d["rect"], d.get("at", (d["rect"] as Rect2).get_center()), d.get("r", 40.0), tint)
 	for tr in m.get("trails", []):
 		var pts := PackedVector2Array()
 		var src := PackedVector2Array(tr)
+		# A curve through the trail's points (no sharp corners where it turns).
 		for i in src.size() - 1:
-			for k in 6:
-				var a := src[i].lerp(src[i + 1], k / 6.0)
+			var p0 := src[maxi(i - 1, 0)]
+			var p3 := src[mini(i + 2, src.size() - 1)]
+			for k in 8:
+				var a := src[i].cubic_interpolate(src[i + 1], p0, p3, k / 8.0)
 				pts.append(a + Vector2(sin(a.y * 0.05) * 4.0, 0))
 		pts.append(src[src.size() - 1])
 		_worn_trail(ci, pts, tint, rng)
@@ -313,9 +319,107 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_rope_bridge(ci, poly, tint, rng)
 			"stairs":
 				_stairs(ci, poly, tint, rng)
+	for d in m.get("decor", []):
+		match d["kind"]:
+			"boat":
+				_boat(ci, d["at"], tint, rng)
+			"planter":
+				_planter(ci, d["at"], tint, rng)
+			"crates":
+				_crates(ci, d["at"], tint, rng)
+			"lamp":
+				_street_lamp(ci, d["at"], tint)
 	for l in m.get("lanterns", []):
 		_lantern(ci, l, tint)
 	snowy = false
+
+
+## A square paved in dressed stone: a dark kerb, big pale flags in courses, and a round
+## mosaic (a sun of two stones) set in it.
+static func _plaza(ci: CanvasItem, r: Rect2, c: Vector2, rad: float, tint: Color) -> void:
+	ci.draw_rect(r.grow(3), Color(0.36, 0.33, 0.3) * tint)
+	ci.draw_rect(r, Color(0.7, 0.66, 0.58) * tint)
+	var y := r.position.y
+	var row := 0
+	while y < r.end.y - 1:
+		var x := r.position.x - (12.0 if row % 2 else 0.0)
+		while x < r.end.x - 1:
+			var cell := Rect2(maxf(x, r.position.x), y, minf(x + 24.0, r.end.x) - maxf(x, r.position.x), minf(16.0, r.end.y - y))
+			ci.draw_rect(cell, Color(0.6, 0.56, 0.5) * tint, false, 1.0)
+			ci.draw_rect(Rect2(cell.position + Vector2(1, 1), Vector2(cell.size.x - 2, 1)), Color(0.78, 0.74, 0.66) * tint)
+			x += 24.0
+		y += 16.0
+		row += 1
+	ci.draw_circle(c, rad + 3.0, Color(0.42, 0.38, 0.34) * tint)
+	ci.draw_circle(c, rad, Color(0.78, 0.72, 0.6) * tint)
+	ci.draw_circle(c, rad - 8.0, Color(0.56, 0.44, 0.34) * tint)
+	ci.draw_circle(c, rad - 11.0, Color(0.8, 0.75, 0.64) * tint)
+	for i in 16:
+		var a := i * TAU / 16.0
+		var tip := c + Vector2.from_angle(a) * (rad - 13.0) * (1.0 if i % 2 == 0 else 0.62)
+		var side := Vector2.from_angle(a + PI / 2.0) * rad * 0.1
+		ci.draw_colored_polygon(PackedVector2Array([c + side, tip, c - side]),
+				(Color(0.62, 0.5, 0.36) if i % 2 == 0 else Color(0.5, 0.52, 0.56)) * tint)
+	ci.draw_circle(c, rad * 0.16, Color(0.42, 0.38, 0.34) * tint)
+	ci.draw_circle(c, rad * 0.1, Color(0.86, 0.72, 0.4) * tint)
+
+
+## A rowing boat moored in a canal, its rope to the bank.
+static func _boat(ci: CanvasItem, at: Vector2, tint: Color, rng: RandomNumberGenerator) -> void:
+	var hull := PackedVector2Array([at + Vector2(-17, -6), at + Vector2(12, -6), at + Vector2(19, 0), at + Vector2(12, 6),
+			at + Vector2(-17, 6), at + Vector2(-20, 0)])
+	ci.draw_colored_polygon(_shifted(hull, Vector2(2, 3)), Color(0, 0, 0, 0.25))
+	ci.draw_colored_polygon(PackedVector2Array(Geometry2D.offset_polygon(hull, 1.5)[0]), OUTLINE)
+	var wood: Color = [Color(0.55, 0.36, 0.2), Color(0.45, 0.3, 0.2), Color(0.36, 0.42, 0.5)][rng.randi() % 3]
+	ci.draw_colored_polygon(hull, wood * tint)
+	ci.draw_rect(Rect2(at + Vector2(-15, -3), Vector2(26, 6)), wood.darkened(0.35) * tint)
+	for x in [-9, 1]:
+		ci.draw_rect(Rect2(at + Vector2(x, -4), Vector2(3, 8)), wood.lightened(0.2) * tint)
+	ci.draw_line(at + Vector2(-20, 0), at + Vector2(-26, -14), Color(0.75, 0.68, 0.5) * tint, 1.0)
+
+
+## A stone tub with a clipped bush in it, and flowers.
+static func _planter(ci: CanvasItem, at: Vector2, tint: Color, rng: RandomNumberGenerator) -> void:
+	ci.draw_rect(Rect2(at + Vector2(-9, 0), Vector2(22, 6)), Color(0, 0, 0, 0.22))
+	ci.draw_rect(Rect2(at + Vector2(-11, -4), Vector2(22, 10)), OUTLINE)
+	ci.draw_rect(Rect2(at + Vector2(-10, -3), Vector2(20, 8)), Color(0.66, 0.62, 0.56) * tint)
+	ci.draw_rect(Rect2(at + Vector2(-10, -3), Vector2(20, 2)), Color(0.8, 0.76, 0.7) * tint)
+	ci.draw_circle(at + Vector2(0, -11), 10.5, OUTLINE)
+	ci.draw_circle(at + Vector2(0, -11), 9.5, Color(0.24, 0.46, 0.24) * tint)
+	ci.draw_circle(at + Vector2(-3, -14), 5.0, Color(0.34, 0.58, 0.3) * tint)
+	for i in 5:
+		var p := at + Vector2(rng.randf_range(-7, 7), rng.randf_range(-17, -6))
+		ci.draw_rect(Rect2(p, Vector2(2, 2)), [Color(0.95, 0.4, 0.45), Color(1.0, 0.85, 0.35), Color(0.95, 0.95, 0.9)][rng.randi() % 3] * tint)
+
+
+## Goods stacked at a door: a crate or two and a barrel.
+static func _crates(ci: CanvasItem, at: Vector2, tint: Color, rng: RandomNumberGenerator) -> void:
+	var wood := Color(0.62, 0.44, 0.26)
+	ci.draw_rect(Rect2(at + Vector2(-10, 2), Vector2(26, 5)), Color(0, 0, 0, 0.22))
+	var boxes := [Rect2(at + Vector2(-11, -8), Vector2(11, 11))]
+	if rng.randf() < 0.6:
+		boxes.append(Rect2(at + Vector2(-8, -17), Vector2(9, 9)))
+	for b in boxes:
+		ci.draw_rect(b.grow(1), OUTLINE)
+		ci.draw_rect(b, wood * tint)
+		ci.draw_line(b.position, b.end, wood.darkened(0.3) * tint, 1.0)
+		ci.draw_line(Vector2(b.end.x, b.position.y), Vector2(b.position.x, b.end.y), wood.darkened(0.3) * tint, 1.0)
+	ci.draw_rect(Rect2(at + Vector2(2, -9), Vector2(10, 13)), OUTLINE)
+	ci.draw_rect(Rect2(at + Vector2(3, -8), Vector2(8, 11)), Color(0.5, 0.32, 0.18) * tint)
+	for y in [-6, 0]:
+		ci.draw_rect(Rect2(at + Vector2(3, y), Vector2(8, 1)), Color(0.3, 0.3, 0.32) * tint)
+
+
+## A city street lamp: an iron post with a glass lamp atop.
+static func _street_lamp(ci: CanvasItem, at: Vector2, tint: Color) -> void:
+	ci.draw_rect(Rect2(at + Vector2(-3, -1), Vector2(7, 3)), Color(0, 0, 0, 0.25))
+	ci.draw_rect(Rect2(at + Vector2(-2, -26), Vector2(4, 27)), OUTLINE)
+	ci.draw_rect(Rect2(at + Vector2(-1, -25), Vector2(2, 25)), Color(0.24, 0.24, 0.27) * tint)
+	ci.draw_rect(Rect2(at + Vector2(-4, -3), Vector2(8, 3)), Color(0.24, 0.24, 0.27) * tint)
+	ci.draw_rect(Rect2(at + Vector2(-5, -36), Vector2(10, 11)), OUTLINE)
+	ci.draw_rect(Rect2(at + Vector2(-4, -35), Vector2(8, 9)), Color(1.0, 0.86, 0.55) * tint)
+	ci.draw_rect(Rect2(at + Vector2(-6, -38), Vector2(12, 3)), OUTLINE)
+	ci.draw_rect(Rect2(at + Vector2(-1, -41), Vector2(2, 3)), OUTLINE)
 
 
 static func _bottom(poly: Array) -> float:

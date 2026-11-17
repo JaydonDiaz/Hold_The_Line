@@ -391,7 +391,7 @@ const MISSIONS := {
 	# so an army without Deepdelve's mines or Greenwood's archers can buy what it lacks).
 	"fc_market": {"name": "The Market Road", "territory": "freecities", "type": "evac", "waves": 99, "level": 5, "gold": 340,
 		"evac": {"routes": [[Vector2(110, 120), Vector2(110, 400), Vector2(110, 600), Vector2(220, 650), Vector2(320, 740)],
-				[Vector2(320, 120), Vector2(320, 400), Vector2(320, 740)],
+				[Vector2(320, 120), Vector2(320, 400), Vector2(320, 556), Vector2(382, 590), Vector2(384, 650), Vector2(330, 702), Vector2(320, 740)],
 				[Vector2(530, 120), Vector2(530, 400), Vector2(530, 600), Vector2(420, 650), Vector2(320, 740)]],
 			"groups": 9, "size": 4, "every": 11.0, "first": 3.0, "hp": 40, "speed": 27.0, "need": 26},
 		"pace": {"auto": "forced", "deploy": 22},

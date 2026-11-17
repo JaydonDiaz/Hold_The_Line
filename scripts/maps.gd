@@ -29,6 +29,9 @@ extends RefCounted
 ##   camp       false: no enemy camp drawn along the top (the road just goes on)
 ##   ground     a mood laid over the biome's ground (field_art._ground_mood): "fen", "burnt", "ash"
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
+##   decor      little things about the field, just paint ({"kind", "at"} or a "rect"):
+##              "plaza" (a dressed-stone square, its mosaic at "at", "r" across), "planter", "boat" (moored in a canal),
+##              "lamp" (a street lamp), "crates"
 ##   lanterns   lantern posts stood about the field (just paint, lit; a night mission hangs
 ##              its own, which light up the dark)
 ##   islands    floating islands ({"at", "r", "path": the sigil's art on it, or -1}), joined
@@ -181,60 +184,66 @@ const MAPS := {
 			{"kind": "thin_ice", "poly": [Vector2(405, 328), Vector2(640, 334), Vector2(640, 456), Vector2(405, 462)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(320, 96), Vector2(312, 140), Vector2(274, 190), Vector2(266, 240), Vector2(290, 290), Vector2(320, 330),
-				Vector2(320, 560), Vector2(320, 736)],
-			[Vector2(120, 96), Vector2(124, 160), Vector2(146, 220), Vector2(196, 268), Vector2(262, 296), Vector2(310, 318)],
-			[Vector2(520, 96), Vector2(516, 160), Vector2(494, 220), Vector2(444, 268), Vector2(378, 296), Vector2(330, 318)]],
+		# Three roads down from the camp: the middle one parts round the rock and meets
+		# again below it, the outer two swing in to join it there, and the one road crosses
+		# the solid ice and runs on to the gate.
+		"trails": [[Vector2(320, 96), Vector2(320, 140), Vector2(286, 180), Vector2(276, 222), Vector2(296, 262), Vector2(320, 286),
+				Vector2(320, 330)],
+			[Vector2(320, 140), Vector2(354, 180), Vector2(364, 222), Vector2(344, 262), Vector2(320, 286)],
+			[Vector2(116, 96), Vector2(122, 160), Vector2(168, 226), Vector2(248, 272), Vector2(312, 300)],
+			[Vector2(524, 96), Vector2(518, 160), Vector2(472, 226), Vector2(392, 272), Vector2(328, 300)],
+			[Vector2(320, 470), Vector2(318, 600), Vector2(320, 736)]],
 		"castle": "frostkeep",
 		"bot_posts": [Vector2(320, 500), Vector2(260, 540), Vector2(380, 540), Vector2(320, 600), Vector2(250, 600),
 			Vector2(390, 600), Vector2(320, 650)],
 	},
 	# Frostmarch, the Stone Lake (the Covenant's Vigil): a snowfield of frozen ponds and
-	# crags. A pond in the north-west and one in the east, each thin ice ringed by solid;
-	# crags in the north-east, the north and the west; and the great lake in the middle
-	# with the middle standing stone out on it (on solid ice), thin ice north and south-west
-	# of it. The other two stones stand on the shore, and every stone stays reachable with
-	# all the thin ice gone. Any way through is at least 64px wide, ice or not.
+	# crags, and the two roads from the camp run straight across the ponds: the west road
+	# over the west pond to the West Stone, the east road over the east pond to the East
+	# Stone, and the way straight down over the great lake, past the Lake Stone out on it
+	# (on a band of solid ice right across, thin ice north and south of it). Each pond is
+	# thin ice ringed by solid: break it and everyone has to go round. Every stone stays
+	# reachable with all the thin ice gone, and every way round is at least 64px wide.
 	"frostmarch_lake": {
 		"name": "The Stone Lake", "battle": "frostlake", "music": "calm_lake",
-		"blurb": "Frozen ponds\nand crags round\nthe standing stones",
+		"blurb": "Frozen ponds\nacross the roads\nto the stones",
 		"biome": "snow",
 		"lanes": [[40, 600]],
 		"terrain": [
-			# The north-west pond.
-			{"kind": "ice", "poly": [Vector2(60, 156), Vector2(200, 150), Vector2(236, 200), Vector2(220, 270), Vector2(130, 286),
-				Vector2(56, 250)]},
-			{"kind": "thin_ice", "poly": [Vector2(88, 176), Vector2(192, 172), Vector2(204, 220), Vector2(184, 256), Vector2(104, 260),
-				Vector2(80, 226)]},
-			# Crags: the north, the north-east, the west, and two low ones by the castle.
-			{"kind": "rock", "poly": [Vector2(296, 146), Vector2(338, 138), Vector2(364, 160), Vector2(356, 198), Vector2(316, 210),
-				Vector2(284, 186)]},
-			{"kind": "cliff", "poly": [Vector2(452, 136), Vector2(560, 124), Vector2(604, 170), Vector2(584, 236), Vector2(504, 250),
-				Vector2(456, 206)]},
-			{"kind": "rock", "poly": [Vector2(0, 336), Vector2(90, 330), Vector2(150, 356), Vector2(142, 408), Vector2(80, 426),
-				Vector2(0, 420)]},
+			# The west pond, across the west road.
+			{"kind": "ice", "poly": [Vector2(84, 186), Vector2(236, 176), Vector2(300, 226), Vector2(290, 312), Vector2(196, 338),
+				Vector2(96, 318), Vector2(64, 254)]},
+			{"kind": "thin_ice", "poly": [Vector2(112, 204), Vector2(222, 198), Vector2(266, 238), Vector2(258, 296), Vector2(190, 316),
+				Vector2(116, 302), Vector2(94, 256)]},
+			# The east pond, across the east road.
+			{"kind": "ice", "poly": [Vector2(372, 252), Vector2(470, 236), Vector2(574, 262), Vector2(596, 330), Vector2(552, 396),
+				Vector2(440, 404), Vector2(380, 360)]},
+			{"kind": "thin_ice", "poly": [Vector2(400, 272), Vector2(470, 258), Vector2(552, 280), Vector2(566, 330), Vector2(532, 374),
+				Vector2(444, 380), Vector2(406, 344)]},
+			# The great lake, the Lake Stone out on its band of solid ice.
+			{"kind": "ice", "poly": [Vector2(214, 404), Vector2(366, 398), Vector2(442, 440), Vector2(452, 500), Vector2(424, 588),
+				Vector2(320, 610), Vector2(220, 590), Vector2(190, 500)]},
+			{"kind": "thin_ice", "poly": [Vector2(236, 414), Vector2(362, 410), Vector2(376, 456), Vector2(226, 456)]},
+			{"kind": "thin_ice", "poly": [Vector2(222, 518), Vector2(420, 518), Vector2(404, 576), Vector2(320, 594), Vector2(236, 578)]},
+			# Crags: the north one between the roads, a cliff in the north-east corner, one on
+			# the west shore, and two low ones by the castle.
+			{"kind": "rock", "poly": [Vector2(304, 128), Vector2(340, 120), Vector2(362, 140), Vector2(356, 174), Vector2(322, 184),
+				Vector2(298, 164)]},
+			{"kind": "cliff", "poly": [Vector2(508, 118), Vector2(584, 106), Vector2(640, 130), Vector2(640, 196), Vector2(556, 210),
+				Vector2(512, 176)]},
+			{"kind": "rock", "poly": [Vector2(0, 392), Vector2(48, 386), Vector2(84, 410), Vector2(72, 452), Vector2(30, 462),
+				Vector2(0, 456)]},
 			{"kind": "rock", "poly": [Vector2(570, 554), Vector2(610, 546), Vector2(640, 560), Vector2(640, 610), Vector2(590, 614)]},
 			{"kind": "rock", "poly": [Vector2(0, 560), Vector2(50, 546), Vector2(70, 580), Vector2(46, 614), Vector2(0, 610)]},
-			# The east pond.
-			{"kind": "ice", "poly": [Vector2(472, 304), Vector2(600, 296), Vector2(626, 350), Vector2(604, 408), Vector2(486, 414),
-				Vector2(454, 360)]},
-			{"kind": "thin_ice", "poly": [Vector2(494, 320), Vector2(584, 316), Vector2(600, 356), Vector2(582, 392), Vector2(500, 396),
-				Vector2(480, 358)]},
-			# The great lake and the Lake Stone on it.
-			{"kind": "ice", "poly": [Vector2(236, 396), Vector2(404, 396), Vector2(440, 470), Vector2(410, 560), Vector2(232, 560),
-				Vector2(200, 476)]},
-			{"kind": "thin_ice", "poly": [Vector2(256, 406), Vector2(384, 406), Vector2(384, 450), Vector2(256, 450)]},
-			{"kind": "thin_ice", "poly": [Vector2(214, 478), Vector2(270, 478), Vector2(270, 544), Vector2(234, 544)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		"trails": [[Vector2(250, 96), Vector2(258, 150), Vector2(256, 236), Vector2(222, 300), Vector2(178, 370), Vector2(166, 450),
-				Vector2(146, 500), Vector2(170, 600), Vector2(250, 670), Vector2(320, 736)],
-			[Vector2(400, 96), Vector2(410, 176), Vector2(428, 276), Vector2(446, 350), Vector2(470, 440), Vector2(494, 500),
-				Vector2(470, 600), Vector2(390, 670), Vector2(320, 736)],
-			[Vector2(320, 736), Vector2(320, 640), Vector2(320, 566)]],
+		"trails": [[Vector2(232, 96), Vector2(216, 160), Vector2(186, 250), Vector2(162, 350), Vector2(146, 450), Vector2(140, 520),
+				Vector2(176, 620), Vector2(254, 690), Vector2(320, 736)],
+			[Vector2(410, 96), Vector2(432, 170), Vector2(464, 300), Vector2(488, 420), Vector2(500, 520), Vector2(462, 620),
+				Vector2(384, 690), Vector2(320, 736)]],
 		"castle": "frostkeep",
-		"bot_posts": [Vector2(140, 470), Vector2(320, 600), Vector2(500, 470), Vector2(200, 610), Vector2(440, 610),
-			Vector2(190, 330), Vector2(420, 350)],
+		"bot_posts": [Vector2(140, 470), Vector2(320, 640), Vector2(500, 470), Vector2(210, 640), Vector2(430, 640),
+			Vector2(170, 368), Vector2(476, 432)],
 	},
 	# The High Monastery, the Thousand Steps: four terraces down the mountain, each ledge
 	# crossed by stairs (and, on the middle one, a rope bridge over a chasm in the centre).
@@ -296,15 +305,16 @@ const MAPS := {
 		"bot_posts": [Vector2(150, 520), Vector2(320, 470), Vector2(490, 520), Vector2(220, 400), Vector2(420, 400),
 			Vector2(320, 600), Vector2(160, 620)],
 	},
-	# The Free Cities, the Market Road: the market square at the top, three streets down
-	# between townhouses of every size, a canal across with a bridge on each street, and
-	# the camp at the bottom. Between the middle and right streets the houses open onto a
-	# plaza with a fountain; tight alleys (about 44px: room for a troop or a goblin, not a
-	# Troll) cut between some of the houses. The townsfolk come down the three streets
-	# (the mission's routes), which stay clear.
+	# The Free Cities, the Market Road: three streets down between townhouses of every size,
+	# a canal across with a bridge on each street, the market's stalls set out between the
+	# houses (a pair on a little square above the canal, a row below it), and the town's
+	# fountain on the square in front of the city hall, the streets going round it. Tight
+	# alleys (about 44px: room for a troop or a goblin, not a Troll) cut between some of the
+	# houses. The townsfolk come down the three streets (the mission's routes), which stay
+	# clear.
 	"city_market": {
 		"name": "The Market Road", "battle": "market", "music": "city",
-		"blurb": "Streets, alleys\nand a fountain\nplaza by a canal",
+		"blurb": "Market stalls,\nstreets and a\nfountain square",
 		"biome": "city",
 		"lanes": [[40, 600]],
 		"terrain": [
@@ -316,7 +326,8 @@ const MAPS := {
 			{"kind": "building", "poly": [Vector2(232, 216), Vector2(280, 216), Vector2(280, 286), Vector2(232, 286)]},
 			{"kind": "building", "poly": [Vector2(154, 330), Vector2(250, 330), Vector2(250, 372), Vector2(154, 372)]},
 			{"kind": "building", "poly": [Vector2(256, 336), Vector2(280, 336), Vector2(280, 372), Vector2(256, 372)]},
-			{"kind": "fountain", "poly": [Vector2(453, 297), Vector2(436, 314), Vector2(414, 314), Vector2(397, 297), Vector2(397, 275), Vector2(414, 258), Vector2(436, 258), Vector2(453, 275)]},
+			{"kind": "stall", "poly": [Vector2(370, 262), Vector2(420, 262), Vector2(420, 294), Vector2(370, 294)]},
+			{"kind": "stall", "poly": [Vector2(434, 262), Vector2(484, 262), Vector2(484, 294), Vector2(434, 294)]},
 			{"kind": "building", "poly": [Vector2(572, 214), Vector2(640, 214), Vector2(640, 330), Vector2(580, 330)]},
 			{"kind": "building", "poly": [Vector2(586, 342), Vector2(640, 342), Vector2(640, 372), Vector2(586, 372)]},
 			# The canal, a bridge on each street.
@@ -327,22 +338,27 @@ const MAPS := {
 			{"kind": "bridge", "poly": [Vector2(66, 386), Vector2(154, 386), Vector2(154, 434), Vector2(66, 434)]},
 			{"kind": "bridge", "poly": [Vector2(276, 386), Vector2(364, 386), Vector2(364, 434), Vector2(276, 434)]},
 			{"kind": "bridge", "poly": [Vector2(486, 386), Vector2(576, 386), Vector2(576, 434), Vector2(486, 434)]},
-			# Below it: the left edge, a block with an alley across it, a row of narrow
-			# houses of different heights, the right edge.
+			# Below it: the left edge, a block with a stall behind it, two rows of stalls
+			# between the middle and right streets, the right edge.
 			{"kind": "building", "poly": [Vector2(0, 452), Vector2(60, 452), Vector2(64, 560), Vector2(0, 560)]},
 			{"kind": "building", "poly": [Vector2(150, 452), Vector2(276, 452), Vector2(276, 512), Vector2(150, 512)]},
-			{"kind": "building", "poly": [Vector2(164, 556), Vector2(226, 556), Vector2(222, 600), Vector2(168, 600)]},
-			{"kind": "building", "poly": [Vector2(360, 450), Vector2(400, 450), Vector2(400, 556), Vector2(360, 556)]},
-			{"kind": "building", "poly": [Vector2(406, 470), Vector2(446, 470), Vector2(446, 574), Vector2(406, 574)]},
-			{"kind": "building", "poly": [Vector2(452, 452), Vector2(490, 452), Vector2(490, 536), Vector2(452, 536)]},
-			{"kind": "building", "poly": [Vector2(580, 456), Vector2(640, 456), Vector2(640, 580), Vector2(576, 580)]}],
+			{"kind": "stall", "poly": [Vector2(158, 552), Vector2(226, 552), Vector2(226, 584), Vector2(158, 584)]},
+			{"kind": "stall", "poly": [Vector2(364, 458), Vector2(416, 458), Vector2(416, 490), Vector2(364, 490)]},
+			{"kind": "stall", "poly": [Vector2(434, 458), Vector2(486, 458), Vector2(486, 490), Vector2(434, 490)]},
+			{"kind": "stall", "poly": [Vector2(364, 524), Vector2(416, 524), Vector2(416, 556), Vector2(364, 556)]},
+			{"kind": "stall", "poly": [Vector2(434, 524), Vector2(486, 524), Vector2(486, 556), Vector2(434, 556)]},
+			{"kind": "building", "poly": [Vector2(580, 456), Vector2(640, 456), Vector2(640, 580), Vector2(576, 580)]},
+			# The fountain on the square before the city hall.
+			{"kind": "fountain", "poly": [Vector2(353, 634), Vector2(334, 653), Vector2(306, 653), Vector2(287, 634), Vector2(287, 606), Vector2(306, 587), Vector2(334, 587), Vector2(353, 606)]}],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"castle": "cityhall",
-		"bot_posts": [Vector2(110, 460), Vector2(320, 460), Vector2(530, 460), Vector2(110, 300), Vector2(320, 300), Vector2(425, 350),
+		"bot_posts": [Vector2(110, 460), Vector2(320, 460), Vector2(530, 460), Vector2(110, 300), Vector2(320, 300), Vector2(440, 350),
 			Vector2(220, 640), Vector2(420, 640)],
 	},
-	# The Free Cities, the Exchange: the Council's great Exchange in its square, a canal
-	# across the city above it with three bridges, townhouses on the flanks.
+	# The Free Cities, the Exchange: the Council's great Exchange on its paved square
+	# (planters at its corners), a canal across the city above it with three bridges and
+	# boats moored along it, street lamps on both banks, townhouses on the flanks with
+	# goods stacked at their doors.
 	"city_exchange": {
 		"name": "The Exchange", "battle": "council", "music": "calm_exchange",
 		"blurb": "The Exchange\nbehind the\ncanal bridges",
@@ -356,12 +372,27 @@ const MAPS := {
 			{"kind": "bridge", "poly": [Vector2(106, 294), Vector2(184, 294), Vector2(184, 338), Vector2(106, 338)]},
 			{"kind": "bridge", "poly": [Vector2(286, 294), Vector2(354, 294), Vector2(354, 338), Vector2(286, 338)]},
 			{"kind": "bridge", "poly": [Vector2(456, 294), Vector2(534, 294), Vector2(534, 338), Vector2(456, 338)]},
+			{"kind": "building", "poly": [Vector2(0, 150), Vector2(84, 150), Vector2(84, 230), Vector2(0, 230)]},
+			{"kind": "building", "poly": [Vector2(556, 150), Vector2(640, 150), Vector2(640, 230), Vector2(556, 230)]},
 			{"kind": "building", "poly": [Vector2(170, 150), Vector2(260, 150), Vector2(260, 240), Vector2(170, 240)]},
 			{"kind": "building", "poly": [Vector2(380, 150), Vector2(470, 150), Vector2(470, 240), Vector2(380, 240)]},
 			{"kind": "building", "poly": [Vector2(0, 390), Vector2(110, 390), Vector2(110, 560), Vector2(0, 560)]},
 			{"kind": "building", "poly": [Vector2(530, 390), Vector2(640, 390), Vector2(640, 560), Vector2(530, 560)]}],
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"castle": "cityhall",
+		# Just paint: nothing here stands in anyone's way.
+		"decor": [{"kind": "plaza", "rect": Rect2(188, 404, 264, 210), "at": Vector2(320, 562), "r": 40.0},
+			{"kind": "planter", "at": Vector2(200, 416)}, {"kind": "planter", "at": Vector2(440, 416)},
+			{"kind": "planter", "at": Vector2(200, 602)}, {"kind": "planter", "at": Vector2(440, 602)},
+			{"kind": "boat", "at": Vector2(52, 316)}, {"kind": "boat", "at": Vector2(236, 316)},
+			{"kind": "boat", "at": Vector2(402, 316)}, {"kind": "boat", "at": Vector2(590, 316)},
+			{"kind": "lamp", "at": Vector2(96, 296)}, {"kind": "lamp", "at": Vector2(196, 296)},
+			{"kind": "lamp", "at": Vector2(444, 296)}, {"kind": "lamp", "at": Vector2(544, 296)},
+			{"kind": "lamp", "at": Vector2(96, 352)}, {"kind": "lamp", "at": Vector2(196, 352)},
+			{"kind": "lamp", "at": Vector2(444, 352)}, {"kind": "lamp", "at": Vector2(544, 352)},
+			{"kind": "crates", "at": Vector2(126, 548)}, {"kind": "crates", "at": Vector2(514, 548)},
+			{"kind": "crates", "at": Vector2(276, 232)}, {"kind": "crates", "at": Vector2(364, 232)},
+			{"kind": "crates", "at": Vector2(98, 222)}, {"kind": "crates", "at": Vector2(542, 222)}],
 		"bot_posts": [Vector2(145, 360), Vector2(320, 360), Vector2(495, 360), Vector2(220, 450), Vector2(420, 450),
 			Vector2(320, 560), Vector2(180, 600), Vector2(460, 600)],
 	},
@@ -703,7 +734,16 @@ static func fitted(m: Dictionary, w: float) -> Dictionary:
 	var out := m.duplicate(true)
 	var sx := func(p: Vector2) -> Vector2: return Vector2(p.x * k, p.y)
 	for t in out.get("terrain", []):
-		t["poly"] = (t["poly"] as Array).map(sx)
+		if t["kind"] == "fountain":
+			# A fountain stays round, the size it is: only moved along with the field.
+			var c := Vector2.ZERO
+			for q in t["poly"]:
+				c += q
+			c /= (t["poly"] as Array).size()
+			var dx := c.x * (k - 1.0)
+			t["poly"] = (t["poly"] as Array).map(func(p: Vector2) -> Vector2: return p + Vector2(dx, 0))
+		else:
+			t["poly"] = (t["poly"] as Array).map(sx)
 	out["lanes"] = out.get("lanes", []).map(func(l): return [l[0] * k, l[1] * k])
 	out["trails"] = out.get("trails", []).map(func(tr): return (tr as Array).map(sx))
 	out["no_build"] = out.get("no_build", []).map(func(r: Rect2): return Rect2(r.position.x * k, r.position.y, r.size.x * k, r.size.y))
@@ -712,6 +752,12 @@ static func fitted(m: Dictionary, w: float) -> Dictionary:
 		out["route"] = (out["route"] as Array).map(sx)
 	if out.has("lanterns"):
 		out["lanterns"] = (out["lanterns"] as Array).map(sx)
+	for d in out.get("decor", []):
+		if d.has("at"):
+			d["at"] = sx.call(d["at"])
+		if d.has("rect"):
+			var r: Rect2 = d["rect"]
+			d["rect"] = Rect2(r.position.x * k, r.position.y, r.size.x * k, r.size.y)
 	if out.has("islands"):
 		# Floating islands: stretched with the field (a circle becomes as much wider as the
 		# field is), their bridges and lands with them; and everything else is the void,
