@@ -234,6 +234,7 @@ func _input(event: InputEvent) -> void:
 # --- Drawing ----------------------------------------------------------------------------
 
 func _draw() -> void:
+	draw_rect(Rect2(-4000, -4000, W + 8000, H + 8000), Color(0, 0, 0, 0.75))   # a curtain over the rest of a wide screen
 	draw_rect(Rect2(0, 0, W, H), Color(0.07, 0.06, 0.05))
 	var s := _scene()
 	if not s.is_empty():

@@ -14,6 +14,7 @@ extends RefCounted
 ##   capture, protect, retreat  a ring in the zone / round the beacon / along the line
 ## Healers stay with the troops they're posted among. Spare gold goes on upgrades (as far
 ## as training allows), after the army's filled out.
+## The Arcane Spires (Phase 5): with Mages to be had, one on each of up to three sigils.
 ## The North's units (Phase 4): with Archers locked, Frost Witches (then Alchemists) take
 ## their places and Frost Towers the Archer Towers', so Slimes and Wyverns can still be
 ## hurt; with Martial Artists to be had, every other melee slot is one (their first path,
@@ -78,6 +79,15 @@ func plan() -> Array:
 			out = _plan_retreat()
 		_:
 			out = _plan_line()
+	# The Arcane Spires: a Mage on a sigil (the Lance's first: the art the bot trains its
+	# Mages in), up to three, bought once the first two of the line are.
+	if can("mage") and main.conduits.active():
+		var spots: Array = main.conduits.spots.duplicate()
+		spots.sort_custom(func(a, b): return int(a["path"] == 1) > int(b["path"] == 1))
+		var at := mini(2, out.size())
+		for c in spots.slice(0, 3):
+			out.insert(at, ["mage", main.conduits.pos(c)])
+			at += 1
 	return _restyle(out)
 
 

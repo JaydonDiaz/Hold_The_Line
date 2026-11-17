@@ -14,6 +14,7 @@ const SCALE := 6.0
 const TROOPS := [["bard", 250.0, 724.0, true], ["alchemist", 392.0, 724.0, false],
 	["mage", 172.0, 852.0, true], ["healer", 320.0, 856.0, false], ["frost", 468.0, 852.0, false],
 	["archer", 188.0, 986.0, true], ["swordsman", 312.0, 984.0, false], ["martial", 452.0, 986.0, true]]
+const EXT := 1600.0   # how far the sky, hills and grass reach either side (a wide window: no bars)
 const PIX := 4.0   # the Ogre King is drawn at a quarter size and shown 4x: chunky pixels, like the rest of the game
 
 var t := 0.0
@@ -29,6 +30,9 @@ func _ready() -> void:
 	rng.seed = 2026
 	for i in 90:
 		stars.append([Vector2(rng.randf_range(4, W - 4), rng.randf_range(4, 520)), 2.0 if rng.randf() < 0.8 else 4.0, rng.randf() * TAU])
+	for i in 240:   # (more out to either side, for a wide window)
+		var x := rng.randf_range(-EXT, -4) if i % 2 == 0 else rng.randf_range(W + 4, W + EXT)
+		stars.append([Vector2(x, rng.randf_range(4, 560)), 2.0 if rng.randf() < 0.8 else 4.0, rng.randf() * TAU])
 	ogre_tex = _bake_ogre()
 
 
@@ -50,7 +54,7 @@ func _sky() -> void:
 	for i in bands:
 		var k := float(i) / (bands - 1)
 		var c := Color(0.03, 0.025, 0.06).lerp(Color(0.2, 0.06, 0.07), pow(k, 2.2))
-		draw_rect(Rect2(0, H * 0.62 * k, W, H * 0.62 / bands + 2), c)
+		draw_rect(Rect2(-EXT, H * 0.62 * k, W + EXT * 2.0, H * 0.62 / bands + 2), c)
 	for s in stars:
 		var a: float = 0.35 + 0.65 * (0.5 + 0.5 * sin(t * 1.7 + s[2]))
 		var p: Vector2 = s[0]
@@ -65,7 +69,7 @@ func _sky() -> void:
 const BODY := [Vector2(0, 600), Vector2(40, 540), Vector2(120, 488), Vector2(196, 462), Vector2(210, 430),
 	Vector2(196, 380), Vector2(192, 300), Vector2(214, 252), Vector2(262, 226), Vector2(320, 220), Vector2(378, 226),
 	Vector2(426, 252), Vector2(448, 300), Vector2(444, 380), Vector2(430, 430), Vector2(444, 462), Vector2(520, 488),
-	Vector2(600, 540), Vector2(640, 570), Vector2(640, 720), Vector2(0, 720)]
+	Vector2(600, 540), Vector2(626, 584), Vector2(640, 630), Vector2(640, 720), Vector2(0, 720)]   # (the right shoulder sloping into the hills)
 const CLUB := [Vector2(540, 500), Vector2(590, 236), Vector2(606, 226), Vector2(632, 240), Vector2(578, 506)]
 const CROWN := [Vector2(250, 236), Vector2(248, 184), Vector2(278, 212), Vector2(298, 164), Vector2(320, 206),
 	Vector2(342, 164), Vector2(362, 212), Vector2(392, 184), Vector2(390, 236)]   # a solid crown sitting on his head
@@ -126,15 +130,17 @@ func _ogre() -> void:
 
 ## The dark hills he stands behind, then the field the Line stands on.
 func _hills() -> void:
-	var hill := PackedVector2Array([Vector2(0, 640)])
-	for i in 17:
-		var x := i * 40.0
-		hill.append(Vector2(x, 596 + sin(i * 1.3) * 18.0 + sin(i * 0.5) * 12.0))
-	hill.append(Vector2(W, 640))
+	var hill := PackedVector2Array([Vector2(-EXT, 640)])
+	var n := int((W + EXT * 2.0) / 40.0)
+	for i in n + 1:
+		var k := i - int(EXT / 40.0)   # (the same hills as ever in the middle)
+		var x := k * 40.0
+		hill.append(Vector2(x, 596 + sin(k * 1.3) * 18.0 + sin(k * 0.5) * 12.0))
+	hill.append(Vector2(W + EXT, 640))
 	draw_colored_polygon(hill, Color(0.17, 0.06, 0.07))
-	draw_rect(Rect2(0, 640, W, H - 640), Color(0.12, 0.2, 0.1))
-	for i in 140:
-		var p := Vector2(fmod(i * 97.3, W), 650 + fmod(i * 53.1, H - 660))
+	draw_rect(Rect2(-EXT, 640, W + EXT * 2.0, H - 640), Color(0.12, 0.2, 0.1))
+	for i in 640:
+		var p := Vector2(fmod(i * 97.3, W + EXT * 2.0) - EXT, 650 + fmod(i * 53.1, H - 660))
 		draw_rect(Rect2(p, Vector2(3, 3)), Color(0.2, 0.32, 0.15) if i % 3 else Color(0.08, 0.14, 0.07))
 	# Fireflies drifting over the grass.
 	for i in 10:

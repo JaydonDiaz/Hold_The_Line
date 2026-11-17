@@ -98,7 +98,7 @@ func _castle_paths() -> void:
 		costs.append(main.powers.tier_cost(0, t) if main.powers.has_method("tier_cost") else 0)
 		main.castle_upgrade(0)
 	check(main.powers.tiers[0] == 4, "Castle paths: all four Fortify tiers can be bought")
-	check(main.castle_max >= hp0 * 1.6 - 1.0 and main.powers.armor() >= 0.35, "...the Citadel: +60% health (%d to %d), 35%% less damage" % [roundi(hp0), roundi(main.castle_max)])
+	check(main.castle_max >= hp0 * 1.6 - 1.0 and main.powers.armor() >= 0.35, "...the Citadel: +60%% health (%d to %d), 35%% less damage" % [roundi(hp0), roundi(main.castle_max)])
 	for t in 4:
 		main.castle_upgrade(2)
 	await _frames(5)

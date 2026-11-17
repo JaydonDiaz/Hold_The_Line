@@ -9,6 +9,7 @@ extends "res://tests/campaign_test.gd"
 ##                      joined yet, or with the other two regions already secured)
 ##     sets=gw+dd,gw+mv,dd+mv,gw+dd+mv     (Sable Crossing's southern beacons; for a northern
 ##                      mission, which southern peoples came north with you)
+##     north=fm+mo,fm+fc,mo+fc   (an Arcane Spires mission: the two northern peoples joined)
 ## Width 640 is the campaign's portrait field; 1040 plays it stretched wide.
 
 const ArmyBot = preload("res://tests/army_bot.gd")
@@ -16,6 +17,7 @@ const SOUTH := ["gw_exodus", "gw_watchfires", "gw_trail", "mv_wounded", "mv_sanc
 const REGION := {"gw": "greenwood", "mv": "mercyvale", "dd": "deepdelve"}
 const REGION_MISSIONS := {"greenwood": ["gw_exodus", "gw_watchfires"], "mercyvale": ["mv_wounded", "mv_sanctuary"], "deepdelve": ["dd_entrance", "dd_orerun"]}
 const ACT1 := ["ashwatch", "ashwatch_road", "stonehollow", "stonehollow_workshops"]
+const NORTH := {"fm": "frostmarch", "mo": "monastery", "fc": "freecities"}
 const NORTH_MISSIONS := {"frostmarch": ["fm_pass", "fm_vigil"], "monastery": ["mo_steps", "mo_gate"], "freecities": ["fc_market", "fc_council"]}   # (Phase 4: grows region by region)
 ## Trained: what a player has typically spent on each kind by the south (a few points on
 ## the Knights, a couple on each people's units). Untrained: nothing (tier I only).
@@ -23,7 +25,7 @@ const TRAINED := {"swordsman": [3, 2, 3, 1], "archer": [2, 1, 2, 1], "tower": [2
 		"medbay": [2, 1, 2, 1], "mine": [2, 1, 2, 1], "cannon": [2, 1, 2, 1], "barricade": [2, 1, 2, 1]}
 
 var opts := {"missions": ",".join(SOUTH), "diffs": "easy,normal,hard", "seeds": "3", "trained": "0,1", "style": "mixed",
-		"width": "640", "prior": "min", "sets": "gw+dd,gw+mv,dd+mv,gw+dd+mv", "seed0": "900"}
+		"width": "640", "prior": "min", "sets": "gw+dd,gw+mv,dd+mv,gw+dd+mv", "seed0": "900", "north": "fm+mo,fm+fc,mo+fc"}
 
 
 func _run() -> void:
@@ -47,7 +49,21 @@ func _run() -> void:
 	for id in opts["missions"].split(","):
 		var setups := []   # [label, completed, allies]
 		var region: String = CD.MISSIONS[id]["territory"]
-		if NORTH_MISSIONS.has(region):
+		if region == "spires":
+			# The Spires: the south (gw+mv) and Sable won, and two northern peoples joined
+			# with their beacons lit (north=fm+mo,...); the Circle won too for the later ones.
+			for nset in opts["north"].split(","):
+				var done := ACT1 + REGION_MISSIONS["greenwood"] + REGION_MISSIONS["mercyvale"] + ["sable_crossing"]
+				var allies := ["stonehollow", "greenwood", "mercyvale"]
+				for n in nset.split("+"):
+					var r: String = NORTH[n]
+					done += NORTH_MISSIONS[r]
+					allies.append(r)
+				if id != "sp_circle":
+					done.append("sp_circle")
+					allies.append("spires")
+				setups.append([nset, done, allies])
+		elif NORTH_MISSIONS.has(region):
 			# The North: Sable won with one of the southern sets; the region's first mission
 			# too for its later ones.
 			for s in opts["sets"].split(","):

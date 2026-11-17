@@ -42,7 +42,8 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	var dim := ColorRect.new()
 	dim.color = Color(0, 0, 0, 0.35)
-	dim.size = size
+	dim.position = Vector2(-4000, -4000)   # (the whole screen, however wide, not just the box's column)
+	dim.size = size + Vector2(8000, 8000)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(dim)
 	box = Panel.new()
