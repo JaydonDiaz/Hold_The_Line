@@ -184,15 +184,11 @@ const MAPS := {
 			{"kind": "thin_ice", "poly": [Vector2(405, 328), Vector2(640, 334), Vector2(640, 456), Vector2(405, 462)]},
 		],
 		"no_build": [Rect2(272, 688, 96, 48)],
-		# Three roads down from the camp: the middle one parts round the rock and meets
-		# again below it, the outer two swing in to join it there, and the one road crosses
-		# the solid ice and runs on to the gate.
-		"trails": [[Vector2(320, 96), Vector2(320, 140), Vector2(286, 180), Vector2(276, 222), Vector2(296, 262), Vector2(320, 286),
-				Vector2(320, 330)],
-			[Vector2(320, 140), Vector2(354, 180), Vector2(364, 222), Vector2(344, 262), Vector2(320, 286)],
-			[Vector2(116, 96), Vector2(122, 160), Vector2(168, 226), Vector2(248, 272), Vector2(312, 300)],
-			[Vector2(524, 96), Vector2(518, 160), Vector2(472, 226), Vector2(392, 272), Vector2(328, 300)],
-			[Vector2(320, 470), Vector2(318, 600), Vector2(320, 736)]],
+		# Two roads down from the camp, one each side of the rock, each to its side of the
+		# solid ice (they never meet), and one road on from the far shore to the gate.
+		"trails": [[Vector2(170, 96), Vector2(176, 160), Vector2(206, 226), Vector2(244, 278), Vector2(266, 330)],
+			[Vector2(470, 96), Vector2(464, 160), Vector2(434, 226), Vector2(396, 278), Vector2(374, 330)],
+			[Vector2(320, 466), Vector2(316, 600), Vector2(320, 736)]],
 		"castle": "frostkeep",
 		"bot_posts": [Vector2(320, 500), Vector2(260, 540), Vector2(380, 540), Vector2(320, 600), Vector2(250, 600),
 			Vector2(390, 600), Vector2(320, 650)],
@@ -381,9 +377,9 @@ const MAPS := {
 		"no_build": [Rect2(272, 688, 96, 48)],
 		"castle": "cityhall",
 		# Just paint: nothing here stands in anyone's way.
-		"decor": [{"kind": "plaza", "rect": Rect2(188, 404, 264, 210), "at": Vector2(320, 562), "r": 40.0},
-			{"kind": "planter", "at": Vector2(200, 416)}, {"kind": "planter", "at": Vector2(440, 416)},
-			{"kind": "planter", "at": Vector2(200, 602)}, {"kind": "planter", "at": Vector2(440, 602)},
+		"decor": [{"kind": "plaza", "rect": Rect2(188, 440, 264, 220), "at": Vector2(320, 550), "r": 44.0},
+			{"kind": "planter", "at": Vector2(200, 454)}, {"kind": "planter", "at": Vector2(440, 454)},
+			{"kind": "planter", "at": Vector2(200, 650)}, {"kind": "planter", "at": Vector2(440, 650)},
 			{"kind": "boat", "at": Vector2(52, 316)}, {"kind": "boat", "at": Vector2(236, 316)},
 			{"kind": "boat", "at": Vector2(402, 316)}, {"kind": "boat", "at": Vector2(590, 316)},
 			{"kind": "lamp", "at": Vector2(96, 296)}, {"kind": "lamp", "at": Vector2(196, 296)},
