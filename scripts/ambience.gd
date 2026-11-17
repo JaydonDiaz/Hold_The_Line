@@ -30,7 +30,10 @@ func setup(mode: String) -> void:
 	bits.clear()
 	for kind in ["shadows", "butterflies", "leaves", "fireflies", "fog", "embers", "ash", "crows", "motes"]:
 		var list := []
-		for i in m.get(kind, 0):
+		var count: int = m.get(kind, 0)
+		if main != null and main.on_phone():
+			count = ceili(count / 2.0)   # (fewer on a phone)
+		for i in count:
 			list.append(_new_bit(kind, true))
 		bits[kind] = list
 

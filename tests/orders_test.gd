@@ -737,3 +737,32 @@ func _touch() -> void:
 	main.pointer_down(Vector2(120, 300), MOUSE_BUTTON_LEFT, false, true)
 	main._finish_box()
 	check(main.selected == null, "T  between waves, a tap on open ground just clears the selection (troops are dragged then)")
+	# A finger's drag: the troop stays under the finger, wherever the last touch was (the
+	# engine's "mouse" is a phone's previous touch, not the one being made).
+	var to_screen: Transform2D = root.get_final_transform() * main.get_global_transform_with_canvas()   # (field to window pixels)
+	var touch := func(at: Vector2, down: bool, motion := false) -> void:
+		var ev: InputEvent
+		if motion:
+			ev = InputEventMouseMotion.new()
+			ev.button_mask = MOUSE_BUTTON_MASK_LEFT
+		else:
+			ev = InputEventMouseButton.new()
+			ev.button_index = MOUSE_BUTTON_LEFT
+			ev.pressed = down
+		ev.device = InputEvent.DEVICE_ID_EMULATION
+		ev.position = to_screen * at
+		ev.global_position = ev.position
+		Input.parse_input_event(ev)   # (through Input, as a real touch comes: it knows the button is held)
+		Input.flush_buffered_events()
+	touch.call(Vector2(560, 300), true)
+	touch.call(Vector2(560, 300), false)
+	await _frames(2)
+	var at: Vector2 = v.position
+	touch.call(at, true)
+	await _frames(1)
+	touch.call(at + Vector2(-90, -60), true, true)
+	await _frames(2)
+	check(main.dragging == v and v.post.distance_to(at + Vector2(-90, -60)) < 12.0,
+			"T  a troop picked up with a finger stays under it as it's dragged (off by %.0f)" % v.post.distance_to(at + Vector2(-90, -60)))
+	touch.call(at + Vector2(-90, -60), false)
+	await _frames(2)

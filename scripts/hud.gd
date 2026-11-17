@@ -121,8 +121,10 @@ var hover_style: StyleBox
 var hover_title: Label
 var hover_sub: Label
 var hover_body: Label
+var hover_since := 0       # when the hover card last came up (a phone puts it away by itself)
 var hover_kind := ""        # hire button the card is showing, or "" (field units are shown by main)
 const CARD_W := 300.0
+const HOVER_ON_PHONE_MS := 3500
 
 
 func _ready() -> void:
@@ -438,7 +440,7 @@ func _layout_hire() -> void:
 			if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > room:
 				# Names too wide for the button go on two lines (e.g. "Martial / Artist").
 				label = label.replace(" ", "\n")
-			text = "%s\n%s  [%d]" % [label, price, i + 1]
+			text = "%s\n%s  [%d]" % [label, price, i + 1] if not compact else "%s\n%s" % [label, price]
 			# Then anything still too wide gets a smaller font until it fits.
 			var widest := 0.0
 			for line in (label + "\n%s  [%d]" % [price, i + 1]).split("\n"):
@@ -540,7 +542,7 @@ func set_prices(mult: float, step := 1) -> void:
 	for kind in hire_meta:
 		var m: Array = hire_meta[kind]
 		var price := _price_text(Data.WARRIORS[kind])
-		hire_buttons[kind].text = ("%s\n%s  [%d]" if m[2] == 1 else "%s  %s [%d]") % [m[0], price, m[1]]
+		hire_buttons[kind].text = ("%s\n%s" % [m[0], price]) if compact else (("%s\n%s  [%d]" if m[2] == 1 else "%s  %s [%d]") % [m[0], price, m[1]])
 
 
 func _setup_hire_button(b: Button, kind: String, d: Dictionary) -> void:
@@ -585,6 +587,7 @@ func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
 	hover_card.size = Vector2.ZERO   # shrink to the new text
 	hover_card.visible = true
 	hover_card.reset_size()
+	hover_since = Time.get_ticks_msec()
 
 
 ## Hovering a hire button: what the unit is and does, above the button.
@@ -678,7 +681,33 @@ static func _base_stats(d: Dictionary) -> String:
 	return "   ".join(parts)
 
 
+## On a phone the panel's help speaks of taps: no right-click, Shift or keys there.
+const TOUCH_WORDS := [
+	["right-click to send it somewhere", "tap the ground to send it somewhere"],
+	["Right-click to move them together", "Tap the ground to move them together"],
+	[" Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them.", " Tap a type above to keep only those."],
+	[" (Q/W/E/R or 1-4)", ""], [" Right-click or Esc to close.", " Tap a troop or the field to close."],
+	[" Hold Shift to hire several.", ""], [" Right-click cancels.", ""], [" (1-6)", ""],
+	["Click", "Tap"], ["click", "tap"],
+]
+
+
+## The panel's help in a phone's words (see TOUCH_WORDS).
+func touch_words() -> void:
+	if not compact or info_label.get_meta("touched", "") == info_label.text:
+		return
+	var t := info_label.text
+	for pair in TOUCH_WORDS:
+		t = t.replace(pair[0], pair[1])
+	info_label.text = t
+	info_label.set_meta("touched", t)
+
+
 func refresh(main) -> void:
+	# On a phone a touch is a hover that never ends: the card it brings up is read, then
+	# goes away by itself.
+	if compact and hover_card.visible and Time.get_ticks_msec() - hover_since > HOVER_ON_PHONE_MS:
+		hide_hover()
 	hard_label.visible = main.started and not main.freeplay and (main.difficulty != "normal" or main.tutorial or main.scripted())
 	status_label.text = main.rules.status() if main.started else ""
 	status_label.visible = status_label.text != ""
@@ -915,7 +944,7 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			var ok: bool = main.gold >= cost and not main.game_over
 			card["tier"].text = nxt["name"]
 			card["desc"].text = nxt["desc"]
-			card["cost"].text = "%dg [%d]" % [cost, p + 1]
+			card["cost"].text = "%dg" % cost if compact else "%dg [%d]" % [cost, p + 1]
 			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
 			b.disabled = not ok
 		b.modulate = Color.WHITE if path_open else LOCKED_TINT
@@ -929,10 +958,10 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 		var ab_open: bool = main.allowed("ability:" + key)
 		b.modulate = Color.WHITE if ab_open else LOCKED_TINT
 		if not ab_open:
-			b.text = "%s\nLocked  [%d]" % [d["name"], n]
+			b.text = "%s\nLocked" % d["name"] if compact else "%s\nLocked  [%d]" % [d["name"], n]
 			b.disabled = true
 		elif not powers.owned.has(key):
-			b.text = "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
+			b.text = "%s\n%dg" % [d["name"], powers.cost(key)] if compact else "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
 			b.disabled = main.gold < powers.cost(key) or main.game_over
 		else:
 			var left: float = powers.ready_in(key)
@@ -1130,7 +1159,7 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			affordable = gold >= cost
 			card["tier"].text = t["name"]
 			card["desc"].text = t["desc"]
-			card["cost"].text = "%dg [%s]" % [cost, PATH_KEYS[p]]
+			card["cost"].text = "%dg" % cost if compact else "%dg [%s]" % [cost, PATH_KEYS[p]]
 			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if affordable else Color(1, 0.4, 0.35))
 		"max":
 			card["tier"].text = "Fully upgraded"

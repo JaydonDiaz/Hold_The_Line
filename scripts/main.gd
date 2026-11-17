@@ -129,13 +129,17 @@ var group_drag := false     # dragging the whole group to new posts (between wav
 var group_from := {}        # warrior -> its post when the group drag started
 var mouse := Vector2.ZERO
 var mouse_stand_in := Vector2.INF   # tests: where the mouse is taken to be (INF: the real one)
+## Where the pointer is, from the input events themselves: a finger's taps and drags as
+## much as a mouse (asking the engine where "the mouse" is gives a phone's last touch, not
+## the one just made, so a unit picked up jumped away from the finger).
+var pointer := Vector2.ZERO
 var dragging: Warrior = null     # unit being repositioned between waves
 var hovered: Warrior = null      # the troop under the mouse between waves (it perks up: see Warrior._carry)
 var drag_origin := Vector2.ZERO
 var drag_offset := Vector2.ZERO
 const LIFT_AFTER := 4.0          # a dragged troop is lifted off its feet once it's moved this far (a click doesn't)
 
-const GROUND_OVERSAMPLE := 2
+var GROUND_OVERSAMPLE := 2   # (1 on a phone: its screen is small, and filling pixels is what costs there)
 var ground_vp := SubViewport.new()     # the ground, painted once (see _repaint_ground)
 var ground_painter := Node2D.new()
 var ground_sprite := Sprite2D.new()
@@ -174,6 +178,14 @@ func _ready() -> void:
 	castle.main = self
 	# The castle goes over the warriors (it hides any standing behind it, showing their
 	# silhouettes) but under the enemies, effects and overlay.
+	if on_phone():
+		# A phone's screen has three pixels to every one the game is drawn in: the game is
+		# drawn at its own size and the whole picture scaled up once (pixel art and the
+		# pixel font stay sharp), far less work for a phone's graphics than drawing at full
+		# resolution; the ground is painted at its own size too, and the scenery's moving
+		# bits are fewer.
+		get_tree().root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+		GROUND_OVERSAMPLE = 1
 	ambience.main = self
 	ambience.setup("normal")
 	powers.main = self
@@ -397,7 +409,7 @@ func choose_mode(mode: String) -> void:
 
 
 func _process(delta: float) -> void:
-	mouse = get_local_mouse_position() if mouse_stand_in == Vector2.INF else mouse_stand_in
+	mouse = pointer if mouse_stand_in == Vector2.INF else mouse_stand_in
 	# Between waves, the troop under the mouse perks up (it can be picked up and moved).
 	hovered = _warrior_at(mouse) if started and not wave_active and dragging == null and not group_drag \
 			and placing_type == "" and mouse.y <= FIELD_H else null
@@ -454,6 +466,9 @@ func _process(delta: float) -> void:
 			else:
 				_end_wave()
 	hud.refresh(self)
+	hud.touch_words()
+	if hud.compact:
+		hud._fit_text(hud.start_btn, 15, hud.start_btn.size.x - 14.0)
 	if hud.scene_music != "":
 		audio.set_track(hud.scene_music)   # a cutscene's own music
 	elif not started:
@@ -1947,7 +1962,7 @@ func _start_group_drag() -> void:
 	group_from.clear()
 	for w in group:
 		group_from[w] = w.post
-	drag_origin = get_local_mouse_position()   # where the press is now (not last frame's mouse)
+	drag_origin = mouse   # where the press is now
 
 
 func _update_group_drag() -> void:
@@ -2392,11 +2407,20 @@ func _warrior_at(p: Vector2, reach := Warrior.RADIUS + 6.0) -> Warrior:
 
 # --- Input ---------------------------------------------------------------
 
+## Every pointer event (mouse, or a finger's emulated one) moves `pointer` to where it
+## happened, before anything acts on it.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouse:
+		pointer = make_input_local(event).position
+		if mouse_stand_in == Vector2.INF:
+			mouse = pointer
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if game_over or not started or hud.story != null:
 		return
 	if event is InputEventMouseButton and event.pressed:
-		var p := get_local_mouse_position()
+		var p: Vector2 = make_input_local(event).position
 		if p.y > FIELD_H or p.y < 0.0 or p.x < 0.0 or p.x > FIELD_W:
 			return   # off the field (the panel, or the scenery around a full screen)
 		# (A touchscreen's taps come in as left clicks, marked as made up from the touch.)
