@@ -885,6 +885,8 @@ func stats_text() -> String:
 	if not src.is_empty():
 		var full: bool = int(src["path"]) == main.conduits.art_of(self)
 		s += "   Sigil: %s (%s%s)" % [main.conduits.NAMES[int(src["path"])], main.conduits.words(main.conduits.boost(self)), "" if full else ", not its art"]
+	elif not main.conduits.stationed(self).is_empty():
+		s += "   Sigil: %s, held by another Mage (one to a sigil)" % main.conduits.NAMES[int(main.conduits.stationed(self)["path"])]
 	if is_support():
 		match data["attack"]:
 			"mine":

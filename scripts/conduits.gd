@@ -1,16 +1,20 @@
 extends Node2D
 ## The Arcane Spires' conduits (Phase 5, F1): rune circles set in the ground, each charged
 ## with one of the Mage's four arts in its colour (Storm purple, Arcane Lance gold, Fire
-## red, Necromancy green). A Mage (or Mage Tower) standing on one draws on it:
+## red, Necromancy green). A Mage stationed on one (its post on the sigil: it keeps the
+## power while it steps off to fight, but not one just passing over), or a Mage Tower built
+## on one, draws on it:
 ##   - the conduit of its own art (the path it's furthest along) powers it up a good deal:
 ##     MATCH damage and rate;
 ##   - any other conduit still lends a little: OTHER damage;
 ##   - an untrained Mage (no path yet) takes the little from any of them.
-## The best conduit in reach counts; they don't add up. A conduit that's lending its power
+## One Mage to a sigil: the one posted nearest its middle draws on it, and any other
+## posted there gets nothing until it's free. The best conduit it holds counts; they
+## don't add up. A conduit that's lending its power
 ## glows and its runes turn.
 ## Map data: "conduits": [{"at": Vector2 (drawn up 640 wide), "path": 0-3}].
 
-const RADIUS := 62.0          # how far a conduit's reach goes from its middle
+const STATION := 34.0         # a Mage whose post is this near a sigil's middle is stationed on it
 const MATCH := {"damage": 0.35, "rate": 0.25}
 const OTHER := {"damage": 0.1}
 const COLORS := [Color(0.68, 0.45, 1.0), Color(1.0, 0.82, 0.38), Color(1.0, 0.36, 0.22), Color(0.5, 0.95, 0.42)]
@@ -59,7 +63,7 @@ func boost(w) -> Dictionary:
 	return {} if src.is_empty() else (MATCH if int(src["path"]) == art_of(w) else OTHER)
 
 
-## The conduit unit w draws on (the best in reach), or {}.
+## The conduit unit w draws on (the best one it holds), or {}.
 func source(w) -> Dictionary:
 	if spots.is_empty() or not MAGES.has(w.kind):
 		return {}
@@ -67,12 +71,40 @@ func source(w) -> Dictionary:
 	var best := {}
 	var best_d := -1.0
 	for c in spots:
-		if pos(c).distance_to(w.position) > RADIUS + w.RADIUS * 0.5:
+		if pos(c).distance_to(w.post) > STATION or holder(c) != w:
 			continue
 		var d: float = (MATCH if int(c["path"]) == art else OTHER)["damage"]
 		if d > best_d:
 			best_d = d
 			best = c
+	return best
+
+
+## The conduit unit w is posted on (held or not), or {}.
+func stationed(w) -> Dictionary:
+	if spots.is_empty() or not MAGES.has(w.kind):
+		return {}
+	for c in spots:
+		if pos(c).distance_to(w.post) <= STATION:
+			return c
+	return {}
+
+
+## The Mage (or Mage Tower) that holds conduit c, one to a sigil: of those stationed on
+## it, the one posted nearest its middle (the first posted, if two are as near), or null.
+func holder(c: Dictionary):
+	var p := pos(c)
+	var best = null
+	var best_d := INF
+	for w in main.get_warriors():
+		if not MAGES.has(w.kind) or not w.is_active():
+			continue
+		var d: float = p.distance_to(w.post)
+		if d > STATION:
+			continue
+		if best == null or d < best_d - 0.01 or (absf(d - best_d) <= 0.01 and w.get_instance_id() < best.get_instance_id()):
+			best = w
+			best_d = d
 	return best
 
 
@@ -97,8 +129,8 @@ func at_point(p: Vector2) -> Dictionary:
 ## A conduit's card: which art it holds, and what it gives whom.
 func card_text(c: Dictionary) -> Array:
 	var art: String = NAMES[int(c["path"])]
-	return ["%s sigil" % art, COLORS[int(c["path"])], "Stand a Mage on it",
-		"%s %s Mage (its furthest path) draws %s.\nAny other Mage draws %s.\nMage Towers too. The best sigil in reach counts." % [
+	return ["%s sigil" % art, COLORS[int(c["path"])], "Post a Mage on it",
+		"%s %s Mage (its furthest path) draws %s.\nAny other Mage draws %s.\nOne Mage to a sigil; it keeps the power while it moves to fight.\nMage Towers too." % [
 			"An" if art[0] in "AEIOU" else "A", art, words(MATCH, false), words(OTHER, false)]]
 
 
@@ -126,8 +158,8 @@ func _draw() -> void:
 		var col: Color = COLORS[int(c["path"])]
 		var lit: float = c["lit"]
 		var pulse := 0.5 + 0.5 * sin(t * 2.0 + p.x)
-		# Its reach, faintly, so you can see where to stand.
-		draw_arc(p, RADIUS, 0.0, TAU, 48, Color(col, 0.18 + 0.25 * lit), 1.5, true)
+		# Where to post a Mage, faintly.
+		draw_arc(p, STATION, 0.0, TAU, 32, Color(col, 0.18 + 0.25 * lit), 1.5, true)
 		# The stone ring and its inlay.
 		draw_circle(p, 26.0, OUTLINE)
 		draw_circle(p, 24.0, Color(0.22, 0.2, 0.26))

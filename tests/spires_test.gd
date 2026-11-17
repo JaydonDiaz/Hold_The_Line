@@ -1,7 +1,7 @@
 extends SceneTree
 ## Phase 5, F1: the Arcane Spires. Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/spires_test.gd
-##   C  conduits   a Mage on the conduit of its own art (the path it's furthest along) is
+##   C  conduits   a Mage stationed (posted) on the conduit of its own art (the path it's furthest along) is
 ##                  powered up a good deal (damage and rate); on another conduit, or untrained,
 ##                  a little; off them, or any other kind of unit, nothing; the best one in
 ##                  reach counts, they don't add up; Mage Towers draw on them too
@@ -130,7 +130,8 @@ func _conduits() -> void:
 	for s in c.spots:
 		by_path[int(s["path"])] = c.pos(s)
 	var fire = _mage(by_path[2], 2)        # a Fire Mage on the Fire conduit
-	var storm = _mage(by_path[2] + Vector2(0, 40), 0)   # a Storm Mage on the Fire conduit
+	var storm = _mage(by_path[1], 0)       # a Storm Mage on the Lance conduit
+	var second = _mage(by_path[2] + Vector2(0, 32), 2)   # a second Fire Mage on the Fire conduit
 	var green = _mage(by_path[3])          # an untrained Mage on the Necromancy conduit
 	var away = _mage(Vector2(320, 540), 2)   # a Fire Mage on no sigil (the big island)
 	var archer = _mage(by_path[0], -1, "archer")
@@ -138,10 +139,22 @@ func _conduits() -> void:
 	check(Conduits.art_of(fire) == 2 and fire.buff["damage"] >= Conduits.MATCH["damage"] - 0.001 and fire.buff["rate"] >= Conduits.MATCH["rate"] - 0.001,
 			"C  a Fire Mage on the Fire conduit: +%d%% damage, +%d%% rate" % [roundi(fire.buff["damage"] * 100), roundi(fire.buff["rate"] * 100)])
 	check(is_equal_approx(storm.buff["damage"], Conduits.OTHER["damage"]) and storm.buff["rate"] == 0.0,
-			"C  a Storm Mage on the Fire conduit: a little (+%d%% damage)" % roundi(storm.buff["damage"] * 100))
+			"C  a Storm Mage on the Lance conduit: a little (+%d%% damage)" % roundi(storm.buff["damage"] * 100))
 	check(is_equal_approx(green.buff["damage"], Conduits.OTHER["damage"]), "C  an untrained Mage on a conduit: a little")
 	check(away.buff["damage"] == 0.0 and away.buff["rate"] == 0.0, "C  off the conduits: nothing")
 	check(archer.buff["damage"] == 0.0, "C  an Archer on a conduit: nothing (it's Mages' power)")
+	check(second.buff["damage"] == 0.0 and c.holder(c.at_point(by_path[2])) == fire and "held by another Mage" in second.stats_text(),
+			"C  one Mage to a sigil: a second Fire Mage posted on the Fire sigil gets nothing, and its info says why")
+	# Stationed, not standing: a Mage posted on a sigil keeps its power when it steps off
+	# to fight; one posted elsewhere gets nothing just for passing over a sigil.
+	fire.position = by_path[2] + Vector2(110, 60)
+	away.position = by_path[3]
+	await _frames(30)
+	check(fire.buff["damage"] >= Conduits.MATCH["damage"] - 0.001 and away.buff["damage"] == 0.0,
+			"C  the post counts, not where it stands: off fighting it keeps the power (+%d%%), passing over a sigil gives none" % roundi(fire.buff["damage"] * 100))
+	fire.position = fire.post
+	away.position = away.post
+	await _frames(30)
 	# Easy to read: each conduit says what it is and gives, and a Mage's info what it draws.
 	var card: Array = c.card_text(c.at_point(by_path[2]))
 	check(card[0] == "Fire sigil" and "+35% damage" in card[3] and "+10% damage" in card[3], "C  a conduit's card names its art and what it gives whom")
@@ -157,12 +170,18 @@ func _conduits() -> void:
 			"C  the Fire Mage's Fire card glows, and says what the sigil gives (%s)" % cards[2]["sigil"].text)
 	main.selected = storm
 	await _frames(2)
-	check(cards[2]["glow"].visible and "+10% dmg" in cards[2]["sigil"].text and not cards[0]["glow"].visible,
-			"C  a Storm Mage on the Fire sigil: its Fire card is marked, with the little it gets (%s)" % cards[2]["sigil"].text)
+	check(cards[1]["glow"].visible and "+10% dmg" in cards[1]["sigil"].text and not cards[0]["glow"].visible,
+			"C  a Storm Mage on the Lance sigil: its Lance card is marked, with the little it gets (%s)" % cards[1]["sigil"].text)
 	main.selected = away
 	await _frames(2)
 	check(cards.all(func(cd): return not cd["glow"].visible), "C  a Mage off the sigils: no card is marked")
 	main.selected = null
+	# The holder posted elsewhere: the sigil passes to the next Mage on it.
+	fire.post = Vector2(320, 540) + Vector2(40, 0)
+	await _frames(30)
+	check(c.holder(c.at_point(by_path[2])) == second and second.buff["damage"] >= Conduits.MATCH["damage"] - 0.001,
+			"C  ...and when the one holding it is posted away, the next Mage on it takes it up")
+	storm.free()   # (its spot on the Lance sigil, for the tower)
 	var tower = _mage(by_path[1] + Vector2(0, 20), 1, "magetower")
 	tower.build_left = 0.0   # (built: one going up has no power to draw)
 	await _frames(30)
