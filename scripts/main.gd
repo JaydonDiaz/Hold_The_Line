@@ -222,6 +222,7 @@ func _ready() -> void:
 	hud.target_pressed.connect(cycle_target_priority)
 	hud.orders_pressed.connect(func(): hud.toggle_orders(self))
 	hud.song_pressed.connect(toggle_song)
+	hud.climb_pressed.connect(climb_down)
 	hud.speed_pressed.connect(cycle_speed)
 	hud.auto_pressed.connect(toggle_auto)
 	hud.restart_pressed.connect(_restart)
@@ -632,6 +633,8 @@ func start_wave(force := false) -> void:
 		return
 	if (wave_active and not force) or game_over or not started:
 		return
+	if rules.holds_waves():
+		return
 	wave_clock = 0.0
 	if dragging != null:
 		_end_drag()
@@ -732,6 +735,10 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 		hud.show_foe(kind, FOE_HINTS[kind][0], FOE_HINTS[kind][1])
 	var d: Dictionary = Data.ENEMIES[kind]
 	var r: float = d["radius"]
+	if at == null and not d.get("boss", false) and not d.get("flying", false):
+		var sp: Vector2 = rules.spawn_point(r)   # (a battle's own sally parties, from the sides)
+		if sp != Vector2.INF:
+			at = sp
 	if at == null:
 		var lane := paths.lane_spawn(r + 4.0)
 		if lane != Vector2.INF and not d.get("boss", false):
@@ -1040,7 +1047,7 @@ func auto_delay() -> float:
 
 
 const PACE_WINDOW := 25.0   # forced pace: seconds from the last of a wave arriving to the next wave
-const PACE_WINDOWS := {"capture": 16.0, "escort": 15.0, "protect": 18.0, "retreat": 20.0, "evac": 25.0}   # ...by kind of battle
+const PACE_WINDOWS := {"capture": 16.0, "escort": 15.0, "protect": 18.0, "retreat": 20.0, "evac": 25.0, "assault": 18.0}   # ...by kind of battle
 const MIN_BREAK := 5.0      # ...and the shortest breather once a wave's beaten
 const REST_HEAL := 0.04     # share of its health a troop gets back each second of a breather
 
@@ -1254,6 +1261,17 @@ func play_prologue() -> void:
 
 
 func start_mission(id: String) -> void:
+	# A long operation with checkpoints asks where to begin it first.
+	var cps: Array = Campaign.checkpoints_for(id)
+	if not cps.is_empty() and hud.world_map != null:
+		hud.show_start_choice(Campaign.missions[id]["name"], cps, func(z):
+			Campaign.op_resume_zone = z
+			_go_mission(id))
+		return
+	_go_mission(id)
+
+
+func _go_mission(id: String) -> void:
 	Campaign.mission_id = id
 	hud.hide_world_map()
 	choose_mode("campaign")
@@ -1366,6 +1384,15 @@ func _lend_unit(a: Dictionary) -> void:
 	w.position = w.post
 	warrior_layer.add_child(w)
 	temp_allies.append(w)
+	if a.has("crew"):
+		# A Tower lent with someone already posted in it (Tamsin's watchtower).
+		var c := Warrior.new()
+		c.setup(a["crew"], Data.WARRIORS[a["crew"]], self, w.post)
+		c.spent = 0
+		c.position = w.post
+		warrior_layer.add_child(c)
+		temp_allies.append(c)
+		c.enter_tower(w)
 
 
 ## The peoples who've joined the Line send help ("help": {faction: {...}}), each only if
@@ -1427,9 +1454,12 @@ func _mission_wave(n: int) -> Array:
 	return list
 
 
-## Enemy strength on wave n (Classic: the wave number; a mission starts at its level).
+## Enemy strength on wave n (Classic: the wave number; a mission starts at its level and
+## goes up one a wave, or by its "level_step": a long operation's many waves climb slowly).
 func wave_level(n: int) -> int:
-	return int(mission["level"]) + heat + n - 1 if scripted() else n
+	if not scripted():
+		return n
+	return int(mission["level"]) + heat + int(floor((n - 1) * float(mission.get("level_step", 1.0))))
 
 
 var heat := 0   # extra enemy levels: the North growing bolder as you push into it (Campaign.north_heat)
@@ -1567,7 +1597,7 @@ func _finish(won: bool) -> void:
 		if flawless:
 			for k in battle_xp:
 				battle_xp[k] *= 1.0 + Campaign.CD.FLAWLESS_BONUS   # perfect play: more learned
-		Campaign.finish_mission(won, _mission_flags() if won else [], battle_xp)
+		Campaign.finish_mission(won, _mission_flags() if won else [], rules.xp_gains(won, battle_xp))
 		var note := ""
 		if won:
 			note = ("Flawless! Every unit learns %d%% more." % roundi(Campaign.CD.FLAWLESS_BONUS * 100.0)) if flawless else \
@@ -1661,6 +1691,8 @@ func _on_hire_pressed(kind: String) -> void:
 func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 	if p.x < 0 or p.x > FIELD_W or p.y < DEPLOY_TOP or p.y > CASTLE_Y:
 		return false
+	if tower_for(p, ignore if ignore != null else placing_type) != null:
+		return true   # a ranged troop onto an empty Tower (or hired straight onto one): it climbs in
 	if ground_problem(p) != "":
 		return false
 	if _emplacing(ignore) and hazards.on_thin_ice(p):
@@ -1672,6 +1704,33 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 		if b.gap_from(p) < Warrior.RADIUS:
 			return false
 	return true
+
+
+## L (or the Climb down button): the selected troop comes down out of its Tower, to its
+## foot (and stays there until it's sent somewhere).
+func climb_down() -> void:
+	if selected == null or not (selected is Warrior) or selected.garrison == null or not is_instance_valid(selected.garrison):
+		return
+	var t = selected.garrison
+	selected.leave_tower()
+	selected.set_post(paths.open_spot(_clamp_post(t.position + Vector2(0, 34))))
+	spawn_text(selected.position + Vector2(0, -40), "Climbs down", Color(0.75, 0.9, 1.0))
+
+
+## An empty Tower at p that troop w could climb into (its own, if it's already in one), or
+## null: w must be one of the ranged kinds (Warrior.GARRISON_KINDS).
+func tower_for(p: Vector2, w) -> Warrior:
+	if w is String:
+		if not Warrior.GARRISON_KINDS.has(w):
+			return null   # (hiring: a ranged kind can be hired straight onto a Tower)
+		w = null
+	elif w == null or not (w is Warrior) or not Warrior.GARRISON_KINDS.has(w.kind) or w.summoned or w.clone_of != null:
+		return null
+	for t in get_warriors():
+		if t.kind == "tower" and t.is_active() and t.build_left <= 0.0 and t.position.distance_to(p) <= Warrior.CLIMB_REACH \
+				and (t.crew_in == null or not is_instance_valid(t.crew_in) or t.crew_in == w):
+			return t
+	return null
 
 
 ## Whether an emplacement is being placed (or `w`, being moved, is one).
@@ -1785,6 +1844,9 @@ func hire_at(p: Vector2) -> void:
 		elif _emplacing(null) and hazards.on_thin_ice(p):
 			hud.show_message("Nothing can be built on thin ice")
 		return
+	var onto := tower_for(p, placing_type)
+	if onto != null:
+		p = onto.position   # hired onto an empty Tower: it walks over and climbs in
 	var data: Dictionary = Data.WARRIORS[placing_type]
 	var cost := hire_cost(placing_type)
 	if gold < cost:
@@ -2021,10 +2083,11 @@ func order_move(p: Vector2) -> void:
 		if selected != null and ground_problem(p) != "":
 			hud.show_message(ground_problem(p))
 		return
-	if selected.is_emplacement():
+	if selected.is_emplacement() and selected.garrison == null:
 		hud.show_message("Emplacements can't move during a wave")
 		return
-	selected.order_to(_clamp_post(p))
+	var tower := tower_for(p, selected)
+	selected.order_to(tower.position if tower != null else _clamp_post(p))   # (onto a Tower: it climbs in; a Tower's crew sent elsewhere climbs down)
 
 
 func upgrade_selected(path: int) -> void:
@@ -2082,6 +2145,9 @@ func _end_drag() -> void:
 	if w is Barricade:
 		ok = wall_problem(w.seg_a(), w.seg_b()) == ""
 	var p := w.post if ok else drag_origin
+	var into := tower_for(p, w)
+	if ok and into != null:
+		p = into.position   # dropped on an empty Tower: up into it
 	var let_go := w.position
 	w.set_post(p)
 	w.position = p
@@ -2393,8 +2459,8 @@ func _warrior_at(p: Vector2, reach := Warrior.RADIUS + 6.0) -> Warrior:
 	var best: Warrior = null
 	var best_d := reach
 	for w in get_warriors():
-		if w.summoned:
-			continue   # skeletons can't be picked up, moved or sold
+		if w.summoned or w.garrison != null:
+			continue   # skeletons can't be picked up, moved or sold; a Tower's crew is picked through its tower
 		var d: float = w.position.distance_to(p)
 		if d < best_d:
 			best_d = d
@@ -2477,6 +2543,9 @@ func pointer_down(p: Vector2, button: int, shift := false, touch := false) -> vo
 			hire_at(p)
 			return
 		var w := _warrior_at(p, TOUCH_PICK if touch else Warrior.RADIUS + 6.0)
+		if w is Warrior and w.kind == "tower" and w.crew_in != null and is_instance_valid(w.crew_in) and w.crew_in.garrison == w \
+				and selected != w.crew_in:
+			w = w.crew_in   # a manned Tower: a click picks its crew (click again for the tower itself)
 		if touch and wave_active and w != null and w == selected and group.is_empty():
 			_cancel()   # a tap on the selected troop: let it go
 			return
@@ -2591,6 +2660,8 @@ func _key(event: InputEventKey) -> void:
 			hud.toggle_orders(self)
 		KEY_G:
 			toggle_song()
+		KEY_L:
+			climb_down()
 		KEY_D:
 			start_area_pick()
 		KEY_K:
@@ -2848,7 +2919,7 @@ func _draw_overlay() -> void:
 			# A tower with its troop on top (or a cannon and its Cannoneer), as it'll stand.
 			var foot := mouse + Vector2(0, Warrior.RADIUS)
 			Sprites.draw_mount(overlay, placing_type, foot, foot, 1.0, Sprites.mount_frames(placing_type, placing_type)[0],
-					Sprites.frames(Sprites.MOUNT_CREW[placing_type])[0], tint, 1.0, Warrior.SCALE)
+					null if placing_type == "tower" else Sprites.frames(Sprites.MOUNT_CREW[placing_type])[0], tint, 1.0, Warrior.SCALE)
 		else:
 			overlay.draw_texture_rect(Sprites.frames(placing_type)[0], Rect2(top_left, size), false, tint)
 		var reach: float = d["range"] + Warrior.RADIUS

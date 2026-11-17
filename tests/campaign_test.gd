@@ -420,12 +420,13 @@ func _unlocks() -> void:
 	campaign.allies = ["stonehollow"]
 	campaign.completed = ["ashwatch", "stonehollow"]
 	await _play("ashwatch")
-	check(main.allowed("barricade") and main.allowed("repair") and main.allowed("path:0"), "U  after Stonehollow joins: barricades, repairs and Fortify are open in every mission")
-	check(not main.allowed("tower") and not main.allowed("path:1") and not main.allowed("ability:arrows"), "U  ...Archer Towers, Wall Archers and Arrow Storm still wait for Greenwood")
+	check(main.allowed("barricade") and main.allowed("repair") and main.allowed("path:0") and main.allowed("tower") and main.allowed("ballista"),
+			"U  after Stonehollow joins: barricades, repairs, Fortify, Towers and Ballistae are open in every mission")
+	check(not main.allowed("archer") and not main.allowed("path:1") and not main.allowed("ability:arrows"), "U  ...Archers, Wall Archers and Arrow Storm still wait for Greenwood")
 	campaign.allies = ["stonehollow", "greenwood"]
-	check(main.allowed("tower") and main.allowed("archer") and main.allowed("ability:arrows"), "U  with Greenwood too: Archers, Archer Towers and Arrow Storm")
+	check(main.allowed("tower") and main.allowed("archer") and main.allowed("ability:arrows"), "U  with Greenwood too: Archers (to put in the Towers) and Arrow Storm")
 	campaign.allies = ["greenwood"]
-	check(main.allowed("archer") and not main.allowed("tower"), "U  Greenwood without the Engineers: Archers, but no towers to put them in")
+	check(main.allowed("archer") and not main.allowed("tower") and not main.allowed("ballista"), "U  Greenwood without the Engineers: Archers, but no Towers or Ballistae")
 	campaign.reset()
 
 

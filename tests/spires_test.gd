@@ -182,10 +182,14 @@ func _conduits() -> void:
 	check(c.holder(c.at_point(by_path[2])) == second and second.buff["damage"] >= Conduits.MATCH["damage"] - 0.001,
 			"C  ...and when the one holding it is posted away, the next Mage on it takes it up")
 	storm.free()   # (its spot on the Lance sigil, for the tower)
-	var tower = _mage(by_path[1] + Vector2(0, 20), 1, "magetower")
-	tower.build_left = 0.0   # (built: one going up has no power to draw)
-	await _frames(30)
-	check(tower.buff["damage"] >= Conduits.MATCH["damage"] - 0.001, "C  a Mage Tower of the Lance on the Lance conduit draws on it too")
+	var tower = _mage(by_path[1] + Vector2(0, 20), -1, "tower")
+	tower.build_left = 0.0   # (built)
+	var up = _mage(by_path[1] + Vector2(-70, 70), 1)
+	main.selected = up
+	main.order_move(tower.position)
+	main.selected = null
+	await _frames(60 * 3)
+	check(up.garrison == tower and up.buff["damage"] >= Conduits.MATCH["damage"] - 0.001, "C  a Lance Mage posted up in a Tower on the Lance conduit draws on it too")
 	check(c.spots.any(func(s): return s["lit"] > 0.0), "C  a conduit lending its power lights up")
 
 
@@ -238,8 +242,8 @@ func _rewards() -> void:
 	check(not campaign.allows("mage"), "R  ...no Mages of the Line's own yet")
 	campaign.mission_id = "sp_circle"
 	campaign.finish_mission(true)
-	check(campaign.allied("spires") and campaign.allows("mage") and campaign.allows("magetower") and not campaign.beacon_lit("spires"),
-			"R  the Circle won: the Conclave joins (Mages, Mage Towers); its beacon isn't lit yet")
+	check(campaign.allied("spires") and campaign.allows("mage") and campaign.allows("obelisk") and not campaign.beacon_lit("spires"),
+			"R  the Circle won: the Conclave joins (Mages, Arcane Obelisks); its beacon isn't lit yet")
 	check(not campaign.tier4_open("mage"), "R  ...Tier IV still closed")
 	campaign.mission_id = "sp_relight"
 	campaign.finish_mission(true)

@@ -28,6 +28,7 @@ const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
 const EnemyShot = preload("res://scripts/enemy_shot.gd")
+const BarricadeScript = preload("res://scripts/barricade.gd")
 # Damage schools: what a hit is made of. Only Slimes care: they shrug off physical hits
 # unless iced over (or frozen); anything else, explosive or magical, hurts them as normal.
 const PHYSICAL := "physical"   # blades, fists, arrows, thorns, fire
@@ -54,6 +55,9 @@ var fights := true
 var flying := false         # over walls and warriors; melee and cannon shells can't reach it
 var bomb := {}              # Sapper: wall, units, radius of its blast (damage already scaled)
 var fuse := -1.0            # >= 0 while the Sapper's bomb is lit
+var sap_target = null       # Sapper: the emplacement (or wall) it's making for, to blow up against
+var sap_check := 0.0
+const SAP_SEEK := 260.0     # how far a Sapper looks for one of your emplacements to go for
 var level := 1              # wave level it was spawned at (for anything it summons)
 var cc_mult := 1.0          # share of stuns, freezes, roots and confusion that lands
 var knock_mult := 1.0       # share of knockback that lands
@@ -357,7 +361,11 @@ func _process(delta: float) -> void:
 	# Once it's at the castle it keeps hammering the wall, even with a unit hitting it.
 	var blocker = _find_blocker() if fights and bomb.is_empty() and not sieging else null
 	var wall = _wall_to_break(delta) if blocker == null and not flying else null
-	if not bomb.is_empty() and (at_castle or at_goal or wall != null):
+	var at_sap := false
+	if not bomb.is_empty():
+		_sap_pick(delta)
+		at_sap = sap_target != null and _sap_gap(sap_target) <= REACH + 6.0
+	if not bomb.is_empty() and (at_castle or at_goal or wall != null or at_sap):
 		fuse = FUSE   # at the castle, or up against a wall in the way: light the bomb
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
 		queue_redraw()
@@ -425,6 +433,9 @@ func _process(delta: float) -> void:
 		elif aggro != null:
 			# Going after the unit that's attacking it (round any terrain in the way).
 			dir = _chase_dir(aggro.position, delta)
+		elif sap_target != null:
+			# A Sapper making for one of your emplacements (or a wall) to blow up against.
+			dir = _chase_dir(_sap_point(sap_target), delta)
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
@@ -564,7 +575,7 @@ func _charge_update(delta: float) -> bool:
 		walking = true
 		bob += delta * 30.0
 		for w in main.get_warriors():
-			if w.is_active() and not charge_hit.has(w) and position.distance_to(w.position) <= radius + w.RADIUS + 4.0:
+			if w.is_active() and not w.sheltered() and not charge_hit.has(w) and position.distance_to(w.position) <= radius + w.RADIUS + 4.0:
 				charge_hit.append(w)
 				w.take_damage(float(rush["damage"]))
 				var side := Vector2(-charge_dir.y, charge_dir.x)
@@ -614,7 +625,7 @@ func _cleave() -> void:
 	var reach: float = cleave["reach"]
 	var half: float = cleave["arc"] / 2.0
 	for w in main.get_warriors():
-		if not w.is_active():
+		if not w.is_active() or w.sheltered():
 			continue
 		var off: Vector2 = w.position - position
 		if off.length() - radius - w.RADIUS > reach:
@@ -637,7 +648,7 @@ func _breathe(delta: float) -> void:
 		best = aggro   # whoever's attacking it gets the fire first
 	else:
 		for w in main.get_warriors():
-			if not w.is_active():
+			if not w.is_active() or w.sheltered():
 				continue
 			var d: float = position.distance_to(w.position) - w.RADIUS
 			if d < best_d:
@@ -648,7 +659,7 @@ func _breathe(delta: float) -> void:
 	breath_timer = breath["cooldown"]
 	var at: Vector2 = best.position
 	for w in main.get_warriors():
-		if w.is_active() and w.position.distance_to(at) <= breath["radius"] + w.RADIUS:
+		if w.is_active() and not w.sheltered() and w.position.distance_to(at) <= breath["radius"] + w.RADIUS:
 			w.take_damage(breath["damage"] * _hit_mult())
 	lunge_dir = position.direction_to(at)
 	lunge = 0.15
@@ -675,6 +686,8 @@ func _attacker():
 			continue
 		best_d = d
 		best = w
+	if best != null and best.garrison != null and is_instance_valid(best.garrison):
+		return best.garrison   # shot at from a Tower: it goes for the tower
 	return best
 
 
@@ -691,7 +704,7 @@ func _shoot_from_range() -> bool:
 	# arrows that don't bring anyone to it, it leaves the troops be and pushes on.
 	var troops: Array = [] if press_on > 0.0 else main.warriors_near(position, r + 40.0)
 	for w in troops:
-		if not w.is_active():
+		if not w.is_active() or w.sheltered():
 			continue
 		var d: float = position.distance_to(w.position) - w.RADIUS - radius
 		if d <= r and d < best and not _wall_across(position, w.position):
@@ -811,8 +824,8 @@ func _explode() -> void:
 		if b.is_active() and b.gap_from(position) <= r:
 			b.take_damage(bomb["wall"])
 	for w in main.get_warriors():
-		if w.is_active() and position.distance_to(w.position) <= r + w.RADIUS:
-			w.take_damage(bomb["units"])
+		if w.is_active() and not w.sheltered() and position.distance_to(w.position) <= r + w.RADIUS:
+			w.take_damage(bomb["wall"] if w.data.get("emplacement", false) else bomb["units"])   # (an emplacement takes it like a wall)
 	if position.y + r * 0.5 >= main.CASTLE_Y:
 		main.damage_castle(bomb["units"] * 2.0)   # the castle's walls are thicker than a barricade's
 	for o in main.rules.objectives():
@@ -859,6 +872,56 @@ func _confused(delta: float) -> void:
 ## to go through it, or one it has been pressed against without getting anywhere
 ## (a gap too tight to fit, or a crush of others). A stuck enemy hacks for a few
 ## seconds, then tries to get past again.
+## A Sapper looks (every second) for the nearest of your emplacements in reach: a Tower,
+## Cannoneer, Ballista, Obelisk, Medic Bay, Statue, Mine or a wall; it makes for that
+## instead of the castle, and blows up against it.
+func _sap_pick(delta: float) -> void:
+	if sap_target != null and not _sap_valid(sap_target):
+		sap_target = null
+		sap_check = 0.0
+	sap_check -= delta
+	if sap_check > 0.0:
+		return
+	sap_check = 1.0
+	var best = null
+	var best_d := SAP_SEEK
+	for w in main.warriors_near(position, SAP_SEEK):
+		if _sap_valid(w):
+			var d: float = _sap_gap(w)
+			if d < best_d:
+				best_d = d
+				best = w
+	for b in main.get_barricades():
+		if _sap_valid(b):
+			var d: float = _sap_gap(b)
+			if d < best_d:
+				best_d = d
+				best = b
+	sap_target = best
+
+
+func _sap_valid(o) -> bool:
+	if not is_instance_valid(o) or o.is_queued_for_deletion() or not o.is_active():
+		return false
+	if o is BarricadeScript:
+		return true
+	return o.data.get("emplacement", false)
+
+
+## How far it is from the Sapper's reach (0: it's there).
+func _sap_gap(o) -> float:
+	if o is BarricadeScript:
+		return o.gap_from(position) - radius
+	return position.distance_to(o.position) - radius - o.RADIUS
+
+
+## Where the Sapper heads to get at it: the emplacement, or the nearest point of the wall.
+func _sap_point(o) -> Vector2:
+	if o is BarricadeScript:
+		return Geometry2D.get_closest_point_to_segment(position, o.seg_a(), o.seg_b())
+	return o.position
+
+
 func _wall_to_break(delta: float):
 	var touching = main.barricade_touching(position, radius + REACH)
 	if touching == null:
@@ -888,7 +951,7 @@ func _find_blocker():
 	var best = null
 	var best_d := INF
 	for w in main.warriors_near(position, radius + REACH + 24.0):
-		if not w.is_active():
+		if not w.is_active() or w.sheltered():
 			continue
 		var d: float = position.distance_to(w.position) - radius - w.RADIUS
 		if d <= REACH and d < best_d:
@@ -902,7 +965,7 @@ func _find_blocker():
 func _push_out() -> void:
 	if not flying and not boss:   # nothing shoves the Ogre King around; others make way
 		for w in main.warriors_near(position, radius + 24.0):
-			if w.is_active():
+			if w.is_active() and not w.sheltered():
 				_push_from(w.position, radius + w.RADIUS, 1.0)
 	if not boss:
 		var in_gap: bool = on_ground and main.paths.tight(position, radius)   # once, not once per neighbour

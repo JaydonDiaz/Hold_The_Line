@@ -69,7 +69,7 @@ func plan() -> Array:
 			out = _plan_positions()
 		"evac":
 			out = _plan_evac()
-		"escort":
+		"escort", "assault":
 			out = _plan_escort()
 		"capture":
 			out = _plan_ring(main.rules.zone.position, main.rules.zone.zone_r)
@@ -112,15 +112,17 @@ func _restyle(out: Array) -> Array:
 				"archer":
 					kind = _first(["frost", "alchemist", MELEE])
 				"tower":
-					kind = _first(["frosttower", "magetower", MELEE])
+					kind = _first([MELEE])
 				"cannon":
 					kind = _first([MELEE])
-				"frost", "bard", "statue", "alchemist", "frosttower":
+				"frost", "bard", "statue", "alchemist", "ballista", "obelisk":
 					kind = ""   # (the North's extras: only when they're allowed)
 				_:
 					kind = ""   # (no Healer, Mine or Medic Bay to be had: just leave it out)
+		if kind == "crew":
+			kind = _first([RANGED, "mage", "frost", "alchemist"]) if res.any(func(r): return r[0] == "tower") else ""
 		if kind != "":
-			res.append([kind, item[1]])
+			res.append([kind, item[1]] + (["crew"] if item[0] == "crew" else []))
 	return res
 
 
@@ -180,6 +182,7 @@ func _plan_line() -> Array:
 	out.append(["cannon", _back(mid, 110.0)])
 	out.append(["healer", _back(posts[mini(1, n - 1)], 90.0)])
 	out.append(["tower", _back(mid + Vector2(-90, 0), 120.0)])
+	out.append(["crew", _back(mid + Vector2(-90, 0), 120.0)])   # (someone up in it)
 	for i in range(n - 2, n):
 		out.append([RANGED, _back(posts[i])])
 	out.append(["medbay", _back(mid + Vector2(90, 0), 140.0)])
@@ -219,6 +222,7 @@ func _plan_positions() -> Array:
 	for o in objs:
 		out.append([RANGED, o.position + Vector2(-50, 30)])
 	out.append(["tower", mid + Vector2(-60, 90)])
+	out.append(["crew", mid + Vector2(-60, 90)])
 	return out
 
 
@@ -332,15 +336,26 @@ func _fill() -> void:
 	for i in items.size():
 		var kind: String = items[i][0]
 		var at: Vector2 = main._clamp_post(items[i][1])
+		if items[i].size() > 2:
+			# A Tower's crew: hired straight onto the Tower once it's built (not before).
+			var t = main.tower_for(at, kind)
+			if t == null:
+				continue
+			at = t.position
+			main.placing_type = kind
 		if not main.can_post_at(at):
 			at = main._clamp_post(main.paths.open_spot(at))
 		if _filled(i):
+			main.placing_type = ""
 			continue
 		if main.gold < main.hire_cost(kind):
+			main.placing_type = ""
 			if _core(kind):
 				return   # (the line comes first: save for it rather than skip ahead)
 			continue     # (support and buildings: buy them when there's gold to spare)
-		if not main.can_post_at(at):
+		var ok: bool = main.can_post_at(at)
+		main.placing_type = ""
+		if not ok:
 			continue
 		var before: int = main.gold
 		var count: int = main.warrior_layer.get_child_count()
@@ -367,7 +382,7 @@ func _orders() -> void:
 		ordered[w.get_instance_id()] = true
 		if w.is_mobile_healer():
 			continue
-		if type == "escort":
+		if type == "escort" or type == "assault":
 			continue
 		if w.kind in [RANGED, "alchemist", "mage", "frost", "bard"]:
 			_guard([w], 80.0)
@@ -375,8 +390,8 @@ func _orders() -> void:
 			main.give_order("move_mode", "hold", [w])
 		else:
 			_guard([w], 170.0 if type == "evac" else 130.0)
-	if type == "escort":
-		var loose := troops.filter(func(w): return w.anchor == null and not w.is_mobile_healer())
+	if type == "escort" or type == "assault":
+		var loose := troops.filter(func(w): return w.anchor == null and not w.is_mobile_healer() and not sent.has(w.get_instance_id()))
 		if not loose.is_empty():
 			main.set_follow(main.rules.wagon, loose)
 			_guard(loose, 70.0)
@@ -399,6 +414,8 @@ func _react() -> void:
 		main.rules.action()
 	_ring()
 	_hunt()
+	if type == "assault":
+		_assault()
 	if type == "positions":
 		var standing: Array = main.rules.standing()
 		if standing.is_empty():
@@ -416,12 +433,60 @@ func _react() -> void:
 					w.order_to(to)
 
 
+## The assault (Dawnspire): a few troops peeled off the ring round the ram to take the
+## winch house once the ram's at a portcullis, free the prison pens and take the archer
+## towers near the road; an Archer, Mage or Frost Witch sent up into each tower taken;
+## back to the ram once the job's done.
+var sent := {}   # troop id -> the work it was sent to
+
+func _assault() -> void:
+	var r = main.rules
+	for id in sent.keys():
+		var o = sent[id]
+		var w = instance_from_id(id)
+		if not is_instance_valid(o) or o.taken or w == null or not is_instance_valid(w) or not w.is_active():
+			sent.erase(id)
+			if w != null and is_instance_valid(w) and w.is_active():
+				main.set_follow(r.wagon, [w])
+	var jobs := []
+	if r.winch != null and is_instance_valid(r.winch) and not r.winch.taken:
+		jobs.append([r.winch, 3])
+	for pen in r.pens:
+		if is_instance_valid(pen) and not pen.taken and r.wagon.position.distance_to(pen.position) < 330.0:
+			jobs.append([pen, 2])
+	for t in r.towers:
+		if is_instance_valid(t) and not t.taken and r.wagon.position.distance_to(t.position) < 260.0:
+			jobs.append([t, 2])
+	for job in jobs:
+		var o = job[0]
+		var have := sent.values().filter(func(x): return x == o).size()
+		for i in job[1] - have:
+			var best = null
+			for w in main.get_warriors():
+				if w.is_active() and not w.is_emplacement() and not w.is_mobile_healer() and w.kind == MELEE \
+						and not sent.has(w.get_instance_id()) and (best == null or w.position.distance_to(o.position) < best.position.distance_to(o.position)):
+					best = w
+			if best == null:
+				break
+			sent[best.get_instance_id()] = o
+			best.anchor = null
+			best.order_to(main.paths.open_spot(main._clamp_post(o.position + Vector2(randf_range(-30, 30), 40))))
+	for t in r.towers:
+		if is_instance_valid(t) and t.taken and not t.crewed:
+			for w in main.get_warriors():
+				if w.is_active() and w.kind in ["archer", "mage", "frost"] and not main.temp_allies.has(w):
+					w.anchor = null
+					w.order_to(t.position)
+					break
+
+
 ## A player sends someone after the last few enemies of a wave when they hang about out of
 ## everyone's reach (shooting from afar, or hacking at something that's being mended): the
 ## nearest troops are moved onto them.
 func _hunt() -> void:
 	var left: Array = main.get_enemies()
-	if not main.wave_active or left.size() > 3 or not main.spawn_queue.is_empty() or left.is_empty():
+	var clearing: bool = type == "assault" and main.rules.phase == "clear"
+	if (not main.wave_active and not clearing) or left.size() > 3 or not main.spawn_queue.is_empty() or left.is_empty():
 		lull = 0
 		last_left = -1
 		return

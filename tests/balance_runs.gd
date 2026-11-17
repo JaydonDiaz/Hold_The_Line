@@ -49,7 +49,7 @@ func _run() -> void:
 	for id in opts["missions"].split(","):
 		var setups := []   # [label, completed, allies]
 		var region: String = CD.MISSIONS[id]["territory"]
-		if region == "spires":
+		if region == "spires" or region == "dawnspire":
 			# The Spires: the south (gw+mv) and Sable won, and two northern peoples joined
 			# with their beacons lit (north=fm+mo,...); the Circle won too for the later ones.
 			for nset in opts["north"].split(","):
@@ -62,6 +62,8 @@ func _run() -> void:
 				if id != "sp_circle":
 					done.append("sp_circle")
 					allies.append("spires")
+				if region == "dawnspire":
+					done.append("sp_relight")   # (the Spires' beacon lit: Dawnspire open)
 				setups.append([nset, done, allies])
 		elif NORTH_MISSIONS.has(region):
 			# The North: Sable won with one of the southern sets; the region's first mission
@@ -200,6 +202,8 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 						roundi(near.zone_rect().size.x / 2.0), str(near.post.round()), near.hp, near.max_hp, str(main.paths.melee_can_reach(e.position))])
 		print("   STUCK queue %d wave_active %s" % [main.spawn_queue.size(), str(main.wave_active)])
 	var result := ("WON" if main.victory else "lost") if main.game_over else "unfinished"
+	if result == "unfinished" and not main.get_enemies().is_empty():
+		print("LEFT ", ", ".join(main.get_enemies().slice(0, 8).map(func(e): return "%s@%s" % [e.kind, e.position.round()])))
 	print("BR mission=%s diff=%s setup=%s trained=%d style=%s seed=%d width=%d result=%s wave=%d margin=%.2f low=%.2f quiet=%d gametime=%d field=%d army=[%s] status=[%s]" % [
 			id, diff, st[0], 1 if trained else 0, opts["style"], sd, width, result, main.wave, _margin(), low, quiet, roundi(frames * 4.0 / 60.0),
 			main.FIELD_W, bot.army(), main.rules.status().replace("\n", " ")])

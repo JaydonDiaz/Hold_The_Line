@@ -8,6 +8,7 @@ signal sell_pressed
 signal target_pressed
 signal orders_pressed
 signal song_pressed
+signal climb_pressed
 signal speed_pressed
 signal auto_pressed
 signal restart_pressed
@@ -75,6 +76,7 @@ var path_cards := []   # one dict of controls per upgrade path
 var sell_btn: Button
 var target_btn: Button
 var song_btn: Button   # a Bard's switch for the eight-Bard song (only while all eight instruments are out)
+var climb_btn: Button  # a Tower's crew: come down out of it
 var message_label: Label
 var message_tween: Tween
 var foe_card: Panel = null   # a new kind of foe on the field (see show_foe), and the ones waiting their turn
@@ -230,6 +232,11 @@ func _ready() -> void:
 	song_btn.add_theme_font_size_override("font_size", 12)
 	song_btn.tooltip_text = "Every instrument is on the field: play the Bards' song between waves, or not [G]"
 	song_btn.pressed.connect(func(): song_pressed.emit())
+	climb_btn = _button(panel, Vector2(234, 212), Vector2(84, 48), "Climb\ndown [L]")
+	climb_btn.add_theme_font_size_override("font_size", 12)
+	climb_btn.tooltip_text = "Come down out of the tower, to its foot [L]"
+	climb_btn.visible = false
+	climb_btn.pressed.connect(func(): climb_pressed.emit())
 
 	message_label = _label(self, Vector2(0, 20), Vector2(WIDTH, 40), Color.WHITE, 28)
 	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -366,7 +373,9 @@ func _layout_bar() -> void:
 		sell_btn.position = Vector2(ui_w - 142, y)
 		target_btn.position = Vector2(ui_w - 280, y)
 		song_btn.position = Vector2(12, y)
-		for b in [sell_btn, target_btn, song_btn]:
+		climb_btn.size = Vector2(110, 50)
+		climb_btn.position = Vector2(130, y)
+		for b in [sell_btn, target_btn, song_btn, climb_btn]:
 			b.add_theme_font_size_override("font_size", 15)
 	else:
 		menu_btn.position = Vector2(ui_w - 298, 8)
@@ -396,6 +405,8 @@ func _layout_bar() -> void:
 		sell_btn.position = Vector2(ui_w - 114, 212)
 		target_btn.position = Vector2(ui_w - 226, 212)
 		song_btn.position = Vector2(ui_w - 314, 212)
+		climb_btn.size = Vector2(84, 48)
+		climb_btn.position = Vector2(ui_w - (406 if song_btn.visible else 314), 212)
 		sell_btn.add_theme_font_size_override("font_size", 16)
 		for b in [target_btn, song_btn]:
 			b.add_theme_font_size_override("font_size", 12)
@@ -514,15 +525,14 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	card["title"].size.x = cw - 12.0
 	card["cost"].position.x = cw - 76.0
 	card["tier"].size.x = cw - 12.0
-	card["desc"].size = Vector2(cw - 12.0, 54)
+	card["desc"].size = Vector2(cw - 12.0, b.size.y - 58.0)   # (inside the card, under its name)
 	var wide := cw >= 200.0
 	card["tier"].add_theme_font_size_override("font_size", 14 if wide else 13)
 	card["desc"].add_theme_font_size_override("font_size", 12)
-	card["desc"].max_lines_visible = 3
+	card["desc"].max_lines_visible = -1   # (all of it, shrunk to fit: see _fit_label)
 	if compact:
-		card["desc"].size = Vector2(cw - 12.0, 34)
-		card["desc"].max_lines_visible = 2   # (a phone's cards are shorter)
-	card["desc_lines"] = card["desc"].max_lines_visible
+		card["desc"].size = Vector2(cw - 12.0, b.size.y - 58.0)
+	card["desc_h"] = card["desc"].size.y
 	if card.has("glow"):
 		card["glow"].size = b.size
 		card["sigil"].position = Vector2(6, b.size.y - 18)
@@ -730,6 +740,62 @@ func touch_words() -> void:
 
 
 func refresh(main) -> void:
+	_refresh(main)
+	_fit_texts()
+
+
+## Every box whose text could run long: shrunk to fit if it would spill out (see _fit_label).
+func _fit_texts() -> void:
+	for card in path_cards + castle_cards:
+		if card.has("desc"):
+			_fit_label(card["desc"], 9)
+		if card.has("tier"):
+			_fit_label(card["tier"], 10)
+	_fit_label(info_label, 8)
+
+
+## A label whose wrapped text would spill out of its box gets a smaller font, a point at a
+## time, down to `smallest`, until it fits (and back up when the text gets shorter). Only
+## measured when its text, box or asked-for size changes.
+func _fit_label(l: Label, smallest := 9) -> void:
+	if l == null or l.text == "" or not l.is_visible_in_tree():
+		return
+	var asked: int = l.get_theme_font_size("font_size")
+	if asked != int(l.get_meta("fit_size", -1)):
+		l.set_meta("fit_base", asked)   # (the size the HUD set it to, not one this shrank it to)
+	var base: int = l.get_meta("fit_base", asked)
+	var key := "%s|%s|%d" % [l.text, l.size, base]
+	if l.get_meta("fit_key", "") == key:
+		if asked != int(l.get_meta("fit_size")):
+			l.add_theme_font_size_override("font_size", int(l.get_meta("fit_size")))
+		return
+	var font: Font = l.get_theme_font("font")
+	var wraps: bool = l.autowrap_mode != TextServer.AUTOWRAP_OFF
+	var size := base
+	while size > smallest:
+		if _text_height(l, size) <= l.size.y + 1.0 and (wraps or font.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= l.size.x + 1.0):
+			break
+		size -= 1
+	l.set_meta("fit_key", key)
+	l.set_meta("fit_size", size)
+	l.add_theme_font_size_override("font_size", size)
+	# Still too much even at the smallest (a phone's short box): only the lines that fit show.
+	var line: float = font.get_height(size) + l.get_theme_constant("line_spacing")
+	l.max_lines_visible = -1 if _text_height(l, size) <= l.size.y + 1.0 else maxi(1, int((l.size.y + 1.0) / line))
+
+
+## How tall label l's text is at font size `size`, wrapped to its width, line by line as
+## the label lays it out (each line the font's height and the label's spacing).
+func _text_height(l: Label, size: int) -> float:
+	var font: Font = l.get_theme_font("font")
+	var para := TextParagraph.new()
+	para.width = l.size.x
+	para.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE
+	para.add_string(l.text, font, size)
+	return para.get_line_count() * (font.get_height(size) + l.get_theme_constant("line_spacing"))
+
+
+func _refresh(main) -> void:
 	# On a phone a touch is a hover that never ends: the card it brings up is read, then
 	# goes away by itself.
 	if compact and hover_card.visible and Time.get_ticks_msec() - hover_since > HOVER_ON_PHONE_MS:
@@ -793,7 +859,10 @@ func refresh(main) -> void:
 		start_btn.disabled = main.wave_active or main.game_over
 		start_btn.text = "Wave in progress" if main.wave_active else "Start Wave %d" % (main.wave + 1)
 		var next_in: float = main.next_wave_in()
-		if next_in >= 0.0 and not main.game_over:
+		if main.started and not main.game_over and not main.wave_active and main.rules.waves_done_here():
+			start_btn.text = "No more waves here"   # (a field cleared: it's yours to move on from)
+			start_btn.disabled = true
+		elif next_in >= 0.0 and not main.game_over:
 			if main.deploying:
 				start_btn.text = "Deploy: %ds" % ceili(next_in)
 			elif main.forced_auto and not main.wave_active:
@@ -837,6 +906,9 @@ func refresh(main) -> void:
 	target_btn.visible = _takes_orders(w) or (in_group and main.group.any(_takes_orders))
 	_refresh_orders(main, w)
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
+	climb_btn.visible = w != null and w.garrison != null and is_instance_valid(w.garrison)
+	if not compact:
+		climb_btn.position.x = ui_w - (406 if song_btn.visible else 314)
 	if grave != null:
 		info_label.position = Vector2(14, 296 if compact else 162)
 		info_label.size = Vector2(ui_w - 26, 100)
@@ -889,7 +961,7 @@ func refresh(main) -> void:
 					else "Hire warriors to stop enemies getting past your camp at the bottom. Click a warrior to select it.")
 		return
 	info_label.position = Vector2(14, 162)
-	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244), 100)
+	info_label.size = Vector2(ui_w - (332 if song_btn.visible else 244) - (92 if climb_btn.visible else 0), 100)
 	if compact:
 		info_label.position = Vector2(14, 296)
 		info_label.size = Vector2(ui_w - 28, _panel_h() - 296 - 66)
@@ -1227,7 +1299,7 @@ func _refresh_sigil(card: Dictionary, w, p: int) -> void:
 	var on: bool = not src.is_empty() and int(src["path"]) == p
 	card["glow"].visible = on
 	card["sigil"].visible = on
-	card["desc"].max_lines_visible = int(card.get("desc_lines", 2)) - (1 if on else 0)
+	card["desc"].size.y = float(card.get("desc_h", card["desc"].size.y)) - (18.0 if on else 0.0)   # (room for the sigil's line under it)
 	if not on:
 		return
 	var C = w.main.conduits
@@ -1311,6 +1383,10 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 	var body := _label(foe_card, Vector2(56, 19), Vector2(200, 40), Color(0.95, 0.92, 0.85), 11)
 	body.text = tip
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# As tall as its tip needs (a long one takes three lines).
+	var need: float = _text_height(body, 11)
+	body.size.y = need + 2.0
+	foe_card.size.y = maxf(60.0, 19.0 + need + 8.0)
 	for l in [head, body]:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var card := foe_card
@@ -2167,6 +2243,35 @@ func hide_world_map() -> void:
 		world_map = null
 
 
+## Before a long operation with checkpoints: where to begin it, from the beginning or as
+## the army stood at any field it's reached. `pick` gets the field (0: the beginning).
+func show_start_choice(mission_name: String, cps: Array, pick: Callable) -> void:
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.72)
+	dim.size = Vector2(WIDTH, HEIGHT)
+	add_child(dim)
+	_center(dim)
+	_bleed(dim)
+	var title := _label(dim, Vector2(0, 250), Vector2(WIDTH, 44), Color(1, 0.85, 0.3), 30)
+	title.text = "Where to begin?"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var sub := _label(dim, Vector2(40, 298), Vector2(WIDTH - 80, 44), Color(0.9, 0.88, 0.82), 16)
+	sub.text = "%s: from the beginning, or as your army stood when it reached a field it's fought through." % mission_name
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var starts: Array = [[0, "From the beginning"]] + cps.map(func(c): return [c[0], "From " + str(c[1])])
+	for i in starts.size():
+		var z: int = starts[i][0]
+		var b := _button(dim, Vector2(170, 360 + i * 62), Vector2(300, 52), starts[i][1])
+		_fit_text(b, 18, b.size.x - 14.0)
+		b.pressed.connect(func():
+			dim.queue_free()
+			pick.call(z))
+	var cancel := _button(dim, Vector2(220, 372 + starts.size() * 62), Vector2(200, 44), "Cancel")
+	cancel.pressed.connect(func(): dim.queue_free())
+	_board_behind(dim)
+
+
 ## A mission is over: won (on to the map, where its story and reward wait) or lost
 ## (try it again, or go back to the map; nothing is lost either way).
 func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary := "") -> void:
@@ -2182,16 +2287,43 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary :=
 	var sub := _label(dim, Vector2(40, 370), Vector2(WIDTH - 80, 60), Color.WHITE, 18)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var open_ended: bool = int(mission.get("waves", 0)) >= 99   # (won by its objective, not by a count of waves)
 	if won:
-		sub.text = "%s: you held through all %d waves." % [mission["name"], mission["waves"]] + ("\n" + summary if summary != "" else "")
+		if open_ended and summary != "":
+			sub.text = "%s: won!\n%s" % [mission["name"], summary]
+		else:
+			sub.text = "%s: you held through all %d waves." % [mission["name"], mission["waves"]] + ("\n" + summary if summary != "" else "")
 		var go := _button(dim, Vector2(200, 460), Vector2(240, 56), "Continue to the map")
 		go.pressed.connect(func(): campaign_map.emit())
 	else:
-		sub.text = (summary + " " if summary != "" else "%s: you held %d of %d waves. " % [mission["name"], survived, mission["waves"]]) + "Half of what your troops learned still counts; try again."
-		var again := _button(dim, Vector2(110, 460), Vector2(200, 56), "Try again")
-		again.pressed.connect(func(): campaign_retry.emit())
-		var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
-		map_btn.pressed.connect(func(): campaign_map.emit())
+		var cps: Array = Campaign.checkpoints_for(Campaign.mission_id)
+		var cp: String = get_parent().rules.checkpoint_name() if get_parent() != null and get_parent().get("rules") != null else ""
+		sub.text = (summary + " " if summary != "" else "%s: you held %d of %d waves. " % [mission["name"], survived, mission["waves"]]) + \
+				("What your troops learned since %s half counts; the rest waits for the win. Start again from:" % cp if cp != "" else "Half of what your troops learned still counts; try again.")
+		if not cps.is_empty():
+			# A long operation: again from the beginning, or from any field it reached.
+			var starts: Array = [[0, "The beginning"]] + cps
+			var n := starts.size() + 1
+			var bw := (WIDTH - 40.0 - 8.0 * (n - 1)) / n
+			var btns := []
+			for i in starts.size():
+				var z: int = starts[i][0]
+				var b := _button(dim, Vector2(20 + i * (bw + 8.0), 460), Vector2(bw, 56), str(starts[i][1]))
+				b.tooltip_text = "Play the whole operation again" if z == 0 else "Take it up again as the army stood when it reached %s" % starts[i][1]
+				b.pressed.connect(func():
+					Campaign.op_resume_zone = z
+					campaign_retry.emit())
+				btns.append(b)
+			var map_btn := _button(dim, Vector2(20 + starts.size() * (bw + 8.0), 460), Vector2(bw, 56), "Back to the map")
+			map_btn.pressed.connect(func(): campaign_map.emit())
+			btns.append(map_btn)
+			for b in btns:
+				_fit_text(b, 17, b.size.x - 10.0)
+		else:
+			var again := _button(dim, Vector2(110, 460), Vector2(200, 56), "Try again")
+			again.pressed.connect(func(): campaign_retry.emit())
+			var map_btn := _button(dim, Vector2(330, 460), Vector2(200, 56), "Back to the map")
+			map_btn.pressed.connect(func(): campaign_map.emit())
 	# A flawless win (or what spoiled it), on its own line under the buttons.
 	if won and flawless_note.size() == 2 and flawless_note[0] != "":
 		var fl := _label(dim, Vector2(30, 528), Vector2(WIDTH - 60, 22), Color(1.0, 0.85, 0.3) if flawless_note[1] else Color(0.75, 0.72, 0.68), 15)
@@ -2216,6 +2348,24 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary :=
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			if got[1] > 0:
 				line.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+		if earned.size() > 8:
+			var more := _label(dim, Vector2(WIDTH / 2.0 - 240, 602 + 8 * 24), Vector2(480, 22), Color(0.75, 0.72, 0.68), 14)
+			var pts := 0
+			for kind in earned.slice(8):
+				pts += int(Campaign.last_battle[kind][1])
+			more.text = "...and %d more%s (the Ledger has them all)" % [earned.size() - 8, ", +%d training point%s" % [pts, "" if pts == 1 else "s"] if pts > 0 else ""]
+			more.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# A long summary (an operation's) takes more lines: everything under it moves down to
+	# make room, so the buttons never sit on the text.
+	var font: Font = sub.get_theme_font("font")
+	var need: float = font.get_multiline_string_size(sub.text, HORIZONTAL_ALIGNMENT_CENTER, sub.size.x, sub.get_theme_font_size("font_size"), -1,
+			TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND | TextServer.BREAK_ADAPTIVE).y + 6.0
+	var extra := maxf(0.0, need - sub.size.y)
+	if extra > 0.0:
+		sub.size.y = need
+		for c in dim.get_children():
+			if c is Control and c != sub and c != title and c.position.y > sub.position.y:
+				c.position.y += extra
 	_board_behind(dim)
 
 
@@ -2328,7 +2478,8 @@ func orders_meaning(w) -> String:
 	if w.uses_targeting():
 		var pick: String = {"closest": "the nearest enemy", "first": "the enemy closest to the castle",
 				"strongest": "the toughest kind of enemy", "weakest": "the weakest kind of enemy",
-				"objective": "the enemy nearest to getting at what you're protecting"}[w.priority]
+				"objective": "the enemy nearest to getting at what you're protecting",
+				"side": "the enemy nearest to getting at what you're protecting, while it goes to take the side objectives"}[w.priority]
 		out += "Picks %s, " % pick
 		out += ("and sticks with it until it falls or gets away. " if w.commit == "focused" else "and switches whenever a better one comes along. ")
 	if w.is_emplacement() or w.wall_guard:
@@ -2438,6 +2589,7 @@ func _open_orders(main, units: Array) -> void:
 			"closest": "The enemy nearest this unit", "first": "The enemy closest to the castle",
 			"strongest": "The toughest kind of enemy", "weakest": "The weakest kind of enemy",
 			"objective": "The enemy nearest to getting at what you're protecting (then the nearest)",
+			"side": "Goes to take this field's side objectives (archer towers, prison pens, the winch house, supplies); an Archer, Mage or Frost Witch also mans a tower once it's taken. With none left, it guards the ram. Fights like Objective",
 			"revive": "Revives the downed first (they're on a clock), then heals the hurt",
 			"heal": "Heals the hurt first (villagers too), then revives the downed",
 			"stay": "Stays with a troop or a group and looks after them first: pick this, then click the troop (or right-click a troop with the Healer selected)",

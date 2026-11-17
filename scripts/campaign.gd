@@ -39,6 +39,12 @@ var unlocked := {}          # unit kind -> [highest tier open on each of its fou
 var spent := {}             # unit kind -> training points spent on it
 var last_battle := {}       # unit kind -> [XP, points] the last battle earned (the map shows it)
 var load_error := ""        # why the save couldn't be read ("" if it could, or there's none)
+# A long operation's checkpoints (the Liberation of Dawnspire, rules_assault.gd): how the
+# army stood as each field after the first began, {"mission", "checkpoints": {field: {"zone",
+# "name", "gold", "army", ...}}}, kept apart from the progress above so a battle can be
+# taken up again from any field reached; {} for none. Saved with the rest.
+var op_state := {}
+var op_resume_zone := 0    # the field the next battle starts from (0: the beginning; not saved: set by the player's choice)
 
 # Where the next main-scene load goes ("" = the title screen, "map", "battle"), and what
 # the map shows when it opens. Not saved: a fresh launch always starts at the title.
@@ -133,6 +139,8 @@ func reset() -> void:
 	unlocked = {}
 	spent = {}
 	last_battle = {}
+	op_state = {}
+	op_resume_zone = 0
 	mission_id = ""
 	pending_story = ""
 	just_joined = ""
@@ -190,6 +198,11 @@ func _read(cfg: ConfigFile) -> bool:
 		for k in f:
 			if k is String and f[k]:
 				flags[k] = true
+	var op = cfg.get_value("state", "operation", {})
+	op_state = op if op is Dictionary and missions.has(str(op.get("mission", ""))) else {}
+	if op_state.has("zone") and not op_state.has("checkpoints"):
+		op_state = {"mission": op_state["mission"], "checkpoints": {int(op_state["zone"]): op_state}}   # (one checkpoint, as first saved)
+	op_resume_zone = 0
 	var v: int = cfg.get_value("meta", "version", 1)
 	if v == 2:
 		# Training was a tier for all four paths at once (towers shared their crew's):
@@ -234,6 +247,35 @@ func _strings(list, known: Dictionary) -> Array:
 
 ## Writes the campaign out: to a temporary file first, then swapped in, so a crash
 ## mid-write can't leave a half-written save behind.
+## Mission m's checkpoints as [field, its name] pairs, in order ([] for none).
+func checkpoints_for(m: String) -> Array:
+	if op_state.get("mission", "") != m:
+		return []
+	var out := []
+	var cps: Dictionary = op_state.get("checkpoints", {})
+	var keys := cps.keys()
+	keys.sort()
+	for z in keys:
+		out.append([int(z), str(cps[z].get("name", "Field %d" % (int(z) + 1)))])
+	return out
+
+
+## Mission m's checkpoint at field z ({} if there's none).
+func checkpoint(m: String, z: int) -> Dictionary:
+	if op_state.get("mission", "") != m:
+		return {}
+	return op_state.get("checkpoints", {}).get(z, {})
+
+
+## Keeps how the army stood as field z of mission m began (the other fields' are kept too;
+## another operation's are dropped).
+func set_checkpoint(m: String, z: int, snap: Dictionary) -> void:
+	if op_state.get("mission", "") != m:
+		op_state = {"mission": m, "checkpoints": {}}
+	op_state["checkpoints"][z] = snap
+	save_game()
+
+
 func save_game() -> bool:
 	if refusing_save():
 		return false
@@ -248,6 +290,7 @@ func save_game() -> bool:
 	cfg.set_value("state", "xp", xp)
 	cfg.set_value("state", "unlocked", unlocked)
 	cfg.set_value("state", "spent", spent)
+	cfg.set_value("state", "operation", op_state)
 	var tmp := save_path + ".tmp"
 	if cfg.save(tmp) != OK:
 		return false
@@ -730,6 +773,8 @@ func finish_mission(won: bool, new_flags: Array = [], gains: Dictionary = {}) ->
 	var first_win := not completed.has(mission_id)
 	if first_win:
 		completed.append(mission_id)
+	if op_state.get("mission", "") == mission_id:
+		op_state = {}   # (the operation's done: its checkpoints with it)
 	just_lit = t if t != "" and territories.has(t) and not was_lit and beacon_lit(t) else ""
 	if first_win:
 		# An optional mission's reward: training points for a unit of its region, once.

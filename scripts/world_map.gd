@@ -265,13 +265,14 @@ func _show_info(k: String) -> void:
 	for key in unlocks:
 		reward_box.add_child(_reward(key))
 	info["defend"].disabled = mid == "" or not _can_play(k, mid)
-	info["defend"].text = ("Replay" if campaign.completed.has(mid) else ("Play" if optional else "Defend")) if mid != "" \
+	var resumes: bool = mid != "" and campaign.op_state.get("mission", "") == mid
+	info["defend"].text = ("Continue" if resumes else ("Replay" if campaign.completed.has(mid) else ("Play" if optional else "Defend"))) if mid != "" \
 			else ("Secured" if st == "secured" else ("Allied" if f != "" else "Held"))
 
 
 func _on_defend() -> void:
 	if chosen != "" and _can_play(selected, chosen):
-		defend.emit(chosen)
+		defend.emit(chosen)   # (a long operation with checkpoints asks where to begin: main.start_mission)
 
 
 ## Territory k's missions, as the list shows them: the required ones in order, then the

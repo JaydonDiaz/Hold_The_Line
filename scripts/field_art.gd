@@ -27,6 +27,8 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 			if (y + 1) * tile > TOP or not camp:   # (no camp: the grass runs on up into the trees)
 				var hh := (x * 73856093) ^ (y * 19349663)
 				variant = 3 if hh % 11 == 0 else absi(hh) % 3
+				if map.get("ground", "") == "war" and map.get("biome", "") != "city":
+					variant = absi(hh) % 3   # (no flower patches on ground fought over)
 			ci.draw_texture_rect(Sprites.ground_tile(variant), Rect2(x * tile, y * tile, tile, tile), false, tint)
 	var th := CampArt.theme(map) if camp else ""
 	var themed := camp and CampArt.paint_ground(ci, w, tint, th)
@@ -77,6 +79,9 @@ static func _trail(w: float) -> PackedVector2Array:
 
 ## `clear` (a campaign map's terrain shapes and trails) keeps the bushes, rocks and the
 ## like off them and out of the way, so nothing that's only scenery looks like terrain.
+const WarArt = preload("res://scripts/war_art.gd")
+
+
 static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true, clear: Array = []) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
@@ -102,9 +107,9 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true, cl
 		ci.draw_line(p, p + Vector2(-2, -6), g, 1.5)
 		ci.draw_line(p, p + Vector2(0, -8), g, 1.5)
 		ci.draw_line(p, p + Vector2(2, -6), g, 1.5)
-	# Clumps of wildflowers.
+	# Clumps of wildflowers (none on ground a war's been fought over).
 	var petals := [Color(1, 0.97, 0.9), Color(1, 0.9, 0.4), Color(0.95, 0.55, 0.75), Color(0.55, 0.7, 1.0), Color(0.75, 0.55, 0.95)]
-	for i in int(22 * count):
+	for i in int(22 * count * (0.0 if barren else 1.0)):
 		var p := _spot(rng, w)
 		var col: Color = petals[rng.randi() % petals.size()] * tint
 		for k in rng.randi_range(3, 6):
@@ -147,7 +152,7 @@ static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true, cl
 			for k in 4:
 				ci.draw_rect(Rect2(p + Vector2(rng.randf_range(-12, 10), rng.randf_range(-8, 4)), Vector2(2, 2)), Color(0.85, 0.15, 0.2) * tint)
 	# Little red mushrooms.
-	for i in int(6 * count):
+	for i in int(6 * count * (0.0 if barren else 1.0)):
 		var p := _spot(rng, w, clear)
 		for k in rng.randi_range(1, 3):
 			var m := p + Vector2(k * 6.0, (k % 2) * 3.0)
@@ -216,6 +221,8 @@ static func _ground_mood(ci: CanvasItem, w: float, tint: Color, m: Dictionary, r
 			for i in int(24 * w / 640.0):
 				var p := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, 750))
 				ci.draw_rect(Rect2(p, Vector2(1, 1)), Color(1.0, 0.55, 0.2, 0.8))
+		"war":
+			WarArt.ground(ci, w, tint, m, rng)
 		"ash":
 			for i in int(14 * w / 640.0):
 				var c := Vector2(rng.randf_range(0, w), rng.randf_range(y0 + 10, 760))
@@ -240,6 +247,7 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 	for tr in m.get("trails", []):
 		clear.append({"pts": tr, "poly": false})
 	snowy = m.get("biome", "meadow") == "snow"
+	barren = m.get("ground", "") == "war"
 	match m.get("biome", "meadow"):
 		"mountain", "snow", "city":
 			pass   # (painted first, by paint_field: it reaches under the camp and the castle)
@@ -263,6 +271,9 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				pts.append(a + Vector2(sin(a.y * 0.05) * 4.0, 0))
 		pts.append(src[src.size() - 1])
 		_worn_trail(ci, pts, tint, rng)
+	for d in m.get("decor", []):
+		if d["kind"] in WarArt.FLAT:
+			WarArt.decor(ci, d, tint, rng)
 	var shapes: Array = m.get("terrain", [])
 	# Ice lies flat on the ground: under everything else, thin ice over the lake it's in.
 	for t in shapes:
@@ -307,6 +318,12 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_stall(ci, poly, tint, rng)
 			"crystal":
 				_crystal(ci, poly, tint, rng)
+			"curtain":
+				_curtain(ci, poly, tint, String(m.get("wall", "outer")), w, rng)
+			"deadwood":
+				WarArt.deadwood(ci, poly, tint, rng)
+			"wreck":
+				WarArt.wreck(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
@@ -329,9 +346,105 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_crates(ci, d["at"], tint, rng)
 			"lamp":
 				_street_lamp(ci, d["at"], tint)
+			"ogre_banner", "pikes", "deadtree", "stakes":
+				WarArt.decor(ci, d, tint, rng)
 	for l in m.get("lanterns", []):
 		_lantern(ci, l, tint)
 	snowy = false
+	barren = false
+
+
+## A stretch of Dawnspire's wall across the top of a field: the walk along its top (flags,
+## merlons along the front), its face of dressed stone in courses down to its foot, and a
+## tower at each end that stands by a gap (the gate's, or a postern's), with the Ogre
+## King's red banners hung from it. "outer": weathered grey, soot from the burning;
+## "inner": darker stone; "citadel": pale stone trimmed in gold.
+static func _curtain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, style: String, w: float, rng: RandomNumberGenerator) -> void:
+	var box := Rect2(poly[0], Vector2.ZERO)
+	for q in poly:
+		box = box.expand(q)
+	var x0 := box.position.x
+	var x1 := box.end.x
+	var foot := box.end.y
+	var face_top := foot - 54.0
+	var stone: Color = {"outer": Color(0.6, 0.57, 0.52), "inner": Color(0.5, 0.48, 0.47), "citadel": Color(0.86, 0.82, 0.72)}.get(style, Color(0.6, 0.57, 0.52))
+	var walk := stone.darkened(0.28)
+	var trim := Color(0.92, 0.74, 0.3)
+	# The walk along the top.
+	ci.draw_rect(Rect2(x0, 0, x1 - x0, face_top), walk * tint)
+	var y := 6.0
+	while y < face_top - 8.0:
+		var x := x0 + (12.0 if int(y / 14.0) % 2 == 0 else 0.0)
+		while x < x1:
+			ci.draw_rect(Rect2(x, y, 22, 12), (walk.lightened(0.06) if rng.randf() < 0.5 else walk) * tint, false, 1.0)
+			x += 24.0
+		y += 14.0
+	# The face, its courses of blocks.
+	ci.draw_rect(Rect2(x0, face_top, x1 - x0, foot - face_top), OUTLINE)
+	ci.draw_rect(Rect2(x0, face_top + 2, x1 - x0, foot - face_top - 4), stone * tint)
+	var row := 0
+	y = face_top + 2.0
+	while y < foot - 3.0:
+		var x := x0 + (0.0 if row % 2 == 0 else 9.0)
+		while x < x1:
+			var c := stone if rng.randf() < 0.6 else stone.darkened(0.07)
+			if style == "outer" and rng.randf() < 0.12:
+				c = c.darkened(0.3)   # soot
+			ci.draw_rect(Rect2(x + 1, y + 1, minf(17.0, x1 - x - 1.0), 8), c * tint)
+			ci.draw_rect(Rect2(x + 1, y + 1, minf(17.0, x1 - x - 1.0), 1), stone.lightened(0.12) * tint)
+			x += 18.0
+		y += 10.0
+		row += 1
+	ci.draw_rect(Rect2(x0, foot - 4, x1 - x0, 4), Color(0, 0, 0, 0.25))
+	if style == "citadel":
+		ci.draw_rect(Rect2(x0, face_top + 3, x1 - x0, 3), trim * tint)
+	# Merlons along the front edge of the walk.
+	var mx := x0 + 4.0
+	while mx < x1 - 10.0:
+		ci.draw_rect(Rect2(mx - 1, face_top - 11, 14, 13), OUTLINE)
+		ci.draw_rect(Rect2(mx, face_top - 10, 12, 11), stone.lightened(0.05) * tint)
+		ci.draw_rect(Rect2(mx, face_top - 10, 12, 2), stone.lightened(0.2) * tint)
+		mx += 22.0
+	# What the siege has done to it, and the Line's banners torn down over it.
+	WarArt.war_wall(ci, Rect2(x0, 0, x1 - x0, foot), face_top, foot, stone, tint, rng, true)
+	# The towers by the gaps (not at the field's own edges).
+	for end in [x0, x1]:
+		if end <= 1.0 or end >= w - 1.0:
+			continue
+		var big: bool = absf(end - w / 2.0) < w * 0.15   # the gate's towers stand bigger
+		var tw := 44.0 if big else 34.0
+		var tx: float = end - tw / 2.0 if end == x0 else end - tw / 2.0
+		tx = clampf(tx, x0, x1 - tw)
+		var tb := foot + (14.0 if big else 8.0)
+		var tt := face_top - (30.0 if big else 20.0)
+		ci.draw_rect(Rect2(tx + 5, tt + 8, tw, tb - tt), Color(0, 0, 0, 0.25))
+		ci.draw_rect(Rect2(tx - 2, tt - 2, tw + 4, tb - tt + 4), OUTLINE)
+		ci.draw_rect(Rect2(tx, tt, tw, tb - tt), stone.lightened(0.04) * tint)
+		ci.draw_rect(Rect2(tx, tt, 4, tb - tt), stone.lightened(0.16) * tint)
+		ci.draw_rect(Rect2(tx + tw - 5, tt, 5, tb - tt), stone.darkened(0.14) * tint)
+		var ty := tt + 14.0
+		while ty < tb - 4.0:
+			ci.draw_rect(Rect2(tx, ty, tw, 1), stone.darkened(0.2) * tint)
+			ty += 10.0
+		for k in int(tw / 11.0):
+			ci.draw_rect(Rect2(tx + 1 + k * 11, tt - 9, 8, 9), OUTLINE)
+			ci.draw_rect(Rect2(tx + 2 + k * 11, tt - 8, 6, 8), stone.lightened(0.1) * tint)
+		ci.draw_rect(Rect2(tx + tw / 2.0 - 2, tt + 18, 4, 10), OUTLINE)   # an arrow slit
+		if style == "citadel":
+			ci.draw_rect(Rect2(tx, tt + 2, tw, 3), trim * tint)
+		# The Ogre King's banner hung down its face: red, a black tusked skull.
+		var bx := tx + tw / 2.0 - 8.0
+		var by := tt + 30.0
+		var rag := PackedVector2Array([Vector2(bx, by), Vector2(bx + 16, by), Vector2(bx + 16, by + 26), Vector2(bx + 13, by + 31),
+				Vector2(bx + 11, by + 25), Vector2(bx + 8, by + 34), Vector2(bx + 5, by + 27), Vector2(bx + 2, by + 32), Vector2(bx, by + 24)])
+		WarArt.outlined(ci, rag, Color(0.62, 0.12, 0.1) * tint)
+		ci.draw_rect(Rect2(bx - 2, by - 2, 20, 3), OUTLINE)   # its pole
+		ci.draw_rect(Rect2(bx + 11, by + 3, 2, 18), Color(0.46, 0.08, 0.07) * tint)   # a fold
+		ci.draw_rect(Rect2(bx + 4, by + 7, 8, 7), Color(0.1, 0.07, 0.07))   # the daubed skull
+		ci.draw_rect(Rect2(bx + 5, by + 9, 2, 2), Color(0.62, 0.12, 0.1) * tint)
+		ci.draw_rect(Rect2(bx + 9, by + 9, 2, 2), Color(0.62, 0.12, 0.1) * tint)
+		ci.draw_rect(Rect2(bx + 4, by + 14, 1, 3), Color(0.9, 0.86, 0.78))
+		ci.draw_rect(Rect2(bx + 11, by + 14, 1, 3), Color(0.9, 0.86, 0.78))
 
 
 ## A square paved in dressed stone: a dark kerb, big pale flags in courses, and a round
@@ -429,7 +542,8 @@ static func _bottom(poly: Array) -> float:
 	return y
 
 
-static var snowy := false   # painting a snow battlefield: trees and rocks wear snow
+static var snowy := false
+static var barren := false   # painting war-torn ground: no wildflowers   # painting a snow battlefield: trees and rocks wear snow
 
 
 ## Snowfields: blue-white drifts in light and shadow, wind ripples, the odd frozen tuft

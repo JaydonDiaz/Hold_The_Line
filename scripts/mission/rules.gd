@@ -37,6 +37,8 @@ static func make(m: Dictionary) -> RefCounted:
 			script = load("res://scripts/mission/rules_escort.gd")
 		"retreat":
 			script = load("res://scripts/mission/rules_retreat.gd")
+		"assault":
+			script = load("res://scripts/mission/rules_assault.gd")
 		_:
 			script = load("res://scripts/mission/rules.gd")
 	return script.new()
@@ -106,6 +108,40 @@ func wave_cleared(n: int) -> bool:
 ## Whether the battle goes on until it's lost (a Battle Modes scenario).
 func endless() -> bool:
 	return mission.get("endless", false)
+
+
+## Where a wave's next enemy (of radius r) comes onto the field, if not by the field's
+## lanes as usual: Vector2.INF for the lanes.
+func spawn_point(_r: float) -> Vector2:
+	return Vector2.INF
+
+
+## Whether the battle has side objectives troops can be sent after (the Side Objectives
+## target priority: see warrior.gd SIDE_PRIORITY).
+func side_objectives() -> bool:
+	return false
+
+
+## Whether this field's waves are over (an assault's gate open: the HUD says so).
+func waves_done_here() -> bool:
+	return false
+
+
+## Whether no new wave may start now (an assault clearing a field before it moves on).
+func holds_waves() -> bool:
+	return false
+
+
+## The XP a finished battle banks (an operation taken up from a checkpoint banks what came
+## before it only once: see rules_assault.gd).
+func xp_gains(_won: bool, gains: Dictionary) -> Dictionary:
+	return gains
+
+
+## The stage a lost battle can be taken up again from ("" for none: it's played again
+## from the start).
+func checkpoint_name() -> String:
+	return ""
 
 
 ## An objective was destroyed (rules with objectives decide whether that loses).

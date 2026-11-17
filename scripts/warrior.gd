@@ -33,6 +33,7 @@ const ARCHER_STOW := 0.7  # ...and put it back only once she moves off (seconds)
 const PRIORITIES := ["closest", "first", "strongest"]   # (on offer; "weakest" still works for anything set to it)
 const PRIORITY_NAMES := {
 	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
+	"side": "Side Objectives",
 	"revive": "Heal", "heal": "Heal the hurt", "stay": "Stay with", "danger": "In danger",
 }
 # A Healer's own priorities: who it looks after first. "revive": the downed first (they're
@@ -46,6 +47,11 @@ const WARD_GAP := Vector2(0, 34)   # where a Healer keeps itself from its ward (
 # In a battle with something to protect (rules.guards()), one more: "objective", the enemy
 # nearest to getting at it. New troops start on it there.
 const OBJECTIVE_PRIORITY := "objective"
+# Where a battle has side objectives to take (the Dawnspire assault's towers, prison pens,
+# winch house and supplies: rules.side_objectives()), one more: "side". The rules send a
+# troop on it to take them (an Archer, Mage or Frost Witch also mans a tower taken), and
+# back to guarding the main objective once they're all done; it fights like "objective".
+const SIDE_PRIORITY := "side"
 const THREAT_RANGE := 320.0   # an enemy this far from its objective (or further) is the least urgent of those after one
 # Orders: where a unit may go to fight (Hold: only at its post; Guard Area: anywhere in a
 # rectangle the player drew, any size, which needn't even hold its post; Free Roam:
@@ -227,7 +233,33 @@ var confuse_vuln := 0.0
 var traps := {}              # Alchemist Trapcraft
 var trap_timer := 0.0
 var my_traps := []
-var burn := []               # Archer Tower / Cannoneer
+var burn := []               # Archer / Cannoneer / Ballista
+# The plain Tower and its crew: any ranged troop ordered onto a Tower climbs in. Up there
+# it counts as an emplacement (it stays put, shoots what's in reach, over walls), keeps
+# all its own upgrades, reaches further from the high ground, and enemies can't get at it
+# (they go for the tower). Ordered anywhere else, it climbs down.
+const GARRISON_KINDS := ["archer", "mage", "frost", "alchemist", "bard"]
+const PERCH_BASE := 0.3      # how much further a crew reaches from a Tower (before its Lookout upgrades)
+const CLIMB_REACH := 30.0    # a troop ordered this near an empty Tower climbs into it
+var garrison = null          # the Tower this troop is posted in (null: on the ground)
+var crew_in = null           # a Tower's crew
+var perch := 0.0             # a Tower: how much further its crew reaches (0.3: 30%)
+var crew_rate := 1.0         # a Tower: its crew's attack time, times this
+var tower_repair := 0.0      # a Tower: HP its masons mend a second while a wave is on
+var garrison_check := 0.0
+# The Ballista: bolts that fly on through everything in their line, hard on flyers.
+var air_mult := 1.0          # damage against flyers, times this
+var impale := 0.0            # seconds the first enemy a bolt hits is pinned
+var net := []                # [slow, seconds] on flyers it hits
+var air_crit := []           # [chance, multiplier] on flyers
+var blast_end := {}          # share, radius, stun: the burst where a bolt stops
+# The Arcane Obelisk: a boost to Mages near it, and a magic of its own for each rune.
+var aura_magic := 0.0        # Mages near it hit this much harder
+var storm_rune := {}         # damage, count, cooldown, fork: lightning from the sky
+var ray_rune := {}           # damage, count, cooldown, mark: a ray through a line of enemies
+var glyph_rune := {}         # dps, radius, duration, count, cooldown, burst: fire glyphs burned into the ground
+var rift_rune := {}          # push, count, cooldown, damage, sick: rifts throwing enemies back up the field
+var rune_t := {}             # rune -> seconds to its next casting
 var rain := {}
 var rain_timer := 0.0
 var cluster := {}
@@ -404,6 +436,19 @@ func _apply_upgrades() -> void:
 	confuse_vuln = 0.0
 	traps = {}
 	burn = []
+	perch = PERCH_BASE if kind == "tower" else 0.0
+	crew_rate = 1.0
+	tower_repair = 0.0
+	air_mult = data.get("air_mult", 1.0)
+	impale = 0.0
+	net = []
+	air_crit = []
+	blast_end = {}
+	aura_magic = data.get("aura_magic", 0.0)
+	storm_rune = {}
+	ray_rune = {}
+	glyph_rune = {}
+	rift_rune = {}
 	rain = {}
 	cluster = {}
 	napalm = {}
@@ -475,8 +520,26 @@ func _apply_upgrades() -> void:
 					set(key, fx[key])
 			melt = fx.get("melt", melt)
 			burst = fx.get("burst", burst)
+			perch += fx.get("perch", 0.0)
+			crew_rate *= fx.get("crew_rate", 1.0)
+			if kind == "tower":
+				tower_repair = fx.get("repair", tower_repair)
+			air_mult += fx.get("air_mult", 0.0)
+			impale = fx.get("impale", impale)
+			net = fx.get("net", net)
+			air_crit = fx.get("air_crit", air_crit)
+			for key in ["blast_end", "storm_rune", "ray_rune", "glyph_rune", "rift_rune"]:
+				if fx.has(key):
+					set(key, fx[key])
 			wave_bonus = fx.get("wave_bonus", wave_bonus)
 			hauls += fx.get("hauls", 0)
+	# Up in a Tower: the high ground (and the tower's upgrades) carry it further.
+	if garrison != null and is_instance_valid(garrison):
+		attack_range *= 1.0 + garrison.perch
+		song_radius *= 1.0 + garrison.perch
+		cooldown *= garrison.crew_rate
+	if crew_in != null and is_instance_valid(crew_in):
+		crew_in.call_deferred("_apply_upgrades")   # (a Tower's upgrades reach its crew)
 	# Extra combo hits turn into extra blasts per volley once ki blasts are learned.
 	blast_count = 0
 	if not blast.is_empty():
@@ -552,6 +615,8 @@ func _accent_paths() -> Array:
 
 
 func accent_layers() -> Array:
+	if kind in PLAIN_LOOKS:
+		return []
 	var accents: Array = Sprites.ACCENTS.get(kind, [])
 	return _accent_paths().map(func(p): return accents[p])
 
@@ -564,7 +629,12 @@ func accent_tag() -> String:
 
 ## Sprite to draw: tier 3 in a path swaps in that path's look, and two paths at
 ## tier 3 wear a combination of both.
+const PLAIN_LOOKS := ["tower", "ballista", "obelisk"]   # one look whatever their upgrades (the Obelisk's runes glow its path's colour)
+
+
 func sprite_name() -> String:
+	if kind in PLAIN_LOOKS:
+		return kind
 	var combo := _combo_sprite()
 	if combo != "":
 		return combo
@@ -625,12 +695,17 @@ func is_healer() -> bool:
 
 ## Emplacements stay where they were built and only shoot what comes into range.
 func is_emplacement() -> bool:
-	return data.get("emplacement", false)
+	return data.get("emplacement", false) or garrison != null   # (a troop up in a Tower stands like one)
+
+
+## Out of the enemy's reach: up on the castle wall, or in a Tower (they go for the tower).
+func sheltered() -> bool:
+	return wall_guard or garrison != null
 
 
 ## Support emplacements (gold mine, medic bay, statue) never attack anything.
 func is_support() -> bool:
-	return data["attack"] in ["mine", "pulse", "aura"]
+	return data["attack"] in ["mine", "pulse", "aura", "perch", "rune"]
 
 
 ## Towers fire from high up, mortar shells and flasks arc over, so they clear walls;
@@ -721,6 +796,13 @@ func _update_buffs() -> void:
 	# The castle's Rally Horn.
 	for key in ["damage", "rate", "speed"]:
 		buff[key] += main.powers.rally(key)
+	# A Mage near an Arcane Obelisk hits harder (the best one near it counts).
+	if kind == "mage":
+		var arcane := 0.0
+		for w in main.get_warriors():
+			if w.aura_magic > 0.0 and w != self and w.is_active() and w.build_left <= 0.0 and w.covers(self):
+				arcane = maxf(arcane, w.aura_magic)
+		buff["damage"] += arcane
 	# A Mage on one of the Spires' conduits draws on it.
 	var drawn: Dictionary = main.conduits.boost(self)
 	for key in drawn:
@@ -765,8 +847,64 @@ func care() -> String:
 
 
 func set_post(p: Vector2) -> void:
+	if garrison != null and is_instance_valid(garrison) and p.distance_to(garrison.position) > CLIMB_REACH:
+		leave_tower()   # sent somewhere else: it climbs down first
 	post = p
 	target = null
+
+
+## Into Tower t: up on its top, where it stays (see GARRISON_KINDS).
+func enter_tower(t) -> void:
+	garrison = t
+	t.crew_in = self
+	anchor = null
+	position = t.position + Vector2(0, -2)
+	post = position
+	fitted_post = Vector2.INF
+	target = null
+	visible = false
+	_apply_upgrades()
+	t.queue_redraw()
+	main.spawn_text(t.position + Vector2(0, -80), "Up in the tower", Color(0.75, 0.9, 1.0))
+	main.sfx("place", 1.2)
+	main.warriors_changed()
+
+
+## Down out of its Tower, at the foot of it.
+func leave_tower() -> void:
+	var t = garrison
+	garrison = null
+	visible = true
+	if t != null and is_instance_valid(t):
+		if t.crew_in == self:
+			t.crew_in = null
+		position = t.position + Vector2(0, 30)
+		t.queue_redraw()
+	_apply_upgrades()
+	main.warriors_changed()
+
+
+## A ranged troop: climbs into an empty Tower it's been ordered onto; up there, it stays
+## on top of it (and climbs down if the tower's wrecked or sold).
+func _garrison_step(delta: float) -> void:
+	if garrison != null:
+		if held or not is_instance_valid(garrison) or garrison.is_queued_for_deletion() or not garrison.is_active():
+			leave_tower()   # (picked up and carried off it, or the tower's gone)
+			return
+		position = garrison.position + Vector2(0, -2)
+		post = position
+		return
+	if summoned or clone_of != null or not is_active() or held:
+		return
+	garrison_check -= delta
+	if garrison_check > 0.0:
+		return
+	garrison_check = 0.2
+	for t in main.get_warriors():
+		if t.kind == "tower" and t.is_active() and t.build_left <= 0.0 and (t.crew_in == null or not is_instance_valid(t.crew_in)) \
+				and post.distance_to(t.position) <= CLIMB_REACH and position.distance_to(t.position) <= CLIMB_REACH + 8.0:
+			enter_tower(t)
+			return
 
 
 ## A player move order: walk to the new post without stopping to fight.
@@ -887,8 +1025,30 @@ func stats_text() -> String:
 		s += "   Sigil: %s (%s%s)" % [main.conduits.NAMES[int(src["path"])], main.conduits.words(main.conduits.boost(self)), "" if full else ", not its art"]
 	elif not main.conduits.stationed(self).is_empty():
 		s += "   Sigil: %s, held by another Mage (one to a sigil)" % main.conduits.NAMES[int(main.conduits.stationed(self)["path"])]
+	if data["attack"] == "bolt":
+		s += "   %.1fx against flyers (aims for them first)" % air_mult
+	if garrison != null and is_instance_valid(garrison):
+		s += "   Up in a Tower: reach +%d%%" % roundi(garrison.perch * 100.0)
 	if is_support():
 		match data["attack"]:
+			"perch":
+				var c = crew_in if crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self else null
+				s = "HP %d/%d   %s   Its crew reaches %d%% further" % [ceili(hp), ceili(max_hp),
+						("Crew: %s" % c.label) if c != null else "Empty: order a ranged troop onto it", roundi(perch * 100.0)]
+				if crew_rate < 1.0:
+					s += ", attacks %d%% faster" % roundi((1.0 / crew_rate - 1.0) * 100.0)
+				if tower_repair > 0.0:
+					s += "   Repairs %.0f HP/s in waves" % tower_repair
+			"rune":
+				s = "HP %d/%d   Reach %s   Mages near it +%d%% damage" % [ceili(hp), ceili(max_hp), Data.ft(attack_range), roundi(aura_magic * 100.0)]
+				if not storm_rune.is_empty():
+					s += "   Lightning %.0f x%d / %.1fs" % [storm_rune["damage"], int(storm_rune["count"]), storm_rune["cooldown"]]
+				if not ray_rune.is_empty():
+					s += "   Ray %.0f x%d / %.1fs" % [ray_rune["damage"], int(ray_rune["count"]), ray_rune["cooldown"]]
+				if not glyph_rune.is_empty():
+					s += "   Glyph %.0f/s x%d / %.0fs" % [glyph_rune["dps"], int(glyph_rune["count"]), glyph_rune["cooldown"]]
+				if not rift_rune.is_empty():
+					s += "   Rift %s x%d / %.0fs" % [Data.ft(rift_rune["push"]), int(rift_rune["count"]), rift_rune["cooldown"]]
 			"mine":
 				s = "HP %d/%d   %dg every %.1fs during waves   Hauls %d/%d this wave" % [ceili(hp), ceili(max_hp), maxi(1, roundi(damage)), cooldown, hauls_done, hauls]
 				if wave_bonus > 0:
@@ -1111,6 +1271,8 @@ func take_damage(amount: float) -> void:
 		main.spawn_text(position + Vector2(0, -40), "Block", Color(0.75, 0.82, 1.0))
 		block_flash = 0.2
 		return
+	if kind == "tower":
+		main.earn_xp("tower", minf(hp, amount * (1.0 - armor)), "soak")   # standing up to it shields its crew: it trains like a wall
 	hp -= amount * (1.0 - armor) * (1.0 - buff["defense"])
 	hurt = 0.1
 	danger_t = DANGER_HIT
@@ -1156,6 +1318,8 @@ func _process(delta: float) -> void:
 	block_flash = maxf(block_flash - delta, 0.0)
 	queue_redraw()
 	_animate(delta)
+	if garrison != null or GARRISON_KINDS.has(kind):
+		_garrison_step(delta)
 	if down_timer > 0.0:
 		# Healers and Medic Bays nearby keep a downed unit alive longer (or, without
 		# permadeath, get it up sooner).
@@ -1737,10 +1901,16 @@ func _pick(candidates: Array):
 
 
 func _priority_score(e) -> float:
+	if data["attack"] == "bolt" and e.flying:
+		return 1e8 + _priority_score_ground(e)   # (a Ballista goes for what flies first)
+	return _priority_score_ground(e)
+
+
+func _priority_score_ground(e) -> float:
 	# Small distance term breaks ties (e.g. a row of full-health goblins) toward the nearest.
 	var near := -_gap_to(e) * 0.001
 	match priority:
-		"objective":
+		"objective", "side":
 			# Enemies after an objective first, the nearest to getting at it first of all; then
 			# the rest by distance. A little stickiness keeps it from flicking between two.
 			return threat(e) * 10000.0 - _gap_to(e) + (600.0 if e == target else 0.0)
@@ -1783,7 +1953,9 @@ static func known_priorities(w) -> Array:
 
 ## The target priorities on offer in this battle.
 static func priorities_for(m) -> Array:
-	return PRIORITIES + [OBJECTIVE_PRIORITY] if m.rules != null and m.rules.guards() else PRIORITIES
+	if m.rules == null or not m.rules.guards():
+		return PRIORITIES
+	return PRIORITIES + [OBJECTIVE_PRIORITY] + ([SIDE_PRIORITY] if m.rules.side_objectives() else [])
 
 
 ## Takes on another unit's orders (a Mirror Self copy, its original's).
@@ -2079,17 +2251,20 @@ func _retreat_spot(dir: Vector2, threat) -> Vector2:
 ## Where projectiles leave from: the hands, or an emplacement's archer or muzzle.
 func _muzzle() -> Vector2:
 	var f := signf(facing.x) if absf(facing.x) > 0.2 else flip
+	if garrison != null:
+		return position + Vector2(10.0 * f, -46)   # up on the tower
 	match kind:
-		"tower":
-			return position + Vector2(10.0 * f, -36)   # the archer on top
-		"magetower", "frosttower":
-			return position + Vector2(10.0 * f, -42)   # the staff of the Mage or Frost Witch on top
+		"ballista":
+			return position + Vector2(16.0 * f, -22)
 		"cannon":
 			return position + Vector2(14.0 * f, -33)   # the mouth of the (bigger) cannon
 	return position + facing * 18.0
 
 
 func _shoot(e, index: int) -> void:
+	if data["attack"] == "bolt":
+		_shoot_bolt(e, index)
+		return
 	var hit := damage * _power()
 	var crit := randf() < crit_chance
 	if crit:
@@ -2420,10 +2595,163 @@ func _cast_spell(spell: String, sp: Dictionary, at: Vector2) -> void:
 		main.spawn_note(position + Vector2(randf_range(-10, 14), -28), Color(0.6, 1.0, 0.6))
 
 
+## A Ballista's bolt: loosed at e (and a little apart for a second or third), flying
+## straight on to the end of its reach through everything in its line.
+func _shoot_bolt(e, index: int) -> void:
+	var b = preload("res://scripts/bolt.gd").new()
+	b.main = main
+	var from := _muzzle()
+	var aim: Vector2 = e.position + Vector2(0, -6)
+	var dir := from.direction_to(aim).rotated((index - (multishot - 1) / 2.0) * 0.06)
+	b.position = from
+	b.dir = dir
+	b.dist_left = attack_range + 60.0
+	b.speed = data["projectile_speed"]
+	b.damage = damage * _power()
+	b.air_mult = air_mult
+	b.credit = xp_kind()
+	b.knockback_chance = knockback_chance
+	b.knockback_force = knockback_force
+	b.impale = impale
+	b.net = net
+	b.air_crit = air_crit
+	b.burn = burn
+	b.corrode = corrode
+	b.blast_end = blast_end
+	main.add_projectile(b)
+
+
+# --- The Arcane Obelisk's runes --------------------------------------------
+
+const RUNE_COLORS := {"storm_rune": Color(0.55, 0.8, 1.0), "ray_rune": Color(1.0, 0.85, 0.4), "glyph_rune": Color(1.0, 0.45, 0.15),
+	"rift_rune": Color(0.7, 0.4, 1.0)}
+
+
+## Each rune carved into the Obelisk casts its own magic when it's ready, at what's in
+## reach: lightning out of the sky (forking on, at Tempest), a prism ray through a line of
+## enemies, a glyph of fire burned into the ground under the thickest crowd, and a rift that
+## throws the enemy furthest down the field back toward its camp.
+func _rune_step(delta: float) -> void:
+	if build_left > 0.0 or not is_active():
+		return
+	for key in ["storm_rune", "ray_rune", "glyph_rune", "rift_rune"]:
+		var r: Dictionary = get(key)
+		if r.is_empty():
+			continue
+		rune_t[key] = rune_t.get(key, 0.5) - delta
+		if rune_t[key] > 0.0:
+			continue
+		var inside: Array = main.enemies_near(position, attack_range + 40.0).filter(func(e): return _in_range(e))
+		if inside.is_empty():
+			rune_t[key] = 0.3
+			continue
+		rune_t[key] = float(r["cooldown"]) / _rate()
+		swing = 0.25
+		match key:
+			"storm_rune":
+				inside.shuffle()
+				for e in inside.slice(0, int(r["count"])):
+					var sky: Vector2 = e.position + Vector2(randf_range(-20, 20), -190)
+					main.spawn_bolt(PackedVector2Array([sky, e.position]), RUNE_COLORS[key])
+					main.spawn_flash(e.position, 26.0)
+					e.take_damage(float(r["damage"]) * _power(), true, "magic")
+					# Tempest: the bolt forks on to enemies near the one it struck.
+					var from: Vector2 = e.position
+					var struck := [e]
+					for i in int(r.get("fork", 0)):
+						var next = null
+						for x in main.enemies_near(from, 90.0):
+							if not x.dead and not struck.has(x) and (next == null or x.position.distance_to(from) < next.position.distance_to(from)):
+								next = x
+						if next == null:
+							break
+						main.spawn_bolt(PackedVector2Array([from, next.position]), RUNE_COLORS[key])
+						next.take_damage(float(r["damage"]) * 0.5 * _power(), true, "magic")
+						struck.append(next)
+						from = next.position
+				main.sfx("zap")
+			"ray_rune":
+				var from := position + Vector2(0, -44)
+				var picked := [_pick(inside)]
+				if int(r["count"]) > 1:
+					var rest := inside.filter(func(e): return e != picked[0])
+					if not rest.is_empty():
+						picked.append(_pick(rest))
+				for e in picked:
+					var to: Vector2 = from + from.direction_to(e.position) * (attack_range + 60.0)
+					main.spawn_beam(from, to, RUNE_COLORS[key], 14.0)
+					for x in main.enemies_near((from + to) / 2.0, from.distance_to(to) / 2.0 + 30.0):
+						if not x.dead and Geometry2D.get_closest_point_to_segment(x.position, from, to).distance_to(x.position) <= x.radius + 8.0:
+							x.take_damage(float(r["damage"]) * _power(), true, "magic")
+							if float(r["mark"]) > 0.0:
+								x.apply_corrode(float(r["mark"]), 5.0)
+				main.sfx("beam")
+			"glyph_rune":
+				# Under the thickest knots of enemies in reach (a second one elsewhere).
+				var spots := []
+				for i in int(r["count"]):
+					var best = null
+					var most := 0
+					for e in inside:
+						if e.flying or spots.any(func(p): return p.distance_to(e.position) < float(r["radius"]) * 1.5):
+							continue
+						var n := 0
+						for x in inside:
+							if x.position.distance_to(e.position) <= float(r["radius"]):
+								n += 1
+						if n > most:
+							most = n
+							best = e.position
+					if best != null:
+						spots.append(best)
+				for p in spots:
+					var g = preload("res://scripts/rune_glyph.gd").new()
+					g.main = main
+					g.position = p
+					g.radius = float(r["radius"])
+					g.dps = float(r["dps"]) * _power()
+					g.duration = float(r["duration"])
+					g.burst = float(r["burst"]) * _power()
+					g.burn = float(r.get("burn", 0.0)) * _power()
+					g.credit = xp_kind()
+					main.corpse_layer.add_child(g)
+				if spots.is_empty():
+					rune_t[key] = 0.3
+				else:
+					main.sfx("flame")
+			"rift_rune":
+				# The enemies furthest down the field (bosses can't be moved).
+				var movable := inside.filter(func(e): return not e.boss and not e.dead)
+				movable.sort_custom(func(a, b): return a.position.y > b.position.y)
+				for e in movable.slice(0, int(r["count"])):
+					var was: Vector2 = e.position
+					var to := Vector2(was.x, maxf(main.DEPLOY_TOP + 10.0, was.y - float(r["push"])))
+					if e.on_ground and main.paths.has_terrain():
+						to = main.paths.open_spot(to)
+					main.spawn_flash(was, 22.0)
+					main.spawn_burst(was, 24.0, RUNE_COLORS[key])
+					e.position = to
+					main.spawn_burst(to, 24.0, RUNE_COLORS[key])
+					if float(r["damage"]) > 0.0:
+						e.take_damage(float(r["damage"]) * _power(), true, "magic")
+					if float(r["sick"]) > 0.0:
+						e.apply_corrode(float(r["sick"]), 4.0)
+				if movable.is_empty():
+					rune_t[key] = 0.3
+				else:
+					main.sfx("spell")
+
+
 # --- Support emplacements -----------------------------------------------
 
 func _support_update(delta: float) -> void:
 	match data["attack"]:
+		"perch":
+			# A Tower: its masons mend it while a wave is on.
+			if tower_repair > 0.0 and main.wave_active and hp < max_hp:
+				_mend(tower_repair * delta)
+		"rune":
+			_rune_step(delta)
 		"mine":
 			# Digs while a wave is on, until it has made this wave's hauls.
 			if not main.wave_active:
@@ -3557,6 +3885,15 @@ func _look() -> Dictionary:
 		# The arrow nocked in her bow matches the ones she shoots.
 		recolor = {"e": Projectile.ARROW_SHAFTS[tiers[0]], "a": Projectile.ARROW_HEADS[tiers[0]]}
 		tag += "+g%d" % tiers[0]
+	if kind == "obelisk":
+		# Its runes glow the colour of the rune most deeply carved.
+		var best := -1
+		for p in tiers.size():
+			if tiers[p] > 0 and (best < 0 or tiers[p] > tiers[best]):
+				best = p
+		var glow: Color = [Color(0.55, 0.8, 1.0), Color(1.0, 0.85, 0.4), Color(1.0, 0.5, 0.2), Color(0.8, 0.45, 1.0)][best] if best >= 0 else Color(0.75, 0.55, 1.0)
+		recolor = {"R": glow}
+		tag += "+r%d" % best
 	if golden_left > 0.0:
 		recolor = recolor.merged(GOLD_HAIR, true)
 		tag += "+gold"
@@ -3606,16 +3943,10 @@ func _crew_look() -> Dictionary:
 			"frames": Sprites.frames(look_name, recolor, tag), "poses": {}}
 
 
-## The crew's pose this frame: an Archer drawing, a Mage or Frost Witch casting, a
-## Cannoneer working the gun drill (see the "cannon" case).
+## The Cannoneer's pose this frame, working the gun drill (a Tower's crew poses as itself:
+## see _draw_tower).
 func _crew_pose() -> String:
 	match kind:
-		"tower":
-			if swing <= 0.0 and _readying() > 0.0:
-				return "draw"
-		"magetower", "frosttower":
-			if swing > 0.0:
-				return "cast"
 		"cannon":
 			# The gun drill: flinch at the blast, fetch a ball, load it, ram it home,
 			# then stand ready and touch off the fuse as the next shot comes up.
@@ -3637,6 +3968,9 @@ func _crew_pose() -> String:
 
 
 func _draw_mounted(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Color) -> void:
+	if kind == "tower":
+		_draw_tower(look, foot, base_foot, tint)
+		return
 	var crew: Dictionary = look["crew"]
 	var crew_tex: Texture2D = crew["frames"][0]
 	var pose_name := _crew_pose()
@@ -3653,13 +3987,40 @@ func _draw_mounted(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Co
 	draw_set_transform(Vector2.ZERO)
 
 
+## A plain Tower: the stone tower, and on its battlements whoever's posted in it (as it
+## looks, in its own upgrades, turned to what it's fighting, going through its own poses);
+## empty battlements without a crew.
+func _draw_tower(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Color) -> void:
+	var base_tex: Texture2D = look["mount"][0]
+	var c = crew_in if crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self else null
+	if c != null:
+		var clook: Dictionary = c._look()
+		var crew_tex: Texture2D = clook["frames"][0]
+		var pn: String = c._pose_name()
+		if pn != "":
+			var t = c._pose_tex(clook, pn)
+			if t != null:
+				crew_tex = t
+		var breathe := 1.0 + 0.025 * sin(anim_t * 2.4 + position.x)
+		var rect := Sprites.draw_mount(self, kind, foot, base_foot, c.flip, base_tex, crew_tex, tint, breathe, SCALE)
+		_remember_body(base_tex, Transform2D(0, Vector2(c.flip, 1), 0, foot), rect)
+	else:
+		var lay := Sprites.mount_layout(kind, SCALE)
+		var k: float = lay["k"]
+		var rect := Rect2(lay["left"], -Sprites.SIZE * k, base_tex.get_width() * k, Sprites.SIZE * k)
+		draw_set_transform(foot, 0, Vector2(flip, 1))
+		draw_texture_rect(base_tex, rect, false, tint)
+		_remember_body(base_tex, Transform2D(0, Vector2(flip, 1), 0, foot), rect)
+	draw_set_transform(Vector2.ZERO)
+
+
 ## A construction site: scaffolding, the emplacement rising out of the ground as the
 ## Engineer works, and a progress bar.
 func _draw_construction() -> void:
 	var done := clampf(1.0 - build_left / maxf(build_total, 0.01), 0.0, 1.0)
 	var look := _look()
 	var tex: Texture2D = look["mount"][0] if MOUNTS.has(kind) else look["frames"][0]
-	var k := SCALE * (Sprites.TOWER_GROW if kind in ["tower", "magetower", "frosttower"] else (Sprites.CANNON_GROW if kind == "cannon" else 1.0))
+	var k := SCALE * (Sprites.TOWER_GROW if kind == "tower" else (Sprites.CANNON_GROW if kind == "cannon" else 1.0))
 	var left: float = Sprites.mount_layout(kind, SCALE)["left"] if MOUNTS.has(kind) else -Sprites.SIZE / 2.0 * k
 	var foot := Vector2(0, RADIUS)
 	draw_texture_rect(Sprites.shadow(), Rect2(-RADIUS * 1.3, foot.y - 6, RADIUS * 2.6, 12), false, Color(0, 0, 0, 0.3))
@@ -3689,7 +4050,7 @@ func _draw_construction() -> void:
 ## How far above its post a unit's health bar sits (above the troop on a tower).
 func _bar_height() -> float:
 	match kind:
-		"tower", "magetower", "frosttower":
+		"tower":
 			return (Sprites.SIZE - Sprites.CREW_STAND) * SCALE * Sprites.TOWER_GROW + Sprites.SIZE * SCALE + 4.0 - RADIUS
 		"cannon":
 			return Sprites.SIZE * SCALE * Sprites.CANNON_GROW + 2.0 - RADIUS

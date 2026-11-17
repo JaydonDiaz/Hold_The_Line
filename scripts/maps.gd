@@ -27,8 +27,10 @@ extends RefCounted
 ##              one, the meadow's)
 ##   bot_posts  where the balance test's bot holds its line (the map's chokepoints)
 ##   camp       false: no enemy camp drawn along the top (the road just goes on)
-##   ground     a mood laid over the biome's ground (field_art._ground_mood): "fen", "burnt", "ash"
+##   ground     a mood laid over the biome's ground (field_art._ground_mood): "fen", "burnt", "ash",
+##              "war" (Dawnspire's fields fought over: war_art.gd)
 ##   tint       a colour the ground is lit with on top of the mode's mood (a dark wood)
+##   wall       a Dawnspire field's wall across the top: "outer", "inner" or "citadel" (its look)
 ##   decor      little things about the field, just paint ({"kind", "at"} or a "rect"):
 ##              "plaza" (a dressed-stone square, its mosaic at "at", "r" across), "planter", "boat" (moored in a canal),
 ##              "lamp" (a street lamp), "crates"
@@ -713,6 +715,105 @@ const ZONES := {
 		"no_build": [],
 		"trails": [[Vector2(320, 740), Vector2(330, 620), Vector2(300, 480), Vector2(330, 330), Vector2(340, 200), Vector2(322, 140), Vector2(320, -20)]],
 		"route": [Vector2(320, 760), Vector2(330, 620), Vector2(300, 480), Vector2(330, 330), Vector2(340, 200), Vector2(322, 104)],
+	},
+	# --- Dawnspire (Phase 5): the fortress assault --------------------------------------------
+	# Each field ends at a wall across the top: a gate in the middle (the mission's, shut
+	# until it's broken or raised) and a postern at each end, where the garrison comes out.
+	# The battering ram comes up the road from the bottom to the gate.
+	# The Approach: the fields under Dawnspire's outer wall, where the Line's army was broken
+	# when the Ogre King took the citadel: scorched and cratered, the farmsteads burnt out,
+	# a grove burnt black and a siege engine wrecked, the dead's shields and blades and
+	# arrows everywhere, Dawnspire's sun banners trampled, and his own war-banners and
+	# skull pikes planted over all of it. Fires still burn. A timber gate in the wall.
+	"ds_approach": {
+		"name": "The Approach", "battle": "siege", "music": "calm_dsapproach", "biome": "meadow", "ground": "war", "camp": false,
+		"tint": Color(0.98, 0.88, 0.8), "wall": "outer",
+		"lanes": [[40, 100], [540, 600]],
+		"terrain": [
+			{"kind": "curtain", "poly": [Vector2(0, -120), Vector2(28, -120), Vector2(28, 150), Vector2(0, 150)]},
+			{"kind": "curtain", "poly": [Vector2(112, -120), Vector2(280, -120), Vector2(280, 150), Vector2(112, 150)]},
+			{"kind": "curtain", "poly": [Vector2(360, -120), Vector2(528, -120), Vector2(528, 150), Vector2(360, 150)]},
+			{"kind": "curtain", "poly": [Vector2(612, -120), Vector2(640, -120), Vector2(640, 150), Vector2(612, 150)]},
+			{"kind": "ruin", "poly": [Vector2(96, 360), Vector2(176, 360), Vector2(176, 426), Vector2(96, 426)]},
+			{"kind": "ruin", "poly": [Vector2(462, 452), Vector2(548, 452), Vector2(548, 516), Vector2(462, 516)]},
+			{"kind": "deadwood", "poly": [Vector2(0, 520), Vector2(70, 512), Vector2(104, 580), Vector2(84, 660), Vector2(0, 672)]},
+			{"kind": "deadwood", "poly": [Vector2(640, 280), Vector2(586, 292), Vector2(566, 360), Vector2(590, 424), Vector2(640, 432)]},
+			{"kind": "wreck", "poly": [Vector2(190, 560), Vector2(262, 556), Vector2(270, 600), Vector2(196, 610)]},
+		],
+		"no_build": [],
+		"trails": [[Vector2(320, 760), Vector2(316, 620), Vector2(326, 470), Vector2(318, 330), Vector2(320, 150)],
+			[Vector2(70, 150), Vector2(90, 250), Vector2(200, 330), Vector2(310, 400)], [Vector2(570, 150), Vector2(550, 260), Vector2(440, 340), Vector2(330, 420)]],
+		"route": [Vector2(320, 760), Vector2(316, 620), Vector2(326, 470), Vector2(318, 330), Vector2(320, 200)],
+		"decor": [
+			{"kind": "crater", "at": Vector2(244, 300), "r": 20.0}, {"kind": "crater", "at": Vector2(410, 392), "r": 24.0},
+			{"kind": "crater", "at": Vector2(158, 486), "r": 16.0}, {"kind": "crater", "at": Vector2(530, 618), "r": 22.0},
+			{"kind": "crater", "at": Vector2(386, 560), "r": 14.0}, {"kind": "crater", "at": Vector2(96, 262), "r": 13.0},
+			{"kind": "crater", "at": Vector2(560, 210), "r": 15.0},
+			{"kind": "line_banner", "at": Vector2(292, 470), "angle": 0.5}, {"kind": "line_banner", "at": Vector2(478, 330), "angle": -0.3},
+			{"kind": "line_banner", "at": Vector2(84, 440), "angle": 2.2}, {"kind": "line_banner", "at": Vector2(420, 676), "angle": 0.9},
+			{"kind": "debris", "at": Vector2(250, 410)}, {"kind": "debris", "at": Vector2(548, 560)},
+			{"kind": "fire", "at": Vector2(136, 393)}, {"kind": "fire", "at": Vector2(505, 484)}, {"kind": "fire", "at": Vector2(232, 586)},
+			{"kind": "fire", "at": Vector2(40, 590)},
+			{"kind": "stakes", "at": Vector2(132, 196), "to": Vector2(236, 222)}, {"kind": "stakes", "at": Vector2(404, 222), "to": Vector2(508, 196)},
+			{"kind": "pikes", "at": Vector2(262, 252)}, {"kind": "pikes", "at": Vector2(380, 252)}, {"kind": "pikes", "at": Vector2(470, 700)},
+			{"kind": "ogre_banner", "at": Vector2(256, 188)}, {"kind": "ogre_banner", "at": Vector2(386, 188)},
+			{"kind": "ogre_banner", "at": Vector2(170, 660)}, {"kind": "ogre_banner", "at": Vector2(610, 520)},
+			{"kind": "deadtree", "at": Vector2(300, 640)}, {"kind": "deadtree", "at": Vector2(610, 640)}, {"kind": "deadtree", "at": Vector2(46, 330)}]},
+	# The Outer Bailey: the ward between the walls, its houses burnt out, market stalls
+	# overturned; an iron portcullis in the inner wall, raised from a winch house.
+	"ds_bailey": {
+		"name": "The Outer Bailey", "battle": "bailey", "music": "calm_bailey", "biome": "city", "ground": "war", "camp": false,
+		"tint": Color(0.94, 0.9, 0.88), "wall": "inner",
+		"lanes": [[40, 100], [540, 600]],
+		"terrain": [
+			{"kind": "curtain", "poly": [Vector2(0, -120), Vector2(28, -120), Vector2(28, 150), Vector2(0, 150)]},
+			{"kind": "curtain", "poly": [Vector2(112, -120), Vector2(280, -120), Vector2(280, 150), Vector2(112, 150)]},
+			{"kind": "curtain", "poly": [Vector2(360, -120), Vector2(528, -120), Vector2(528, 150), Vector2(360, 150)]},
+			{"kind": "curtain", "poly": [Vector2(612, -120), Vector2(640, -120), Vector2(640, 150), Vector2(612, 150)]},
+			{"kind": "ruin", "poly": [Vector2(0, 330), Vector2(76, 330), Vector2(76, 420), Vector2(0, 420)]},
+			{"kind": "ruin", "poly": [Vector2(560, 400), Vector2(640, 400), Vector2(640, 500), Vector2(560, 500)]},
+			{"kind": "ruin", "poly": [Vector2(150, 470), Vector2(236, 470), Vector2(236, 530), Vector2(150, 530)]},
+			{"kind": "stall", "poly": [Vector2(404, 560), Vector2(456, 560), Vector2(456, 592), Vector2(404, 592)]},
+			{"kind": "stall", "poly": [Vector2(178, 622), Vector2(230, 622), Vector2(230, 654), Vector2(178, 654)]},
+		],
+		"no_build": [],
+		"trails": [[Vector2(320, 760), Vector2(324, 620), Vector2(314, 470), Vector2(322, 330), Vector2(320, 150)]],
+		"route": [Vector2(320, 760), Vector2(324, 620), Vector2(314, 470), Vector2(322, 330), Vector2(320, 200)],
+		"decor": [
+			{"kind": "crater", "at": Vector2(400, 440), "r": 16.0}, {"kind": "crater", "at": Vector2(230, 300), "r": 14.0},
+			{"kind": "line_banner", "at": Vector2(250, 600), "angle": 0.4}, {"kind": "line_banner", "at": Vector2(500, 640), "angle": -0.6},
+			{"kind": "debris", "at": Vector2(380, 680)}, {"kind": "fire", "at": Vector2(38, 376)}, {"kind": "fire", "at": Vector2(600, 450)},
+			{"kind": "fire", "at": Vector2(193, 500)},
+			{"kind": "pikes", "at": Vector2(250, 214)}, {"kind": "pikes", "at": Vector2(392, 214)},
+			{"kind": "ogre_banner", "at": Vector2(200, 400)}, {"kind": "ogre_banner", "at": Vector2(440, 260)}]},
+	# The Dawn Gate: the citadel's great gate, gilded and sun-crowned, at the head of a
+	# courtyard of broken pillars; the walls above it loose Arrow Storms and Fireballs.
+	"ds_dawngate": {
+		"name": "The Dawn Gate", "battle": "dawngate", "music": "calm_dawngate", "biome": "city", "camp": false,
+		"tint": Color(1.0, 0.92, 0.82), "wall": "citadel",
+		"lanes": [[40, 100], [540, 600]],
+		"terrain": [
+			{"kind": "curtain", "poly": [Vector2(0, -120), Vector2(28, -120), Vector2(28, 150), Vector2(0, 150)]},
+			{"kind": "curtain", "poly": [Vector2(112, -120), Vector2(280, -120), Vector2(280, 150), Vector2(112, 150)]},
+			{"kind": "curtain", "poly": [Vector2(360, -120), Vector2(528, -120), Vector2(528, 150), Vector2(360, 150)]},
+			{"kind": "curtain", "poly": [Vector2(612, -120), Vector2(640, -120), Vector2(640, 150), Vector2(612, 150)]},
+			{"kind": "ruin", "poly": [Vector2(196, 300), Vector2(232, 300), Vector2(232, 336), Vector2(196, 336)]},
+			{"kind": "ruin", "poly": [Vector2(408, 300), Vector2(444, 300), Vector2(444, 336), Vector2(408, 336)]},
+			{"kind": "ruin", "poly": [Vector2(196, 460), Vector2(232, 460), Vector2(232, 496), Vector2(196, 496)]},
+			{"kind": "ruin", "poly": [Vector2(408, 460), Vector2(444, 460), Vector2(444, 496), Vector2(408, 496)]},
+			{"kind": "ruin", "poly": [Vector2(0, 560), Vector2(70, 560), Vector2(70, 640), Vector2(0, 640)]},
+			{"kind": "ruin", "poly": [Vector2(570, 590), Vector2(640, 590), Vector2(640, 660), Vector2(570, 660)]},
+		],
+		"no_build": [],
+		"trails": [[Vector2(320, 760), Vector2(320, 600), Vector2(320, 400), Vector2(320, 150)]],
+		"route": [Vector2(320, 760), Vector2(320, 600), Vector2(320, 400), Vector2(320, 202)],
+		"ground": "war",
+		"decor": [{"kind": "plaza", "rect": Rect2(250, 220, 140, 500), "at": Vector2(320, 398), "r": 46.0},
+			{"kind": "line_banner", "at": Vector2(280, 560), "angle": 0.3}, {"kind": "line_banner", "at": Vector2(372, 300), "angle": 2.6},
+			{"kind": "debris", "at": Vector2(520, 520)}, {"kind": "fire", "at": Vector2(36, 600)}, {"kind": "fire", "at": Vector2(604, 624)},
+			{"kind": "pikes", "at": Vector2(240, 232)}, {"kind": "pikes", "at": Vector2(400, 232)},
+			{"kind": "ogre_banner", "at": Vector2(150, 360)}, {"kind": "ogre_banner", "at": Vector2(490, 360)},
+			{"kind": "ogre_banner", "at": Vector2(214, 520)}, {"kind": "ogre_banner", "at": Vector2(426, 520)}],
 	},
 }
 

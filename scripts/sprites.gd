@@ -1767,6 +1767,50 @@ const SPRITES := {
 			"kkkkkkkkkkkkkkkk",
 		],
 	},
+	"ballista": {  # A great crossbow on a wooden trestle, an iron-headed bolt laid in it
+		"palette": {"W": Color(0.58, 0.4, 0.22), "D": Color(0.38, 0.25, 0.13), "I": Color(0.52, 0.52, 0.58), "B": Color(0.72, 0.56, 0.32),
+			"S": Color(0.86, 0.82, 0.68)},
+		"rows": [
+			"................",
+			"..........kk....",
+			".........kIIk...",
+			".........kWk....",
+			"........kWkS....",
+			"..kkkkkkkWkkkk..",
+			".kSBBBBBBBBBBIk.",
+			"..kDDDDDDWDDDkk.",
+			"........kWkS....",
+			".........kWk....",
+			".........kIIk...",
+			"......kkkkkk....",
+			".....kDWWWWDk...",
+			"....kWk.kk.kWk..",
+			"...kWk......kWk.",
+			"..kkk........kkk",
+		],
+	},
+	"obelisk": {  # A tall rune-carved standing stone on a plinth, its runes glowing
+		"palette": {"S": Color(0.42, 0.4, 0.52), "D": Color(0.3, 0.28, 0.4), "L": Color(0.56, 0.54, 0.66), "R": Color(0.75, 0.55, 1.0),
+			"P": Color(0.55, 0.52, 0.5)},
+		"rows": [
+			".......kk.......",
+			"......kLSk......",
+			".....kLSSDk.....",
+			".....kLRSDk.....",
+			".....kLSSDk.....",
+			".....kLSRDk.....",
+			".....kLSSDk.....",
+			".....kLRSDk.....",
+			".....kLSSDk.....",
+			".....kLSRDk.....",
+			".....kLSSDk.....",
+			"....kLSRSSDk....",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+			"................",
+		],
+	},
 	"statue": {  # A stone knight raising a sword on a pedestal
 		"palette": {"S": Color(0.72, 0.72, 0.7), "D": Color(0.5, 0.5, 0.5), "P": Color(0.55, 0.5, 0.45)},
 		"rows": [
@@ -3632,7 +3676,7 @@ const MOUNT_CLEAR := {
 }
 
 
-const MOUNT_CREW := {"tower": "archer", "magetower": "mage", "frosttower": "frost", "cannon": "cannoneer"}
+const MOUNT_CREW := {"tower": "archer", "cannon": "cannoneer"}   # (a plain Tower's crew is whoever's posted in it: warrior._draw_tower)
 const TOWER_GROW := 1.4     # mounted towers are drawn this much bigger than other emplacements
 const CANNON_GROW := 1.25
 const CREW_STAND := 8.5     # tower rows down from the top where the troop's feet are (behind the parapet)
@@ -3658,8 +3702,9 @@ static func draw_mount(ci: CanvasItem, kind: String, foot: Vector2, base_foot: V
 		base_tex: Texture2D, crew_tex: Texture2D, tint := Color.WHITE, breathe := 1.0, scale := 3.0) -> Rect2:
 	var lay := mount_layout(kind, scale)
 	var crew := lay["crew"] as Vector2
-	ci.draw_set_transform(base_foot + Vector2(crew.x * flip, crew.y), 0, Vector2(flip, breathe))
-	ci.draw_texture_rect(crew_tex, Rect2(-SIZE / 2.0 * scale, -SIZE * scale, crew_tex.get_width() * scale, SIZE * scale), false, tint)
+	if crew_tex != null:   # (an empty Tower has nobody on its battlements)
+		ci.draw_set_transform(base_foot + Vector2(crew.x * flip, crew.y), 0, Vector2(flip, breathe))
+		ci.draw_texture_rect(crew_tex, Rect2(-SIZE / 2.0 * scale, -SIZE * scale, crew_tex.get_width() * scale, SIZE * scale), false, tint)
 	var k: float = lay["k"]
 	var rect := Rect2(lay["left"], -SIZE * k, base_tex.get_width() * k, SIZE * k)
 	ci.draw_set_transform(foot, 0, Vector2(flip, 1))
@@ -3680,6 +3725,8 @@ static func mount_icon(kind: String) -> Texture2D:
 	var k: float = lay["k"]
 	var base := _image_of(mount_frames(kind, kind)[0])
 	var crew := _image_of(frames(MOUNT_CREW[kind])[0])
+	if kind == "tower":
+		crew = Image.create(1, 1, false, Image.FORMAT_RGBA8)   # (an empty Tower: nobody posted in it yet)
 	var crew_at := (lay["crew"] as Vector2) + Vector2(-SIZE / 2.0 * scale, -SIZE * scale)
 	var base_at := Vector2(lay["left"], -SIZE * k)
 	var lo := Vector2(minf(crew_at.x, base_at.x), minf(crew_at.y, base_at.y))

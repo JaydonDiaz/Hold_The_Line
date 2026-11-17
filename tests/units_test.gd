@@ -336,11 +336,11 @@ func _spawn() -> void:
 
 func _engineer() -> void:
 	await _fresh()
-	main.placing_type = "tower"
+	main.placing_type = "cannon"
 	main.hire_at(Vector2(320, 560))
 	main.placing_type = ""
-	var t = main.get_warriors().filter(func(w): return w.kind == "tower")[0]
-	check(t.under_construction(), "Engineer: a new Archer Tower starts as a building site")
+	var t = main.get_warriors().filter(func(w): return w.kind == "cannon")[0]
+	check(t.under_construction(), "Engineer: a new Cannoneer starts as a building site")
 	var engineers: Array = main.fx_layer.get_children().filter(func(n): return n.get_script() != null and n.get_script().resource_path.ends_with("engineer.gd"))
 	check(engineers.size() >= 1, "...an Engineer sets out to build it")
 	main.wave_active = true

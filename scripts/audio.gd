@@ -146,6 +146,14 @@ const BATTLES := {
 		"seed": 139, "lead": "square", "bass": "offbeat", "drums": "rock", "arp": "up", "range": [64, 84]},
 	"council": {"bpm": 116, "chords": [[48, "min"], [44, "maj"], [46, "maj"], [43, "maj"], [48, "min"], [41, "min"], [43, "maj"], [43, "maj"]],
 		"seed": 149, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "pendulum", "range": [60, 79]},
+	# Dawnspire: the assault on the walls (a drumbeat for the ram), the fight in the bailey,
+	# and the last charge at the Dawn Gate.
+	"siege": {"bpm": 126, "chords": [[45, "min"], [41, "maj"], [43, "maj"], [40, "min"], [45, "min"], [48, "maj"], [43, "maj"], [44, "maj"]],
+		"seed": 163, "lead": "saw", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [60, 79]},
+	"bailey": {"bpm": 140, "chords": [[50, "min"], [48, "maj"], [46, "maj"], [45, "maj"], [50, "min"], [53, "maj"], [48, "maj"], [45, "maj"]],
+		"seed": 167, "lead": "square", "bass": "gallop", "drums": "rock", "arp": "up", "range": [62, 82]},
+	"dawngate": {"bpm": 148, "chords": [[52, "min"], [48, "maj"], [50, "maj"], [47, "maj"], [52, "min"], [55, "maj"], [50, "maj"], [47, "maj"]],
+		"seed": 173, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "triplet", "range": [64, 86]},
 	"carnival": {"bpm": 144, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [57, "min"], [46, "maj"], [48, "maj"]],
 		"seed": 151, "lead": "tri", "bass": "eighths", "drums": "tribal", "arp": "triplet", "range": [65, 86]},
 	"ashen": {"bpm": 128, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
@@ -227,6 +235,15 @@ const CALMS := {
 	# The Fens: mist, frogs, the road picking its way.
 	"fens": {"bpm": 72, "chords": [[49, "min"], [45, "maj"], [49, "min"], [44, "maj"], [42, "min"], [45, "maj"], [44, "maj"], [44, "maj"]],
 		"seed": 127, "lead": "sine", "range": [61, 78], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["frogs", "water"]},
+	# Dawnspire's Approach: war drums far off under the walls, the wind over burnt fields.
+	"dsapproach": {"bpm": 70, "chords": [[45, "min"], [41, "maj"], [43, "maj"], [40, "min"], [45, "min"], [48, "maj"], [43, "maj"], [44, "maj"]],
+		"seed": 137, "lead": "saw", "range": [57, 76], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["wind", "crackle"]},
+	# The Outer Bailey: a ruined ward, a bell tolling somewhere inside.
+	"bailey": {"bpm": 78, "chords": [[50, "min"], [46, "maj"], [48, "maj"], [45, "maj"], [50, "min"], [53, "maj"], [48, "maj"], [45, "maj"]],
+		"seed": 139, "lead": "tri", "range": [60, 79], "scale": "minor", "accomp": "pads", "perc": "march", "color": ["bells"]},
+	# The Dawn Gate: the old Line's hymn, coming back as the army reaches the citadel.
+	"dawngate": {"bpm": 76, "chords": [[52, "maj"], [47, "maj"], [49, "min"], [45, "maj"], [52, "maj"], [54, "min"], [45, "maj"], [47, "maj"]],
+		"seed": 149, "lead": "sine", "range": [64, 86], "scale": "major", "accomp": "pads", "perc": "none", "color": ["shimmer", "wind"]},
 	# The Burnt Village: a lament over the embers.
 	"embers": {"bpm": 62, "chords": [[52, "min"], [48, "maj"], [45, "min"], [47, "maj"], [52, "min"], [50, "maj"], [48, "maj"], [47, "maj"]],
 		"seed": 131, "lead": "tri", "range": [59, 79], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["crackle"]},

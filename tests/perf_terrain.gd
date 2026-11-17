@@ -105,7 +105,7 @@ func _process(_d: float) -> bool:
 			for k in 3:
 				var p := Vector2(rng.randf_range(60, 580), rng.randf_range(480, 680))
 				if main.can_post_at(p):
-					main.placing_type = ["tower", "cannon", "magetower"][k]
+					main.placing_type = ["tower", "cannon", "ballista"][k]
 					main.hire_at(p)
 					var all: Array = main.get_warriors().filter(func(w): return w.is_emplacement())
 					if not all.is_empty():

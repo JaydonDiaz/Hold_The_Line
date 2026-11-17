@@ -221,8 +221,9 @@ func _tier4() -> void:
 	campaign.new_campaign("normal")
 	for m in ["ashwatch", "stonehollow", "gw1"]:
 		_win(m)
-	check(campaign.region_of("archer") == "greenwood" and campaign.region_of("tower") == "greenwood" and campaign.region_of("swordsman") == "ashwatch"
-			and campaign.region_of("barricade") == "stonehollow" and campaign.region_of("mine") == "deepdelve" and campaign.region_of("magetower") == "spires",
+	check(campaign.region_of("archer") == "greenwood" and campaign.region_of("tower") == "stonehollow" and campaign.region_of("swordsman") == "ashwatch"
+			and campaign.region_of("barricade") == "stonehollow" and campaign.region_of("mine") == "deepdelve" and campaign.region_of("obelisk") == "spires"
+			and campaign.region_of("ballista") == "stonehollow",
 			"Tier IV: each kind belongs to the region whose people bring it (the Swordsman to Ashwatch)")
 	campaign.xp["archer"] = 1e9
 	check(campaign.unlock("archer", 0) and campaign.unlock("archer", 0) and campaign.path_tier("archer", 0) == 3, "...Archers train Tiers II and III before the beacon")
@@ -239,7 +240,8 @@ func _tier4() -> void:
 	campaign.xp["tower"] = 1e9
 	campaign.unlocked["tower"] = [3, 1, 1, 1]
 	campaign.spent["tower"] = 2
-	check(campaign.can_unlock("tower", 0), "...Archer Towers (their own training) share Greenwood's beacon")
+	check(campaign.can_unlock("tower", 0) == campaign.beacon_lit("stonehollow") and (campaign.beacon_lit("stonehollow") or "Stonehollow" in campaign.tier_lock_reason("tower", 0)),
+			"...Towers (their own training) go by Stonehollow's beacon (%s)" % campaign.tier_lock_reason("tower", 0))
 	campaign.xp["swordsman"] = 1e9
 	campaign.unlocked["swordsman"] = [3, 1, 1, 1]
 	campaign.spent["swordsman"] = 2

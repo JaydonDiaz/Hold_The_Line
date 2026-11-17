@@ -20,7 +20,7 @@ const OTHER := {"damage": 0.1}
 const COLORS := [Color(0.38, 0.68, 1.0), Color(1.0, 0.82, 0.38), Color(1.0, 0.36, 0.22), Color(0.5, 0.95, 0.42)]
 const NAMES := ["Storm", "Arcane Lance", "Fire", "Necromancy"]
 const OUTLINE := Color(0.1, 0.07, 0.1)
-const MAGES := ["mage", "magetower"]
+const MAGES := ["mage"]   # (a Mage posted in a Tower on a sigil draws on it from there)
 
 var main
 var spots: Array = []     # {"at": Vector2 (640 wide), "path": int, "lit": 0..1, "drawing": [[unit, give]]}

@@ -70,7 +70,7 @@ func _setup() -> void:
 	main.wave = 30
 	main.gold = 10000000
 	var troops := ["swordsman", "archer", "mage", "frost", "martial", "healer", "bard", "alchemist"]
-	var emps := ["tower", "cannon", "magetower", "frosttower", "medbay", "statue", "mine"]
+	var emps := ["tower", "cannon", "ballista", "obelisk", "medbay", "statue", "mine"]
 	var i := 0
 	var ys := [300.0, 380.0, 460.0, 540.0, 620.0]
 	if label.begins_with("typical"):

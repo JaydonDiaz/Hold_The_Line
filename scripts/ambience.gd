@@ -13,6 +13,8 @@ const MOODS := {
 	"tutorial": {"ground": Color(1.04, 1.04, 0.97), "castle": Color(1, 1, 1), "shadows": 2, "butterflies": 5, "glow": 0.0},
 	"normal": {"ground": Color(0.93, 0.95, 0.98), "castle": Color(0.95, 0.96, 0.98), "shadows": 6, "butterflies": 2, "leaves": 6, "glow": 0.0},
 	"hard": {"ground": Color(0.68, 0.72, 0.9), "castle": Color(0.76, 0.78, 0.94), "fireflies": 16, "fog": 5, "crows": 2, "glow": 1.0},
+	# Dawnspire under siege: smoke-dimmed light, ash and embers on the wind, crows overhead.
+	"siege": {"ground": Color(0.9, 0.85, 0.8), "castle": Color(0.9, 0.86, 0.82), "shadows": 5, "embers": 14, "ash": 22, "crows": 3, "glow": 0.0},
 	"freeplay": {"ground": Color(0.88, 0.84, 0.98), "castle": Color(0.9, 0.88, 1.0), "motes": 18, "shadows": 2, "glow": 0.5},
 }
 

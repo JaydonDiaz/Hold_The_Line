@@ -120,6 +120,11 @@ func _pass() -> void:
 	await _frames(40)
 	check(r.through == 3 and main.get_enemies().is_empty(), "A Goblin and a Troll reach the bottom: 3 through (a Troll counts 2), both off the field")
 	# A Sapper's bomb at the bottom line doesn't go off against a castle that isn't there.
+	# (No emplacement near it: a Sapper would make for that instead.)
+	for w in main.get_warriors():
+		if w.data.get("emplacement", false):
+			w.queue_free()
+	await process_frame
 	main._spawn_enemy("sapper", 1, Vector2(200, main.CASTLE_Y - 14))
 	await _frames(20)
 	check(r.through == 4 and main.castle_hp == hp, "...a Sapper just gets through, its bomb unlit")

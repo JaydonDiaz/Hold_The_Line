@@ -321,7 +321,7 @@ func _grid() -> void:
 		if Maps.ZONES.has(map_id):
 			# (a convoy's roads: checked with the other Battle Modes fields, group Z). Its
 			# stretches are all roads there, and its troops start on open ground.
-			var zs: Array = CD.MISSIONS[mid].get("convoy", {}).get("zones", [])
+			var zs: Array = CD.MISSIONS[mid].get("convoy", CD.MISSIONS[mid].get("assault", {})).get("zones", [])
 			check(not zs.is_empty() and zs.all(func(z): return Maps.ZONES.has(z["map"])), "G  %s: every stretch of its road is a convoy field" % mid)
 			await _mission(mid)
 			var open := []
