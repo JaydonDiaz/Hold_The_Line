@@ -42,6 +42,20 @@ func _run() -> void:
 		await process_frame
 	check(started[0] and main.hud.splash == null and main.hud.mode_screen != null and main.audio._wanted_track == "title",
 			"...Start leads to the title screen, and its music plays (%s)" % main.audio._wanted_track)
+	# The title screen shows no game information: the bar's buttons and the castle under it
+	# give no cards.
+	var hb = main.hud.hire_buttons.values().filter(func(b): return b.visible)[0]
+	var shown := []
+	hb.emit_signal("mouse_entered")
+	shown.append(main.hud.hover_card.visible)
+	for key in main.hud.ability_buttons:
+		main.hud._show_ability_card(key, main.hud.ability_buttons[key])
+		shown.append(main.hud.hover_card.visible)
+	main.hud.show_castle_card(main, Vector2(320, 300))
+	shown.append(main.hud.hover_card.visible)
+	main.hud.show_card_at(["Sigil", Color.WHITE, "", "x"], Vector2(320, 300))
+	shown.append(main.hud.hover_card.visible)
+	check(not shown.has(true), "The title screen: hovering where the troops, abilities and castle would be shows nothing (%s)" % [shown])
 	# On a phone the game is played upright: turned on its side, it waits behind a card.
 	main._turn_upright(Vector2(900, 420))
 	check(main._upright == null and not paused, "A desktop's wide window is just a wide window")
@@ -52,6 +66,11 @@ func _run() -> void:
 	await process_frame
 	check(main._upright == null and not paused, "...and turned back upright, it carries on")
 	main.pretend_phone = false
+	# ...and once a game is under way, the same button shows its card.
+	main.choose_mode("normal")
+	await process_frame
+	hb.emit_signal("mouse_entered")
+	check(main.hud.hover_card.visible, "...while in a game, hovering a troop's button shows its card")
 	main.free()
 	print("%d checks, %d failed" % [checks, fails])
 	quit(1 if fails > 0 else 0)

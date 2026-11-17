@@ -584,6 +584,11 @@ func _make_hover_card() -> void:
 
 
 func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
+	# No game information on the title screen or the menus before a game is picked (the
+	# bar's buttons and the castle still sit under them, and would answer the mouse).
+	if not menu_closed():
+		hide_hover()
+		return
 	hover_title.text = title
 	hover_title.add_theme_color_override("font_color", color)
 	hover_sub.text = sub
@@ -657,6 +662,11 @@ func show_card_at(card: Array, at: Vector2) -> void:
 	pos.x = clampf(pos.x, 4.0, ui_w - hover_card.size.x - 4.0)
 	pos.y = maxf(pos.y, 4.0)
 	hover_card.position = pos
+
+
+## True once a game is under way and no title screen is up: only then do the hover cards show.
+func menu_closed() -> bool:
+	return mode_screen == null and bool(get_parent().get("started"))
 
 
 func hide_hover() -> void:
@@ -1367,6 +1377,14 @@ func show_mode_select() -> void:
 		mode_screen.set_meta("phone", true)
 		mode_screen.color = Color(0.11, 0.08, 0.06)
 	_center(mode_screen)
+	# The mouse stops at the title screen right across a wide window, so the game's bar
+	# and buttons under it (past the middle 640) neither answer it nor show their tips.
+	var blocker := Control.new()
+	blocker.position = Vector2(-2000, -2000)
+	blocker.size = Vector2(WIDTH + 4000, HEIGHT + 4000)
+	blocker.mouse_filter = Control.MOUSE_FILTER_STOP
+	blocker.show_behind_parent = true
+	mode_screen.add_child(blocker)
 	# The castle scene, with the title banner drawn on it, fills the screen.
 	title_scene = TitleScene.new()
 	title_scene.size = Vector2(WIDTH, HEIGHT)
