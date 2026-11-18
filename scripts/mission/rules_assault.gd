@@ -40,7 +40,9 @@ extends "res://scripts/mission/rules_escort.gd"
 const Works = preload("res://scripts/mission/siege_works.gd")
 const Warrior = preload("res://scripts/warrior.gd")
 const Data = preload("res://scripts/data.gd")
-const TOWER_RANGE := 240.0      # an enemy tower's archer shoots troops this near
+# An enemy tower's archer reaches as far as a plain Archer up a plain Tower (its range, 30%
+# further for the height), measured to the edge of what it shoots at, as a troop's is.
+const TOWER_RANGE: float = Data.WARRIORS["archer"]["range"] * (1.0 + Warrior.PERCH_BASE)
 const TOWER_COOLDOWN := 1.7
 const TAKE_TIME := {"siege_tower": 8.0, "stockade": 6.0, "winch": 12.0}
 const BATTER_EVERY := 1.2       # seconds between the ram's blows
@@ -152,7 +154,7 @@ func _setup_zone() -> void:
 	for at in z.get("towers", []):
 		var t = _work({"id": "tower", "kind": "siege_tower", "name": "Archer tower", "at": at})
 		towers.append(t)
-		shot_t[t] = randf_range(0.5, TOWER_COOLDOWN)
+		shot_t[t] = 0.0   # (it looses at the first thing in reach, straight away)
 	for p in z.get("prisons", []):
 		var pen = _work({"id": "pen", "kind": "stockade", "name": "Prison pen", "at": p["at"],
 				"prisoners": int(p.get("townsfolk", 0)) + (p.get("soldiers", []) as Array).size()})
@@ -264,6 +266,7 @@ func process(delta: float) -> void:
 	if over or main.game_over or wagon == null or moving_on:
 		return
 	_send_side(delta)   # (troops on Side Objectives set out at once, deploying or not)
+	_towers(delta)      # (an enemy tower shoots whatever comes in reach, whenever)
 	if main.deploying:
 		return
 	if not stragglers.is_empty():
@@ -274,7 +277,6 @@ func process(delta: float) -> void:
 			wagon.speed = wagon_speed
 			main.hud.show_message("The %s rolls on" % wagon.label.to_lower())
 		return
-	_towers(delta)
 	_pens(delta)
 	_caches()
 	_winch(delta)
@@ -604,15 +606,15 @@ func _towers(delta: float) -> void:
 		if not is_instance_valid(t) or t.crewed:
 			continue
 		if not t.taken:
-			# The archer on top shoots the nearest troop in reach.
-			shot_t[t] = shot_t.get(t, 1.0) - delta
+			# The archer on top shoots the nearest of yours in reach, the moment it's there.
+			shot_t[t] = shot_t.get(t, 0.0) - delta
 			if shot_t[t] <= 0.0:
 				var mark = null
 				var best := TOWER_RANGE
-				for w in main.warriors_near(t.position, TOWER_RANGE):
-					if w.is_active() and not w.wall_guard:
-						var d: float = t.position.distance_to(w.position)
-						if d < best:
+				for w in main.warriors_near(t.position, TOWER_RANGE + 40.0):
+					if w.is_active() and not w.wall_guard and not w.sheltered():
+						var d: float = t.position.distance_to(w.position) - w.RADIUS
+						if d <= best:
 							best = d
 							mark = w
 				if mark != null:
@@ -629,7 +631,7 @@ func _towers(delta: float) -> void:
 					main.add_projectile(shot)
 					main.sfx("bow", 0.6)
 				else:
-					shot_t[t] = 0.4
+					shot_t[t] = 0.0   # (looking every moment)
 			if _take(t, delta):
 				main.spawn_text(t.position + Vector2(0, -160), "Tower taken!", Color(0.6, 0.85, 1.0))
 				main.hud.show_message("An archer tower is yours! Order a ranged troop onto it to post it up there.")
@@ -701,8 +703,13 @@ func _free_prisoners(pen) -> void:
 		var c = preload("res://scripts/mission/objective.gd").new()
 		var start: Vector2 = at + Vector2(randf_range(-20, 20), 36 + randf_range(0, 10))
 		var lane := clampf(start.x + randf_range(-30, 30), 40, 600)
+		# Down the field the way a person would go: round the ruins and walls, not into them.
+		var from: Vector2 = Vector2(start.x * k, start.y)
+		var bottom: Vector2 = main.paths.open_spot(Vector2(lane * k, main.CASTLE_Y - 20.0))
+		var way: Array = Array(main.paths.troop_route(from, bottom)).map(func(q): return Vector2(q.x / k, q.y))
+		way.append(Vector2(bottom.x / k, 790))
 		c.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": start, "variant": randi() % 24,
-				"route": [Vector2(lane, start.y + 80), Vector2(lane, 790)], "speed": randf_range(30, 38), "hp": 40.0})
+				"route": way, "speed": randf_range(30, 38), "hp": 40.0})
 		main.add_objective(c)
 		c.reached.connect(func(o):
 			freed += 1

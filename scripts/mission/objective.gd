@@ -53,6 +53,7 @@ var look := ""                      # a villager's sprite
 var cargo := ""                     # a wagon's load: "" (a canvas tilt) or "arms" (open, stacked with weapons)
 var variant := 0                    # ...and the colours it wears
 var panic := 0.0                    # a villager running from a blow
+var blocked_t := 0.0                # a villager getting nowhere against a wall: how long (it finds a way round)
 var face := 1.0                     # which way a mover faces (1: right)
 # Zones, charging and lines.
 var zone_r := 0.0
@@ -244,7 +245,25 @@ func _walk(delta: float) -> void:
 		leg += 1
 	else:
 		var next := position + position.direction_to(to) * step
+		var was := position
 		position = next if main.paths.terrain.is_empty() else main.paths.slide(position, next, RADIUS * 0.6)
+		# A villager walked into a wall (its road runs into one): a moment of getting
+		# nowhere, and it finds its way round to where it's going, as a troop would.
+		if kind == "civilian" and step > 0.0:
+			if position.distance_to(was) < step * 0.3:
+				blocked_t += delta
+			else:
+				blocked_t = 0.0
+			if blocked_t > 0.6:
+				blocked_t = 0.0
+				var goal: Vector2 = route[route.size() - 1]
+				var way: PackedVector2Array = main.paths.troop_route(position, main.paths.open_spot(Vector2(goal.x, minf(goal.y, main.CASTLE_Y - 20.0))))
+				if not way.is_empty():
+					var rest := PackedVector2Array(way)
+					if goal.y > main.CASTLE_Y - 20.0:
+						rest.append(goal)   # (and on off the bottom of the field)
+					route = rest
+					leg = 0
 
 
 func _b(x: float, y: float, w: float, h: float, c: Color) -> void:

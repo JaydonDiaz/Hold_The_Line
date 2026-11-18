@@ -1682,13 +1682,30 @@ func _follow_anchor(delta: float) -> void:
 	if anchor_check > 0.0:
 		return
 	anchor_check = 0.25
+	if "RADIUS" in anchor and not anchor.has_method("stay_with"):
+		var keep: float = anchor.RADIUS + RADIUS + 4.0   # (never under what it follows)
+		if anchor_off.length() < keep:
+			anchor_off = (anchor_off.normalized() if anchor_off.length() > 0.01 else Vector2.DOWN) * keep
 	var p: Vector2 = main._clamp_post(anchor.position + anchor_off)
-	p = main.paths.open_spot(p)
+	p = main.paths.open_spot(_clear_of_works(p))
 	if p.distance_to(post) > 6.0:
 		if guard_area.has_area():
 			guard_area.position += p - post   # its area goes along with what it follows
 		post = p
 		lost_time = 0.0
+
+
+## `p` moved out of any mission structure it's inside (a shut gate, a pen, a tower) and
+## clear of a wagon or ram, so a post that's followed along never lands where it can't stand.
+func _clear_of_works(p: Vector2) -> Vector2:
+	for o in main.rules.objectives():
+		if not is_instance_valid(o) or not (o.is_solid() or (o.is_mover() and o.is_target())) or o == self:
+			continue
+		var off: Vector2 = p - o.position
+		var room: float = o.RADIUS + RADIUS + 4.0
+		if off.length_squared() < room * room:
+			p = o.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * room
+	return main._clamp_post(p)
 
 
 ## Couldn't find its way back to its post in time: blinks straight there.
@@ -2055,6 +2072,13 @@ func _separate() -> void:
 		var room: float = o.RADIUS + RADIUS
 		if (o.is_solid() or (o.is_mover() and o.is_target())) and off.length_squared() < room * room:
 			position = o.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * room
+			# Its post under it too (the ram rolled up onto it, or it follows too close): the
+			# post goes just clear of it, or it would keep walking back into it.
+			var poff: Vector2 = post - o.position
+			if poff.length_squared() < room * room and not is_emplacement():
+				post = main._clamp_post(o.position + (poff.normalized() if poff.length() > 0.01 else off.normalized()) * (room + 4.0))
+				if anchor == o:
+					anchor_off = post - o.position
 	if wall_guard:
 		position = post   # standing at its post on the wall
 		return

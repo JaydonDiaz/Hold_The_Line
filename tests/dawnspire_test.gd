@@ -37,6 +37,7 @@ extends SceneTree
 
 const TEST_SAVE := "user://dawnspire_test_campaign.cfg"
 const CD = preload("res://scripts/campaign_data.gd")
+const Data = preload("res://scripts/data.gd")
 
 var main
 var fails := 0
@@ -237,7 +238,37 @@ func _towers() -> void:
 	for i in 60 * 4:
 		await process_frame
 		low = minf(low, sw.hp)
+	# A troop following the ram too closely isn't left under it, walking into it for good.
+	var close = _unit("swordsman", rules.wagon.position + Vector2(60, 0))
+	main.set_follow(rules.wagon, [close])
+	close.anchor_off = Vector2(20, 0)
+	await _frames(60 * 2)
+	var room: float = rules.wagon.RADIUS + close.RADIUS
+	check(close.post.distance_to(rules.wagon.position) >= room and close.position.distance_to(close.post) < 12.0,
+			"T  a troop following the ram too close keeps just clear of it (and gets there)")
+	close.queue_free()
 	check(low < hp0, "T  an enemy tower shoots a troop in reach")
+	# At once, and as far as a plain Archer up a plain Tower reaches.
+	var reach: float = Data.WARRIORS["archer"]["range"] * 1.3
+	sw.queue_free()
+	await _frames(2)
+	rules.shot_t[tower] = 0.0
+	var np: Vector2 = tower.position + Vector2(50, sqrt(pow(reach + 18.0 - 8.0, 2) - 2500.0))
+	var fp: Vector2 = tower.position + Vector2(-20, sqrt(pow(reach + 18.0 + 30.0, 2) - 400.0))
+	var near = _unit("swordsman", np)
+	near.move_mode = "hold"
+	var far = _unit("swordsman", fp)
+	far.move_mode = "hold"
+	var shot_at := []
+	for i in 15:
+		await process_frame
+		for n in main.fx_layer.get_children():
+			if n.get_script() == preload("res://scripts/enemy_shot.gd") and is_instance_valid(n.target) and not shot_at.has(n.target):
+				shot_at.append(n.target)
+	check(shot_at.has(near) and not shot_at.has(far), "T  ...the moment one comes in reach (%.0f, a tower Archer's), not before" % reach)
+	near.queue_free()
+	far.queue_free()
+	sw = _unit("swordsman", tower.position + Vector2(40, 130))
 	sw.order_to(tower.position + Vector2(0, 40))
 	var sw2 = _unit("swordsman", tower.position + Vector2(30, 40))
 	await _frames(60 * 10)

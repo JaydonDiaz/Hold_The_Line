@@ -5,6 +5,7 @@ extends SceneTree
 ##   S  sight       a castle's walls block sight: an Archer doesn't shoot (and an enemy archer
 ##                   doesn't) at what's behind one, but does through a doorway; a shot that
 ##                   flies into a wall stops there; a map with no such walls sees through all
+##                   (and a villager walking into one finds its way round)
 ##   D  doors       a shut door is solid; opened, troops route through it
 ##   C  crowding    a score of troops sent through a hall's gap all get there, none stuck
 ##   E  entering    taken up in the Gatehouse Hall: the army comes in at its south door a few at
@@ -228,6 +229,18 @@ func _sight() -> void:
 		if shot.position.y < 296.0:
 			break
 	check(stopped, "S  a shot flown into the wall stops there")
+	# A villager whose road runs into a wall finds its way round.
+	var O = preload("res://scripts/mission/objective.gd")
+	var v = O.new()
+	v.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": Vector2(110, 420), "variant": 1,
+			"route": [Vector2(110, 200), Vector2(110, 120)], "speed": 60.0, "hp": 40.0})
+	main.add_objective(v)
+	for i in 60 * 20:
+		if v.arrived:
+			break
+		await process_frame
+	check(v.arrived and v.position.distance_to(Vector2(110, 120)) < 20.0, "S  a villager whose road runs into a wall finds its way round it (and gets where it's going) (at %s, leg %d of %d, deploying %s)" % [v.position.round(), v.leg, v.route.size(), main.deploying])
+	v.queue_free()
 	# Elsewhere nothing changes.
 	paths.set_map(Maps.get_map("ds_approach"))
 	check(not paths.has_sight_walls() and paths.sight_clear(Vector2(0, 0), Vector2(640, 768)), "S  a map with no castle walls: sight is never blocked")
