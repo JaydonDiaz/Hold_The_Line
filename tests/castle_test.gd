@@ -17,6 +17,12 @@ extends SceneTree
 ##                   Banners they come in at its door in the order they'd have got there; a
 ##                   troop still down is left behind, an emplacement hauled through and set up;
 ##                   health, training and orders kept; a checkpoint for the new room
+##   R  side rooms  from a hall taken, its side door's arrow leads to its side room (the army in
+##                   by that room's own door, from the side); its cells open when troops stand
+##                   round them: the soldiers join on loan, the townsfolk walk out by the door
+##                   the army came in by; back in the hall it's still taken (nobody there, the
+##                   way on open at once), the cells shown as taken; supplies claimed for gold;
+##                   taken up again from a checkpoint after, nothing had is there to be had again
 ##   K  checkpoints taken up again from the Hall of Banners: as the army came in (gold, army,
 ##                   the standard's health), the XP before it banked once; a checkpoint with
 ##                   too little left to win with brings reserves up to the floor, once a try
@@ -27,6 +33,8 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://castle_test_campaign.cfg"
+const CD = preload("res://scripts/campaign_data.gd")
+const BANNERS := 2   # (the rooms' places: the Gatehouse Hall, its cells, the Hall of Banners...)
 const Maps = preload("res://scripts/maps.gd")
 
 var main
@@ -62,7 +70,7 @@ func _at_dawnspire() -> void:
 
 ## A room checkpoint as the castle keeps one.
 func _room_cp(room: int, army: Array, gold: int, std := 1.0) -> Dictionary:
-	return {"zone": 100 + room, "room": room, "name": "The Gatehouse Hall" if room == 0 else "The Hall of Banners",
+	return {"zone": 100 + room, "room": room, "name": CD.MISSIONS["ds_assault"]["assault"]["castle"]["rooms"][room]["name"],
 		"gold": gold, "wave": 6, "army": army, "xp": {"swordsman": 500.0}, "owned": [], "standard": std,
 		"freed": 3, "joined": 2, "garrisons": [], "stragglers": []}
 
@@ -141,6 +149,7 @@ func _run() -> void:
 	await _crowding()
 	await _entering()
 	await _through()
+	await _side_rooms()
 	await _checkpoints()
 	await _stuck()
 	await _standard()
@@ -323,14 +332,15 @@ func _through() -> void:
 		if rules.phase == "clear":
 			break
 		await process_frame
-	check(rules.phase == "clear" and rules.arrows.size() == 1 and rules.action_label() != "", "T  the room taken: an arrow at the way on")
+	var ways: Array = rules.arrows.map(func(a): return a["to"])
+	check(rules.phase == "clear" and ways.has("banners") and ways.has("cells") and rules.action_label() != "", "T  the room taken: an arrow at each way on: the hall beyond, the cells (%s)" % str(ways))
 	var before := {}
 	for w in main.get_warriors():
 		if w != fallen:
 			before[w.kind + str(w.tiers)] = [w.hp / w.max_hp, w.priority, w.move_mode, w.position.distance_to(rules.arrows[0]["at"])]
 	var gold0: int = main.gold
 	# Click its arrow (a troop's down: asked first).
-	main.pointer_down(rules._arrow_point(rules.arrows[0]), MOUSE_BUTTON_LEFT)
+	main.pointer_down(rules._arrow_point(rules._forward()), MOUSE_BUTTON_LEFT)
 	await _frames(2)
 	var box = main.hud.choice_box
 	check(box != null and is_instance_valid(box), "T  clicked, with a troop down: asked first (it'd be left behind)")
@@ -369,17 +379,132 @@ func _through() -> void:
 	var cannon = main.get_warriors().filter(func(w): return w.kind == "cannon")
 	check(kept and cannon.size() == 1 and cannon[0].is_active() and main.gold == gold0,
 			"T  health, training and orders kept; the Cannoneer hauled through and set up; the gold the same %s gold %d/%d" % [str(bad), main.gold, gold0])
-	var cp: Dictionary = campaign.checkpoint("ds_assault", 101)
-	check(cp.get("room", -1) == 1 and (cp.get("army", []) as Array).size() == main.get_warriors().size() and int(cp.get("gold", -1)) == main.gold,
+	var cp: Dictionary = campaign.checkpoint("ds_assault", 100 + BANNERS)
+	check(cp.get("room", -1) == BANNERS and (cp.get("army", []) as Array).size() == main.get_warriors().size() and int(cp.get("gold", -1)) == main.gold,
 			"T  a checkpoint for the Hall of Banners (army, gold)")
 	check(main.get_warriors().all(func(w): return w.position.y > 380.0 and main.paths.troop_can_stand(w.position)),
 			"T  everyone came in at the south door and stands in the room")
 
 
+# --- R ---------------------------------------------------------------------------------------
+
+## Through the way named `to` (asked, if need be, and gone on).
+func _through_to(to: String) -> void:
+	var rules = main.rules
+	for i in 60 * int(rules.LINGER + 2):
+		if rules.phase == "clear":
+			break
+		await process_frame
+	var a = null
+	for x in rules.arrows:
+		if x["to"] == to:
+			a = x
+	if a == null:
+		return
+	main.pointer_down(rules._arrow_point(a), MOUSE_BUTTON_LEFT)
+	await _frames(2)
+	if main.hud.choice_box != null and is_instance_valid(main.hud.choice_box):
+		for c in main.hud.choice_box.get_children():
+			if c is Button and c.text == "Go on":
+				c.pressed.emit()
+	for i in 60 * 20:
+		if rules.phase in ["fight", "clear"] and rules.room()["id"] == to:
+			break
+		await process_frame
+
+
+func _side_rooms() -> void:
+	await _castle(0, ARMY.slice(0, 3), 300)
+	var rules = main.rules
+	await _all_in()
+	main.clear_enemies()
+	main.wave = rules.wave0 + int(rules.room()["waves"])
+	main.spawn_queue.clear()
+	await _through_to("cells")
+	check(main.map_id == "dsc_cells" and rules.entry == "w" and main.get_warriors().all(func(w): return w.position.x < 400.0),
+			"R  through the side door into the Guardroom Cells, the army in by its west door")
+	check(main.get_enemies().size() == 4 and rules.pens.size() == 3, "R  ...its jailers there, three cells locked")
+	main.clear_enemies()
+	await _frames(2)
+	var pen = rules.pens[0]
+	var lent0: int = main.temp_allies.size()
+	for w in main.get_warriors():
+		w.order_to(pen.position + Vector2(randf_range(-20, 20), 40))
+	for i in 60 * 14:
+		if pen.taken:
+			break
+		await process_frame
+	await _frames(5)
+	var joined: Array = main.temp_allies.slice(lent0)
+	check(pen.taken and joined.size() == 1 and joined[0].kind == "swordsman" and joined[0].has_meta("freed") and joined[0].tiers[0] == 3,
+			"R  a cell broken open: its soldier joins on loan (a Knight, trained to tier III)")
+	check(rules.townsfolk.size() == 3, "R  ...its townsfolk make for the way out")
+	var freed0: int = rules.freed
+	for i in 60 * 25:
+		if rules.townsfolk.is_empty():
+			break
+		await process_frame
+	check(rules.townsfolk.is_empty() and rules.freed == freed0 + 3, "R  ...and get out by the door the army came in by (%d out)" % (rules.freed - freed0))
+	# Back to the hall.
+	await _through_to("gatehall")
+	await _frames(30)
+	var back_arrow = rules.arrows.filter(func(a): return a["to"] == "cells")
+	check(main.map_id == "dsc_gatehall" and rules.entry == "e" and main.get_enemies().is_empty() and rules.phase == "clear" and back_arrow.size() == 1,
+			"R  back in the Gatehouse Hall by its east door: still taken, nobody there, the ways on open at once")
+	var cp: Dictionary = campaign.checkpoint("ds_assault", 100)
+	check((cp.get("rooms", {}).get("cells", {}).get("taken", []) as Array).has("cells:pen0") and cp["rooms"]["gatehall"]["cleared"],
+			"R  the checkpoint knows what's been had (the cell opened, the hall taken)")
+	# Taken up again from there: the opened cell stays open.
+	campaign.save_game()
+	campaign.load_game()
+	await _castle_from(cp)
+	rules = main.rules
+	await _all_in()
+	check(rules.phase == "clear" and main.get_enemies().is_empty(), "R  taken up again in the hall: still taken")
+	await _through_to("cells")
+	await _frames(10)
+	check(rules.pens.size() == 2 and rules.pens.all(func(p): return p.id != "cells:pen0"), "R  ...and in the cells, the one opened stays open (2 still locked)")
+	# The stores: supplies for gold, once.
+	await _castle(3, ARMY.slice(0, 3), 300)   # (room 3: the Quartermaster's Store)
+	rules = main.rules
+	await _all_in()
+	main.clear_enemies()
+	await _frames(2)
+	var c = rules.caches[0]
+	var g0: int = main.gold
+	main.get_warriors()[0].order_to(c.position + Vector2(0, 24))
+	for i in 60 * 10:
+		if c == null or not is_instance_valid(c) or c.taken:
+			break
+		await process_frame
+	check(main.gold == g0 + 90 and (rules._state("stores")["taken"] as Array).has("stores:cache0"), "R  the stores: a troop at the supplies claims their 90 gold")
+
+
+## Into the castle from a checkpoint as it was saved.
+func _castle_from(cp: Dictionary) -> void:
+	if main != null:
+		main.free()
+	main = load("res://main.tscn").instantiate()
+	root.add_child(main)
+	await _frames(3)
+	main.hud.hide_mode_select()
+	campaign.op_resume_zone = int(cp["zone"])
+	main.start_mission("ds_assault")
+	await process_frame
+	if main.hud.story != null:
+		main.hud.story.skip()
+	main._lock_portrait(true)
+	await _frames(3)
+	main.deploying = false
+	main.forced_auto = false
+	main.auto_play = false
+	main.auto_timer = 9999.0
+
+
 # --- K ---------------------------------------------------------------------------------------
 
 func _checkpoints() -> void:
-	await _castle(1, ARMY, 300)
+	await _castle(BANNERS, ARMY, 300)
 	var rules = main.rules
 	await _all_in()
 	check(main.map_id == "dsc_banners" and main.gold == 300 and main.get_warriors().size() == ARMY.size() and absf(rules.standard.hp / rules.standard.max_hp - 1.0) < 0.01,
@@ -391,11 +516,11 @@ func _checkpoints() -> void:
 	# Too little left to win with: reserves, up to the floor, once.
 	var thin := [ARMY[0].duplicate()]
 	thin[0]["spent"] = 60
-	await _castle(1, thin, 40)
+	await _castle(BANNERS, thin, 40)
 	rules = main.rules
 	var floor_gold: int = int(rules._c()["reserve"])
 	check(main.gold == floor_gold - 60, "K  a checkpoint with little left: reserves bring it up to %d in all (gold %d)" % [floor_gold, main.gold])
-	rules.resume(_room_cp(1, thin, 40))
+	rules.resume(_room_cp(BANNERS, thin, 40))
 	await _frames(2)
 	check(main.gold == 40, "K  ...once a try, not again (gold %d)" % main.gold)
 

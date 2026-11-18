@@ -71,6 +71,9 @@ func plan() -> Array:
 			out = _plan_evac()
 		"escort", "assault":
 			out = _plan_escort()
+		"castle":
+			var st = main.rules.standard
+			out = _plan_ring(st.position if st != null and is_instance_valid(st) else Vector2(320, 560), 110.0)
 		"capture":
 			out = _plan_ring(main.rules.zone.position, main.rules.zone.zone_r)
 		"protect":
@@ -298,6 +301,9 @@ func _plan_retreat() -> Array:
 func tick() -> void:
 	if main.game_over:
 		return
+	if type == "assault" and main.rules.get("standard") != null:
+		type = "castle"   # (past the Dawn Gate: inside, room by room, round the standard)
+		slots.clear()
 	_repair()
 	_fill()
 	_orders()
@@ -442,6 +448,8 @@ var sent := {}   # troop id -> the work it was sent to
 
 func _assault() -> void:
 	var r = main.rules
+	if r.get("standard") != null:
+		return   # (the castle's taken over: no ram any more)
 	for id in sent.keys():
 		var o = sent[id]
 		var w = instance_from_id(id)
@@ -486,7 +494,7 @@ func _assault() -> void:
 ## nearest troops are moved onto them.
 func _hunt() -> void:
 	var left: Array = main.get_enemies()
-	var clearing: bool = type == "assault" and main.rules.phase == "clear"
+	var clearing: bool = type in ["assault", "castle"] and main.rules.phase == "clear"
 	if (not main.wave_active and not clearing) or left.size() > 3 or not main.spawn_queue.is_empty() or left.is_empty():
 		lull = 0
 		last_left = -1

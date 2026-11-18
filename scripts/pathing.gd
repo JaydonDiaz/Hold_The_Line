@@ -100,6 +100,7 @@ func setup(m) -> void:
 ## field's width as it is now (set again whenever the field changes width).
 func set_map(raw: Dictionary) -> void:
 	_map = raw
+	main.DEPLOY_TOP = 44 if raw.get("biome", "") == "hall" else 96   # (a castle's room has no enemy camp across its top: only its wall)
 	var m: Dictionary = preload("res://scripts/maps.gd").fitted(raw, main.FIELD_W)
 	terrain.clear()
 	lanes.clear()
@@ -575,6 +576,12 @@ func _flood_troops() -> void:
 	var top := int(ceilf((main.DEPLOY_TOP + TROOP_RADIUS) / float(CELL)))
 	var gate := _cell(Vector2(main.FIELD_W / 2.0, main.CASTLE_Y - TROOP_RADIUS))
 	var stack := PackedInt32Array([gate.y * cols + gate.x])
+	# A castle's room: troops get about it from its doors (there may be no way in from the bottom).
+	var k: float = main.FIELD_W / 640.0
+	for d in _map.get("doors", []):
+		var inward: Vector2 = {"n": Vector2(0, 1), "s": Vector2(0, -1), "e": Vector2(-1, 0), "w": Vector2(1, 0)}.get(d["side"], Vector2.ZERO)
+		var c := _cell(Vector2(d["at"].x * k, d["at"].y) + inward * 60.0)
+		stack.append(c.y * cols + c.x)
 	while not stack.is_empty():
 		var i: int = stack[stack.size() - 1]
 		stack.resize(stack.size() - 1)

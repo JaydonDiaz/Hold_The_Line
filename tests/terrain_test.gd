@@ -180,6 +180,36 @@ func _water() -> void:
 	main.paths.set_map({})
 
 
+## A castle room (F3): troops can stand a little in from every door and walk from each to
+## every other; enemies of every size come in at its lanes (if it has any) and can get to
+## every door.
+func _hall(id: String, m: Dictionary, tag: String) -> void:
+	var paths = main.paths
+	var k: float = main.FIELD_W / 640.0
+	var spots := []
+	for d in m.get("doors", []):
+		var inward: Vector2 = {"n": Vector2(0, 1), "s": Vector2(0, -1), "e": Vector2(-1, 0), "w": Vector2(1, 0)}[d["side"]]
+		spots.append(Vector2(d["at"].x * k, d["at"].y) + inward * 60.0)
+	var bad := []
+	for a in spots:
+		if not paths.troop_can_stand(a):
+			bad.append("stand %s" % a)
+		for b in spots:
+			if a != b:
+				var route: PackedVector2Array = paths.troop_route(a, b)
+				if route.is_empty() or route[route.size() - 1].distance_to(b) > 24.0:
+					bad.append("%s->%s" % [a, b])
+	for l in m.get("lanes", []):
+		var x := (float(l[0]) + float(l[1])) / 2.0
+		for b in spots:
+			for r in [11.0, 24.0]:
+				var route: PackedVector2Array = paths.enemy_route(Vector2(x, 30), b, r)
+				if route.is_empty() or route[route.size() - 1].distance_to(b) > 30.0:
+					bad.append("enemy %d from %d to %s" % [r, x, b])
+	check(bad.is_empty() and not spots.is_empty(), "%s%s: a castle room: troops stand at every door and get from each to the others, enemies from its lanes to each%s" % [
+			tag, id, "" if bad.is_empty() else " (%s)" % str(bad.slice(0, 3))])
+
+
 ## The Battle Modes fields (maps.gd ZONES): every lane reaches the bottom for every enemy
 ## size, and a wagon's road (where it has one) runs clear of the terrain all the way.
 func _zones() -> void:
@@ -192,6 +222,9 @@ func _zones() -> void:
 		for id in Maps.MAPS.keys() + Maps.ZONES.keys():
 			paths.set_map(Maps.get_map(id))
 			var m: Dictionary = Maps.fitted(Maps.get_map(id), main.FIELD_W)
+			if m.get("biome", "") == "hall":
+				_hall(id, m, tag)   # (a castle's room: its ways out are its doors, not the bottom)
+				continue
 			var stuck := []
 			for r in [11.0, 14.0, 19.0, 24.0]:
 				for l in m["lanes"]:
@@ -214,6 +247,8 @@ func _zones() -> void:
 	var paths = main.paths
 	for id in Maps.ZONES:
 		var m: Dictionary = Maps.ZONES[id]
+		if m.get("biome", "") == "hall":
+			continue
 		paths.set_map(m)
 		var stuck := []
 		for r in [11.0, 14.0, 19.0, 24.0]:

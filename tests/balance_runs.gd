@@ -219,6 +219,12 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 ## swamped by numbers, or the army out of position).
 func _why_lost() -> String:
 	var r = main.rules
+	if r.get("standard") != null:
+		var hits_c: Array = main.obj_hits.keys()
+		hits_c.sort_custom(func(a, b): return main.obj_hits[a] > main.obj_hits[b])
+		return "castle room=%s phase=%s standard_hits=[%s] troops_up=%d gold=%d enemies=%d" % [r.room()["name"], r.phase,
+				", ".join(hits_c.slice(0, 4).map(func(k): return "%s %d" % [k, main.obj_hits[k]])),
+				main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement()).size(), main.gold, main.get_enemies().size()]
 	var hits: Array = main.obj_hits.keys()
 	hits.sort_custom(func(a, b): return main.obj_hits[a] > main.obj_hits[b])
 	var total := 0.0

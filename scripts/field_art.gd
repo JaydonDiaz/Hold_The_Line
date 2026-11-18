@@ -339,6 +339,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				CastleArt.pillar(ci, poly, tint, rng)
 			"furniture":
 				CastleArt.furniture(ci, poly, tint, rng)
+			"altar":
+				CastleArt.altar(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])

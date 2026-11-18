@@ -4,27 +4,34 @@ extends "res://scripts/mission/rules.gd"
 ## once the Dawn Gate's field is clear) as the same operation: the same army, gold,
 ## checkpoints and towers held behind it.
 ##
-## A room (a "hall" map: castle_art.gd) has walls all round with doors in them. The army
-## comes in at one and plants the Line's standard by it: that's what the enemy goes for here,
-## and if it falls the army breaks (the battle's lost). The room's garrison holds its posts
-## until the army's close; then the room's waves come in through its far door. Once they're
-## beaten (and nobody's down, or LINGER seconds after the last one came in, whatever's
-## left), an arrow shows at each door the army can go on by. Clicking one (or Y, for the way
-## on) gives the order: the troops make for that door, the view pans through to the room
-## beyond as the first of them gets there, and they come in at its near door when each
-## would have got there, walking on to where they stood in the last room (as near as this
-## one allows). Emplacements are taken down and hauled through after them, set up again;
-## barricades are taken down and paid back; troops still down are left where they fell.
-## Every room is a checkpoint (Campaign.op_state, at 100 + the room's place): the battle can
-## be taken up again as the army stood when it came in. Taken up with too little left to
-## win with (army and gold worth less than the castle's "reserve"), reserves come up from
-## the gate to make it up to that, once per try, so a bad checkpoint can't trap the player.
-## Nothing that's been taken (supplies, freed prisoners) is had twice: the checkpoint's
-## gold and army are as they were when the room was entered.
+## The castle is rooms joined by doors: the main way (each room's north door to the next)
+## and side rooms off it (a door in an east or west wall, and back the same way): prison
+## cells (the soldiers in them join on loan, the townsfolk make for the way out), a supply
+## room and a treasure room (gold). A room (a "hall" map: castle_art.gd) has walls all round.
+## The army comes in at a door and plants the Line's standard by it: that's what the enemy
+## goes for here, and if it falls the army breaks (the battle's lost). The room's garrison
+## holds its posts until the army's close; then the room's waves (a main room's) come in
+## through its far door. Once they're beaten (and nobody's down, or LINGER seconds after the
+## last one came in, whatever's left), an arrow shows at each door, named for where it
+## leads. Clicking one (or Y, for the way on) gives the order: the troops make for that
+## door, the view pans through to the room beyond as the first of them gets there, and they
+## come in at its door when each would have got there, walking on to where they stood in
+## the last room (as near as this one allows). Emplacements are taken down and hauled
+## through after them; barricades are taken down and paid back; troops still down are left
+## where they fell; enemies still about follow the army through that door.
+## A room remembers being taken: gone back into (from a side room), nobody's there, and
+## what was taken in it (pens opened, supplies claimed) stays taken.
+## Every room the army comes into is a checkpoint (Campaign.op_state, at 100 + the room's
+## place): the battle can be taken up again as the army stood when it came in, the rooms as
+## they were then (nothing taken since is had twice). Taken up with too little left to win
+## with (army and gold worth less than the castle's "reserve"), reserves come up from the
+## gate to make it up to that, once per try, so a bad checkpoint can't trap the player.
 ##
 ## Mission data: "assault": {"castle": {"reserve": gold, "standard": hp,
-##   "rooms": [{"id", "map", "name", "note", "waves": how many come in,
-##     "garrison": [[kind, at], ...], "doors": {door id: room id, or "out" to finish}}]}}
+##   "rooms": [{"id", "map", "name", "note", "waves": how many come in (0: none, a side room),
+##     "garrison": [[kind, at], ...], "doors": {door id: room id, or "out" to finish},
+##     "pens": [{"at", "townsfolk": n, "soldiers": [{"kind", "path", "tier"}]}],
+##     "caches": [{"at", "gold", "style": "" or "chest"}]}]}}
 
 const Works = preload("res://scripts/mission/siege_works.gd")
 const Warrior = preload("res://scripts/warrior.gd")
@@ -38,14 +45,16 @@ const FIRST_LIMIT := 8.0      # the first troop not there by now: the view goes 
 const LATE_LIMIT := 8.0       # nobody comes in later than this after the first (a lost troop catches up)
 const PAN_TIME := 0.9
 const ENTRY_DEPTH := 170.0    # how far into a room the army's middle comes to stand
+const TAKE_TIME := 6.0        # seconds of troops round a pen, with no enemy there, to open it
 
 var rooms: Array = []
 var room_i := 0
+var entry := "s"              # the door the army came into this room by
 var phase := "enter"          # "enter" (coming in), "fight", "clear" (a way on open), "march" (going), "pan"
 var wave0 := 0                # main.wave when this room was entered
 var linger := 0.0
 var standard = null
-var arrows: Array = []        # [{"door", "at", "dir"}] the ways on once the room's taken
+var arrows: Array = []        # [{"door", "at", "to"}] the ways on once the room's taken
 var march_door := {}          # the door being gone through
 var march_t := 0.0
 var march_units: Array = []   # the troops on their way to it
@@ -63,6 +72,10 @@ var stragglers: Array = []
 var reserve_given := false
 var arrow_node: Node2D = null
 var restored_entry := false   # this room taken up from its checkpoint: the army's at its posts already
+var room_state := {}          # room id -> {"cleared": bool, "taken": [ids of what's been had in it]}
+var pens: Array = []          # this room's prison pens (siege_works stockades, "iron")
+var caches: Array = []        # ...and its supplies (or treasure)
+var townsfolk: Array = []     # freed townsfolk on their way out
 
 
 ## Draws the ways-on arrows over everything on the field.
@@ -85,6 +98,12 @@ func room() -> Dictionary:
 	return rooms[room_i]
 
 
+func _state(id: String) -> Dictionary:
+	if not room_state.has(id):
+		room_state[id] = {"cleared": false, "taken": []}
+	return room_state[id]
+
+
 func has_castle() -> bool:
 	return false
 
@@ -101,6 +120,11 @@ func side_objectives() -> bool:
 	return false
 
 
+## The standard's an objective: guard it.
+func guards() -> bool:
+	return true
+
+
 ## From the assault, its last field clear and the order given: the army marches in
 ## through the Dawn Gate (`gate_at`), and on into the first room.
 func take_over(a, gate_at: Vector2) -> void:
@@ -115,7 +139,7 @@ func take_over(a, gate_at: Vector2) -> void:
 		main.gold += int(b.spent)
 		b.queue_free()
 	main.walls_changed()
-	_march_to({"id": "gate", "side": "n", "at": gate_at}, 0)
+	_march_to({"id": "gate", "side": "n", "at": gate_at, "point": gate_at}, 0)
 
 
 ## Taken up again from a room's checkpoint.
@@ -136,6 +160,7 @@ func resume(cp: Dictionary) -> void:
 	joined = int(cp.get("joined", 0))
 	garrisons = (cp.get("garrisons", []) as Array).duplicate(true)
 	stragglers = (cp.get("stragglers", []) as Array).duplicate(true)
+	room_state = (cp.get("rooms", {}) as Dictionary).duplicate(true)
 	var army: Array = cp.get("army", [])
 	# Reserves: never so little to go on with that the room can't be won.
 	var worth: int = main.gold
@@ -146,61 +171,22 @@ func resume(cp: Dictionary) -> void:
 		reserve_given = true
 		main.gold += floor_gold - worth
 		main.hud.show_message("Reserves come up from the gate: +%d gold" % (floor_gold - worth))
-	_enter_room(room_i, army.map(func(r): return [r, 0.0]), float(cp.get("standard", 1.0)), true)
+	_enter_room(room_i, army.map(func(r): return [r, 0.0]), float(cp.get("standard", 1.0)), str(cp.get("entry", "s")), true)
 	main.hud.show_message("Taken up again from %s." % cp_name)
 
 
 # --- A room ---------------------------------------------------------------------------------
 
-## Into room `i`: its ground, the standard planted by the door the army came in by, its
-## garrison out, and the army coming in (each [record, seconds after the first]).
-func _enter_room(i: int, coming: Array, standard_hp: float, restored := false) -> void:
-	room_i = i
-	var r := room()
-	change_field(r["map"])
-	var k: float = main.FIELD_W / 640.0
-	var door := _door("s")
-	var at: Vector2 = Vector2(door["at"].x * k, door["at"].y)
-	# The standard, a little in from the door.
-	if standard == null or not is_instance_valid(standard):
-		standard = Works.new()
-		standard.setup(main, {"id": "standard", "kind": "standard", "name": "The Line's standard", "at": at + Vector2(-60 * k, -70),
-				"hp": float(_c().get("standard", 900.0))})
-		main.add_objective(standard)
-		standard.destroyed.connect(func(_o): _end(false))
-	standard.position = main.paths.open_spot(at + Vector2(-60 * k, -70))
-	standard.hp = standard.max_hp * clampf(standard_hp, 0.05, 1.0)
-	main.paths.set_objectives(objectives())
-	# The garrison at its posts.
-	for g in r.get("garrison", []):
-		main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), Vector2(g[1].x * k, g[1].y))
-		var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
-		e.set_meta("guard", true)
-		e.goal = null
-	# The army, as it comes in.
-	arrivals.clear()
-	arrive_t = 0.0
-	var c_old := Vector2.ZERO
-	for row in coming:
-		c_old += row[0].get("post", Vector2(320, 600))
-	c_old /= maxf(coming.size(), 1)
-	var c_new: Vector2 = Vector2(door["stand"].x * k, door["stand"].y) if door.has("stand") else at + Vector2(0, -ENTRY_DEPTH)   # (where the army's middle comes to stand)
-	for row in coming:
-		var rec: Dictionary = row[0]
-		var p: Vector2 = rec.get("post", c_old)
-		var post: Vector2 = c_new + Vector2((p.x - c_old.x) * k * 0.85, (p.y - c_old.y) * 0.7) if not restored else Vector2(p.x * k, p.y)
-		post = Vector2(clampf(post.x, 50.0 * k, main.FIELD_W - 50.0 * k), clampf(post.y, 380.0, 720.0))
-		arrivals.append([rec, float(row[1]), main.paths.open_spot(main._clamp_post(post))])
-	arrivals.sort_custom(func(a, b): return a[1] < b[1])
-	restored_entry = restored
-	wave0 = main.wave
-	linger = 0.0
-	arrows.clear()
-	phase = "enter"
-	if r.get("note", "") != "":
-		main.hud.show_message(r["note"])
-	if not restored:
-		checkpoint()
+## Which way is into the room from a door on `side`.
+static func _inward(side: String) -> Vector2:
+	match side:
+		"n":
+			return Vector2(0, 1)
+		"e":
+			return Vector2(-1, 0)
+		"w":
+			return Vector2(1, 0)
+	return Vector2(0, -1)
 
 
 func _door(id: String) -> Dictionary:
@@ -210,11 +196,111 @@ func _door(id: String) -> Dictionary:
 	return {"id": id, "side": id, "at": Vector2(320, 756 if id == "s" else 22)}
 
 
+## A point on the field as it's drawn up (640 wide), for what's set up from data.
+func _base(p: Vector2) -> Vector2:
+	return Vector2(p.x * 640.0 / main.FIELD_W, p.y)
+
+
+func _door_at(d: Dictionary) -> Vector2:
+	var k: float = main.FIELD_W / 640.0
+	return Vector2(d["at"].x * k, d["at"].y)
+
+
+## Into room `i` by door `by`: its ground, the standard planted by that door, its garrison
+## and what's in it (unless it's been taken), and the army coming in (each [record, seconds
+## after the first]).
+func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored := false) -> void:
+	room_i = i
+	entry = by
+	var r := room()
+	var st := _state(r["id"])
+	change_field(r["map"])
+	var k: float = main.FIELD_W / 640.0
+	var door := _door(by)
+	var at := _door_at(door)
+	var inward := _inward(door["side"])
+	var across := Vector2(-inward.y, inward.x)
+	# The standard, a little in from the door and to one side.
+	var spot: Vector2 = at + inward * 70.0 + across * 60.0 * k
+	if standard == null or not is_instance_valid(standard):
+		standard = Works.new()
+		standard.setup(main, {"id": "standard", "kind": "standard", "name": "The Line's standard", "at": _base(spot),
+				"hp": float(_c().get("standard", 900.0))})
+		main.add_objective(standard)
+		standard.destroyed.connect(func(_o): _end(false))
+	standard.position = main.paths.open_spot(spot)
+	standard.hp = standard.max_hp * clampf(standard_hp, 0.05, 1.0)
+	# What's in it: its garrison (not once it's taken), its pens and supplies (not what's had).
+	pens.clear()
+	caches.clear()
+	townsfolk.clear()
+	if not st["cleared"]:
+		for g in r.get("garrison", []):
+			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), Vector2(g[1].x * k, g[1].y))
+			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+			e.set_meta("guard", true)
+			e.goal = null
+	var n := 0
+	for p in r.get("pens", []):
+		var id := "%s:pen%d" % [r["id"], n]
+		n += 1
+		if (st["taken"] as Array).has(id):
+			continue
+		var pen := Works.new()
+		pen.setup(main, {"id": id, "kind": "stockade", "style": "iron", "name": "A cell", "at": p["at"],
+				"prisoners": int(p.get("townsfolk", 0)) + (p.get("soldiers", []) as Array).size()})
+		pen.set_meta("spec", p)
+		main.add_objective(pen)
+		pens.append(pen)
+	n = 0
+	for c in r.get("caches", []):
+		var id := "%s:cache%d" % [r["id"], n]
+		n += 1
+		if (st["taken"] as Array).has(id):
+			continue
+		var cache := Works.new()
+		cache.setup(main, {"id": id, "kind": "cache", "style": str(c.get("style", "")), "name": "Treasure" if c.get("style", "") == "chest" else "Supplies",
+				"at": c["at"], "gold": int(c.get("gold", 60))})
+		main.add_objective(cache)
+		caches.append(cache)
+	main.paths.set_objectives(objectives())
+	# The army, as it comes in: its shape kept round where it comes to stand.
+	arrivals.clear()
+	arrive_t = 0.0
+	var c_old := Vector2.ZERO
+	for row in coming:
+		c_old += row[0].get("post", Vector2(320, 600))
+	c_old /= maxf(coming.size(), 1)
+	var c_new: Vector2 = Vector2(door["stand"].x * k, door["stand"].y) if door.has("stand") else at + inward * ENTRY_DEPTH
+	# (Turned to face the way it's come in: a room entered from the side gets the army's
+	# depth across it.)
+	for row in coming:
+		var rec: Dictionary = row[0]
+		var p: Vector2 = rec.get("post", c_old)
+		var off := Vector2((p.x - c_old.x) * k * 0.85, (p.y - c_old.y) * 0.7)
+		if door["side"] in ["e", "w"]:
+			off = Vector2(-off.y * inward.x, off.x)
+		var post: Vector2 = (c_new + off) if not restored else Vector2(p.x * k, p.y)
+		post = Vector2(clampf(post.x, 50.0 * k, main.FIELD_W - 50.0 * k), clampf(post.y, 70.0, 720.0))
+		arrivals.append([rec, float(row[1]), main.paths.open_spot(main._clamp_post(post))])
+	arrivals.sort_custom(func(a, b): return a[1] < b[1])
+	restored_entry = restored
+	wave0 = main.wave
+	linger = 0.0
+	arrows.clear()
+	phase = "enter"
+	if st["cleared"]:
+		main.hud.show_message("Back in %s." % r["name"])
+	elif r.get("note", "") != "":
+		main.hud.show_message(r["note"])
+	if not restored:
+		checkpoint()
+
+
 ## A unit back on the field: at the door, walking on to its place.
 func _arrive(rec: Dictionary, post: Vector2, at_post := false) -> void:
-	var k: float = main.FIELD_W / 640.0
-	var door := _door("s")
-	var at := Vector2(door["at"].x * k + randf_range(-10, 10), door["at"].y - 6.0)
+	var door := _door(entry)
+	var at := _door_at(door) + _inward(door["side"]) * 6.0
 	var w = _make_unit(rec)
 	if w == null:
 		return
@@ -222,13 +308,19 @@ func _arrive(rec: Dictionary, post: Vector2, at_post := false) -> void:
 		w.post = post   # (hauled in and set up again where it's to stand; or taken up again where it stood)
 		w.position = post
 	else:
-		w.position = at
+		w.position = main.paths.open_spot(at + Vector2(randf_range(-10, 10), randf_range(-10, 10)))
 		w.order_to(post)
 	main.warriors_changed()
 
 
 func objectives() -> Array:
-	return [standard] if standard != null and is_instance_valid(standard) and not standard.dead else NONE
+	var out := []
+	if standard != null and is_instance_valid(standard) and not standard.dead:
+		out.append(standard)
+	for o in pens + caches + townsfolk:
+		if is_instance_valid(o) and not o.is_queued_for_deletion():
+			out.append(o)
+	return out
 
 
 func enemy_goal(e):
@@ -260,12 +352,16 @@ func on_reached_bottom(_e) -> bool:
 	return true
 
 
+func _waves() -> int:
+	return 0 if _state(room()["id"])["cleared"] else int(room().get("waves", 2))
+
+
 func holds_waves() -> bool:
-	return phase != "fight" or main.wave - wave0 >= int(room().get("waves", 2))
+	return phase != "fight" or main.wave - wave0 >= _waves()
 
 
 func waves_done_here() -> bool:
-	return phase == "fight" and main.wave - wave0 >= int(room().get("waves", 2)) or phase == "clear"
+	return phase == "fight" and main.wave - wave0 >= _waves() or phase == "clear"
 
 
 func wave_cleared(_n: int) -> bool:
@@ -275,14 +371,19 @@ func wave_cleared(_n: int) -> bool:
 func wave_text() -> String:
 	if room_i < 0 or rooms.is_empty():
 		return ""
-	if phase != "fight":
-		return "Room %d/%d" % [room_i + 1, rooms.size()]
-	return "Wave %d/%d" % [clampi(main.wave - wave0, 0, int(room().get("waves", 2))), int(room().get("waves", 2))]
+	if phase == "clear":
+		return "Room taken"
+	if phase != "fight" or _waves() == 0:
+		return "Foes %d" % main.get_enemies().size()
+	return "Wave %d/%d" % [clampi(main.wave - wave0, 0, _waves()), _waves()]
 
 
 func process(delta: float) -> void:
 	if over or main.game_over:
 		return
+	if phase in ["fight", "clear"]:
+		_pens(delta)
+		_caches()
 	match phase:
 		"enter":
 			arrive_t += delta
@@ -294,7 +395,7 @@ func process(delta: float) -> void:
 				_woke = false
 				_stragglers_come()
 		"fight":
-			var done: bool = main.wave - wave0 >= int(room().get("waves", 2)) and main.spawn_queue.is_empty()
+			var done: bool = main.wave - wave0 >= _waves() and main.spawn_queue.is_empty()
 			if done and main.get_enemies().is_empty() and _downed() == 0:
 				_room_taken()
 			elif done:
@@ -305,35 +406,144 @@ func process(delta: float) -> void:
 			_march_step(delta)
 
 
+# --- What's in a room: cells and supplies ---------------------------------------------------
+
+## A pen opens once troops have stood round it a while with no enemy there.
+func _pens(delta: float) -> void:
+	for pen in pens:
+		if not is_instance_valid(pen) or pen.taken:
+			continue
+		var mine := 0
+		var theirs := 0
+		for w in main.warriors_near(pen.position, pen.capture_r()):
+			if w.is_active() and not w.is_emplacement() and w.position.distance_to(pen.position) <= pen.capture_r():
+				mine += 1
+		for e in main.enemies_near(pen.position, pen.capture_r() + 30.0):
+			if not e.dead and not e.flying and e.position.distance_to(pen.position) <= pen.capture_r():
+				theirs += 1
+		pen.contested = mine > 0 and theirs > 0
+		if mine > 0 and theirs == 0:
+			pen.progress = minf(1.0, pen.progress + delta / TAKE_TIME)
+		elif theirs > 0 and mine == 0:
+			pen.progress = maxf(0.0, pen.progress - delta / TAKE_TIME * 0.5)
+		if pen.progress >= 1.0:
+			pen.taken = true
+			_had(pen.id)
+			_free_prisoners(pen)
+
+
+## A cell opened: its soldiers join the army on loan (each trained up to tier III on one
+## path), its townsfolk make for the door the army came in by, and out.
+func _free_prisoners(pen) -> void:
+	var spec: Dictionary = pen.get_meta("spec")
+	var k: float = main.FIELD_W / 640.0
+	var n := 0
+	for s in spec.get("soldiers", []):
+		var tiers := [0, 0, 0, 0]
+		tiers[clampi(int(s.get("path", 0)), 0, 3)] = clampi(int(s.get("tier", 1)), 1, 3)
+		var spot: Vector2 = main.paths.open_spot(pen.position + Vector2(-26 + n * 26, 46))
+		main._lend_unit({"kind": s["kind"], "at": Vector2(spot.x / k, spot.y), "tiers": tiers})
+		var w = main.temp_allies.back()
+		w.set_meta("freed", true)
+		n += 1
+		joined += 1
+	var door := _door(entry)
+	var out := _door_at(door)
+	var by: Vector2 = out + _inward(door["side"]) * 60.0
+	for i in int(spec.get("townsfolk", 0)):
+		var c = preload("res://scripts/mission/objective.gd").new()
+		var start: Vector2 = pen.position + Vector2(randf_range(-20, 20), 36 + randf_range(0, 10))
+		var route: PackedVector2Array = main.paths.troop_route(start, by)
+		var pts: Array = Array(route) + [out]
+		c.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": _base(start), "variant": randi() % 24,
+				"route": pts.map(_base), "speed": randf_range(30, 38), "hp": 40.0})
+		main.add_objective(c)
+		c.reached.connect(func(o):
+			freed += 1
+			townsfolk.erase(o)
+			o.queue_free())
+		townsfolk.append(c)
+	main.warriors_changed()
+	main.spawn_text(pen.position + Vector2(0, -60), "Freed!", Color(0.6, 1.0, 0.6))
+	var who := []
+	if n > 0:
+		who.append("%d soldier%s join%s you" % [n, "" if n == 1 else "s", "s" if n == 1 else ""])
+	if int(spec.get("townsfolk", 0)) > 0:
+		who.append("%d townsfolk make for the way out" % int(spec["townsfolk"]))
+	main.hud.show_message("Prisoners freed: " + ", ".join(who) + ".")
+	main.sfx("fanfare")
+	main.paths.invalidate()
+
+
+## Supplies (or treasure): a troop that gets to them, with no enemy there, claims the gold.
+func _caches() -> void:
+	for c in caches:
+		if not is_instance_valid(c) or c.taken:
+			continue
+		if not main.enemies_near(c.position, 50.0).filter(func(e): return not e.dead).is_empty():
+			continue
+		for w in main.warriors_near(c.position, c.capture_r() + 14.0):
+			if w.is_active() and not w.is_emplacement():
+				c.taken = true
+				_had(c.id)
+				main.gold += c.gold
+				main.spawn_text(c.position + Vector2(0, -40), "+%dg" % c.gold, Color(1, 0.85, 0.3))
+				main.sfx("coin")
+				main.hud.show_message("%s: +%d gold" % [c.label, c.gold])
+				c.queue_free()
+				break
+
+
+## Something in this room had (a cell opened, supplies claimed): not to be had again.
+func _had(id: String) -> void:
+	var taken: Array = _state(room()["id"])["taken"]
+	if not taken.has(id):
+		taken.append(id)
+
+
+# --- The ways on --------------------------------------------------------------------------
+
 ## The room's taken (or nothing more is coming): the ways on show.
 func _room_taken() -> void:
 	phase = "clear"
+	var first: bool = not _state(room()["id"])["cleared"]
+	_state(room()["id"])["cleared"] = true
 	arrows.clear()
 	if arrow_node == null or not is_instance_valid(arrow_node):
 		arrow_node = ArrowNode.new()
 		arrow_node.rules = self
 		arrow_node.z_index = 50
 		main.add_child(arrow_node)
-	var k: float = main.FIELD_W / 640.0
 	for d in Maps.get_map(room()["map"]).get("doors", []):
 		var to: String = str(room().get("doors", {}).get(d["id"], ""))
 		if to == "":
 			continue
-		arrows.append({"door": d, "at": Vector2(d["at"].x * k, d["at"].y), "to": to})
-	main.hud.show_message("%s is yours. On through the door when you're ready (click its arrow, or Y)." % room()["name"])
-	main.sfx("horn", 1.2)
+		arrows.append({"door": d, "at": _door_at(d), "to": to})
+	if first:
+		main.hud.show_message("%s is yours. On through a door when you're ready (click its arrow; Y for the way on)." % room()["name"])
+		main.sfx("horn", 1.2)
 	main.queue_redraw()
 
 
+## The way on: the door that leads to the next room on the main way (not a side room, nor
+## back), or out.
+func _forward():
+	for a in arrows:
+		var to := str(a["to"])
+		if to == "out" or (a["door"]["side"] == "n"):
+			return a
+	return null
+
+
 func action_label() -> String:
-	if phase != "clear" or arrows.is_empty():
+	if phase != "clear" or _forward() == null:
 		return ""
 	return "On through the door"
 
 
 func action() -> void:
 	if action_label() != "":
-		_ask(arrows[0])
+		_ask(_forward())
 
 
 ## A click on a way on's arrow: go that way.
@@ -348,7 +558,12 @@ func click(p: Vector2) -> bool:
 
 
 func _arrow_point(a: Dictionary) -> Vector2:
-	return a["at"] + (Vector2(0, 46) if a["door"]["side"] == "n" else Vector2(0, -46))
+	return a["at"] + _inward(a["door"]["side"]) * 46.0
+
+
+func _where(a: Dictionary) -> String:
+	var to := str(a["to"])
+	return "the Throne Room" if to == "out" else _room_named(to)
 
 
 ## What's left behind, said before going (and the choice not to yet).
@@ -363,12 +578,13 @@ func _ask(a: Dictionary) -> void:
 				"it" if down == 1 else "them", "it's" if down == 1 else "they're"])
 	if foes > 0:
 		notes.append("%d enem%s still here: %s." % [foes, "y is" if foes == 1 else "ies are", "it'll follow you" if foes == 1 else "they'll follow you"])
-	var to := str(a["to"])
-	var where: String = "out of the castle's first halls" if to == "out" else _room_named(to)
+	var left := pens.filter(func(p): return is_instance_valid(p) and not p.taken).size()
+	if left > 0:
+		notes.append("%d cell%s still locked here." % [left, "" if left == 1 else "s"])
 	if notes.is_empty():
 		_go(a)
 		return
-	main.hud.show_choice("On to %s?" % where, "\n\n".join(notes), [["Go on", func(): _go(a)], ["Not yet", null]])
+	main.hud.show_choice("On to %s?" % _where(a), "\n\n".join(notes), [["Go on", func(): _go(a)], ["Not yet", null]])
 
 
 func _room_named(id: String) -> String:
@@ -409,8 +625,7 @@ func _march_to(door: Dictionary, to: int) -> void:
 	first_t = -1.0
 	through.clear()
 	main.queue_redraw()
-	var k: float = main.FIELD_W / 640.0
-	var at: Vector2 = Vector2(door["at"].x * k, door["at"].y) if door["id"] != "gate" else door["at"]
+	var at: Vector2 = door["point"] if door.has("point") else _door_at(door) + _inward(door["side"]) * 30.0   # (in the doorway's mouth)
 	march_door["point"] = at
 	march_units.clear()
 	orders.clear()
@@ -424,10 +639,17 @@ func _march_to(door: Dictionary, to: int) -> void:
 		if w.garrison != null:
 			w.leave_tower()
 		orders[w.get_instance_id()] = _unit_record(w)   # (where it stood, and its orders, for the next room)
-		w.order_to(main._clamp_post(at + Vector2(randf_range(-14, 14), 0)))
+		w.order_to(main._clamp_post(at + Vector2(randf_range(-14, 14), randf_range(-14, 14))))
 		w.move_mode = "free"
 		march_units.append(w)
 	main.hud.show_message("On through the door!")
+
+
+## A marching troop's record: as it stood before the march, with the health it has now.
+func _record(w) -> Dictionary:
+	var rec: Dictionary = orders.get(w.get_instance_id(), _unit_record(w)).duplicate()
+	rec["hp"] = w.hp / maxf(w.max_hp, 1.0)
+	return rec
 
 
 ## Each step of the march: troops that get to the door are through (gone from this room).
@@ -450,13 +672,6 @@ func _march_step(delta: float) -> void:
 		first_t = march_t   # (nobody can get there: on anyway, the army catches up)
 	if first_t >= 0.0 and phase == "march":
 		_pan()
-
-
-## A marching troop's record: as it stood before the march, with the health it has now.
-func _record(w) -> Dictionary:
-	var rec: Dictionary = orders.get(w.get_instance_id(), _unit_record(w)).duplicate()
-	rec["hp"] = w.hp / maxf(w.max_hp, 1.0)
-	return rec
 
 
 func _pan() -> void:
@@ -497,24 +712,44 @@ func _pan() -> void:
 	for e in main.get_enemies():
 		if not e.dead and not e.is_queued_for_deletion():
 			stragglers.append([e.kind, e.level])
+	# Townsfolk still on their way out of here get out.
+	for c in townsfolk:
+		if is_instance_valid(c):
+			freed += 1
+			c.queue_free()
+	townsfolk.clear()
 	var keep_hp: float = standard.hp / standard.max_hp if standard != null and is_instance_valid(standard) else 1.0
-	var dir := -1.0 if march_door["side"] == "n" else 1.0
+	# The room the army goes into it by: its door back to this one (the south door, on the main way).
+	var from_id: String = room()["id"] if room_i >= 0 else ""
+	var by := "s"
+	if march_to >= 0 and march_to < rooms.size():
+		var doors: Dictionary = rooms[march_to].get("doors", {})
+		for id in doors:
+			if str(doors[id]) == from_id:
+				by = id
+	# The view pans the way the army's going.
+	var out := -_inward(march_door["side"])   # (towards the door)
+	var size := Vector2(main.FIELD_W, main.FIELD_H)
 	var start_pos: Vector2 = main.position
 	var tw = main.create_tween()
-	tw.tween_property(main, "position", start_pos + Vector2(0, -dir * main.FIELD_H), PAN_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.tween_property(main, "position", start_pos - out * size, PAN_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func():
 		var coming := through.duplicate()
 		through.clear()
-		_enter_room(march_to, coming, keep_hp)
-		main.position = start_pos + Vector2(0, dir * main.FIELD_H))
+		_enter_room(march_to, coming, keep_hp, by)
+		main.position = start_pos + out * size)
 	tw.tween_property(main, "position", start_pos, PAN_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
+## Enemies left behind come through the door after the army.
 func _stragglers_come() -> void:
+	if stragglers.is_empty():
+		return
+	var door := _door(entry)
+	var at := _door_at(door) + _inward(door["side"]) * 20.0
 	for st in stragglers:
-		main._spawn_enemy(str(st[0]), int(st[1]))
-	if not stragglers.is_empty():
-		main.hud.show_message("%d enem%s followed you through!" % [stragglers.size(), "y" if stragglers.size() == 1 else "ies"])
+		main._spawn_enemy(str(st[0]), int(st[1]), main.paths.open_spot(at + Vector2(randf_range(-20, 20), randf_range(-20, 20))))
+	main.hud.show_message("%d enem%s followed you through!" % [stragglers.size(), "y" if stragglers.size() == 1 else "ies"])
 	stragglers.clear()
 
 
@@ -540,9 +775,9 @@ func checkpoint() -> void:
 		var k: float = main.FIELD_W / 640.0
 		rec["post"] = Vector2(a[2].x / k, a[2].y)
 		return rec)
-	Campaign.set_checkpoint(Campaign.mission_id, CP_BASE + room_i, {"zone": CP_BASE + room_i, "room": room_i, "name": cp_name,
+	Campaign.set_checkpoint(Campaign.mission_id, CP_BASE + room_i, {"zone": CP_BASE + room_i, "room": room_i, "entry": entry, "name": cp_name,
 			"gold": main.gold, "wave": main.wave, "army": army, "xp": cp_xp, "owned": main.powers.owned.keys(),
-			"standard": standard.hp / standard.max_hp if standard != null else 1.0,
+			"standard": standard.hp / standard.max_hp if standard != null else 1.0, "rooms": room_state.duplicate(true),
 			"freed": freed, "joined": joined, "garrisons": garrisons.duplicate(true), "stragglers": stragglers.duplicate(true)})
 
 
@@ -565,7 +800,7 @@ func _end(won: bool) -> void:
 	over = true
 	if won and main.campaign:
 		Campaign.held_towers = garrisons.duplicate(true)
-	main.hud.show_message("Through the castle's first halls!" if won else "The standard's fallen: the army breaks!")
+	main.hud.show_message("Through the castle's halls!" if won else "The standard's fallen: the army breaks!")
 	main.call_deferred("_finish", won)
 
 
@@ -574,7 +809,11 @@ func _end(won: bool) -> void:
 func status() -> String:
 	if room_i < 0 or rooms.is_empty():
 		return "Through the Dawn Gate..."
-	var text := "%s (room %d of %d)" % [room()["name"], room_i + 1, rooms.size()]
+	var main_rooms := rooms.filter(func(r): return int(r.get("waves", 2)) > 0)
+	var text: String = room()["name"]
+	var place := main_rooms.find(room())
+	if place >= 0:
+		text += " (hall %d of %d)" % [place + 1, main_rooms.size()]
 	if standard != null and is_instance_valid(standard):
 		text += "  ·  Standard %d%%" % roundi(standard.hp / standard.max_hp * 100.0)
 	if phase == "clear":
@@ -586,34 +825,37 @@ func panel_status() -> String:
 	return "Standard %d%%" % roundi(standard.hp / standard.max_hp * 100.0) if standard != null and is_instance_valid(standard) else ""
 
 
-## The standard's an objective: guard it.
-func guards() -> bool:
-	return true
-
-
 func summary(won: bool) -> String:
 	var s := "Freed %d of Dawnspire's people and %d soldiers." % [freed, joined]
 	if not garrisons.is_empty():
 		s += "  %d tower%s left manned behind the army." % [garrisons.size(), "" if garrisons.size() == 1 else "s"]
 	if won:
-		s += "  (The citadel's deeper halls are still to come.)"
+		s += "  (The Throne Room is still to come.)"
 	return s
 
 
-## The arrows at the ways on, over the field (drawn by an ArrowNode while the way's open).
+## The arrows at the ways on, each named for where it leads, over the field (drawn by an
+## ArrowNode while the way's open).
 func draw_over(ci: CanvasItem) -> void:
 	if phase != "clear":
 		return
 	var t := Time.get_ticks_msec() / 1000.0
+	var font := ThemeDB.fallback_font
 	for a in arrows:
 		var p := _arrow_point(a)
-		var up: bool = a["door"]["side"] == "n"
-		var bob := sin(t * 4.0) * 5.0 * (-1.0 if up else 1.0)
-		var c := p + Vector2(0, bob)
+		var out := -_inward(a["door"]["side"])   # (the arrow points out through the door)
+		var c := p + out * sin(t * 4.0) * 5.0
+		var seen: bool = _state(str(a["to"]))["cleared"] if str(a["to"]) != "out" else false
+		var gold := Color(1.0, 0.85, 0.35) if not seen else Color(0.75, 0.75, 0.7)
 		ci.draw_circle(c, 26.0, Color(0, 0, 0, 0.45))
-		ci.draw_arc(c, 26.0, 0.0, TAU, 32, Color(1.0, 0.85, 0.35, 0.9), 2.5, true)
-		var s := 1.0 if up else -1.0   # (the point towards the door)
-		var tri := PackedVector2Array([c + Vector2(0, -16 * s), c + Vector2(15, 4 * s), c + Vector2(6, 4 * s), c + Vector2(6, 15 * s),
-				c + Vector2(-6, 15 * s), c + Vector2(-6, 4 * s), c + Vector2(-15, 4 * s)])
-		ci.draw_colored_polygon(tri, Color(1.0, 0.85, 0.35))
+		ci.draw_arc(c, 26.0, 0.0, TAU, 32, Color(gold, 0.9), 2.5, true)
+		var side := Vector2(-out.y, out.x)
+		var tri := PackedVector2Array([c + out * 16.0, c + side * 15.0 - out * 4.0, c + side * 6.0 - out * 4.0, c + side * 6.0 - out * 15.0,
+				c - side * 6.0 - out * 15.0, c - side * 6.0 - out * 4.0, c - side * 15.0 - out * 4.0])
+		ci.draw_colored_polygon(tri, gold)
 		ci.draw_polyline(tri + PackedVector2Array([tri[0]]), Color(0.25, 0.15, 0.05), 1.5)
+		# Where it leads.
+		var label := _where(a) + (" (taken)" if seen else "")
+		var lp := c - out * 40.0 + Vector2(-90, 4)
+		ci.draw_string_outline(font, lp, label, HORIZONTAL_ALIGNMENT_CENTER, 180, 13, 4, Color(0, 0, 0, 0.85))
+		ci.draw_string(font, lp, label, HORIZONTAL_ALIGNMENT_CENTER, 180, 13, gold)

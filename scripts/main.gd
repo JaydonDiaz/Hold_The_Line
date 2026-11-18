@@ -27,7 +27,7 @@ var FIELD_W := 640         # widens to fill the screen (see _fit_screen); 640 in
 const FIELD_H := 768
 const CASTLE_Y := 736      # top of the castle wall: enemies that reach it get in
 const TILE := 64
-const DEPLOY_TOP := 96     # warriors can't be posted in the enemy entry zone
+var DEPLOY_TOP := 96       # warriors can't be posted in the enemy entry zone (in a castle's room: only its wall, 44)
 const TOUCH_PICK := 34.0   # how near a tap has to be to a troop to pick it (a fingertip is wider than a cursor)
 const MIN_POST_GAP := 30.0
 

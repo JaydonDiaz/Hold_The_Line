@@ -160,6 +160,20 @@ const BATTLES := {
 		"seed": 179, "lead": "square", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [59, 79]},
 	"banners": {"bpm": 154, "chords": [[49, "min"], [45, "maj"], [47, "maj"], [44, "maj"], [49, "min"], [52, "maj"], [47, "maj"], [44, "min"]],
 		"seed": 181, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "up", "range": [61, 84]},
+	# ...and the rest of the citadel: its cells, its stores, the defiled chapel, the deep
+	# cells, the Long Gallery, the treasury.
+	"cells": {"bpm": 136, "chords": [[45, "min"], [44, "maj"], [45, "min"], [41, "maj"], [45, "min"], [48, "maj"], [44, "maj"], [44, "maj"]],
+		"seed": 197, "lead": "square", "bass": "pedal", "drums": "march", "arp": "none", "range": [57, 77]},
+	"stores": {"bpm": 150, "chords": [[48, "min"], [46, "maj"], [44, "maj"], [43, "maj"], [48, "min"], [51, "maj"], [46, "maj"], [43, "maj"]],
+		"seed": 199, "lead": "tri", "bass": "eighths", "drums": "rock", "arp": "up", "range": [60, 82]},
+	"chapel": {"bpm": 120, "chords": [[50, "min"], [46, "maj"], [43, "min"], [45, "maj"], [50, "min"], [53, "maj"], [46, "maj"], [45, "maj"]],
+		"seed": 211, "lead": "saw", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [62, 84]},
+	"dungeon": {"bpm": 140, "chords": [[44, "min"], [40, "maj"], [42, "maj"], [39, "min"], [44, "min"], [47, "maj"], [42, "maj"], [39, "maj"]],
+		"seed": 223, "lead": "square", "bass": "gallop", "drums": "tribal", "arp": "triplet", "range": [56, 76]},
+	"gallery": {"bpm": 160, "chords": [[51, "min"], [47, "maj"], [49, "maj"], [46, "maj"], [51, "min"], [54, "maj"], [49, "maj"], [46, "maj"]],
+		"seed": 227, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [63, 87]},
+	"treasury": {"bpm": 146, "chords": [[46, "min"], [42, "maj"], [44, "maj"], [41, "maj"], [46, "min"], [49, "maj"], [44, "maj"], [41, "min"]],
+		"seed": 229, "lead": "tri", "bass": "gallop", "drums": "march", "arp": "up", "range": [58, 80]},
 	"carnival": {"bpm": 144, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [57, "min"], [46, "maj"], [48, "maj"]],
 		"seed": 151, "lead": "tri", "bass": "eighths", "drums": "tribal", "arp": "triplet", "range": [65, 86]},
 	"ashen": {"bpm": 128, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
@@ -256,6 +270,24 @@ const CALMS := {
 	# The Hall of Banners: the Line's torn banners, a bell far off in the keep.
 	"banners": {"bpm": 70, "chords": [[49, "min"], [45, "maj"], [47, "maj"], [44, "min"], [49, "min"], [52, "maj"], [45, "maj"], [44, "maj"]],
 		"seed": 193, "lead": "sine", "range": [61, 81], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["bells"]},
+	# The Guardroom Cells: chains, a drip, a slow heavy pulse.
+	"cells": {"bpm": 58, "chords": [[45, "min"], [41, "maj"], [44, "maj"], [45, "min"], [43, "maj"], [41, "maj"], [40, "maj"], [44, "maj"]],
+		"seed": 233, "lead": "tri", "range": [55, 74], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["water"]},
+	# The Quartermaster's Store: rummaging quiet, a plucked tune.
+	"stores": {"bpm": 84, "chords": [[48, "min"], [44, "maj"], [46, "maj"], [43, "maj"], [48, "min"], [51, "maj"], [46, "maj"], [43, "maj"]],
+		"seed": 239, "lead": "tri", "range": [60, 79], "scale": "minor", "accomp": "pluck", "perc": "hand", "color": []},
+	# The Chapel of the Dawn: the Line's hymn on an organ-like drone, broken off.
+	"chapel": {"bpm": 60, "chords": [[50, "maj"], [45, "maj"], [47, "min"], [43, "maj"], [50, "maj"], [52, "min"], [43, "maj"], [45, "maj"]],
+		"seed": 241, "lead": "sine", "range": [62, 84], "scale": "major", "accomp": "drone", "perc": "none", "color": ["shimmer", "bells"]},
+	# The Deep Cells: deeper, darker water dripping.
+	"dungeon": {"bpm": 54, "chords": [[44, "min"], [40, "maj"], [43, "maj"], [44, "min"], [42, "maj"], [40, "maj"], [39, "maj"], [43, "maj"]],
+		"seed": 251, "lead": "tri", "range": [53, 72], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["water", "wind"]},
+	# The Long Gallery: the old heroes in stone, a hush before the throne.
+	"gallery": {"bpm": 68, "chords": [[51, "min"], [47, "maj"], [49, "maj"], [46, "min"], [51, "min"], [54, "maj"], [49, "maj"], [46, "maj"]],
+		"seed": 257, "lead": "sine", "range": [63, 84], "scale": "minor", "accomp": "pads", "perc": "march", "color": ["wind"]},
+	# The Treasury: gold glinting in the dark.
+	"treasury": {"bpm": 72, "chords": [[46, "min"], [42, "maj"], [44, "maj"], [41, "maj"], [46, "min"], [49, "maj"], [44, "maj"], [41, "maj"]],
+		"seed": 263, "lead": "sine", "range": [58, 80], "scale": "minor", "accomp": "chimes", "perc": "none", "color": ["shimmer", "crackle"]},
 	# The Burnt Village: a lament over the embers.
 	"embers": {"bpm": 62, "chords": [[52, "min"], [48, "maj"], [45, "min"], [47, "maj"], [52, "min"], [50, "maj"], [48, "maj"], [47, "maj"]],
 		"seed": 131, "lead": "tri", "range": [59, 79], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["crackle"]},

@@ -168,6 +168,37 @@ static func furniture(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng
 				ci.draw_line(p, p + Vector2(6, -2), Color(0.75, 0.75, 0.8) * tint, 1.0)
 
 
+## The chapel's altar: a block of pale stone, its gold-fringed cloth torn and stained, the
+## Line's sun on it smashed, guttered candles, a skull left on it in mockery.
+static func altar(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: RandomNumberGenerator) -> void:
+	var box := _box(poly)
+	ci.draw_rect(Rect2(box.position + Vector2(3, 7), box.size), Color(0, 0, 0, 0.3))
+	ci.draw_rect(box.grow(1.0), OUTLINE)
+	ci.draw_rect(box, Color(0.7, 0.66, 0.6) * tint)
+	ci.draw_rect(Rect2(box.position.x, box.end.y - 7, box.size.x, 7), Color(0.55, 0.51, 0.47) * tint)
+	# The cloth over it, hanging down the front, torn.
+	var cloth := Rect2(box.position.x + 20, box.position.y + 2, box.size.x - 40, box.size.y + 6)
+	ci.draw_rect(cloth, Color(0.85, 0.82, 0.74) * tint)
+	ci.draw_rect(Rect2(cloth.position.x, cloth.end.y - 3, cloth.size.x, 3), Color(0.82, 0.65, 0.25) * tint)
+	for i in 4:
+		var x := cloth.position.x + rng.randf_range(4, cloth.size.x - 8)
+		ci.draw_rect(Rect2(x, cloth.end.y - rng.randf_range(4, 10), rng.randf_range(4, 8), 12), Color(0.7, 0.66, 0.6) * tint)
+	ci.draw_circle(cloth.get_center() + Vector2(10, 2), 7.0, Color(0.42, 0.08, 0.06, 0.6))
+	# The sun on it, broken in two.
+	var c := cloth.get_center() + Vector2(0, -2)
+	ci.draw_circle(c, 6.0, Color(0.9, 0.72, 0.28) * tint)
+	ci.draw_line(c + Vector2(-6, -5), c + Vector2(5, 6), Color(0.3, 0.26, 0.24), 2.0)
+	# Candles, guttered, and a skull.
+	for x in [box.position.x + 8, box.position.x + 14, box.end.x - 10]:
+		ci.draw_rect(Rect2(x, box.position.y - 6, 3, 8), Color(0.92, 0.88, 0.76) * tint)
+		ci.draw_rect(Rect2(x, box.position.y - 7, 3, 1), Color(0.3, 0.2, 0.15))
+	var sk := Vector2(box.end.x - 24, box.position.y + 6)
+	ci.draw_circle(sk, 4.5, OUTLINE)
+	ci.draw_circle(sk, 3.5, Color(0.88, 0.85, 0.76) * tint)
+	ci.draw_rect(Rect2(sk + Vector2(-2, -1), Vector2(1.5, 1.5)), OUTLINE)
+	ci.draw_rect(Rect2(sk + Vector2(1, -1), Vector2(1.5, 1.5)), OUTLINE)
+
+
 ## The room's things on the floor and walls.
 static func decor(ci: CanvasItem, d: Dictionary, tint: Color, rng: RandomNumberGenerator) -> void:
 	match String(d["kind"]):

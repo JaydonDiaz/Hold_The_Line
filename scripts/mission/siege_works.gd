@@ -443,6 +443,9 @@ func _draw_stockade() -> void:
 			var look: String = VILLAGERS[i % VILLAGERS.size()]
 			var tex: Texture2D = Sprites.frames(look)[0]
 			draw_texture_rect(tex, Rect2(x - 12, -40 + (i % 2) * 3, 24, 24), false)
+	if style == "iron":
+		_draw_bars()
+		return
 	# The stakes, sharpened, lashed with rope; the door open once they're out.
 	for i in 13:
 		var x := -30 + i * 5
@@ -460,10 +463,49 @@ func _draw_stockade() -> void:
 		draw_rect(Rect2(-2, -19, 5, 5), Color(0.55, 0.55, 0.6))
 
 
+## A cell in the castle's dungeon ("style": "iron"): a stone sill, iron bars set in it, a
+## barred door with a heavy lock, swung open once they're out.
+func _draw_bars() -> void:
+	var iron := Color(0.42, 0.42, 0.47)
+	draw_rect(Rect2(-33, -3, 68, 6), OUTLINE)
+	draw_rect(Rect2(-32, -2, 66, 4), Color(0.5, 0.48, 0.5))
+	for i in 12:
+		var x := -30 + i * 5.5
+		var door: bool = taken and i >= 5 and i <= 7
+		if door:
+			continue
+		draw_rect(Rect2(x - 1, -38, 4, 37), OUTLINE)
+		draw_rect(Rect2(x, -37, 2, 35), iron if i % 2 == 0 else iron.lightened(0.12))
+	for y in [-38, -22]:
+		draw_rect(Rect2(-32, y - 1, 66, 4), OUTLINE)
+		draw_rect(Rect2(-31, y, 64, 2), iron.lightened(0.08))
+	if taken:
+		# The door swung out.
+		for i in 3:
+			draw_rect(Rect2(4 + i * 4, -30, 2, 30), iron.darkened(0.2))
+	else:
+		draw_rect(Rect2(-4, -20, 9, 9), OUTLINE)   # the lock
+		draw_rect(Rect2(-3, -19, 7, 7), Color(0.62, 0.5, 0.25))
+
+
 # --- Supplies ------------------------------------------------------------------------------
 
 func _draw_cache() -> void:
 	draw_texture_rect(Sprites.shadow(), Rect2(-20, -2, 40, 10), false, Color(0, 0, 0, 0.3))
+	if style == "chest":
+		# A treasure chest (the Ogre King's plunder): iron-bound, the lid up, gold heaped in it.
+		draw_rect(Rect2(-17, -18, 34, 18), OUTLINE)
+		draw_rect(Rect2(-16, -17, 32, 16), Color(0.5, 0.3, 0.14))
+		for x in [-12, 9]:
+			draw_rect(Rect2(x, -17, 3, 16), Color(0.45, 0.45, 0.5))
+		draw_rect(Rect2(-17, -30, 34, 10), OUTLINE)
+		draw_rect(Rect2(-16, -29, 32, 8), Color(0.58, 0.36, 0.18))
+		for k in 9:
+			draw_circle(Vector2(-12 + k * 3.0, -18 - (k % 3) * 2.0), 3.0, Color(1.0, 0.82, 0.25) if k % 2 else Color(0.92, 0.7, 0.18))
+		draw_rect(Rect2(-2, -10, 5, 5), Color(0.8, 0.7, 0.3))
+		var bob2 := sin(t * 4.0) * 2.0
+		draw_string(ThemeDB.fallback_font, Vector2(-30, -40 + bob2), "%dg" % gold, HORIZONTAL_ALIGNMENT_CENTER, 60, 12, Color(1, 0.85, 0.3))
+		return
 	var crate := Color(0.62, 0.45, 0.24)
 	var sack := Color(0.82, 0.74, 0.55)
 	for b in [Rect2(-16, -14, 13, 13), Rect2(2, -12, 12, 11), Rect2(-8, -25, 11, 11)]:
