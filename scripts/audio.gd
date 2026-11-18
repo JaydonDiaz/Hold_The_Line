@@ -172,6 +172,12 @@ const BATTLES := {
 		"seed": 223, "lead": "square", "bass": "gallop", "drums": "tribal", "arp": "triplet", "range": [56, 76]},
 	"gallery": {"bpm": 160, "chords": [[51, "min"], [47, "maj"], [49, "maj"], [46, "maj"], [51, "min"], [54, "maj"], [49, "maj"], [46, "maj"]],
 		"seed": 227, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [63, 87]},
+	# The Throne Room: the Ogre King himself.
+	"throne": {"bpm": 168, "chords": [[45, "min"], [41, "maj"], [43, "maj"], [40, "maj"], [45, "min"], [48, "maj"], [41, "maj"], [44, "maj"]],
+		"seed": 269, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [57, 86]},
+	# The Fields of Dawn: the last battle, every people of the Line on the field.
+	"dawnfield": {"bpm": 156, "chords": [[50, "maj"], [45, "maj"], [47, "min"], [43, "maj"], [50, "maj"], [52, "min"], [43, "maj"], [45, "maj"]],
+		"seed": 271, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "up", "range": [62, 88]},
 	"treasury": {"bpm": 146, "chords": [[46, "min"], [42, "maj"], [44, "maj"], [41, "maj"], [46, "min"], [49, "maj"], [44, "maj"], [41, "min"]],
 		"seed": 229, "lead": "tri", "bass": "gallop", "drums": "march", "arp": "up", "range": [58, 80]},
 	"carnival": {"bpm": 144, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [57, "min"], [46, "maj"], [48, "maj"]],
@@ -285,6 +291,12 @@ const CALMS := {
 	# The Long Gallery: the old heroes in stone, a hush before the throne.
 	"gallery": {"bpm": 68, "chords": [[51, "min"], [47, "maj"], [49, "maj"], [46, "min"], [51, "min"], [54, "maj"], [49, "maj"], [46, "maj"]],
 		"seed": 257, "lead": "sine", "range": [63, 84], "scale": "minor", "accomp": "pads", "perc": "march", "color": ["wind"]},
+	# The Throne Room: the hall gone quiet, his breathing in it.
+	"throne": {"bpm": 56, "chords": [[45, "min"], [41, "maj"], [44, "maj"], [45, "min"], [43, "maj"], [41, "maj"], [40, "maj"], [44, "maj"]],
+		"seed": 277, "lead": "tri", "range": [52, 74], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["crackle"]},
+	# The Fields of Dawn: morning over the field, the Line's hymn whole again.
+	"dawnfield": {"bpm": 74, "chords": [[50, "maj"], [45, "maj"], [47, "min"], [43, "maj"], [50, "maj"], [52, "min"], [43, "maj"], [45, "maj"]],
+		"seed": 281, "lead": "sine", "range": [62, 86], "scale": "major", "accomp": "pads", "perc": "march", "color": ["wind", "bells", "shimmer"]},
 	# The Treasury: gold glinting in the dark.
 	"treasury": {"bpm": 72, "chords": [[46, "min"], [42, "maj"], [44, "maj"], [41, "maj"], [46, "min"], [49, "maj"], [44, "maj"], [41, "maj"]],
 		"seed": 263, "lead": "sine", "range": [58, 80], "scale": "minor", "accomp": "chimes", "perc": "none", "color": ["shimmer", "crackle"]},

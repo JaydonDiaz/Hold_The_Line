@@ -77,6 +77,16 @@ var pens: Array = []          # this room's prison pens (siege_works stockades, 
 var caches: Array = []        # ...and its supplies (or treasure)
 var townsfolk: Array = []     # freed townsfolk on their way out
 var fight_t := 0.0            # seconds since the army was all in the room
+var escaping := false         # the nine-beacon route, the King beaten: the army's getting out of the castle
+var escaped := 0              # his that got out of the castle ahead of the army (they fight for him outside)
+var king = null               # the Ogre King, in his throne room
+var told_throne := false
+const CP_ESCAPE := 200        # an escape room's checkpoint: at this plus its place in the rooms
+const FIELD := -2             # (marching out of the castle altogether, onto the field)
+const MAIN_WAY := ["gatehall", "banners", "chapel", "gallery", "throne"]   # the halls, in order (the way back out, reversed)
+const ROCK_EVERY := 2.4       # escaping: seconds between falls of stone in a room...
+const ROCK_COLLAPSE := 40.0   # ...and after this long in one, it comes down three times as often
+var rock_t := 2.0
 
 
 ## Draws the ways-on arrows over everything on the field.
@@ -162,6 +172,9 @@ func resume(cp: Dictionary) -> void:
 	garrisons = (cp.get("garrisons", []) as Array).duplicate(true)
 	stragglers = (cp.get("stragglers", []) as Array).duplicate(true)
 	room_state = (cp.get("rooms", {}) as Dictionary).duplicate(true)
+	escaping = bool(cp.get("escape", false))
+	escaped = int(cp.get("escaped", 0))
+	told_throne = escaping   # (taken up again in the throne room, he speaks again: a new try)
 	var army: Array = cp.get("army", [])
 	# Reserves: never so little to go on with that the room can't be won.
 	var worth: int = main.gold
@@ -235,14 +248,29 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 	pens.clear()
 	caches.clear()
 	townsfolk.clear()
-	if not st["cleared"]:
-		for g in r.get("garrison", []):
+	king = null
+	if not st["cleared"] and not escaping:
+		for g in r.get("garrison", []) + (r.get("prepared_garrison", []) if united() else []):
 			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)) + int(_c().get("level_bonus", 0)), Vector2(g[1].x * k, g[1].y))
 			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 			e.set_meta("guard", true)
 			e.goal = null
 			if g.size() > 2 and g[2] == "warden":
 				_make_warden(e)
+			elif g.size() > 2 and g[2] == "guard":
+				preload("res://scripts/mission/rules_assault.gd").kings_guard(e)
+		# The Ogre King on his throne.
+		if r.has("boss"):
+			var b: Dictionary = r["boss"]
+			main._spawn_enemy(b["kind"], int(b.get("level", 10)), Vector2(b["at"].x * k, b["at"].y))
+			king = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+			king.max_hp *= float(b.get("hp_mult", 1.0))
+			king.hp = king.max_hp
+			king.set_meta("guard", true)
+			king.set_meta("undying", true)   # (beaten, the battle decides: boss_beaten)
+			king.goal = null
+	if escaping:
+		_fleeing_out(r, k)
 	var n := 0
 	for p in r.get("pens", []):
 		var id := "%s:pen%d" % [r["id"], n]
@@ -335,6 +363,12 @@ func objectives() -> Array:
 
 
 func enemy_goal(e):
+	if e != null and e.has_meta("fleeing"):
+		return null   # (making for the way out: the bottom of the room)
+	if e != null and e == king:
+		# The Ogre King holds his dais and fights whoever comes at him; his followers go for
+		# the standard. Enraged, he comes for it himself.
+		return standard if e.enraged and standard != null and is_instance_valid(standard) and standard.is_target() else null
 	if e != null and e.has_meta("guard") and not _awake():
 		return null
 	return standard if standard != null and is_instance_valid(standard) and standard.is_target() else null
@@ -370,7 +404,10 @@ func wait_y() -> float:
 	return 0.0
 
 
-func on_reached_bottom(_e) -> bool:
+func on_reached_bottom(e) -> bool:
+	if e != null and e.has_meta("fleeing"):
+		escaped += 1
+		main.hud.show_message("One of his got out of the castle ahead of you!")
 	return true
 
 
@@ -407,6 +444,8 @@ func process(delta: float) -> void:
 		_pens(delta)
 		_caches()
 		_send_side(delta)
+		if escaping:
+			_rockfall(delta)
 	match phase:
 		"enter":
 			arrive_t += delta
@@ -418,8 +457,15 @@ func process(delta: float) -> void:
 				fight_t = 0.0
 				_woke = false
 				_stragglers_come()
+				if escaping:
+					_room_taken()   # (no clearing it: out, as fast as the army can)
+				elif king != null and is_instance_valid(king) and not told_throne:
+					told_throne = true
+					_story("ds_throne", func(): pass)
 		"fight":
 			fight_t += delta
+			if king != null and is_instance_valid(king) and not king.has_meta("beaten"):
+				return   # (the throne room isn't taken while he stands)
 			var done: bool = main.wave - wave0 >= _waves() and main.spawn_queue.is_empty()
 			if done and main.get_enemies().is_empty() and _downed() == 0:
 				_room_taken()
@@ -604,8 +650,12 @@ func _had(id: String) -> void:
 
 # --- The ways on --------------------------------------------------------------------------
 
-## The room's taken (or nothing more is coming): the ways on show.
+## The room's taken (or nothing more is coming): the ways on show. Escaping, only the way
+## back out (to the hall before, or out of the castle).
 func _room_taken() -> void:
+	if escaping:
+		_escape_ways()
+		return
 	phase = "clear"
 	var first: bool = not _state(room()["id"])["cleared"]
 	_state(room()["id"])["cleared"] = true
@@ -664,6 +714,8 @@ func _arrow_point(a: Dictionary) -> Vector2:
 
 func _where(a: Dictionary) -> String:
 	var to := str(a["to"])
+	if to == "field":
+		return "the Fields of Dawn"
 	return "the Throne Room" if to == "out" else _room_named(to)
 
 
@@ -697,6 +749,9 @@ func _room_named(id: String) -> String:
 
 func _go(a: Dictionary) -> void:
 	if phase != "clear":
+		return
+	if str(a["to"]) == "field":
+		_march_to(a["door"], FIELD)
 		return
 	if str(a["to"]) == "out":
 		_end(true)
@@ -812,7 +867,11 @@ func _pan() -> void:
 	stragglers.clear()
 	for e in main.get_enemies():
 		if not e.dead and not e.is_queued_for_deletion():
-			stragglers.append([e.kind, e.level])
+			if escaping:
+				escaped += 1   # (fleeing like the army: out ahead of it, to fight for him outside)
+				e.queue_free()
+			else:
+				stragglers.append([e.kind, e.level])
 	# Townsfolk still on their way out of here get out.
 	for c in townsfolk:
 		if is_instance_valid(c):
@@ -837,7 +896,10 @@ func _pan() -> void:
 	tw.tween_callback(func():
 		var coming := through.duplicate()
 		through.clear()
-		_enter_room(march_to, coming, keep_hp, by)
+		if march_to == FIELD:
+			_to_field(coming, keep_hp)
+		else:
+			_enter_room(march_to, coming, keep_hp, by)
 		main.position = start_pos + out * size)
 	tw.tween_property(main, "position", start_pos, PAN_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
@@ -862,6 +924,171 @@ func _downed() -> int:
 	return n
 
 
+# --- The Ogre King -------------------------------------------------------------------------
+
+## All nine beacons lit: he's ready for the army, and beaten in his throne room he doesn't
+## fall (the true-power route).
+func united() -> bool:
+	return main.campaign and Campaign.beacon_count() >= 9
+
+
+## A story in the middle of the battle: the game holds still while it plays.
+func _story(key: String, then: Callable) -> void:
+	var lines: Array = Campaign.story_lines(key) if main.campaign else []
+	if lines.is_empty():
+		then.call()
+		return
+	main.get_tree().paused = true
+	main.hud.play_story(lines, func():
+		main.get_tree().paused = false
+		then.call())
+
+
+## The Ogre King beaten in his throne room. With fewer than nine beacons, he falls: the
+## standard ending. With all nine, he draws on the corrupted beacon instead, and the castle
+## starts coming down: the army has to get out.
+func boss_beaten(e) -> void:
+	if e != king:
+		super.boss_beaten(e)
+		return
+	if not united():
+		_story("ds_king_falls", func():
+			e.remove_meta("undying")
+			e.take_damage(1e9, false)
+			for x in main.get_enemies():
+				if not x.dead:
+					x.take_damage(1e9, false)   # (the horde breaks at the sight of it)
+			Campaign.flags.erase("ds_united")
+			_end(true))
+		return
+	_story("ds_unbound", func():
+		main.spawn_burst(e.position, 120.0, Color(1.0, 0.3, 0.1))
+		main.spawn_flash(e.position, 90.0)
+		main.sfx("boom", 0.6)
+		e.queue_free()   # (gone through the window, to meet the Line outside)
+		king = null
+		escaping = true
+		_state(room()["id"])["cleared"] = true
+		for x in main.get_enemies():
+			if not x.dead:
+				x.set_meta("fleeing", true)
+				x.remove_meta("guard")
+				x.goal = null
+		main.hud.show_message("The castle's coming down! Get out, hall by hall. Anything of his that gets out first waits for you outside.")
+		checkpoint()
+		_room_taken())
+
+
+## Escaping: the way back out of this hall (its south door, to the hall before, or out of
+## the castle from the Gatehouse Hall).
+func _escape_ways() -> void:
+	phase = "clear"
+	arrows.clear()
+	if arrow_node == null or not is_instance_valid(arrow_node):
+		arrow_node = ArrowNode.new()
+		arrow_node.rules = self
+		arrow_node.z_index = 50
+		main.add_child(arrow_node)
+	var at := MAIN_WAY.find(room()["id"])
+	var to: String = "field" if at <= 0 else MAIN_WAY[at - 1]
+	var door := _door("s")
+	arrows.append({"door": door, "at": _door_at(door), "to": to})
+	rock_t = 2.0
+	fight_t = 0.0
+	main.queue_redraw()
+
+
+## Escaping into a hall: whatever of his is still in it (or in its side room, if that
+## wasn't taken) makes for the way out too.
+func _fleeing_out(r: Dictionary, k: float) -> void:
+	for id in r.get("doors", {}):
+		var side_id: String = str(r["doors"][id])
+		if MAIN_WAY.has(side_id) or side_id in ["out", "field"]:
+			continue
+		if _state(side_id)["cleared"]:
+			continue
+		_state(side_id)["cleared"] = true
+		var spec: Dictionary = rooms[_room_index(side_id)]
+		var door := _door(id)
+		var at := _door_at(door) + _inward(door["side"]) * 30.0
+		for g in spec.get("garrison", []):
+			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), main.paths.open_spot(at + Vector2(randf_range(-30, 30), randf_range(-30, 30))))
+			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+			e.set_meta("fleeing", true)
+			e.goal = null
+		main.hud.show_message("%s's guards are running for it too!" % spec["name"])
+
+
+## The castle coming down round the army: a fall of stone, its spot shown on the ground a
+## moment first, on someone near; more and more often the longer the army stays.
+func _rockfall(delta: float) -> void:
+	fight_t += delta
+	rock_t -= delta
+	if rock_t > 0.0:
+		return
+	rock_t = ROCK_EVERY / (3.0 if fight_t > ROCK_COLLAPSE else 1.0)
+	var troops: Array = main.get_warriors().filter(func(w): return w.is_active())
+	if troops.is_empty():
+		return
+	var w = troops.pick_random()
+	var fall := RockFall.new()
+	fall.main = main
+	fall.position = w.position + Vector2(randf_range(-30, 30), randf_range(-30, 30))
+	fall.damage = 35.0 + 3.0 * main.wave_level(maxi(main.wave, 1))
+	main.corpse_layer.add_child(fall)
+
+
+## A fall of masonry: its ring on the ground for WARN seconds, then it lands on whoever's
+## still under it (the army and the enemy alike).
+class RockFall extends Node2D:
+	const WARN := 1.4
+	const RADIUS := 42.0
+	var main
+	var damage := 40.0
+	var t := 0.0
+	func _process(delta: float) -> void:
+		t += delta
+		if t >= WARN:
+			for w in main.warriors_near(position, RADIUS + 20.0):
+				if w.is_active() and w.position.distance_to(position) <= RADIUS + w.RADIUS * 0.5:
+					w.take_damage(damage)
+			for e in main.enemies_near(position, RADIUS + 30.0):
+				if not e.dead and not e.flying and e.position.distance_to(position) <= RADIUS + e.radius * 0.5:
+					e.take_damage(damage, false)
+			main.spawn_burst(position, RADIUS, Color(0.55, 0.52, 0.5))
+			main.sfx("crumble", 0.9)
+			queue_free()
+			return
+		queue_redraw()
+	func _draw() -> void:
+		var k := t / WARN
+		draw_set_transform(Vector2.ZERO, 0, Vector2(1.0, 0.6))
+		draw_circle(Vector2.ZERO, RADIUS, Color(0.1, 0.08, 0.08, 0.25 + 0.2 * k))
+		draw_arc(Vector2.ZERO, RADIUS, 0.0, TAU, 32, Color(1.0, 0.5, 0.3, 0.9), 2.5, true)
+		draw_circle(Vector2.ZERO, RADIUS * k, Color(0.5, 0.45, 0.42, 0.35))
+		draw_set_transform(Vector2.ZERO)
+		# The stones coming down.
+		var y := -260.0 * (1.0 - k)
+		for i in 4:
+			draw_rect(Rect2(Vector2(-14 + i * 8, y - i * 6), Vector2(8, 7)), Color(0.5, 0.48, 0.46))
+
+
+## Out of the castle: the battle goes on in the open, against the Ogre King's true power
+## (rules_finale.gd takes it from here).
+func _to_field(coming: Array, std_hp: float) -> void:
+	var f = load("res://scripts/mission/rules_finale.gd").new()
+	f.setup(main, mission)
+	main.rules = f
+	if arrow_node != null and is_instance_valid(arrow_node):
+		arrow_node.queue_free()
+	if standard != null and is_instance_valid(standard):
+		standard.queue_free()
+	for c in pens + caches + townsfolk:
+		if is_instance_valid(c):
+			c.queue_free()
+	f.take_over(self, coming, std_hp)
+
+
 # --- Checkpoints ----------------------------------------------------------------------------
 
 ## The army as it comes into the room (before anything's had in it): kept, so a lost battle
@@ -876,7 +1103,9 @@ func checkpoint() -> void:
 		var k: float = main.FIELD_W / 640.0
 		rec["post"] = Vector2(a[2].x / k, a[2].y)
 		return rec)
-	Campaign.set_checkpoint(Campaign.mission_id, CP_BASE + room_i, {"zone": CP_BASE + room_i, "room": room_i, "entry": entry, "name": cp_name,
+	var key: int = (CP_ESCAPE if escaping else CP_BASE) + room_i
+	Campaign.set_checkpoint(Campaign.mission_id, key, {"zone": key, "room": room_i, "entry": entry, "name": cp_name + (" (getting out)" if escaping else ""),
+			"escape": escaping, "escaped": escaped,
 			"gold": main.gold, "wave": main.wave, "army": army, "xp": cp_xp, "owned": main.powers.owned.keys(),
 			"standard": standard.hp / standard.max_hp if standard != null else 1.0, "rooms": room_state.duplicate(true),
 			"freed": freed, "joined": joined, "garrisons": garrisons.duplicate(true), "stragglers": stragglers.duplicate(true)})

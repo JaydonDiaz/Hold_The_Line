@@ -2728,7 +2728,7 @@ func spawn_corpse(e) -> void:
 		return
 	var f := Fx.new()
 	f.mode = "fall"
-	f.tex = Sprites.frames(e.kind)[0]
+	f.tex = Sprites.frames(e.look)[0]
 	f.radius = e.radius
 	f.size = Vector2(Sprites.SIZE, Sprites.SIZE) * e.sprite_scale
 	f.flip = e.flip

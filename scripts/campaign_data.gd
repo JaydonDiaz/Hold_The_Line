@@ -506,6 +506,14 @@ const MISSIONS := {
 					"volleys": {"first": 35.0, "every": [45.0, 60.0], "kinds": ["arrows", "fire"]}}],
 			# Inside the citadel (F3, rules_castle.gd): four halls on the main way, a side
 			# room off each (two of cells, the stores, the treasury).
+			# All nine beacons lit: he's seen them, and made ready ("prepared" here and in the
+			# rooms' "prepared_garrison"): a tower more in each field, sally parties twice as
+			# often, his King's Guard in the last halls. Beaten in his throne room, he draws on
+			# the corrupted beacon instead of falling: the army escapes the castle, and meets
+			# him on the open field (rules_finale.gd, "finale").
+			"prepared": {"towers": [[Vector2(320, 300)], [Vector2(200, 300)], [Vector2(320, 300)]], "sally_every": 2,
+				"garrison": [[["orc", Vector2(320, 230)], ["skeleton_archer", Vector2(120, 260)]], [["troll", Vector2(320, 230)]],
+					[["warlord", Vector2(180, 260), "guard"], ["skeleton_archer", Vector2(460, 240)]]]},
 			"castle": {"reserve": 500, "standard": 900, "level_bonus": 1, "rooms": [
 				{"id": "gatehall", "map": "dsc_gatehall", "name": "The Gatehouse Hall", "waves": 3,
 					"note": "Inside! Plant the standard and hold it. Their archers can't shoot through the walls, and neither can yours.",
@@ -553,7 +561,15 @@ const MISSIONS := {
 					"garrison": [["troll", Vector2(320, 200)], ["warlord", Vector2(320, 120)], ["skeleton_archer", Vector2(150, 320)],
 						["skeleton_archer", Vector2(490, 320)], ["orc", Vector2(220, 440)], ["orc", Vector2(420, 440)], ["wyvern", Vector2(320, 260)],
 						["troll", Vector2(200, 200)], ["troll", Vector2(440, 200)], ["slime", Vector2(320, 380)], ["skeleton_archer", Vector2(320, 300)]],
-					"doors": {"n": "out", "w": "treasury"}},
+					"prepared_garrison": [["warlord", Vector2(200, 120), "guard"], ["warlord", Vector2(440, 120), "guard"]],
+					"doors": {"n": "throne", "w": "treasury"}},
+				{"id": "throne", "map": "dsc_throne", "name": "The Throne Room", "waves": 0,
+					"boss": {"kind": "ogre_king", "at": Vector2(320, 150), "level": 12, "hp_mult": 0.55},
+					"garrison": [["troll", Vector2(200, 260)], ["troll", Vector2(440, 260)], ["skeleton_archer", Vector2(100, 380)],
+						["skeleton_archer", Vector2(540, 380)]],
+					"prepared_garrison": [["warlord", Vector2(240, 200), "guard"], ["warlord", Vector2(400, 200), "guard"],
+						["skeleton_archer", Vector2(100, 200)], ["skeleton_archer", Vector2(540, 200)]],
+					"doors": {}},
 				{"id": "treasury", "map": "dsc_treasury", "name": "The Treasury", "waves": 0,
 					"note": "The Ogre King's plunder, under guard. Worth it, if you can take it.",
 					"garrison": [["warlord", Vector2(300, 400)], ["troll", Vector2(240, 250)], ["troll", Vector2(240, 560)], ["skeleton_archer", Vector2(420, 400)],
@@ -636,6 +652,10 @@ const SPEAKERS := {
 		"look": {"skin": Color(0.5, 0.62, 0.36), "hair": "bald", "hair_color": Color(0.22, 0.2, 0.12), "eyes": Color(1.0, 0.8, 0.2), "wide": true,
 			"head": "crown", "outfit": "ogre", "colors": [Color(0.45, 0.3, 0.18), Color(0.35, 0.22, 0.12), Color(0.92, 0.75, 0.25)],
 			"extras": ["tusks", "glow", "angry", "pelt", "teeth"], "scene": "ogre", "bg": [Color(0.7, 0.2, 0.12), Color(0.18, 0.05, 0.05)]}},
+	"unbound": {"name": "The Ogre King", "role": "Unbound", "color": Color(1.0, 0.3, 0.2),
+		"look": {"skin": Color(0.5, 0.62, 0.36), "hair": "bald", "hair_color": Color(0.22, 0.2, 0.12), "eyes": Color(1.0, 0.35, 0.15), "wide": true,
+			"head": "crown", "outfit": "ogre", "colors": [Color(0.45, 0.3, 0.18), Color(0.35, 0.22, 0.12), Color(0.92, 0.75, 0.25)],
+			"extras": ["tusks", "glow", "angry", "pelt", "teeth"], "scene": "ogre", "bg": [Color(0.95, 0.25, 0.08), Color(0.25, 0.03, 0.02)]}},
 	"marshal": {"name": "The Ash Marshal", "role": "Herald of the Ogre King", "color": Color(1.0, 0.55, 0.3),
 		"look": {"skin": Color(0.4, 0.34, 0.33), "hair": "bald", "hair_color": Color(0.1, 0.1, 0.1),
 			"head": "horned", "outfit": "armor", "colors": [Color(0.24, 0.22, 0.24), Color(0.5, 0.18, 0.1), Color(1.0, 0.5, 0.15)],
@@ -881,12 +901,53 @@ const STORY := {
 		{"who": "ysolde", "text": "Three walls stand between us and the citadel: the outer gate, the iron portcullis of the bailey, and the Dawn Gate itself."},
 		{"who": "ysolde", "text": "The Guild has built you a ram. Keep it alive, and it will break what it can. What it can't, we'll find another way through."},
 		{"who": "hale", "text": "And they took prisoners on their way north. Ashwatch's own garrison is in there somewhere. If they live, we bring them out."},
-		{"who": "ogre", "text": "Knock, then, little commander. My walls have held for two hundred years. They will hold for one more day."},
+		{"who": "ogre", "text": "Knock, then, little commander. My walls have held for two hundred years. They will hold for one more day.", "if": {"beacons_below": 9}},
+		{"who": "hale", "text": "Commander, look at the walls. More towers than our scouts counted, and the gates braced. He knew we were coming.", "if": {"beacons": 9}},
+		{"who": "ysolde", "text": "Every beacon of the Line burns tonight, all nine. He has seen them from his tower, and he has made ready for us.", "if": {"beacons": 9}},
+		{"who": "ogre", "text": "Nine fires. The whole Line, come back from the dead to knock at my door. Then I will open every gate I have, and bury it here.", "if": {"beacons": 9}},
+	],
+	# In the Throne Room, as the army comes in: he speaks from the Dawn Throne.
+	"ds_throne": [
+		{"who": "ogre", "text": "So you came all the way to my throne. The Line's throne, once. They sat here and swore their oaths, and broke every one."},
+		{"who": "ogre", "text": "I didn't take Dawnspire, little commander. They left it lying in the road. I only picked it up."},
+		{"who": "ogre", "text": "Every beacon burning. Every people at your back. You think that makes you something they never were. Come and show me.", "if": {"beacons": 9}},
+		{"who": "hale", "text": "Hold the standard, and watch the ground: he shows his slams before they land. Get clear when the red ring fills."},
+	],
+	# The standard route: the Ogre King falls in his throne room.
+	"ds_king_falls": [
+		{"who": "ogre", "text": "No... not to a frontier captain with borrowed soldiers..."},
+		{"who": "hale", "text": "He's down. The Ogre King is down!"},
+	],
+	# The nine-beacon route: beaten, he draws on what's under Dawnspire.
+	"ds_unbound": [
+		{"who": "unbound", "text": "Down? You think I am down? Look at your beacons, little commander. Every one of them a promise. Every one of them a lie, once."},
+		{"who": "unbound", "text": "This beacon was the first to go dark. I drank it dry, and the curse of every oath they broke with it. Their betrayal is my strength."},
+		{"who": "unbound", "text": "Now I will have all of it. Run, if you like. The castle is mine. The field outside is mine. I will meet your Line there, and end it."},
+		{"who": "ysolde", "text": "He's pulling on the beacon itself. The whole citadel's coming apart around it. Commander, out! Get everyone out!"},
+		{"who": "hale", "text": "Back the way we came, hall by hall! And anything of his that gets out before us will be waiting for us outside. Cut them off if you can."},
+	],
+	# Out of the castle, onto the Fields of Dawn: the whole Line comes.
+	"ds_field": [
+		{"who": "hale", "text": "We're out. And look: the Line's come for us. Every banner we've fought beside."},
+		{"who": "vell", "text": "The Guild's here, Commander, with every engine we could haul up the road.", "if": {"ally": "stonehollow"}},
+		{"who": "thorne", "text": "The Watch holds the high ground. Point us at him.", "if": {"ally": "greenwood"}},
+		{"who": "ilse", "text": "The Sanctuary stands behind you. No one falls today that we can reach.", "if": {"ally": "mercyvale"}},
+		{"who": "dagna", "text": "Deepdelve came up out of the mountain for this. Let's make it count.", "if": {"ally": "deepdelve"}},
+		{"who": "ysra", "text": "The North keeps its word this time.", "if": {"ally": "frostmarch"}},
+		{"who": "kaito", "text": "Breathe, Commander. Then strike.", "if": {"ally": "monastery"}},
+		{"who": "coralie", "text": "The Free Cities have paid for this battle in full. We intend to see it won.", "if": {"ally": "freecities"}},
+		{"who": "ysolde", "text": "When he charges, he leaves himself open after. That is when every one of us strikes."},
+		{"who": "unbound", "text": "All of you, on one field. Good. Then I only have to win once."},
 	],
 	"ds_assault_outro": [
-		{"who": "hale", "text": "The Dawn Gate is down. We're through the walls."},
-		{"who": "ysolde", "text": "The citadel's halls are ahead, and he'll have filled every one of them. Rest the army while you can, Commander."},
-		{"who": "ogre", "text": "You broke my gates. Come inside and see what waits behind them."},
+		{"who": "hale", "text": "The Ogre King is dead. Dawnspire is ours.", "if": {"no_flag": "ds_united"}},
+		{"who": "ysolde", "text": "Two hundred years, and the citadel at the heart of the Line is free. The beacon here is cold, but it can be lit again.", "if": {"no_flag": "ds_united"}},
+		{"who": "hale", "text": "Not every people came to this fight, Commander. The Line holds today. Whether it holds tomorrow is up to all of them.", "if": {"no_flag": "ds_united"}},
+		{"who": "hale", "text": "He's gone. Truly gone, and Dawnspire with him gone free.", "if": {"flag": "ds_united"}},
+		{"who": "ysolde", "text": "Nine beacons, and now a tenth: Dawnspire's own, lit by every people together. The first time it has burned since the oath was broken.", "if": {"flag": "ds_united"}},
+		{"who": "vell", "text": "The Guild will raise the walls again. Properly, this time.", "if": {"flag": "ds_united"}},
+		{"who": "ilse", "text": "We'll tend the wounded of every side. That was always the oath, wasn't it?", "if": {"flag": "ds_united"}},
+		{"who": "hale", "text": "No one holds the line alone. We swore it once and broke it. Let's not break it again.", "if": {"flag": "ds_united"}},
 	],
 	"sp_archive_intro": [
 		{"who": "ysolde", "text": "Under the tower lies the Archive: the oaths of the Line, sealed when it fell, so no one could read what we had broken."},

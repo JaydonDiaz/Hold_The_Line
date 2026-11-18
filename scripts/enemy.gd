@@ -100,11 +100,19 @@ var breath_timer := 1.0
 var horn_timer := 15.0
 var enrage_at := 0.0
 var enraged := false
+const STOMP_WARN := 0.9   # seconds a boss's slam shows its ring before it lands
+var stomp_wind := 0.0     # > 0 while it's winding up a slam
+var boss_hold := 0.0      # > 0: a boss stands where it is (exposed after a charge, say)
 var stomp_timer := 3.0
 var summon_timer := 5.0
 var bounty := 5
 var radius := 12.0
 var sprite_scale := 2.5
+var look := ""              # the sprite it's drawn with (its kind's own, unless its data names another)
+var aura := Color(0, 0, 0, 0)   # a glow round it (the Ogre King unbound: the corrupted beacon's fire)
+var charge_warn := 0.0      # > 0: a charge about to start (its line shown on the ground)
+var exposed := 0.0          # > 0: caught off balance after a charge (rooted, and hit harder)
+var embers_timer := 6.0     # the unbound King's burning ground
 var flip := 1.0
 var turn := 1.0             # the facing it's drawn with: swings over to flip in a quick turn, never snaps
 var turn_hold := 0.0        # how long flip has pointed away from turn (a turn starts once it's held a moment)
@@ -166,6 +174,8 @@ var goal_check := 1.0             # when to ask the rules again for an objective
 func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult: float, bounty_mult: float) -> void:
 	kind = k
 	main = m
+	look = str(d.get("look", k))
+	aura = d.get("aura", Color(0, 0, 0, 0))
 	max_hp = d["hp"] * hp_mult
 	hp = max_hp
 	speed = d["speed"] * randf_range(0.9, 1.1)
@@ -308,6 +318,9 @@ func _process(delta: float) -> void:
 
 	if boss:
 		_boss_update(delta)
+		if stomp_wind > 0.0 or boss_hold > 0.0:
+			boss_hold = maxf(0.0, boss_hold - delta)
+			return   # (rooted while it winds up a slam, or caught off balance)
 	if not rush.is_empty() and _charge_update(delta):
 		_push_out()
 		queue_redraw()
@@ -468,6 +481,8 @@ func _hit_mult() -> float:
 ## Ogre King: stomps when anything of yours is close, calls in help, and gets
 ## angrier as it's worn down.
 func _boss_update(delta: float) -> void:
+	if exposed > 0.0 or charge_warn > 0.0 or charging > 0.0:
+		return   # (busy charging, or off balance after it)
 	if not enraged and enrage_at > 0.0 and hp < max_hp * enrage_at:
 		enraged = true
 		speed *= ENRAGE_SPEED
@@ -476,23 +491,62 @@ func _boss_update(delta: float) -> void:
 	if not banner.is_empty():
 		_banner_update(delta)
 	stomp_timer -= delta
-	if not stomp.is_empty() and stomp_timer <= 0.0:
-		var r: float = stomp["radius"]
-		var near: Array = main.get_warriors().filter(func(w): return w.is_active() and position.distance_to(w.position) <= r + w.RADIUS)
-		var walls: Array = main.get_barricades().filter(func(b): return b.is_active() and b.gap_from(position) <= r)
-		if not near.is_empty() or not walls.is_empty():
+	if stomp_wind > 0.0:
+		# Winding up a slam: the ring on the ground fills, then it lands on whoever's still in it.
+		stomp_wind -= delta
+		queue_redraw()
+		if stomp_wind > 0.0:
+			return
+		stomp_wind = 0.0
+		_stomp_lands()
+	elif not stomp.is_empty() and stomp_timer <= 0.0:
+		var r0: float = stomp["radius"]
+		var near0: Array = main.get_warriors().filter(func(w): return w.is_active() and position.distance_to(w.position) <= r0 + w.RADIUS)
+		var walls0: Array = main.get_barricades().filter(func(b): return b.is_active() and b.gap_from(position) <= r0)
+		if not near0.is_empty() or not walls0.is_empty():
 			stomp_timer = stomp["cooldown"]
-			main.sfx("stomp")
-			lunge = 0.15
-			for w in near:
-				w.take_damage(stomp["damage"])
-				var away: Vector2 = position.direction_to(w.position) if w.position != position else Vector2.DOWN
-				w.shove(away * stomp.get("push", 0.0), stomp.get("stun", 0.0))
-			for b in walls:
-				b.take_damage(stomp["damage"] * 3.0)
-			main.spawn_burst(position + Vector2(0, radius), r, Color(0.65, 0.5, 0.3))
-			main.spawn_burst(position + Vector2(0, radius), r * 0.6, Color(0.85, 0.75, 0.55))
-			main.spawn_text(position + Vector2(0, -60), "STOMP!", Color(1, 0.75, 0.4))
+			stomp_wind = STOMP_WARN   # (the warning first: quick troops can get clear)
+			main.spawn_text(position + Vector2(0, -70), "!", Color(1, 0.4, 0.3))
+	_boss_rest(delta)
+
+
+## The slam itself, once its warning's run out.
+func _stomp_lands() -> void:
+	var r: float = stomp["radius"]
+	main.sfx("stomp")
+	lunge = 0.15
+	for w in main.get_warriors().filter(func(x): return x.is_active() and position.distance_to(x.position) <= r + x.RADIUS):
+		w.take_damage(stomp["damage"])
+		var away: Vector2 = position.direction_to(w.position) if w.position != position else Vector2.DOWN
+		w.shove(away * stomp.get("push", 0.0), stomp.get("stun", 0.0))
+	for b in main.get_barricades().filter(func(x): return x.is_active() and x.gap_from(position) <= r):
+		b.take_damage(stomp["damage"] * 3.0)
+	main.spawn_burst(position + Vector2(0, radius), r, Color(0.65, 0.5, 0.3))
+	main.spawn_burst(position + Vector2(0, radius), r * 0.6, Color(0.85, 0.75, 0.55))
+	main.spawn_text(position + Vector2(0, -60), "STOMP!", Color(1, 0.75, 0.4))
+
+
+## The rest of a boss's turn: its summons and war horn.
+func _boss_rest(delta: float) -> void:
+	var em: Dictionary = main.Data.ENEMIES[kind].get("embers", {})
+	if not em.is_empty():
+		embers_timer -= delta
+		if embers_timer <= 0.0:
+			embers_timer = float(em["cooldown"])
+			# Burning ground: under the troops nearest him, marked a moment before it catches.
+			var near: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and w.position.distance_to(position) < 360.0)
+			near.shuffle()
+			for w in near.slice(0, int(em["count"])):
+				var patch = preload("res://scripts/ember_patch.gd").new()
+				patch.main = main
+				patch.position = w.position
+				patch.radius = float(em["radius"])
+				patch.dps = float(em["dps"]) * (1.0 + 0.1 * (level - 1))
+				patch.duration = float(em["duration"])
+				patch.warn = float(em["warn"])
+				main.corpse_layer.add_child(patch)
+			if not near.is_empty():
+				main.spawn_text(position + Vector2(0, -70), "Burn!", Color(1, 0.5, 0.2))
 	summon_timer -= delta
 	if not summon.is_empty() and summon_timer <= 0.0 and position.y > 0.0:
 		summon_timer = summon["cooldown"]
@@ -568,13 +622,38 @@ func banner_up() -> bool:
 ## along a line that's clear: never through rock, cliffs, water (a ford included) or a
 ## wall, and a charge that meets one stops dead. Returns true while charging.
 func _charge_update(delta: float) -> bool:
+	if charge_warn > 0.0:
+		charge_warn -= delta
+		queue_redraw()
+		if charge_warn <= 0.0:
+			charge_warn = 0.0
+			_charge_go()
+		return true
+	if exposed > 0.0:
+		exposed -= delta
+		queue_redraw()
+		if exposed <= 0.0:
+			exposed = 0.0
+			vuln = maxf(0.0, vuln - float(rush.get("exposed_vuln", 0.0)))
+		return true
 	if charging > 0.0:
 		charging -= delta
+		if charging <= 0.0 and float(rush.get("exposed", 0.0)) > 0.0:
+			# Spent: off balance where it stopped, open to the troops round it.
+			exposed = float(rush["exposed"])
+			vuln += float(rush.get("exposed_vuln", 0.0))
+			main.spawn_text(position + Vector2(0, -80), "Exposed!", Color(1, 0.9, 0.4))
+			return true
 		var next := position + charge_dir * float(rush["speed"]) * delta
 		var paths = main.paths
 		if paths.blocked(next, radius) or paths.in_ford(next) or paths.any_wall_between(position, next) \
 				or next.y > main.CASTLE_Y - radius or next.x < radius or next.x > main.FIELD_W - radius:
 			charging = 0.0   # (something in the way: it stops dead)
+			if float(rush.get("exposed", 0.0)) > 0.0:
+				exposed = float(rush["exposed"])
+				vuln += float(rush.get("exposed_vuln", 0.0))
+				main.spawn_text(position + Vector2(0, -80), "Exposed!", Color(1, 0.9, 0.4))
+				return true
 			return false
 		position = next
 		walking = true
@@ -605,12 +684,23 @@ func _charge_update(delta: float) -> bool:
 		return false
 	charge_timer = float(rush["cooldown"])
 	charge_dir = position.direction_to(best.position)
-	charging = (best_d + 20.0) / float(rush["speed"])
+	charge_len = best_d + 20.0
 	charge_hit = []
 	lunge_dir = charge_dir
+	if float(rush.get("warn", 0.0)) > 0.0:
+		charge_warn = float(rush["warn"])   # (its line on the ground first: time to get out of the way)
+		main.spawn_text(position + Vector2(0, -70), "!", Color(1, 0.4, 0.3))
+		return true
+	_charge_go()
+	return true
+
+
+var charge_len := 0.0
+
+func _charge_go() -> void:
+	charging = charge_len / float(rush["speed"])
 	main.spawn_text(position + Vector2(0, -70), "CHARGE!", Color(1, 0.45, 0.2))
 	main.sfx("dash", 0.7)
-	return true
 
 
 ## Whether a charge from a to b would meet nothing: no rock, cliff, water, ford or wall.
@@ -1085,6 +1175,14 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
 	if show_hit:
 		flash = 0.08
+	if hp <= 0.0 and has_meta("undying"):
+		# Beaten, but this one isn't killed by it: the battle decides what happens (see the
+		# rules' boss_beaten).
+		hp = 1.0
+		if not has_meta("beaten"):
+			set_meta("beaten", true)
+			main.rules.boss_beaten(self)
+		return
 	if hp <= 0.0:
 		dead = true
 		died.emit(self)
@@ -1209,7 +1307,7 @@ func _gait() -> Array:
 	# over onto the planted foot step by step.
 	var pace := 0.5 - 0.5 * cos(PI * (bob / 2.5 - 0.5))
 	var side := sin(ph * 0.5)
-	match kind:
+	match look:
 		"slime":
 			# Hops: squashed flat on the ground (its squashed frame: see _draw), springing
 			# up tall, landing flat again.
@@ -1231,12 +1329,38 @@ func _gait() -> Array:
 
 func _draw() -> void:
 	_draw_sap_mark()
+	if stomp_wind > 0.0:
+		# The slam's warning: its reach on the ground, filling as it comes.
+		var r: float = stomp["radius"]
+		var k: float = 1.0 - stomp_wind / STOMP_WARN
+		var foot := Vector2(0, radius * 0.6)
+		draw_set_transform(foot, 0, Vector2(1.0, 0.55))
+		draw_circle(Vector2.ZERO, r, Color(1.0, 0.25, 0.15, 0.12 + 0.12 * k))
+		draw_circle(Vector2.ZERO, r * k, Color(1.0, 0.35, 0.2, 0.22))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 48, Color(1.0, 0.3, 0.2, 0.9), 3.0, true)
+		draw_set_transform(Vector2.ZERO)
 	var tint := Color.WHITE
 	if slow_timer > 0.0 or freeze_timer > 0.0 or ice_crust > 0.0:
 		tint = Color(0.6, 0.85, 1.3)
 	if flash > 0.0:
 		tint = Color(3, 3, 3)
-	var frames: Array = Sprites.frames(kind)
+	if aura.a > 0.0:
+		# His aura: the corrupted beacon's fire, pulsing round him.
+		var pulse := 0.75 + 0.25 * sin(Time.get_ticks_msec() / 160.0)
+		draw_set_transform(Vector2(0, radius * 0.4), 0, Vector2(1.0, 0.6))
+		draw_circle(Vector2.ZERO, radius * 2.2, Color(aura, aura.a * 0.35 * pulse))
+		draw_circle(Vector2.ZERO, radius * 1.5, Color(aura, aura.a * 0.5 * pulse))
+		draw_set_transform(Vector2.ZERO)
+	if charge_warn > 0.0:
+		# The charge coming: its line along the ground.
+		var to := charge_dir * float(rush.get("range", 200.0))
+		draw_line(Vector2(0, radius * 0.5), to + Vector2(0, radius * 0.5), Color(1.0, 0.25, 0.15, 0.35), radius * 1.6)
+		draw_line(Vector2(0, radius * 0.5), to + Vector2(0, radius * 0.5), Color(1.0, 0.4, 0.25, 0.9), 2.0)
+	if exposed > 0.0:
+		var f := ThemeDB.fallback_font
+		draw_string_outline(f, Vector2(-60, -radius * 3.6 - 22), "EXPOSED!", HORIZONTAL_ALIGNMENT_CENTER, 120, 14, 4, Color(0, 0, 0, 0.9))
+		draw_string(f, Vector2(-60, -radius * 3.6 - 22), "EXPOSED!", HORIZONTAL_ALIGNMENT_CENTER, 120, 14, Color(1.0, 0.9, 0.4))
+	var frames: Array = Sprites.frames(look)
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * sprite_scale
 	var feet := radius
 	# Shadow, sprite and health bar all come from the sprite atlas, so the renderer can
@@ -1258,7 +1382,7 @@ func _draw() -> void:
 	elif fighting and cd_timer < 0.3:
 		attack = "raise"
 	if attack != "":
-		var posed = Sprites.pose(kind, attack)
+		var posed = Sprites.pose(look, attack)
 		if posed != null:
 			body_tex = posed
 	var nudge := lunge_dir * (lunge / 0.15) * 6.0

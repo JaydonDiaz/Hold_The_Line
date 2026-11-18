@@ -296,6 +296,13 @@ func _make_unit(rec: Dictionary):
 	return w
 
 
+## A boss that can't simply be killed ("undying": the Ogre King) has been beaten: what
+## happens is the battle's to say. Here: it falls like anything else.
+func boss_beaten(e) -> void:
+	e.remove_meta("undying")
+	e.take_damage(1e9, false)
+
+
 ## A click on the field that the battle takes (a way on's arrow, say): true if it did.
 func click(_p: Vector2) -> bool:
 	return false

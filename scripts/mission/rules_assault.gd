@@ -107,8 +107,16 @@ func start() -> void:
 	var resume: Dictionary = Campaign.checkpoint(Campaign.mission_id, Campaign.op_resume_zone) \
 			if main.campaign and Campaign.op_resume_zone > 0 else {}
 	Campaign.op_resume_zone = 0
+	if not resume.is_empty() and int(resume.get("zone", 0)) >= 300:
+		# Taken up again on the Fields of Dawn (the nine-beacon finale).
+		var fin = load("res://scripts/mission/rules_finale.gd").new()
+		fin.setup(main, mission)
+		main.rules = fin
+		fin.resume(resume)
+		return
 	if not resume.is_empty() and int(resume.get("zone", 0)) >= 100:
-		# Taken up again inside the citadel: the castle's rules take the battle from there.
+		# Taken up again inside the citadel (or getting out of it): the castle's rules take
+		# the battle from there.
 		var castle = load("res://scripts/mission/rules_castle.gd").new()
 		castle.setup(main, mission)
 		main.rules = castle
@@ -151,7 +159,7 @@ func _setup_zone() -> void:
 			"hp": g.get("hp", 900.0), "at": g.get("at", Vector2(320, 150))})
 	if z.has("winch"):
 		winch = _work({"id": "winch", "kind": "winch", "name": "The winch house", "at": z["winch"]["at"]})
-	for at in z.get("towers", []):
+	for at in z.get("towers", []) + (_prep("towers") if united() else []):
 		var t = _work({"id": "tower", "kind": "siege_tower", "name": "Archer tower", "at": at})
 		towers.append(t)
 		shot_t[t] = 0.0   # (it looses at the first thing in reach, straight away)
@@ -175,13 +183,38 @@ func _setup_zone() -> void:
 	var v: Dictionary = z.get("volleys", {})
 	volley_t = float(v.get("first", 40.0)) if not v.is_empty() else INF
 	var k: float = main.FIELD_W / 640.0
-	for g2 in z.get("garrison", []):
+	for g2 in z.get("garrison", []) + (_prep("garrison") if united() else []):
 		main._spawn_enemy(g2[0], main.wave_level(maxi(main.wave, 1)), Vector2(g2[1].x * k, g2[1].y))
 		var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 		e.set_meta("guard", true)   # (it holds its post by the gate: see enemy_goal)
 		e.goal = null
+		if g2.size() > 2 and g2[2] == "guard":
+			kings_guard(e)
 	if z.get("note", "") != "":
 		main.hud.show_message(z["note"])
+
+
+## All nine beacons lit: the Ogre King has seen them, and made ready for the army (more
+## towers, more of his garrison, sally parties more often: the mission's "prepared").
+func united() -> bool:
+	return main.campaign and Campaign.beacon_count() >= 9
+
+
+## This field's share of his preparations.
+func _prep(key: String) -> Array:
+	var list: Array = _a().get("prepared", {}).get(key, [])
+	return list[zone_i] if zone_i < list.size() else []
+
+
+## One of the Ogre King's own guard: a champion of his, tougher and harder-hitting than its
+## kind, named over its head.
+static func kings_guard(e) -> void:
+	e.set_meta("title", "King's Guard")
+	e.max_hp *= 1.8
+	e.hp = e.max_hp
+	e.damage *= 1.25
+	e.cc_mult *= 0.6
+	e.bounty *= 2
 
 
 func _work(d: Dictionary):
@@ -445,9 +478,10 @@ func spawn_point(r: float) -> Vector2:
 	if wagon == null or phase != "advance" or zone_along() < 0.08:
 		return Vector2.INF
 	sallied += 1
-	if sallied % SALLY_EVERY != 0:
+	var every: int = int(_a().get("prepared", {}).get("sally_every", SALLY_EVERY)) if united() else SALLY_EVERY
+	if sallied % every != 0:
 		return Vector2.INF
-	var left: bool = (sallied / SALLY_EVERY) % 2 == 0
+	var left: bool = (sallied / every) % 2 == 0
 	var y := clampf(wagon.position.y + randf_range(-90.0, 50.0), 230.0, main.CASTLE_Y - 40.0)
 	var p := Vector2(r + 6.0 if left else main.FIELD_W - r - 6.0, y)
 	p = main.paths.open_spot(p)

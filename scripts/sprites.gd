@@ -3835,6 +3835,8 @@ static func _alt_rows(sprite: String) -> Array:
 ## Variants inherit the base sprite's palette, overriding some colors.
 static func _palette(sprite: String) -> Dictionary:
 	var s: Dictionary = _entry(sprite)
+	if not SPRITES.has(sprite) and not _generated.has(sprite):
+		sprite = str(preload("res://scripts/data.gd").ENEMIES.get(sprite, {}).get("look", sprite))
 	if s.has("base"):
 		return SPRITES[s["base"]]["palette"].merged(s["palette"], true)
 	return s["palette"]
@@ -3842,7 +3844,13 @@ static func _palette(sprite: String) -> Dictionary:
 
 ## A drawn sprite, or one made up by combo().
 static func _entry(sprite: String) -> Dictionary:
-	return SPRITES[sprite] if SPRITES.has(sprite) else _generated[sprite]
+	if SPRITES.has(sprite):
+		return SPRITES[sprite]
+	if _generated.has(sprite):
+		return _generated[sprite]
+	# An enemy drawn with another's look (the Ogre King unbound: his own).
+	var look = preload("res://scripts/data.gd").ENEMIES.get(sprite, {}).get("look", "")
+	return SPRITES[look] if SPRITES.has(look) else _generated[sprite]
 
 
 ## A recolor of the original letters (e.g. "h" for hair) also reaches a combined

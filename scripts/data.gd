@@ -917,4 +917,21 @@ const ENEMIES := {
 			"horn": {"kinds": ["goblin", "orc", "orc", "wolf", "bat", "troll", "sapper"], "count": 8, "cooldown": 30.0},
 			"enrage": 0.5,
 			"bounty": 500, "radius": 30.0, "scale": 5.5, "color": Color(0.5, 0.6, 0.35)},
+	# The Ogre King unbound (the nine-beacon finale): his true power, drawn from the corrupted
+	# Dawnspire beacon and the curse of the Line's broken oath. The same slams and blows,
+	# and three new moves, each shown before it lands: a charge down a line marked on the
+	# ground, after which he's off balance and exposed (rooted, hit far harder) for a few
+	# seconds; burning ground under the troops nearest him; and his reinforcements.
+	"ogre_unbound": {"tier": 6, "name": "The Ogre King, Unbound", "look": "ogre_king", "aura": Color(1.0, 0.25, 0.1, 1.0),
+			"hp": 12000, "speed": 17.0, "damage": 70.0, "cooldown": 1.7, "fights": true, "cc": 0.25, "knock": 0.0,
+			"wall_damage": 140.0, "boss": true,
+			"stomp": {"damage": 60.0, "radius": 110.0, "cooldown": 7.0, "push": 80.0, "stun": 1.5},
+			"cleave": {"reach": 36.0, "arc": 2.2},
+			"charge": {"cooldown": 11.0, "min": 70.0, "range": 260.0, "speed": 260.0, "damage": 55.0, "push": 80.0, "stun": 1.2,
+				"warn": 1.0, "exposed": 3.5, "exposed_vuln": 0.75},
+			"embers": {"cooldown": 9.0, "count": 3, "radius": 46.0, "dps": 22.0, "duration": 6.0, "warn": 1.3},
+			"summon": {"kinds": ["orc", "skeleton_archer", "sapper"], "count": 3, "cooldown": 14.0},
+			"horn": {"kinds": ["orc", "orc", "troll", "wolf", "skeleton_archer", "warlord", "slime", "wyvern"], "count": 8, "cooldown": 32.0},
+			"enrage": 0.4,
+			"bounty": 1000, "radius": 32.0, "scale": 6.0, "color": Color(0.6, 0.35, 0.25)},
 }

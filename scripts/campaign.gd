@@ -853,6 +853,10 @@ func _holds(cond: Dictionary) -> bool:
 		return false
 	if cond.has("not_won") and completed.has(cond["not_won"]):
 		return false
+	if cond.has("beacons") and beacon_count() < int(cond["beacons"]):
+		return false
+	if cond.has("beacons_below") and beacon_count() >= int(cond["beacons_below"]):
+		return false
 	return true
 
 

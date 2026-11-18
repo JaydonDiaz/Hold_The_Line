@@ -131,7 +131,7 @@ func _next() -> void:
 			name_label.text = f["name"]
 			name_label.add_theme_color_override("font_color", f["color"])
 			sub_label.text = "%s  ·  led by %s" % [f["home"], CD.SPEAKERS[who]["name"]]
-		"ogre", "marshal":
+		"ogre", "marshal", "unbound":
 			who = s["who"]
 			name_label.text = CD.SPEAKERS[who]["name"]
 			name_label.add_theme_color_override("font_color", CD.SPEAKERS[who]["color"])
@@ -247,6 +247,8 @@ func _draw() -> void:
 				_draw_nation(s["faction"])
 			"horde":
 				_draw_horde()
+			"unbound":
+				_draw_ogre_throne(true)   # (the throne room, the beacon's fire pouring into him)
 			"ogre":
 				if _at_dawnspire():
 					_draw_ogre_throne()   # (Dawnspire's open: he speaks from the throne he took)
@@ -1259,7 +1261,7 @@ func _at_dawnspire() -> bool:
 ## sun window behind the throne cracked and bled red by the corrupted beacon's glow, the old
 ## sun banners torn down and his red ones hung over them, braziers, his guards either side,
 ## and the Line's own Dawn Throne, his now, a pelt thrown over it and skulls on its back.
-func _draw_ogre_throne() -> void:
+func _draw_ogre_throne(unbound := false) -> void:
 	var stone := Color(0.62, 0.58, 0.52)
 	var shade := Color(0.38, 0.34, 0.32)
 	var gold := Color(0.85, 0.68, 0.3)
@@ -1334,6 +1336,19 @@ func _draw_ogre_throne() -> void:
 		var age := fmod(t * 0.3 + k / 12.0, 1.0)
 		_b((44.0 if k % 2 == 0 else 116.0) + sin(t * 2.0 + k) * 4.0, 104 - age * 60.0, 1, 1, Color(1.0, 0.6, 0.25, 1.0 - age))
 	_b(56, 54, 48, 60, Color(1.0, 0.2, 0.1, 0.06 * glow))
+	if unbound:
+		# His true power: the beacon's fire pouring down through the window into him, the
+		# hall shaking apart, stones falling.
+		for k in 5:
+			var x := 74.0 + k * 3.0 + sin(t * 3.0 + k) * 2.0
+			_b(x, 30, 2, 80, Color(1.0, 0.35 + 0.1 * k, 0.15, 0.5))
+		for r in range(10, 34, 4):
+			for a in 16:
+				var ang := a * TAU / 16.0 + t * (1.0 if r % 8 == 0 else -1.0)
+				_b(80 + cos(ang) * r, 100 + sin(ang) * r * 0.5, 1, 1, Color(1.0, 0.4, 0.1, 0.8 - r * 0.018))
+		for k in 10:
+			var fall := fmod(t * 40.0 + k * 31.0, 140.0)
+			_b(fmod(k * 37.0, GW), fall, 3, 3, Color(0.55, 0.5, 0.46))
 
 
 func _draw_ogre_court() -> void:

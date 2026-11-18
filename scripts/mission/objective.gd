@@ -249,7 +249,8 @@ func _walk(delta: float) -> void:
 		position = next if main.paths.terrain.is_empty() else main.paths.slide(position, next, RADIUS * 0.6)
 		# A villager walked into a wall (its road runs into one): a moment of getting
 		# nowhere, and it finds its way round to where it's going, as a troop would.
-		if kind == "civilian" and step > 0.0:
+		# (Freed prisoners only: an evacuation's villagers keep to the roads drawn for them.)
+		if kind == "civilian" and id == "freed" and step > 0.0 and step < 8.0:   # (at a walk: a long step's slide isn't being stuck)
 			if position.distance_to(was) < step * 0.3:
 				blocked_t += delta
 			else:

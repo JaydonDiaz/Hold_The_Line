@@ -19,7 +19,7 @@ const OUTLINE := Color(0.1, 0.07, 0.1)
 const FLOOR := Color(0.42, 0.4, 0.42)
 const WALL_TOP := Color(0.36, 0.34, 0.38)
 const WALL_FACE := Color(0.25, 0.23, 0.27)
-const FLAT := ["carpet", "mosaic", "stain", "chains", "bones", "rubble"]
+const FLAT := ["dais", "carpet", "mosaic", "stain", "chains", "bones", "rubble"]
 
 
 ## The floor: big flagstones in staggered rows, each a little different, cracked here and
@@ -199,9 +199,49 @@ static func altar(ci: CanvasItem, poly: PackedVector2Array, tint: Color, rng: Ra
 	ci.draw_rect(Rect2(sk + Vector2(1, -1), Vector2(1.5, 1.5)), OUTLINE)
 
 
+## The Dawn Throne: tall-backed, gold, a sun on its crest; the Ogre King's pelt thrown
+## over it, skulls set along its back.
+static func throne(ci: CanvasItem, poly: PackedVector2Array, tint: Color, _rng: RandomNumberGenerator) -> void:
+	var box := _box(poly)
+	var gold := Color(0.85, 0.68, 0.3)
+	ci.draw_rect(Rect2(box.position + Vector2(4, 8), box.size), Color(0, 0, 0, 0.35))
+	ci.draw_rect(box.grow(1.0), OUTLINE)
+	ci.draw_rect(box, Color(0.72, 0.56, 0.24) * tint)
+	ci.draw_rect(Rect2(box.position.x + 4, box.position.y + 3, box.size.x - 8, 5), gold.lightened(0.2) * tint)
+	var sun := Vector2(box.get_center().x, box.position.y - 4)
+	ci.draw_circle(sun, 9.0, OUTLINE)
+	ci.draw_circle(sun, 8.0, gold * tint)
+	ci.draw_circle(sun, 4.0, Color(1.0, 0.86, 0.45) * tint)
+	ci.draw_rect(Rect2(box.position.x + 4, box.get_center().y, box.size.x - 8, box.size.y / 2.0 - 2), Color(0.45, 0.32, 0.2) * tint)   # the pelt
+	for i in 4:
+		var c := Vector2(box.position.x + 12 + i * (box.size.x - 24) / 3.0, box.position.y + 13)
+		ci.draw_circle(c, 4.5, OUTLINE)
+		ci.draw_circle(c, 3.5, Color(0.88, 0.85, 0.76) * tint)
+		ci.draw_rect(Rect2(c + Vector2(-2, -1), Vector2(1.5, 1.5)), OUTLINE)
+		ci.draw_rect(Rect2(c + Vector2(1, -1), Vector2(1.5, 1.5)), OUTLINE)
+
+
 ## The room's things on the floor and walls.
 static func decor(ci: CanvasItem, d: Dictionary, tint: Color, rng: RandomNumberGenerator) -> void:
 	match String(d["kind"]):
+		"dais":
+			# Three broad steps of pale stone up to the throne.
+			var r: Rect2 = d["rect"]
+			for k in 3:
+				var step := r.grow(-k * 10.0)
+				ci.draw_rect(step.grow(1.0), OUTLINE)
+				ci.draw_rect(step, Color(0.66, 0.62, 0.56).darkened(0.08 * (2 - k)) * tint)
+				ci.draw_rect(Rect2(step.position, Vector2(step.size.x, 2)), Color(0.8, 0.76, 0.7) * tint)
+		"sun_window":
+			# The great window over the throne, in the north wall: its glass bled red.
+			var c: Vector2 = d["at"]
+			ci.draw_rect(Rect2(c - Vector2(40, 22), Vector2(80, 44)), OUTLINE)
+			ci.draw_rect(Rect2(c - Vector2(38, 20), Vector2(76, 40)), Color(0.42, 0.06, 0.05))
+			for k in 12:
+				var a := k * TAU / 12.0
+				ci.draw_line(c + Vector2.from_angle(a) * 6.0, c + Vector2(cos(a) * 34.0, sin(a) * 18.0), Color(1.0, 0.45, 0.2, 0.85), 2.0)
+			ci.draw_circle(c, 6.0, Color(1.0, 0.6, 0.3))
+			ci.draw_line(c + Vector2(-20, -18), c + Vector2(-8, 18), OUTLINE, 1.5)
 		"carpet":
 			var r: Rect2 = d["rect"]
 			ci.draw_rect(r, Color(0.45, 0.1, 0.1) * tint)

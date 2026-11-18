@@ -53,6 +53,10 @@ func _run() -> void:
 			# The Spires: the south (gw+mv) and Sable won, and two northern peoples joined
 			# with their beacons lit (north=fm+mo,...); the Circle won too for the later ones.
 			for nset in opts["north"].split(","):
+				if nset == "all":
+					# Every region secured, every optional mission won: all nine beacons.
+					setups.append(["all", CD.MISSIONS.keys().filter(func(m): return m != id), CD.FACTIONS.keys()])
+					continue
 				var done := ACT1 + REGION_MISSIONS["greenwood"] + REGION_MISSIONS["mercyvale"] + ["sable_crossing"]
 				var allies := ["stonehollow", "greenwood", "mercyvale"]
 				for n in nset.split("+"):
@@ -159,6 +163,8 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 	var quiet := 0     # seconds of game time with no enemy on the field (once deployed)
 	var limit_s := int(opts.get("limit", "540"))
 	while not main.game_over and frames < limit_s * 15:
+		if main.hud.story != null and is_instance_valid(main.hud.story):
+			main.hud.story.skip()   # (a story in the middle of the battle: on with it)
 		tick -= 1
 		if tick <= 0:
 			tick = 15   # once a second of game time

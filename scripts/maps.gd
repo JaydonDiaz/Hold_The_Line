@@ -821,6 +821,34 @@ const ZONES := {
 	# one in the north wall the enemy comes through ("lanes") and the army goes on by.
 	# "doors": where the ways out are ({"id", "side", "at"}; the way in may say where the army
 	# comes to "stand", if not straight in from it); which room each leads to is the mission's.
+	# The Fields of Dawn (the nine-beacon finale): the open ground below Dawnspire's walls, the
+	# Dawn Gate broken open, the Line's whole host drawn up across it at morning.
+	"ds_dawnfield": {
+		"name": "The Fields of Dawn", "battle": "dawnfield", "music": "calm_dawnfield", "biome": "meadow", "ground": "war", "camp": false,
+		"tint": Color(1.0, 0.94, 0.84), "wall": "citadel",
+		"lanes": [[40, 100], [284, 356], [540, 600]],
+		"terrain": [
+			{"kind": "curtain", "poly": [Vector2(0, -120), Vector2(28, -120), Vector2(28, 120), Vector2(0, 120)]},
+			{"kind": "curtain", "poly": [Vector2(112, -120), Vector2(276, -120), Vector2(276, 120), Vector2(112, 120)]},
+			{"kind": "curtain", "poly": [Vector2(364, -120), Vector2(528, -120), Vector2(528, 120), Vector2(364, 120)]},
+			{"kind": "curtain", "poly": [Vector2(612, -120), Vector2(640, -120), Vector2(640, 120), Vector2(612, 120)]},
+			{"kind": "ruin", "poly": [Vector2(70, 330), Vector2(140, 330), Vector2(140, 386), Vector2(70, 386)]},
+			{"kind": "ruin", "poly": [Vector2(500, 300), Vector2(570, 300), Vector2(570, 356), Vector2(500, 356)]},
+			{"kind": "wreck", "poly": [Vector2(200, 480), Vector2(272, 476), Vector2(280, 520), Vector2(206, 530)]},
+			{"kind": "wreck", "poly": [Vector2(390, 420), Vector2(458, 414), Vector2(466, 456), Vector2(396, 464)]},
+		],
+		"no_build": [],
+		"trails": [[Vector2(320, 760), Vector2(316, 600), Vector2(326, 420), Vector2(320, 120)]],
+		"decor": [
+			{"kind": "crater", "at": Vector2(220, 260), "r": 22.0}, {"kind": "crater", "at": Vector2(450, 560), "r": 20.0},
+			{"kind": "crater", "at": Vector2(120, 560), "r": 16.0}, {"kind": "crater", "at": Vector2(540, 460), "r": 18.0},
+			{"kind": "line_banner", "at": Vector2(260, 380), "angle": 0.6}, {"kind": "line_banner", "at": Vector2(470, 250), "angle": 2.0},
+			{"kind": "debris", "at": Vector2(160, 450)}, {"kind": "debris", "at": Vector2(380, 300)},
+			{"kind": "fire", "at": Vector2(104, 358)}, {"kind": "fire", "at": Vector2(534, 328)}, {"kind": "fire", "at": Vector2(236, 500)},
+			{"kind": "pikes", "at": Vector2(250, 170)}, {"kind": "pikes", "at": Vector2(390, 170)},
+			{"kind": "ogre_banner", "at": Vector2(200, 150)}, {"kind": "ogre_banner", "at": Vector2(440, 150)},
+			{"kind": "stakes", "at": Vector2(60, 220), "to": Vector2(170, 240)}, {"kind": "stakes", "at": Vector2(470, 240), "to": Vector2(580, 220)}],
+	},
 	"dsc_gatehall": {
 		"name": "The Gatehouse Hall", "battle": "gatehall", "music": "calm_gatehall", "biome": "hall", "camp": false,
 		"tint": Color(0.98, 0.94, 0.9),
@@ -1052,6 +1080,47 @@ const ZONES := {
 			{"kind": "line_banner", "at": Vector2(250, 380), "angle": 1.8}, {"kind": "line_banner", "at": Vector2(400, 470), "angle": 0.3},
 			{"kind": "bones", "at": Vector2(380, 300)}, {"kind": "rubble", "at": Vector2(100, 440)}, {"kind": "stain", "at": Vector2(300, 640)},
 			{"kind": "sconce", "at": Vector2(60, 140)}, {"kind": "sconce", "at": Vector2(580, 400)}],
+	},
+	# The Throne Room: Dawnspire's great hall, the Dawn Throne at its head under the sun
+	# window, two passages behind (where his reinforcements come from), the way in at its foot.
+	"dsc_throne": {
+		"name": "The Throne Room", "battle": "throne", "music": "calm_throne", "biome": "hall", "camp": false,
+		"tint": Color(1.0, 0.93, 0.88),
+		"lanes": [[48, 104], [536, 592]],
+		"doors": [{"id": "s", "side": "s", "at": Vector2(320, 756), "stand": Vector2(320, 600)}],
+		"terrain": [
+			{"kind": "hall", "poly": [Vector2(0, 0), Vector2(30, 0), Vector2(30, 768), Vector2(0, 768)]},
+			{"kind": "hall", "poly": [Vector2(610, 0), Vector2(640, 0), Vector2(640, 768), Vector2(610, 768)]},
+			{"kind": "hall", "poly": [Vector2(30, 0), Vector2(44, 0), Vector2(44, 44), Vector2(30, 44)]},
+			{"kind": "hall", "poly": [Vector2(108, 0), Vector2(532, 0), Vector2(532, 44), Vector2(108, 44)]},
+			{"kind": "hall", "poly": [Vector2(596, 0), Vector2(610, 0), Vector2(610, 44), Vector2(596, 44)]},
+			{"kind": "hall", "poly": [Vector2(30, 740), Vector2(272, 740), Vector2(272, 768), Vector2(30, 768)]},
+			{"kind": "hall", "poly": [Vector2(368, 740), Vector2(610, 740), Vector2(610, 768), Vector2(368, 768)]},
+			{"kind": "throne", "poly": [Vector2(286, 52), Vector2(354, 52), Vector2(354, 96), Vector2(286, 96)]},
+			{"kind": "pillar", "poly": [Vector2(134, 184), Vector2(166, 184), Vector2(166, 216), Vector2(134, 216)]},
+			{"kind": "pillar", "poly": [Vector2(474, 184), Vector2(506, 184), Vector2(506, 216), Vector2(474, 216)]},
+			{"kind": "pillar", "poly": [Vector2(134, 324), Vector2(166, 324), Vector2(166, 356), Vector2(134, 356)]},
+			{"kind": "pillar", "poly": [Vector2(474, 324), Vector2(506, 324), Vector2(506, 356), Vector2(474, 356)]},
+			{"kind": "pillar", "poly": [Vector2(134, 464), Vector2(166, 464), Vector2(166, 496), Vector2(134, 496)]},
+			{"kind": "pillar", "poly": [Vector2(474, 464), Vector2(506, 464), Vector2(506, 496), Vector2(474, 496)]},
+			{"kind": "pillar", "poly": [Vector2(134, 604), Vector2(166, 604), Vector2(166, 636), Vector2(134, 636)]},
+			{"kind": "pillar", "poly": [Vector2(474, 604), Vector2(506, 604), Vector2(506, 636), Vector2(474, 636)]},
+			{"kind": "hall", "poly": [Vector2(30, 150), Vector2(70, 150), Vector2(70, 250), Vector2(30, 250)]},
+			{"kind": "hall", "poly": [Vector2(570, 150), Vector2(610, 150), Vector2(610, 250), Vector2(570, 250)]},
+			{"kind": "hall", "poly": [Vector2(30, 430), Vector2(70, 430), Vector2(70, 530), Vector2(30, 530)]},
+			{"kind": "hall", "poly": [Vector2(570, 430), Vector2(610, 430), Vector2(610, 530), Vector2(570, 530)]},
+		],
+		"no_build": [],
+		"trails": [],
+		"decor": [{"kind": "carpet", "rect": Rect2(290, 96, 60, 644)}, {"kind": "mosaic", "at": Vector2(320, 380), "r": 56.0},
+			{"kind": "sun_window", "at": Vector2(320, 22)}, {"kind": "dais", "rect": Rect2(240, 44, 160, 80)},
+			{"kind": "brazier", "at": Vector2(240, 150)}, {"kind": "fire", "at": Vector2(240, 142)}, {"kind": "brazier", "at": Vector2(400, 150)}, {"kind": "fire", "at": Vector2(400, 142)},
+			{"kind": "brazier", "at": Vector2(240, 560)}, {"kind": "fire", "at": Vector2(240, 552)}, {"kind": "brazier", "at": Vector2(400, 560)}, {"kind": "fire", "at": Vector2(400, 552)},
+			{"kind": "ogre_banner", "at": Vector2(110, 300)}, {"kind": "ogre_banner", "at": Vector2(530, 300)}, {"kind": "ogre_banner", "at": Vector2(110, 580)}, {"kind": "ogre_banner", "at": Vector2(530, 580)},
+			{"kind": "line_banner", "at": Vector2(220, 420), "angle": 0.5}, {"kind": "line_banner", "at": Vector2(430, 260), "angle": 2.4}, {"kind": "line_banner", "at": Vector2(380, 650), "angle": 1.3},
+			{"kind": "bones", "at": Vector2(200, 120)}, {"kind": "bones", "at": Vector2(460, 120)}, {"kind": "bones", "at": Vector2(560, 680)},
+			{"kind": "stain", "at": Vector2(330, 250)}, {"kind": "chains", "at": Vector2(90, 380)}, {"kind": "rubble", "at": Vector2(80, 690)},
+			{"kind": "sconce", "at": Vector2(60, 300)}, {"kind": "sconce", "at": Vector2(580, 300)}],
 	},
 	"dsc_treasury": {
 		"name": "The Treasury", "battle": "treasury", "music": "calm_treasury", "biome": "hall", "camp": false,

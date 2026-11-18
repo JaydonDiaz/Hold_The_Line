@@ -93,7 +93,7 @@ var story: Control = null       # a story scene, while one is playing
 var classic_map := ""      # the battlefield picked for Classic ("" = the open meadow)
 var battlefields = null    # Classic's battlefield viewer, while it's up
 var scene_music := ""       # while a cutscene is up, the music it wants (main plays it)
-const VILLAINS := ["ogre", "marshal"]   # speakers whose lines play as cutscenes of their own
+const VILLAINS := ["ogre", "marshal", "unbound"]   # speakers whose lines play as cutscenes of their own
 var mode_title: Label
 var mode_sub: Label
 var mode_cards := []            # the title screen's cards now showing
@@ -1370,7 +1370,7 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 	foe_card.position = Vector2(-270, below)
 	add_child(foe_card)
 	var icon := TextureRect.new()
-	icon.texture = Sprites.frames(kind)[0]
+	icon.texture = Sprites.frames(str(Data.ENEMIES.get(kind, {}).get("look", kind)))[0]
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1395,7 +1395,8 @@ func show_foe(kind: String, title: String, tip: String) -> void:
 	tw.tween_interval(4.5)
 	tw.tween_property(card, "modulate:a", 0.0, 0.5)
 	tw.tween_callback(func():
-		card.queue_free()
+		if is_instance_valid(card):
+			card.queue_free()
 		foe_card = null
 		if not foe_queue.is_empty():
 			var next: Array = foe_queue.pop_front()
@@ -2162,6 +2163,9 @@ func show_battle_end(won: bool, name: String, summary: String, record: String, a
 ## A story: the allies' lines in the dialogue box, and the enemy's (the Ogre King's and
 ## his heralds') each as a cutscene of their own (unless marked "box"), in order. Esc skips the rest of it.
 func play_story(lines: Array, then: Callable = Callable()) -> void:
+	if foe_card != null and is_instance_valid(foe_card):
+		foe_card.queue_free()   # (a new foe's card isn't left over the story)
+		foe_card = null
 	if lines.is_empty():
 		if then.is_valid():
 			then.call()

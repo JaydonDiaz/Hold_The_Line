@@ -399,7 +399,8 @@ func _orders() -> void:
 	if type == "escort" or type == "assault":
 		var loose := troops.filter(func(w): return w.anchor == null and not w.is_mobile_healer() and not sent.has(w.get_instance_id()))
 		if not loose.is_empty():
-			main.set_follow(main.rules.wagon, loose)
+			if main.rules.get("wagon") != null:
+				main.set_follow(main.rules.wagon, loose)
 			_guard(loose, 70.0)
 	# Healers: on Heal in an evacuation (villagers too), else staying with the troops near them.
 	for h in fresh.filter(func(w): return w.is_mobile_healer()):
