@@ -83,6 +83,9 @@ var price_step := 1          # ...rounded to this many gold (5 on Hard)
 var castle_max: float = Data.CASTLE_HP
 var castle_base: float = Data.CASTLE_HP   # castle_max before the Fortify path's extra health
 var castle_hp: float = Data.CASTLE_HP
+var obj_hits := {}          # damage the battle's objectives have taken, by what dealt it (the balance bots read it)
+var dmg_src := ""           # ...what's dealing it right now ("" when nothing's said)
+var sap_wrecks: Array = []  # emplacements a Sapper's blast has wrecked this battle: [kind, gold spent on it] (the balance bots read it)
 var down_time := 20.0        # seconds a downed warrior has before it dies (or, without permadeath, gets up)
 var margin := Vector2.ZERO   # spare screen above and below the game on a tall window
 var gates_warned := false   # "at the gates" has been shown this wave
@@ -720,7 +723,7 @@ const FOE_HINTS := {
 	"bat": ["Bat", "Flies over troops and walls: only ranged troops and spells reach it."],
 	"skeleton_archer": ["Skeleton Archer", "Hangs back and shoots: rush it down, or outrange it."],
 	"slime": ["Slime", "Blades and arrows can't hurt it. Use magic, ki, alchemy, explosives or ice (ice lets anything bite)."],
-	"sapper": ["Sapper", "Carries a bomb for your walls. Stop it before it gets there."],
+	"sapper": ["Sapper", "Carries a bomb for the nearest of your emplacements or walls (it's marked in red). Stop it on the way, or kill it while the fuse fizzes; a cheap Barricade in front draws it off."],
 	"troll": ["Troll", "Huge and slow, and knocks troops back. Gang up on it."],
 	"warlord": ["Warlord", "A champion. Shrugs off stuns and hits like a falling tree."],
 	"wyvern": ["Wyvern", "Flying elite that breathes fire on whatever's below."],
@@ -1505,6 +1508,18 @@ func max_tier(kind: String, p := -1) -> int:
 
 ## Campaign experience: `amount` of `what` (an XP_RATES key) done by unit kind `kind`
 ## this battle. Outside a campaign, or with no one to credit, it counts for nothing.
+## A Sapper's set out for one of your emplacements (or walls): say so, now and then.
+var sap_alert_t := -100.0
+
+func sap_alert(target) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - sap_alert_t < 8.0:
+		return
+	sap_alert_t = now
+	var what: String = "a wall" if target is Barricade else "your " + str(target.label)
+	hud.show_message("A Sapper's going for %s! Stop it before it gets there." % what)
+
+
 func earn_xp(kind: String, amount: float, what := "damage") -> void:
 	if campaign and kind != "" and amount > 0.0:
 		battle_xp[kind] = battle_xp.get(kind, 0.0) + amount * CD_XP_RATES[what]
@@ -2518,6 +2533,8 @@ func pointer_down(p: Vector2, button: int, shift := false, touch := false) -> vo
 		return
 	if bells.active() and button == MOUSE_BUTTON_LEFT and placing_type == "" and bells.click(p):
 		return   # a temple bell, rung
+	if button == MOUSE_BUTTON_LEFT and placing_type == "" and rules.click(p):
+		return   # the battle's own (a way on's arrow, in the castle)
 	if not area_pick.is_empty():
 		# Drawing a Guard Area: left-drag it out; right-click cancels.
 		if button == MOUSE_BUTTON_LEFT:

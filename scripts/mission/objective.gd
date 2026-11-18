@@ -157,6 +157,8 @@ func take_damage(amount: float) -> void:
 	if dead or amount <= 0.0 or main.game_over or kind == "zone" or kind == "line" or arrived:
 		return
 	hp -= amount
+	var src: String = main.dmg_src if main.dmg_src != "" else "other"
+	main.obj_hits[src] = main.obj_hits.get(src, 0.0) + minf(amount, hp + amount)
 	hit = 0.2
 	if main.rules != null:
 		main.rules.on_objective_hit(self)

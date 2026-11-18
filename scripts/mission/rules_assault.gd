@@ -12,10 +12,16 @@ extends "res://scripts/mission/rules_escort.gd"
 ## true final battle's retreat),
 ## prison pens (freed the same way: the soldiers in them join you, on loan, trained up to
 ## tier III on one path; the townsfolk make for safety), and supplies (a troop that gets to
-## them claims the gold). Once the gate's open the enemy stops sending more, but the army
-## doesn't move on while an enemy's left on the field or a troop's still down (the Healers
-## get their chance). Then it's on through the gate into the next field, the army, its gold
-## and the ram with it (the ram patched up a little). Every field after the first is a
+## them claims the gold). Once the gate's open the enemy stops sending more. The army can go
+## on once the field's clear (no enemy left, nobody down: the Healers get their chance), or,
+## so nothing can trap it there, LINGER seconds after the last enemy came out whatever's left:
+## the order then says what happens (enemies still on the field follow the army through and
+## come at it in the next field; troops still down are left behind). Going on, the player
+## chooses whether the crews of the towers taken there stay to hold them (out of the army
+## for good, unless the Line falls back out of the castle in the true final battle; each
+## tower held keeps the road open behind the army: HELD_ROAD_GOLD in supplies in every
+## field after) or climb down and come along. Then it's on through the gate into the next
+## field, the army, its gold and the ram with it (the ram patched up a little). Every field after the first is a
 ## checkpoint (Campaign.op_state): the battle can be taken up again from the start of any
 ## field reached, or played from the beginning (the player's choice, from the map or after
 ## a loss). Once a gate's open and its field cleared, the army waits for the order to go
@@ -59,6 +65,11 @@ var volley_t := INF          # seconds to the walls' next volley
 var told_iron := false
 var cp_xp := {}              # the XP the checkpoint taken up again had already earned (banked only once)
 var cp_name := ""            # the field a lost battle can be taken up again from ("" before the first checkpoint)
+const LINGER := 20.0         # seconds after a field's last enemy came out that the army may go on anyway
+const HELD_ROAD_GOLD := 50   # supplies up the road, per tower held behind the army, in each field after
+var linger := 0.0
+var hold_towers := true      # going on: the crews of towers taken here stay (true) or come along
+var stragglers: Array = []   # enemies left on the last field: [kind, level], to come at the army in this one
 
 
 func _a() -> Dictionary:
@@ -94,6 +105,13 @@ func start() -> void:
 	var resume: Dictionary = Campaign.checkpoint(Campaign.mission_id, Campaign.op_resume_zone) \
 			if main.campaign and Campaign.op_resume_zone > 0 else {}
 	Campaign.op_resume_zone = 0
+	if not resume.is_empty() and int(resume.get("zone", 0)) >= 100:
+		# Taken up again inside the citadel: the castle's rules take the battle from there.
+		var castle = load("res://scripts/mission/rules_castle.gd").new()
+		castle.setup(main, mission)
+		main.rules = castle
+		castle.resume(resume)
+		return
 	if not resume.is_empty():
 		zone_i = clampi(int(resume.get("zone", 0)), 0, zones().size() - 1)
 		if zone_i > 0:
@@ -118,6 +136,8 @@ func start() -> void:
 func _setup_zone() -> void:
 	var z := zone()
 	phase = "advance"
+	linger = 0.0
+	hold_towers = true
 	told_iron = false
 	towers.clear()
 	pens.clear()
@@ -174,17 +194,31 @@ func _work(d: Dictionary):
 ## falls back out of the castle, in the true final battle).
 func _leave_zone() -> void:
 	var stayed := 0
+	var lost := 0
+	# Troops still down are left where they fell.
+	for w in main.get_warriors():
+		if not w.is_queued_for_deletion() and w.down_timer > 0.0 and not w.data.get("emplacement", false):
+			lost += 1
+			w.queue_free()
+	# Enemies still on the field follow the army through.
+	stragglers.clear()
+	for e in main.get_enemies():
+		if not e.dead and not e.is_queued_for_deletion():
+			stragglers.append([e.kind, e.level])
+			e.queue_free()
 	for w in main.warrior_layer.get_children():
 		if w.is_queued_for_deletion() or not w.has_meta("captured"):
 			continue
 		var c = w.crew_in
-		if w.is_active() and c != null and is_instance_valid(c) and c.garrison == w and c.is_active():
+		if hold_towers and w.is_active() and c != null and is_instance_valid(c) and c.garrison == w and c.is_active():
 			_hold_tower(w, c)
 			stayed += 1
 			c.queue_free()
 		elif c != null and is_instance_valid(c) and c.garrison == w:
 			c.leave_tower()   # (a wrecked tower's crew comes along)
 		w.queue_free()
+	if lost > 0:
+		main.hud.show_message("%d troop%s left behind where %s fell." % [lost, "" if lost == 1 else "s", "it" if lost == 1 else "they"])
 	if stayed > 0:
 		main.hud.show_message("%d crew%s stay%s behind to hold %s tower%s." % [stayed, "" if stayed == 1 else "s", "s" if stayed == 1 else "",
 				"its" if stayed == 1 else "their", "" if stayed == 1 else "s"])
@@ -232,6 +266,8 @@ func process(delta: float) -> void:
 	_send_side(delta)   # (troops on Side Objectives set out at once, deploying or not)
 	if main.deploying:
 		return
+	if not stragglers.is_empty():
+		_stragglers_come()
 	if settle > 0.0:
 		settle -= delta
 		if settle <= 0.0:
@@ -265,13 +301,20 @@ func process(delta: float) -> void:
 			main.sfx("fanfare")
 	if phase == "clear":
 		var down := _downed()
+		var where: String = "through " + gate.label.to_lower() if zone_i + 1 < zones().size() else "into the citadel"
 		if main.spawn_queue.is_empty() and main.get_enemies().is_empty() and down == 0:
 			# The field's clear: the army waits for the order to go on (finish what's left
 			# to do here first, if you like).
 			phase = "ready"
-			main.hud.show_message("The way is clear. Go on %s when you're ready (%s, or Y)." % [
-					"through " + gate.label.to_lower() if zone_i + 1 < zones().size() else "into the citadel", action_label()])
+			main.hud.show_message("The way is clear. Go on %s when you're ready (%s, or Y)." % [where, action_label()])
 			main.sfx("horn", 1.2)
+		elif main.spawn_queue.is_empty():
+			# Nothing more coming: whatever's left (out of reach, say) can't keep the army here.
+			linger += delta
+			if linger >= LINGER:
+				phase = "ready"
+				main.hud.show_message("You can go on %s now (%s, or Y), or finish here first." % [where, action_label()])
+				main.sfx("horn", 1.2)
 
 
 ## Once the field's clear: the order to go on through the gate (or, past the last, to
@@ -283,12 +326,101 @@ func action_label() -> String:
 
 
 func action() -> void:
+	if action_label() == "" or (main.hud.choice_box != null and is_instance_valid(main.hud.choice_box)):
+		return
+	var last := zone_i + 1 >= zones().size()
+	var crews := _crews_here()
+	var down := _downed()
+	var foes: int = main.get_enemies().size()
+	if crews == 0 and down == 0 and foes == 0:
+		_go(true)
+		return
+	# Something's left behind: say what, and let the player choose.
+	var notes := []
+	if crews > 0 and not last:
+		notes.append("%d tower%s taken here %s a crew. Crews who stay hold their towers: they're out of the army from now on, and each tower held keeps the road open behind you (%d gold in supplies in every field after). Or they climb down and come along. (To bring some, have the rest climb down first: L.)" % [
+				crews, "" if crews == 1 else "s", "has" if crews == 1 else "have", HELD_ROAD_GOLD])
+	if down > 0:
+		notes.append("%d troop%s down: a Healer can still get %s up. Go on now and %s left behind." % [down, " is" if down == 1 else "s are",
+				"it" if down == 1 else "them", "it's" if down == 1 else "they're"])
+	if foes > 0:
+		notes.append("%d enem%s still on the field: %s." % [foes, "y is" if foes == 1 else "ies are",
+				"they'll be left behind" if last else ("it'll follow you through" if foes == 1 else "they'll follow you through")])
+	var go_text: String = "Into the citadel" if last else "Through the gate"
+	var opts := []
+	if crews > 0 and not last:
+		opts.append(["%s: crews hold" % go_text, func(): _go(true), "The crews stay in their towers, holding the road"])
+		opts.append(["%s: crews come too" % go_text, func(): _go(false), "Every crew climbs down and goes on with the army"])
+	else:
+		opts.append([go_text, func(): _go(true)])
+	opts.append(["Not yet", null])
+	main.hud.show_choice("Go on %s?" % ("into the citadel" if last else "through " + gate.label.to_lower()), "\n\n".join(notes), opts)
+
+
+## Won: the towers left manned go with the campaign, for the rest of the operation (set
+## afresh by each win, never added to, so a replay can't double them).
+func _end(won: bool) -> void:
+	if won and not over and main.campaign:
+		Campaign.held_towers = garrisons.duplicate(true)
+	super._end(won)
+
+
+func _go(hold: bool) -> void:
 	if action_label() == "":
 		return
+	hold_towers = hold
 	if zone_i + 1 < zones().size():
 		_move_on()
+	elif _a().has("castle"):
+		_into_castle()
 	else:
 		_end(true)
+
+
+## Past the last gate: on into the citadel (rules_castle.gd takes the battle on from here,
+## the same operation). The ram stays at the gate; the army marches in through it.
+func _into_castle() -> void:
+	if over or moving_on:
+		return
+	moving_on = true
+	var at: Vector2 = gate.position + Vector2(0, 20)
+	hold_towers = true
+	_leave_zone_keep_army()
+	if wagon != null and is_instance_valid(wagon):
+		wagon.queue_free()
+	wagon = null
+	var castle = load("res://scripts/mission/rules_castle.gd").new()
+	castle.setup(main, mission)
+	main.rules = castle
+	castle.take_over(self, at)
+
+
+## The field's works cleared away (towers taken here keep their crews: they hold them), the
+## army left standing for its march in.
+func _leave_zone_keep_army() -> void:
+	for w in main.warrior_layer.get_children():
+		if w.is_queued_for_deletion() or not w.has_meta("captured"):
+			continue
+		var c = w.crew_in
+		if w.is_active() and c != null and is_instance_valid(c) and c.garrison == w and c.is_active():
+			_hold_tower(w, c)
+			c.queue_free()
+		w.queue_free()
+	for o in [gate, winch] + towers + pens + caches + townsfolk:
+		if o != null and is_instance_valid(o):
+			o.queue_free()
+	townsfolk.clear()
+	main.warriors_changed()
+
+
+## Towers taken in this field that have a crew up them now.
+func _crews_here() -> int:
+	var n := 0
+	for w in main.warrior_layer.get_children():
+		if not w.is_queued_for_deletion() and w.has_meta("captured") and w.is_active() and w.crew_in != null \
+				and is_instance_valid(w.crew_in) and w.crew_in.garrison == w and w.crew_in.is_active():
+			n += 1
+	return n
 
 
 ## Troops down (a Healer can still reach them).
@@ -356,11 +488,11 @@ func _send_side(delta: float) -> void:
 	var troops: Array = main.get_warriors().filter(_on_side_duty)
 	# Those already on a job that's still open keep it.
 	for w in troops:
-		var j = w.get_meta("side_job", null)
+		var j = (w.get_meta("side_job") if w.has_meta("side_job") else null)
 		if j != null and is_instance_valid(j) and ((jobs.has(j)) or (crews.has(j) and Warrior.GARRISON_KINDS.has(w.kind))):
 			busy[j] = busy.get(j, 0) + 1
 	for w in troops:
-		var j = w.get_meta("side_job", null)
+		var j = (w.get_meta("side_job") if w.has_meta("side_job") else null)
 		if j != null and is_instance_valid(j) and (jobs.has(j) or (crews.has(j) and Warrior.GARRISON_KINDS.has(w.kind))):
 			continue
 		var best = null
@@ -741,7 +873,21 @@ func enter_next() -> void:
 			if w.has_meta("side_job"):
 				w.remove_meta("side_job")
 	_setup_zone()
-	checkpoint()
+	# Supplies up the road the towers behind hold open.
+	if not garrisons.is_empty():
+		main.gold += garrisons.size() * HELD_ROAD_GOLD
+		main.hud.show_message("Supplies up the road your towers hold: +%d gold" % (garrisons.size() * HELD_ROAD_GOLD))
+	checkpoint()   # (with the stragglers, so a battle taken up again here has them too)
+
+
+## Enemies left on the last field come through after the army (as it gets there, or once
+## it's deployed, taken up again from here).
+func _stragglers_come() -> void:
+	for st in stragglers:
+		main._spawn_enemy(str(st[0]), int(st[1]))   # (out at the top of the field, as any enemy)
+	if not stragglers.is_empty():
+		main.hud.show_message("%d enem%s followed you through!" % [stragglers.size(), "y" if stragglers.size() == 1 else "ies"])
+	stragglers.clear()
 
 
 func _move_on() -> void:
@@ -753,38 +899,6 @@ func _move_on() -> void:
 
 
 # --- Checkpoints ---------------------------------------------------------------------------------
-
-## What a unit is, to put it back later: its kind, training, health, post and orders.
-func _unit_record(w) -> Dictionary:
-	var k: float = main.FIELD_W / 640.0
-	return {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
-			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.temp_allies.has(w),
-			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode}
-
-
-## A unit back from its record (on the field as it's stretched now).
-func _make_unit(rec: Dictionary):
-	var k: float = main.FIELD_W / 640.0
-	var kind: String = rec["kind"]
-	if not Data.WARRIORS.has(kind):
-		return null
-	var p: Vector2 = rec.get("post", Vector2(320, 600))
-	var w := Warrior.new()
-	w.setup(kind, Data.WARRIORS[kind], main, main.paths.open_spot(main._clamp_post(Vector2(p.x * k, p.y))))
-	w.tiers = (rec.get("tiers", [0, 0, 0, 0]) as Array).duplicate()
-	w._apply_upgrades()
-	w.hp = w.max_hp * clampf(float(rec.get("hp", 1.0)), 0.05, 1.0)
-	w.spent = int(rec.get("spent", 0))
-	w.priority = str(rec.get("priority", w.priority))
-	w.move_mode = str(rec.get("move_mode", w.move_mode))
-	w.position = w.post
-	main.warrior_layer.add_child(w)
-	if rec.get("lent", false):
-		main.temp_allies.append(w)
-	if rec.get("freed", false):
-		w.set_meta("freed", true)
-	return w
-
 
 ## The army as it stands at the start of a field (after the first): kept, so a lost
 ## battle can be taken up again from here.
@@ -800,7 +914,8 @@ func checkpoint() -> void:
 	cp_name = zone()["name"]
 	Campaign.set_checkpoint(Campaign.mission_id, zone_i, {"zone": zone_i, "name": cp_name, "gold": main.gold,
 			"wave": main.wave, "ram": wagon.hp / wagon.max_hp, "army": army, "xp": cp_xp, "owned": main.powers.owned.keys(),
-			"freed": freed, "joined": joined, "garrisons": garrisons.duplicate(true)})
+			"freed": freed, "joined": joined, "garrisons": garrisons.duplicate(true),
+			"stragglers": stragglers.duplicate(true)})
 
 
 ## Picks the operation up from its checkpoint: the army, gold, the ram's health, the XP
@@ -823,6 +938,7 @@ func _restore(cp: Dictionary) -> void:
 	freed = int(cp.get("freed", 0))
 	joined = int(cp.get("joined", 0))
 	garrisons = (cp.get("garrisons", []) as Array).duplicate(true)
+	stragglers = (cp.get("stragglers", []) as Array).duplicate(true)
 	main.warriors_changed()
 	main.hud.show_message("Taken up again from %s." % cp_name)
 

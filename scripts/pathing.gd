@@ -17,6 +17,13 @@ extends RefCounted
 ## knockback) and is only the safety net. With no map, every terrain call returns at
 ## once and nothing behaves differently.
 ##
+## Tall terrain (TALL: a castle's inner walls, its pillars, a shut door) also blocks sight:
+## nobody shoots, casts or aims through it (sight_clear), and a shot that flies into it
+## stops there (tall_at). Worked out per cell once, with the map; on a map without any,
+## every sight call returns true at once (so nothing elsewhere changes). A map's doors
+## ("door" shapes with a "door" name) are tall and solid while shut: open_door(name) opens
+## one for good (the map is worked out again without it).
+##
 ## Fords ("ford" shapes) are shallow water: not terrain, anyone can walk in, but wading is
 ## slow (wade_factor) and costs FORD_COST times as much in every route (the enemy fields,
 ## enemy chase routes, troop routes), so a ford is a real way across that's weighed against
@@ -35,6 +42,7 @@ const SLOW_GROUND := {"ford": FORD_SLOW, "stairs": 0.65}   # ground anyone can c
 # Map shapes that don't block: a ford is waded and stairs climbed (both slowly), a bridge
 # or a rope bridge walked, ice (a frozen lake) walked; thin ice is walked too until it
 # breaks (hazards.gd turns it to open water then).
+const TALL := ["hall", "pillar", "door"]   # terrain nothing sees or shoots through
 const NOT_TERRAIN := ["ford", "bridge", "stairs", "ice", "thin_ice", "rope_bridge"]
 const NEIGHBORS := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
 		Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
@@ -74,6 +82,8 @@ var enemy_grids := {}      # size key -> AStarGrid2D for enemies chasing a unit 
 var cell_edges: Array = []
 var cell_shapes: Array = []
 var _map := {}
+var tall := PackedByteArray()   # per cell: 1 if tall terrain covers it (empty: none on the map)
+var opened := {}                # doors opened (name -> true), left out of the terrain from then on
 
 
 func setup(m) -> void:
@@ -100,6 +110,8 @@ func set_map(raw: Dictionary) -> void:
 	slows.clear()
 	for t in m.get("terrain", []):
 		var poly := PackedVector2Array(t["poly"])
+		if t["kind"] == "door" and opened.has(str(t.get("door", ""))):
+			continue   # (opened: gone)
 		if t["kind"] in NOT_TERRAIN:
 			if SLOW_GROUND.has(t["kind"]):
 				fords.append(poly)
@@ -112,6 +124,7 @@ func set_map(raw: Dictionary) -> void:
 			hi = Vector2(maxf(hi.x, q.x), maxf(hi.y, q.y))
 		terrain.append({"kind": t["kind"], "poly": poly, "box": Rect2(lo, hi - lo)})
 	_build_clearance()
+	_build_tall()
 	wade = PackedByteArray()
 	if not fords.is_empty():
 		wade.resize(cols * rows)
@@ -130,6 +143,89 @@ func set_map(raw: Dictionary) -> void:
 
 func has_terrain() -> bool:
 	return not terrain.is_empty()
+
+
+## Marks the cells tall terrain covers: a cell counts if its centre, or a point a little in
+## from any corner, is inside a tall shape (so a wall thinner than a cell still counts).
+func _build_tall() -> void:
+	tall = PackedByteArray()
+	var talls := terrain.filter(func(t): return t["kind"] in TALL)
+	if talls.is_empty():
+		return
+	tall.resize(cols * rows)
+	var probe := [Vector2.ZERO, Vector2(-5, -5), Vector2(5, -5), Vector2(-5, 5), Vector2(5, 5)]
+	for t in talls:
+		var box: Rect2 = t["box"].grow(CELL)
+		var c0 := _cell(box.position)
+		var c1 := _cell(box.end)
+		for cy in range(maxi(c0.y, 0), mini(c1.y, rows - 1) + 1):
+			for cx in range(maxi(c0.x, 0), mini(c1.x, cols - 1) + 1):
+				var i := cy * cols + cx
+				if tall[i] == 1:
+					continue
+				var c := _center(Vector2i(cx, cy))
+				for d in probe:
+					if Geometry2D.is_point_in_polygon(c + d, t["poly"]):
+						tall[i] = 1
+						break
+
+
+func has_sight_walls() -> bool:
+	return not tall.is_empty()
+
+
+## Whether p is inside tall terrain (a shot flying there has hit the wall).
+func tall_at(p: Vector2) -> bool:
+	if tall.is_empty():
+		return false
+	var c := _cell(p)
+	return _inside(c) and tall[_index(c)] == 1
+
+
+## Whether a can see b: no tall terrain on the line between them. The cells the two ends are
+## in don't count (someone standing right against a wall still sees past its face).
+func sight_clear(a: Vector2, b: Vector2) -> bool:
+	if tall.is_empty():
+		return true
+	var c := _cell(a)
+	var end := _cell(b)
+	if c == end:
+		return true
+	# Along the line cell by cell (Amanatides and Woo).
+	var d := b - a
+	var step := Vector2i(1 if d.x > 0 else -1, 1 if d.y > 0 else -1)
+	var t_max := Vector2(INF, INF)
+	var t_delta := Vector2(INF, INF)
+	if absf(d.x) > 0.0001:
+		var edge_x: float = (c.x + (1 if d.x > 0 else 0)) * CELL
+		t_max.x = (edge_x - a.x) / d.x
+		t_delta.x = CELL / absf(d.x)
+	if absf(d.y) > 0.0001:
+		var edge_y: float = (c.y + (1 if d.y > 0 else 0)) * CELL
+		t_max.y = (edge_y - a.y) / d.y
+		t_delta.y = CELL / absf(d.y)
+	for n in cols + rows + 4:
+		if t_max.x < t_max.y:
+			c.x += step.x
+			t_max.x += t_delta.x
+		else:
+			c.y += step.y
+			t_max.y += t_delta.y
+		if c == end:
+			return true
+		if _inside(c) and tall[_index(c)] == 1:
+			return false
+	return true
+
+
+## Opens door `name` for good: it's left out of the terrain from now on (the map is worked
+## out again, routes and all).
+func open_door(name: String) -> void:
+	if opened.has(name):
+		return
+	opened[name] = true
+	set_map(_map)
+	main.warriors_changed()
 
 
 ## Whether p is on slow ground (a ford, or stairs).

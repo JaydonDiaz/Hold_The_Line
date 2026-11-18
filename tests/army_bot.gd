@@ -412,6 +412,7 @@ func _orders() -> void:
 func _react() -> void:
 	if main.rules.action_label() != "":
 		main.rules.action()
+		_answer_choice()
 	_ring()
 	_hunt()
 	if type == "assault":
@@ -591,3 +592,15 @@ func _guard(units: Array, half: float) -> void:
 ## The line itself (bought before support): melee and ranged troops, the North's included.
 func _core(kind: String) -> bool:
 	return kind in [MELEE, RANGED, "martial", "frost"]
+
+
+## A choice the battle asks mid-way (going on with crews up towers, say): the bot takes the
+## first option, as a player in a hurry would.
+func _answer_choice() -> void:
+	var box = main.hud.choice_box
+	if box == null or not is_instance_valid(box):
+		return
+	for c in box.get_children():
+		if c is Button:
+			c.pressed.emit()
+			return

@@ -71,6 +71,9 @@ func _process(delta: float) -> void:
 		_hit()
 		return
 	position += to.normalized() * step
+	if main.paths.tall_at(position):
+		queue_free()   # into a castle's wall: it stops there
+		return
 	traveled += step
 	left = to.length() - step
 	if style == "shell" or style == "note" or style == "flask":
@@ -87,6 +90,9 @@ func _fly_on(delta: float) -> void:
 	var step := speed * delta
 	position += dir * step
 	flown += step
+	if main.paths.tall_at(position):
+		queue_free()
+		return
 	if flown > PIERCE_RANGE or position.y < -20.0 or position.y > main.FIELD_H or position.x < -20.0 or position.x > main.FIELD_W + 20.0:
 		queue_free()
 		return

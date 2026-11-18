@@ -20,10 +20,19 @@ extends SceneTree
 ##   V  volleys     an Arrow Storm or Fireball gives a ring of warning first, then hits only
 ##                   those still inside it
 ##   C  clearing    the gate open: no more waves; the army doesn't move on while an enemy is
-##                   left or a troop is down; then it goes through into the next field
+##                   left or a troop is down (for a while: see M); then it goes through
+##   M  moving on   with a crew up a tower taken there, the order to go on asks: crews hold
+##                   (kept for the retreat; each tower held brings supplies in every field
+##                   after, paid once, not again when the battle's taken up from a checkpoint)
+##                   or come too (in the army, nothing held); nothing keeps the army there for
+##                   good: an enemy out of reach or a troop that won't get up, and after a while
+##                   it can go on anyway, told what happens (the troop's left behind, the enemy
+##                   follows it through, and is there again if the battle's taken up from there)
 ##   K  checkpoints each field after the first is a checkpoint: a loss there banks only the XP
 ##                   since it, and a retry picks up from it (field, gold, army, ram)
-##   W  win         the Dawn Gate broken and its field cleared: won, the checkpoint gone
+##   W  win         the Dawn Gate broken and its field cleared: on into the citadel (the castle's
+##                   rules, the same battle); through its halls, won, the checkpoints gone; the
+##                   towers left manned kept by the campaign, set afresh by each win
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://dawnspire_test_campaign.cfg"
@@ -96,6 +105,7 @@ func _run() -> void:
 	await _prisoners_and_supplies()
 	await _volleys()
 	await _clearing()
+	await _moving_on()
 	await _checkpoints()
 	await _win()
 	if main != null:
@@ -142,6 +152,9 @@ func _go_on(map: String) -> void:
 			break
 		await process_frame
 	rules.action()
+	if main.hud.choice_box != null and is_instance_valid(main.hud.choice_box):
+		main.hud.choice_box.queue_free()
+		rules._go(true)   # (asked about the crews: they hold)
 	for i in 60 * 6:
 		if main.map_id == map and not rules.moving_on:
 			break
@@ -283,7 +296,7 @@ func _side_orders() -> void:
 	var b = _unit("swordsman", Vector2(340, 600))
 	main.give_order("priority", "side", [a, b])
 	await _frames(60)
-	var jobs: Array = [a.get_meta("side_job", null), b.get_meta("side_job", null)]
+	var jobs: Array = [(a.get_meta("side_job") if a.has_meta("side_job") else null), (b.get_meta("side_job") if b.has_meta("side_job") else null)]
 	check(jobs.all(func(j): return j != null) and a.post.distance_to(jobs[0].position) < 70.0,
 			"D  troops on it are sent to the field's side objectives")
 	check(jobs[0] != jobs[1] or rules._side_jobs().size() == 1, "D  ...shared out, not all to the one")
@@ -302,7 +315,7 @@ func _side_orders() -> void:
 	rules.gate.batter(99999.0)
 	await _go_on("ds_bailey")
 	await _frames(60)
-	check(main.map_id == "ds_bailey" and a.priority == "side" and a.get_meta("side_job", null) != null, "D  into the next field, still on Side Objectives, and off to its works (%s, %s, active %s, map %s, moving %s)" % [a.priority, a.get_meta("side_job", null), a.is_active(), main.map_id, rules.moving_on])
+	check(main.map_id == "ds_bailey" and a.priority == "side" and (a.get_meta("side_job") if a.has_meta("side_job") else null) != null, "D  into the next field, still on Side Objectives, and off to its works (%s, %s, active %s, map %s, moving %s)" % [a.priority, (a.get_meta("side_job") if a.has_meta("side_job") else null), a.is_active(), main.map_id, rules.moving_on])
 	# Elsewhere it isn't offered.
 	main.rules.gate = null
 	var esc = load("res://scripts/mission/rules.gd").new()
@@ -418,6 +431,114 @@ func _clearing() -> void:
 	check(main.map_id == "ds_bailey" and rules.zone_i == 1 and rules.wagon.position.y > 600, "C  ...given it, through the gate into the Outer Bailey, the ram at the bottom of it")
 
 
+## Into the citadel: wait for the army to march in through the gate.
+func _into_halls() -> void:
+	for i in 60 * 15:
+		if main.map_id == "dsc_gatehall" and main.rules.get("phase") in ["enter", "fight"]:
+			break
+		await process_frame
+	await _frames(10)
+
+
+# --- M ---------------------------------------------------------------------------------------
+
+## A tower taken in the first field, an Archer up it.
+func _crewed_tower():
+	var rules = main.rules
+	var tower = rules.towers[0]
+	tower.taken = true
+	rules._tower_taken(tower)
+	await _frames(5)
+	var t = null
+	for w in main.get_warriors():
+		if w.has_meta("captured"):
+			t = w
+	var ar = _unit("archer", t.position + Vector2(30, 60))
+	ar.order_to(t.position)
+	await _frames(60 * 4)
+	return ar
+
+
+func _moving_on() -> void:
+	# Crews come too.
+	_at_dawnspire()
+	await _assault()
+	var rules = main.rules
+	var ar = await _crewed_tower()
+	rules.gate.batter(99999.0)
+	for i in 60 * 6:
+		if rules.phase == "ready":
+			break
+		await process_frame
+	rules.action()
+	var box = main.hud.choice_box
+	var labels := []
+	if box != null:
+		for c in box.get_children():
+			if c is Button:
+				labels.append(c.text)
+	check(ar.garrison != null and box != null and is_instance_valid(box) and labels.size() == 3 and "crews hold" in labels[0] and "crews come too" in labels[1] and labels[2] == "Not yet",
+			"M  a crew up a tower: going on asks whether crews hold or come too (or not yet) %s (crew up %s, phase %s, foes %d, down %d)" % [str(labels), ar.garrison != null, rules.phase, main.get_enemies().size(), rules._downed()])
+	if box != null:
+		box.queue_free()
+	rules._go(false)
+	await _frames(60 * 3)
+	check(main.map_id == "ds_bailey" and rules.garrisons.is_empty() and main.get_warriors().any(func(w): return w.kind == "archer" and w.garrison == null and w.is_active()),
+			"M  ...come too: the Archer's in the army in the Bailey, no tower held")
+	# Crews hold: supplies in the field after, paid once.
+	await _assault()
+	rules = main.rules
+	ar = await _crewed_tower()
+	rules.gate.batter(99999.0)
+	main.gold = 400
+	await _go_on("ds_bailey")
+	await _frames(10)
+	var cp: Dictionary = campaign.checkpoint("ds_assault", 1)
+	check(rules.garrisons.size() == 1 and main.gold == 400 + rules.HELD_ROAD_GOLD and int(cp.get("gold", 0)) == main.gold,
+			"M  crews hold: the tower's kept, and its road brings %d gold in the Bailey (gold %d, checkpoint %d)" % [rules.HELD_ROAD_GOLD, main.gold, cp.get("gold", 0)])
+	await _assault(1)
+	await _frames(30)
+	check(main.gold == int(cp.get("gold", 0)) and main.rules.garrisons.size() == 1, "M  ...taken up again from the Bailey: the same gold, not paid twice (%d)" % main.gold)
+	# Nothing keeps the army there for good.
+	await _assault()
+	rules = main.rules
+	var sw = _unit("swordsman", Vector2(320, 560))
+	var far = _foe("goblin", Vector2(20, 60))
+	far.speed = 0.0
+	far.max_hp = 1e6
+	far.hp = 1e6
+	rules.gate.batter(99999.0)
+	await _frames(5)
+	sw.take_damage(99999.0)
+	await _frames(5)
+	sw.down_timer = 9999.0   # (it won't get up)
+	await _frames(60 * 5)
+	check(rules.phase == "clear" and rules.action_label() == "", "M  an enemy out of reach and a troop down: the army waits a while...")
+	for i in 60 * int(rules.LINGER):
+		if rules.phase == "ready":
+			break
+		await process_frame
+	check(rules.phase == "ready" and rules.action_label() == "Through the gate", "M  ...then it can go on anyway (after %ds)" % int(rules.LINGER))
+	rules.action()
+	box = main.hud.choice_box
+	var body := ""
+	if box != null:
+		for c in box.get_children():
+			if c is Label:
+				body += c.text + " "
+	check(box != null and "left behind" in body and "follow you through" in body, "M  ...the order says the troop's left behind and the enemy follows")
+	box.queue_free()
+	rules._go(true)
+	await _frames(60 * 3)
+	var gobs: Array = main.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead)
+	check(main.map_id == "ds_bailey" and not is_instance_valid(sw) and gobs.size() == 1 and gobs[0].position.y < 400 and not is_nan(gobs[0].position.x),
+			"M  through: the fallen troop's left behind, the goblin came through after the army (%d, troop gone %s, at %s)" % [gobs.size(), not is_instance_valid(sw), gobs[0].position if gobs.size() > 0 else Vector2.ZERO])
+	check((campaign.checkpoint("ds_assault", 1).get("stragglers", []) as Array).size() == 1, "M  ...kept with the checkpoint")
+	await _assault(1)
+	await _frames(30)
+	check(main.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead).size() == 1, "M  ...taken up again there, it's there again (once)")
+
+
 # --- K ---------------------------------------------------------------------------------------
 
 func _checkpoints() -> void:
@@ -500,6 +621,39 @@ func _win() -> void:
 	await _frames(60 * 2)
 	check(not main.game_over and rules.action_label() == "Into the citadel", "W  cleared, it waits for the order to finish")
 	rules.action()
+	await _into_halls()
+	check(not main.game_over and main.rules != rules and main.map_id == "dsc_gatehall" and main.rules.room()["name"] == "The Gatehouse Hall",
+			"W  broken and its field cleared: on into the citadel, the same battle (the Gatehouse Hall)")
+	main.rules._end(true)
 	await _frames(30)
 	check(main.game_over and main.victory and campaign.completed.has("ds_assault") and campaign.op_state.is_empty(),
-			"W  broken and its field cleared: the Liberation's assault is won, the checkpoint gone")
+			"W  ...and through the castle's halls, the Liberation's operation is won, the checkpoints gone")
+	# The towers left manned go with the campaign, set afresh by each win (never doubled).
+	campaign.set_checkpoint("ds_assault", 2, {"zone": 2, "name": "The Dawn Gate", "gold": 500, "army": [], "xp": {}})
+	await _assault(2)
+	rules = main.rules
+	rules.garrisons = [{"zone": 0, "field": "The Approach", "tower": "tower", "crew": {"kind": "archer", "tiers": [2, 0, 0, 2]}}]
+	_unit("swordsman", Vector2(320, 600))
+	rules.gate.batter(99999.0)
+	await _frames(60 * 2)
+	rules.action()
+	await _into_halls()
+	main.rules._end(true)
+	await _frames(30)
+	campaign.save_game()
+	campaign.load_game()
+	check(campaign.held_towers.size() == 1 and campaign.held_towers[0]["crew"]["tiers"] == [2, 0, 0, 2],
+			"W  won with a tower held: the campaign keeps its crew (for the true final battle), through a save")
+	campaign.set_checkpoint("ds_assault", 2, {"zone": 2, "name": "The Dawn Gate", "gold": 500, "army": [], "xp": {}})
+	await _assault(2)
+	rules = main.rules
+	rules.garrisons = rules.garrisons + [{"zone": 1, "field": "The Outer Bailey", "tower": "tower", "crew": {"kind": "mage", "tiers": [0, 2, 0, 0]}}]
+	_unit("swordsman", Vector2(320, 600))
+	rules.gate.batter(99999.0)
+	await _frames(60 * 2)
+	rules.action()
+	await _into_halls()
+	main.rules._end(true)
+	await _frames(30)
+	check(campaign.held_towers.size() == 1 and campaign.held_towers[0]["crew"]["kind"] == "mage",
+			"W  won again (a replay): the towers held are this win's, not added to the last (%d)" % campaign.held_towers.size())

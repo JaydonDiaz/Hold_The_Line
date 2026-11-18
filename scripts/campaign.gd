@@ -11,9 +11,16 @@ extends Node
 
 const CD = preload("res://scripts/campaign_data.gd")
 const Data = preload("res://scripts/data.gd")
-const VERSION := 3   # bump when the save's shape changes, and migrate older saves in _read
+const VERSION := 4   # bump when the save's shape changes, and migrate older saves in _read
 # 1: the first campaign save.  2: adds troop training (points and trained tiers).
 # 3: training is earned per unit by use (XP, points spent per path).
+# 4: the Mage and Frost Towers retired (the plain Tower, the Arcane Obelisk): their XP
+#    carried to their successors (MIGRATE_XP); training of any kind the game no longer
+#    knows is kept aside ("retired"), never dropped.
+# Retired kinds' XP goes to the kind that took their place: the same XP, so the same number
+# of training points, unspent (their paths are new), never more than full training. Nothing
+# goes to the troop that crewed them, so no troop is trained twice over.
+const MIGRATE_XP := {"magetower": "obelisk", "frosttower": "tower"}
 
 const SLOTS := 3
 
@@ -39,6 +46,12 @@ var unlocked := {}          # unit kind -> [highest tier open on each of its fou
 var spent := {}             # unit kind -> training points spent on it
 var last_battle := {}       # unit kind -> [XP, points] the last battle earned (the map shows it)
 var load_error := ""        # why the save couldn't be read ("" if it could, or there's none)
+# The towers left manned when the Dawnspire assault was last won (rules_assault's
+# garrisons: [{"zone", "field", "tower", "crew"}]): out of the army for the rest of the
+# operation; in the true final battle's retreat they rejoin it, once. Set, never added
+# to, by each win of the assault, so a replay can't double them.
+var held_towers: Array = []
+var retired := {}           # training of kinds the game no longer has (kind -> {"xp", "unlocked", "spent"}), kept, never dropped
 # A long operation's checkpoints (the Liberation of Dawnspire, rules_assault.gd): how the
 # army stood as each field after the first began, {"mission", "checkpoints": {field: {"zone",
 # "name", "gold", "army", ...}}}, kept apart from the progress above so a battle can be
@@ -138,6 +151,8 @@ func reset() -> void:
 	xp = {}
 	unlocked = {}
 	spent = {}
+	retired = {}
+	held_towers = []
 	last_battle = {}
 	op_state = {}
 	op_resume_zone = 0
@@ -229,6 +244,24 @@ func _read(cfg: ConfigFile) -> bool:
 				unlocked[kind] = tiers
 			if sp is Dictionary and sp.get(kind, 0) is int and int(sp.get(kind, 0)) > 0:
 				spent[kind] = clampi(int(sp.get(kind, 0)), 0, CD.MAX_TRAINING)
+		var held = cfg.get_value("state", "held_towers", [])
+		held_towers = (held as Array).filter(func(h): return h is Dictionary and h.get("crew") is Dictionary) if held is Array else []
+		# Kinds the game no longer has: kept aside as they were...
+		var r = cfg.get_value("state", "retired", {})
+		retired = (r as Dictionary).duplicate(true) if r is Dictionary else {}
+		if x is Dictionary:
+			for kind in x:
+				if kind is String and not Data.WARRIORS.has(kind) and not retired.has(kind) and (x[kind] is float or x[kind] is int):
+					retired[kind] = {"xp": float(x[kind]), "unlocked": u.get(kind, []) if u is Dictionary else [],
+							"spent": sp.get(kind, 0) if sp is Dictionary else 0}
+		# ...and a retired tower's XP carried once to the kind that took its place.
+		for kind in MIGRATE_XP:
+			if retired.has(kind) and not retired[kind].get("carried", false):
+				var to: String = MIGRATE_XP[kind]
+				var had: float = xp.get(to, 0.0)
+				var full: float = xp_for_level(CD.MAX_TRAINING)
+				xp[to] = minf(had + float(retired[kind].get("xp", 0.0)), maxf(had, full))
+				retired[kind]["carried"] = to
 		for kind in xp.keys():
 			if xp[kind] <= 0.0:
 				xp.erase(kind)
@@ -291,6 +324,8 @@ func save_game() -> bool:
 	cfg.set_value("state", "unlocked", unlocked)
 	cfg.set_value("state", "spent", spent)
 	cfg.set_value("state", "operation", op_state)
+	cfg.set_value("state", "retired", retired)
+	cfg.set_value("state", "held_towers", held_towers)
 	var tmp := save_path + ".tmp"
 	if cfg.save(tmp) != OK:
 		return false

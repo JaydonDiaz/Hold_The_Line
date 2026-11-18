@@ -23,6 +23,7 @@ const Sprites = preload("res://scripts/sprites.gd")
 const REACH := 6.0
 const FLY_HEIGHT := 18.0   # how far above its shadow a flyer is drawn
 const FUSE := 0.6          # seconds a Sapper's bomb fizzes before it goes off
+const PLANT := 1.6         # ...against one of your emplacements: it has to plant the charge (time to stop it)
 const ENRAGE_SPEED := 1.35
 const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
@@ -366,7 +367,9 @@ func _process(delta: float) -> void:
 		_sap_pick(delta)
 		at_sap = sap_target != null and _sap_gap(sap_target) <= REACH + 6.0
 	if not bomb.is_empty() and (at_castle or at_goal or wall != null or at_sap):
-		fuse = FUSE   # at the castle, or up against a wall in the way: light the bomb
+		# At the castle, or up against a wall in the way: light the bomb. At an emplacement
+		# it plants the charge first, so there's a moment to stop it.
+		fuse = PLANT if at_sap and not (sap_target is BarricadeScript) and wall == null and not at_castle else FUSE
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
 		queue_redraw()
 		return
@@ -403,7 +406,9 @@ func _process(delta: float) -> void:
 		if cd_timer <= 0.0:
 			cd_timer = attack_cd
 			lunge = 0.15
+			main.dmg_src = kind
 			goal.take_damage(wall_damage * _hit_mult())
+			main.dmg_src = ""
 	elif at_castle:
 		# At the castle: hammer on its wall until something kills it.
 		fighting = true
@@ -808,6 +813,8 @@ func _set_on_castle() -> bool:
 
 
 func _wall_across(a: Vector2, b: Vector2) -> bool:
+	if not main.paths.sight_clear(a, b):
+		return true   # (a castle's walls: no seeing through them)
 	for wall in main.paths.walls:
 		if Geometry2D.segment_intersects_segment(a, b, wall.seg_a(), wall.seg_b()) != null:
 			return true
@@ -825,12 +832,17 @@ func _explode() -> void:
 			b.take_damage(bomb["wall"])
 	for w in main.get_warriors():
 		if w.is_active() and not w.sheltered() and position.distance_to(w.position) <= r + w.RADIUS:
+			var was_up: bool = w.is_active()
 			w.take_damage(bomb["wall"] if w.data.get("emplacement", false) else bomb["units"])   # (an emplacement takes it like a wall)
+			if was_up and not w.is_active() and w.data.get("emplacement", false):
+				main.sap_wrecks.append([w.kind, w.spent])   # (for the balance bots: what Sappers cost the player)
 	if position.y + r * 0.5 >= main.CASTLE_Y:
 		main.damage_castle(bomb["units"] * 2.0)   # the castle's walls are thicker than a barricade's
 	for o in main.rules.objectives():
 		if o.is_target() and position.distance_to(o.position) <= r + o.RADIUS:
+			main.dmg_src = "sapper"
 			o.take_damage(bomb["units"])   # (a workshop's walls are no castle's)
+			main.dmg_src = ""
 	main.spawn_flash(position, r * 0.7)
 	main.spawn_burst(position, r, Color(1.0, 0.55, 0.2))
 	main.spawn_burst(position, r * 0.55, Color(1.0, 0.9, 0.5))
@@ -897,7 +909,40 @@ func _sap_pick(delta: float) -> void:
 			if d < best_d:
 				best_d = d
 				best = b
+	if best != null and best != sap_target and main.has_method("sap_alert"):
+		main.sap_alert(best)
 	sap_target = best
+
+
+## A Sapper's mark on what it's going for: a dotted line to it and a blinking red ring
+## round it with a bomb sign, so the player sees which emplacement is in danger.
+func _draw_sap_mark() -> void:
+	if bomb.is_empty() or dead:
+		return
+	if fuse >= 0.0:
+		# The fuse burning down: a ring round it that empties as it goes.
+		var left := clampf(fuse / PLANT, 0.0, 1.0)
+		draw_arc(Vector2(0, -radius * 0.5), radius + 8.0, -PI / 2.0, -PI / 2.0 + TAU * left, 32, Color(1.0, 0.6, 0.2, 0.9), 3.0, true)
+	if sap_target == null or not is_instance_valid(sap_target):
+		return
+	var to: Vector2 = _sap_point(sap_target) - position
+	var t := Time.get_ticks_msec() / 1000.0
+	var k := 0.55 + 0.45 * sin(t * 8.0)
+	var red := Color(1.0, 0.25, 0.15, 0.75 * k)
+	var n := int(to.length() / 14.0)
+	for i in n:
+		if i % 2 == 0:
+			draw_line(to * (float(i) / n), to * (float(i + 1) / n), Color(1.0, 0.35, 0.2, 0.45), 2.0)
+	var r: float = 18.0 if sap_target is BarricadeScript else sap_target.RADIUS + 10.0
+	draw_arc(to, r, 0.0, TAU, 32, red, 2.5, true)
+	for a in 4:
+		var d := Vector2.from_angle(a * PI / 2.0 + PI / 4.0)
+		draw_line(to + d * (r - 5.0), to + d * (r + 6.0), red, 2.5)
+	# The bomb sign over it.
+	var b := to + Vector2(0, -r - 12.0)
+	draw_circle(b, 6.0, Color(0.12, 0.1, 0.1, 0.9 * k + 0.1))
+	draw_line(b + Vector2(3, -4), b + Vector2(6, -9), Color(0.85, 0.7, 0.4, 0.9), 1.5)
+	draw_circle(b + Vector2(6.5, -10), 2.2, Color(1.0, 0.7, 0.2, k))
 
 
 func _sap_valid(o) -> bool:
@@ -1175,6 +1220,7 @@ func _gait() -> Array:
 
 
 func _draw() -> void:
+	_draw_sap_mark()
 	var tint := Color.WHITE
 	if slow_timer > 0.0 or freeze_timer > 0.0 or ice_crust > 0.0:
 		tint = Color(0.6, 0.85, 1.3)

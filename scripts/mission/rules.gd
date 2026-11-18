@@ -260,3 +260,42 @@ func objectives() -> Array:
 
 
 const NONE: Array = []   # (asked every frame by every troop: no new array each time)
+
+
+# --- Operations carried over fields (the assault, the castle) --------------------------------
+
+## What a unit is, to put it back later: its kind, training, health, post and orders.
+func _unit_record(w) -> Dictionary:
+	var k: float = main.FIELD_W / 640.0
+	return {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
+			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.temp_allies.has(w),
+			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode}
+
+
+## A unit back from its record (on the field as it's stretched now).
+func _make_unit(rec: Dictionary):
+	var k: float = main.FIELD_W / 640.0
+	var kind: String = rec["kind"]
+	if not preload("res://scripts/data.gd").WARRIORS.has(kind):
+		return null
+	var p: Vector2 = rec.get("post", Vector2(320, 600))
+	var w = preload("res://scripts/warrior.gd").new()
+	w.setup(kind, preload("res://scripts/data.gd").WARRIORS[kind], main, main.paths.open_spot(main._clamp_post(Vector2(p.x * k, p.y))))
+	w.tiers = (rec.get("tiers", [0, 0, 0, 0]) as Array).duplicate()
+	w._apply_upgrades()
+	w.hp = w.max_hp * clampf(float(rec.get("hp", 1.0)), 0.05, 1.0)
+	w.spent = int(rec.get("spent", 0))
+	w.priority = str(rec.get("priority", w.priority))
+	w.move_mode = str(rec.get("move_mode", w.move_mode))
+	w.position = w.post
+	main.warrior_layer.add_child(w)
+	if rec.get("lent", false):
+		main.temp_allies.append(w)
+	if rec.get("freed", false):
+		w.set_meta("freed", true)
+	return w
+
+
+## A click on the field that the battle takes (a way on's arrow, say): true if it did.
+func click(_p: Vector2) -> bool:
+	return false

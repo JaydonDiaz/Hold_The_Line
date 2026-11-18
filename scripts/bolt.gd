@@ -37,6 +37,8 @@ func _process(delta: float) -> void:
 	position = b
 	rotation = dir.angle()
 	dist_left -= step
+	if main.paths.tall_at(position):
+		dist_left = 0.0   # into a castle's wall: it stops (and bursts) there
 	if dist_left <= 0.0:
 		_burst()
 		queue_free()

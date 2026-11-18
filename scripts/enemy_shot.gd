@@ -20,13 +20,18 @@ func _process(delta: float) -> void:
 		return
 	position += to.normalized() * step
 	rotation = to.angle()
+	if main.paths.tall_at(position):
+		queue_free()   # into a castle's wall
+
 
 
 func _land() -> void:
 	if target == null:
 		main.damage_castle(damage)
 	elif is_instance_valid(target) and target.is_active() and target.position.distance_to(position) <= target.RADIUS + 14.0:
+		main.dmg_src = "arrows"
 		target.take_damage(damage)
+		main.dmg_src = ""
 	queue_free()
 
 

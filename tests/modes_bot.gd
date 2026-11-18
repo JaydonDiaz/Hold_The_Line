@@ -14,6 +14,7 @@ var prio := ""   # (a second argument: every troop on this target priority, to c
 ## A campaign mission's state when it's played: missions won, peoples joined.
 const CAMPAIGN_AT := {
 	"ashwatch_road": [["ashwatch", "stonehollow"], ["stonehollow"]],
+	"mv_sanctuary": [["ashwatch", "stonehollow", "ashwatch_road", "stonehollow_workshops", "mv_wounded"], ["stonehollow", "mercyvale"]],
 }
 
 
@@ -69,6 +70,22 @@ func _spend() -> void:
 			main._on_hire_pressed(kind)
 			main.hire_at(at)
 			main.placing_type = ""
+	# With "emp" (the third argument): a few emplacements too, behind the troops, as a player
+	# would (to see what Sappers do to them).
+	if OS.get_cmdline_user_args().size() > 2 and OS.get_cmdline_user_args()[2] == "emp" and main.get_warriors().size() >= 6:
+		var spots: Array = _spots()
+		if not spots.is_empty():
+			var c := Vector2.ZERO
+			for p in spots:
+				c += p
+			c /= spots.size()
+			for e in [["cannon", Vector2(-90, 90)], ["ballista", Vector2(90, 90)], ["medbay", Vector2(0, 120)]]:
+				var at: Vector2 = main._clamp_post(c + e[1])
+				var have: bool = main.get_warriors().any(func(w): return w.kind == e[0])
+				if not have and main.allowed(e[0]) and main.gold >= main.hire_cost(e[0]) and main.can_post_at(at):
+					main._on_hire_pressed(e[0])
+					main.hire_at(at)
+					main.placing_type = ""
 	if type == "escort":
 		var loose: Array = main.get_warriors().filter(func(w): return not w.is_emplacement() and w.anchor == null)
 		if not loose.is_empty():
@@ -85,6 +102,14 @@ func _spend() -> void:
 	main.selected = null
 
 
+## What Sappers wrecked this game: how many emplacements, the gold they'd cost.
+func _sapped() -> String:
+	var gold := 0
+	for w in main.sap_wrecks:
+		gold += int(w[1])
+	return "sapped %d (%dg: %s)" % [main.sap_wrecks.size(), gold, ",".join(main.sap_wrecks.map(func(w): return w[0]))]
+
+
 func _run() -> void:
 	await process_frame
 	campaign = root.get_node("Campaign")
@@ -92,11 +117,13 @@ func _run() -> void:
 	campaign.reset()
 	var only: String = OS.get_cmdline_user_args()[0] if OS.get_cmdline_user_args().size() > 0 else ""
 	prio = OS.get_cmdline_user_args()[1] if OS.get_cmdline_user_args().size() > 1 else ""
+	if prio == "-":
+		prio = ""   # (no priority given, to pass a third argument)
 	if only.begins_with("mission:"):
 		await _missions_bot(only.trim_prefix("mission:"))
 		quit()
 		return
-	for id in ["three_towers", "open_road", "signal_beacon", "village_road", "old_fort", "supply_wagon", "long_retreat"]:
+	for id in ["classic", "three_towers", "open_road", "signal_beacon", "village_road", "old_fort", "supply_wagon", "long_retreat"]:
 		if only != "" and id != only:
 			continue
 		for diff in ["easy", "normal", "hard"]:
@@ -105,7 +132,10 @@ func _run() -> void:
 				await _fresh_main()
 				main.hud.hide_mode_select()
 				main.records_path = ""
-				main._on_mode_chosen("battle:%s:%s" % [id, diff])
+				if id == "classic":
+					main.choose_mode(diff)   # (Classic: the castle, endless waves)
+				else:
+					main._on_mode_chosen("battle:%s:%s" % [id, diff])
 				await process_frame
 				main._lock_portrait(true)
 				await process_frame
@@ -125,11 +155,12 @@ func _run() -> void:
 							main.start_wave()
 						if main.rules.action_label() != "":
 							main.rules.action()
+							_answer_choice()
 					await process_frame
 					guard += 1
 				Engine.time_scale = 1.0
-				print("MB %s %s seed %d: %s %d waves  %s" % [id, diff, s, "survived" if main.game_over else "still going after", main.waves_survived(),
-						main.rules.status().replace("\n", " ")])
+				print("MB %s %s seed %d: %s %d waves  %s  %s" % [id, diff, s, "survived" if main.game_over else "still going after", main.waves_survived(),
+						main.rules.status().replace("\n", " "), _sapped()])
 	quit()
 
 
@@ -167,5 +198,17 @@ func _missions_bot(id: String) -> void:
 					await process_frame
 					guard += 1
 				Engine.time_scale = 1.0
-				print("MB %s %s %s seed %d: %s wave %d  %s" % [id, diff, "trained" if trained else "untrained", s,
-						("WON" if main.victory else "lost") if main.game_over else "unfinished", main.wave, main.rules.status().replace("\n", " ")])
+				print("MB %s %s %s seed %d: %s wave %d  %s  %s" % [id, diff, "trained" if trained else "untrained", s,
+						("WON" if main.victory else "lost") if main.game_over else "unfinished", main.wave, main.rules.status().replace("\n", " "), _sapped()])
+
+
+## A choice the battle asks mid-way (going on with crews up towers, say): the bot takes the
+## first option, as a player in a hurry would.
+func _answer_choice() -> void:
+	var box = main.hud.choice_box
+	if box == null or not is_instance_valid(box):
+		return
+	for c in box.get_children():
+		if c is Button:
+			c.pressed.emit()
+			return

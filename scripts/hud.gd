@@ -2272,6 +2272,48 @@ func show_start_choice(mission_name: String, cps: Array, pick: Callable) -> void
 	_board_behind(dim)
 
 
+## A choice to make mid-battle (going on to the next field, say): a title, what each choice
+## means, and a button per option ([label, Callable or null to just close, tooltip]); the
+## last option is the "not yet" one. Returns the dialog (closed by any button).
+var choice_box: Control = null
+
+func show_choice(title_text: String, body: String, options: Array) -> Control:
+	if choice_box != null and is_instance_valid(choice_box):
+		choice_box.queue_free()
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.6)
+	dim.size = Vector2(WIDTH, HEIGHT)
+	add_child(dim)
+	_center(dim)
+	_bleed(dim)
+	choice_box = dim
+	var top := 230.0
+	var title := _label(dim, Vector2(30, top), Vector2(WIDTH - 60, 44), Color(1, 0.85, 0.3), 28)
+	title.text = title_text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fit_label(title, 16)
+	var sub := _label(dim, Vector2(40, top + 50), Vector2(WIDTH - 80, 190), Color(0.92, 0.9, 0.84), 16)
+	sub.text = body
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_fit_label(sub, 11)
+	for i in options.size():
+		var o: Array = options[i]
+		var last := i == options.size() - 1 and options.size() > 1
+		var b := _button(dim, Vector2(150 if not last else 210, top + 252 + i * 60), Vector2(340 if not last else 220, 50 if not last else 42), str(o[0]))
+		_fit_text(b, 17, b.size.x - 14.0)
+		if o.size() > 2:
+			b.tooltip_text = str(o[2])
+		var then = o[1]
+		b.pressed.connect(func():
+			dim.queue_free()
+			if then is Callable and then.is_valid():
+				then.call())
+	_board_behind(dim)
+	return dim
+
+
 ## A mission is over: won (on to the map, where its story and reward wait) or lost
 ## (try it again, or go back to the map; nothing is lost either way).
 func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary := "") -> void:

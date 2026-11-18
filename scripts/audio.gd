@@ -154,6 +154,12 @@ const BATTLES := {
 		"seed": 167, "lead": "square", "bass": "gallop", "drums": "rock", "arp": "up", "range": [62, 82]},
 	"dawngate": {"bpm": 148, "chords": [[52, "min"], [48, "maj"], [50, "maj"], [47, "maj"], [52, "min"], [55, "maj"], [50, "maj"], [47, "maj"]],
 		"seed": 173, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "triplet", "range": [64, 86]},
+	# Inside the citadel: the Gatehouse Hall (close stone, a grim march), and the Hall of
+	# Banners (wider, faster, the old hymn's chords turned dark).
+	"gatehall": {"bpm": 132, "chords": [[47, "min"], [43, "maj"], [45, "maj"], [42, "maj"], [47, "min"], [50, "maj"], [45, "maj"], [42, "maj"]],
+		"seed": 179, "lead": "square", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [59, 79]},
+	"banners": {"bpm": 154, "chords": [[49, "min"], [45, "maj"], [47, "maj"], [44, "maj"], [49, "min"], [52, "maj"], [47, "maj"], [44, "min"]],
+		"seed": 181, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "up", "range": [61, 84]},
 	"carnival": {"bpm": 144, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [57, "min"], [46, "maj"], [48, "maj"]],
 		"seed": 151, "lead": "tri", "bass": "eighths", "drums": "tribal", "arp": "triplet", "range": [65, 86]},
 	"ashen": {"bpm": 128, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
@@ -244,6 +250,12 @@ const CALMS := {
 	# The Dawn Gate: the old Line's hymn, coming back as the army reaches the citadel.
 	"dawngate": {"bpm": 76, "chords": [[52, "maj"], [47, "maj"], [49, "min"], [45, "maj"], [52, "maj"], [54, "min"], [45, "maj"], [47, "maj"]],
 		"seed": 149, "lead": "sine", "range": [64, 86], "scale": "major", "accomp": "pads", "perc": "none", "color": ["shimmer", "wind"]},
+	# The Gatehouse Hall: stone all round, the braziers crackling, a slow pulse.
+	"gatehall": {"bpm": 64, "chords": [[47, "min"], [43, "maj"], [45, "min"], [42, "maj"], [47, "min"], [40, "maj"], [43, "maj"], [42, "maj"]],
+		"seed": 191, "lead": "tri", "range": [57, 76], "scale": "minor", "accomp": "drone", "perc": "heartbeat", "color": ["crackle"]},
+	# The Hall of Banners: the Line's torn banners, a bell far off in the keep.
+	"banners": {"bpm": 70, "chords": [[49, "min"], [45, "maj"], [47, "maj"], [44, "min"], [49, "min"], [52, "maj"], [45, "maj"], [44, "maj"]],
+		"seed": 193, "lead": "sine", "range": [61, 81], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["bells"]},
 	# The Burnt Village: a lament over the embers.
 	"embers": {"bpm": 62, "chords": [[52, "min"], [48, "maj"], [45, "min"], [47, "maj"], [52, "min"], [50, "maj"], [48, "maj"], [47, "maj"]],
 		"seed": 131, "lead": "tri", "range": [59, 79], "scale": "minor", "accomp": "pads", "perc": "none", "color": ["crackle"]},

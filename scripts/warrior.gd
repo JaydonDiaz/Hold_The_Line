@@ -717,7 +717,7 @@ func shoots_over_walls() -> bool:
 
 
 func _sees(e) -> bool:
-	return shoots_over_walls() or not main.paths.wall_between(position, e.position)
+	return (shoots_over_walls() or not main.paths.wall_between(position, e.position)) and main.paths.sight_clear(position, e.position)   # (and never through a castle's walls)
 
 
 ## Whether the Target button means anything for this unit.

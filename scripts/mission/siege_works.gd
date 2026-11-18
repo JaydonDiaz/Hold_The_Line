@@ -12,6 +12,9 @@ extends "res://scripts/mission/objective.gd"
 ##                 army, townsfolk make for safety)
 ##   cache         supplies: a troop that gets to it with no enemy there claims the gold
 ##   winch         the winch house that raises a portcullis: taken like a tower
+##   standard      inside the castle (rules_castle.gd): the Line's standard, planted in each
+##                 room the army takes; what the enemy goes for there. Lose it and the army
+##                 breaks.
 ## And the ram itself: a wagon with "cargo": "ram" (a hide-roofed shed on wheels over a
 ## swinging iron-headed log).
 
@@ -46,6 +49,8 @@ func setup(m, d: Dictionary) -> void:
 			RADIUS = 14.0
 		"winch":
 			RADIUS = 18.0
+		"standard":
+			RADIUS = 16.0
 	zone_r = CAPTURE_R.get(kind, zone_r)
 
 
@@ -64,6 +69,8 @@ func is_solid() -> bool:
 			return true
 		"cache", "winch":
 			return false
+		"standard":
+			return true
 	return super.is_solid()
 
 
@@ -155,12 +162,48 @@ func _draw() -> void:
 		"winch":
 			_draw_ring()
 			_draw_winch()
+		"standard":
+			if not dead:
+				_draw_standard()
 		_:
 			if _is_ram():
 				if not dead:
 					_draw_body()
 				return
 			super._draw()
+
+
+## The Line's standard: a tall pole on a heap of stones, the blue sun banner flying from it,
+## and its health in a ring round its foot.
+func _draw_standard() -> void:
+	var foot := Vector2(0, 10)
+	draw_set_transform(foot, 0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, 20.0, Color(0, 0, 0, 0.3))
+	draw_set_transform(Vector2.ZERO)
+	# Stones round the foot.
+	for k in 6:
+		var a := k * TAU / 6.0 + 0.3
+		var q := foot + Vector2(cos(a) * 11.0, sin(a) * 4.5 - 2.0)
+		draw_rect(Rect2(q - Vector2(4, 3), Vector2(8, 6)), OUTLINE)
+		draw_rect(Rect2(q - Vector2(3, 2), Vector2(6, 4)), Color(0.55, 0.53, 0.5) if k % 2 else Color(0.47, 0.45, 0.43))
+	var top := Vector2(0, -62)
+	draw_rect(Rect2(-2.5, top.y, 5, foot.y - top.y), OUTLINE)
+	draw_rect(Rect2(-1.5, top.y + 1, 3, foot.y - top.y - 2), Color(0.5, 0.34, 0.18))
+	draw_circle(top, 4.0, OUTLINE)
+	draw_circle(top, 3.0, Color(0.95, 0.8, 0.35))
+	# The banner, waving.
+	var wv := sin(t * 3.0) * 2.5
+	var flag := PackedVector2Array([top + Vector2(2, 4), top + Vector2(34, 6 + wv), top + Vector2(30, 19 + wv * 0.6), top + Vector2(35, 32 + wv), top + Vector2(2, 30)])
+	draw_colored_polygon(flag, Color(0.2, 0.32, 0.62))
+	draw_polyline(flag + PackedVector2Array([flag[0]]), OUTLINE, 1.5)
+	var sun := top + Vector2(17, 18 + wv * 0.5)
+	for k in 8:
+		var a := k * TAU / 8.0 + t * 0.3
+		draw_line(sun + Vector2.from_angle(a) * 4.0, sun + Vector2.from_angle(a) * 8.0, Color(1.0, 0.85, 0.4), 1.5)
+	draw_circle(sun, 4.0, Color(1.0, 0.88, 0.45))
+	if hp < max_hp:
+		var k := clampf(hp / max_hp, 0.0, 1.0)
+		draw_arc(foot, 24.0, -PI / 2.0, -PI / 2.0 + TAU * k, 32, Color(0.4, 0.85, 0.45) if k > 0.4 else Color(1.0, 0.4, 0.3), 3.0, true)
 
 
 func _draw_body() -> void:

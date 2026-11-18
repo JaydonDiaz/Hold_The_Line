@@ -579,10 +579,10 @@ const WARRIORS := {
 				{"name": "Eagle's Nest", "cost": 160, "desc": "The crew reaches 60% further", "effect": {"perch": 0.1}},
 			]},
 			{"name": "Hoardings", "tiers": [
-				{"name": "Arrow Loops", "cost": 30, "desc": "The crew attacks 8% faster", "effect": {"crew_rate": 0.92}},
-				{"name": "Shuttered Hoard", "cost": 50, "desc": "The crew attacks 8% faster", "effect": {"crew_rate": 0.92}},
-				{"name": "Fighting Gallery", "cost": 90, "desc": "The crew attacks 12% faster", "effect": {"crew_rate": 0.88}},
-				{"name": "War Hoardings", "cost": 160, "desc": "The crew attacks 15% faster", "effect": {"crew_rate": 0.85}},
+				{"name": "Arrow Loops", "cost": 30, "desc": "The crew attacks 6% faster", "effect": {"crew_rate": 0.9434}},
+				{"name": "Shuttered Hoard", "cost": 50, "desc": "The crew attacks 12% faster", "effect": {"crew_rate": 0.9464}},
+				{"name": "Fighting Gallery", "cost": 90, "desc": "The crew attacks 25% faster", "effect": {"crew_rate": 0.8960}},
+				{"name": "War Hoardings", "cost": 160, "desc": "The crew attacks 40% faster", "effect": {"crew_rate": 0.8929}},
 			]},
 			{"name": "Masonry", "note": "Masons mend the tower while a wave is on.", "tiers": [
 				{"name": "Mason", "cost": 30, "desc": "Repairs 3 HP/s during waves", "effect": {"repair": 3.0}},

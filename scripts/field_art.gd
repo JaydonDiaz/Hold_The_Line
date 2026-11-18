@@ -46,10 +46,16 @@ static func paint_field(ci: CanvasItem, w: float, h: float, tint: Color, map: Di
 			draw_snow(ci, w, tint, y0, h)
 		"city":
 			draw_city(ci, w, tint, y0, h)
+		"hall":
+			var frng := RandomNumberGenerator.new()
+			frng.seed = 4141
+			CastleArt.floor(ci, w, h, tint, frng)
 	if map.is_empty():
 		draw_meadow(ci, w, tint)
 	if themed or th == "frostkeep":
 		CampArt.draw_camp(ci, w, tint, th, props(w)["fire"], props(w)["torches"])
+	elif map.get("biome", "") == "hall":
+		pass   # (a room inside: its walls all round, no way in for the enemy but its doors)
 	elif not camp and map.get("biome", "") == "snow":
 		CampArt._backdrop(ci, w, tint, "frostkeep", RandomNumberGenerator.new())   # snow-laden pines
 	else:
@@ -80,6 +86,7 @@ static func _trail(w: float) -> PackedVector2Array:
 ## `clear` (a campaign map's terrain shapes and trails) keeps the bushes, rocks and the
 ## like off them and out of the way, so nothing that's only scenery looks like terrain.
 const WarArt = preload("res://scripts/war_art.gd")
+const CastleArt = preload("res://scripts/castle_art.gd")   # Dawnspire's rooms inside ("biome": "hall")
 
 
 static func draw_meadow(ci: CanvasItem, w: float, tint: Color, trail := true, clear: Array = []) -> void:
@@ -249,7 +256,7 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 	snowy = m.get("biome", "meadow") == "snow"
 	barren = m.get("ground", "") == "war"
 	match m.get("biome", "meadow"):
-		"mountain", "snow", "city":
+		"mountain", "snow", "city", "hall":
 			pass   # (painted first, by paint_field: it reaches under the camp and the castle)
 		"void":
 			draw_islands(ci, w, tint, m)
@@ -274,6 +281,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 	for d in m.get("decor", []):
 		if d["kind"] in WarArt.FLAT:
 			WarArt.decor(ci, d, tint, rng)
+		elif d["kind"] in CastleArt.FLAT:
+			CastleArt.decor(ci, d, tint, rng)
 	var shapes: Array = m.get("terrain", [])
 	# Ice lies flat on the ground: under everything else, thin ice over the lake it's in.
 	for t in shapes:
@@ -324,6 +333,12 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				WarArt.deadwood(ci, poly, tint, rng)
 			"wreck":
 				WarArt.wreck(ci, poly, tint, rng)
+			"hall":
+				CastleArt.wall(ci, poly, tint, rng)
+			"pillar":
+				CastleArt.pillar(ci, poly, tint, rng)
+			"furniture":
+				CastleArt.furniture(ci, poly, tint, rng)
 	# Fords, stairs and bridges go over what they cross.
 	for t in shapes:
 		var poly := PackedVector2Array(t["poly"])
@@ -348,6 +363,8 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 				_street_lamp(ci, d["at"], tint)
 			"ogre_banner", "pikes", "deadtree", "stakes":
 				WarArt.decor(ci, d, tint, rng)
+			"brazier", "rack", "sconce":
+				CastleArt.decor(ci, d, tint, rng)
 	for l in m.get("lanterns", []):
 		_lantern(ci, l, tint)
 	snowy = false

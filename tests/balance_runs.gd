@@ -204,9 +204,48 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 	var result := ("WON" if main.victory else "lost") if main.game_over else "unfinished"
 	if result == "unfinished" and not main.get_enemies().is_empty():
 		print("LEFT ", ", ".join(main.get_enemies().slice(0, 8).map(func(e): return "%s@%s" % [e.kind, e.position.round()])))
-	print("BR mission=%s diff=%s setup=%s trained=%d style=%s seed=%d width=%d result=%s wave=%d margin=%.2f low=%.2f quiet=%d gametime=%d field=%d army=[%s] status=[%s]" % [
+	if result == "lost" and main.rules.get("garrisons") != null:
+		print("WHY " + _why_lost())
+	var xp_sum := 0.0
+	for k in main.battle_xp:
+		xp_sum += main.battle_xp[k]
+	print("BR mission=%s diff=%s setup=%s trained=%d style=%s seed=%d width=%d result=%s wave=%d margin=%.2f low=%.2f quiet=%d gametime=%d field=%d xp=%d sapped=%s army=[%s] status=[%s]" % [
 			id, diff, st[0], 1 if trained else 0, opts["style"], sd, width, result, main.wave, _margin(), low, quiet, roundi(frames * 4.0 / 60.0),
-			main.FIELD_W, bot.army(), main.rules.status().replace("\n", " ")])
+			main.FIELD_W, roundi(xp_sum), "%d/%dg" % [main.sap_wrecks.size(), main.sap_wrecks.reduce(func(t, w): return t + int(w[1]), 0)], bot.army(), main.rules.status().replace("\n", " ")])
+
+
+## The assault lost: where, what hurt the ram, and how the army stood, to sort losses by
+## cause (the ram worn down at the gate or on the road, too few troops, gold left unspent,
+## swamped by numbers, or the army out of position).
+func _why_lost() -> String:
+	var r = main.rules
+	var hits: Array = main.obj_hits.keys()
+	hits.sort_custom(func(a, b): return main.obj_hits[a] > main.obj_hits[b])
+	var total := 0.0
+	for k in hits:
+		total += main.obj_hits[k]
+	var top: Array = hits.slice(0, 4).map(func(k): return "%s %d%%" % [k, roundi(main.obj_hits[k] / maxf(total, 1.0) * 100.0)])
+	var up := 0
+	var down := 0
+	var near := 0
+	var side := 0
+	var crews := 0
+	for w in main.get_warriors():
+		if w.is_queued_for_deletion() or w.is_emplacement() and w.garrison == null:
+			continue
+		if w.down_timer > 0.0:
+			down += 1
+			continue
+		up += 1
+		if r.wagon != null and w.position.distance_to(r.wagon.position) < 150.0:
+			near += 1
+		if w.priority == "side":
+			side += 1
+		if w.garrison != null:
+			crews += 1
+	return "field=%d(%s) phase=%s along=%.2f gate=%.0f%% ram_hits=[%s] troops_up=%d down=%d near_ram=%d side=%d crews=%d gold=%d enemies=%d queue=%d" % [
+			r.zone_i, r.zone()["name"], r.phase, r.zone_along(), r.gate.hp / maxf(r.gate.max_hp, 1.0) * 100.0 if r.gate != null else 0.0,
+			", ".join(top), up, down, near, side, crews, main.gold, main.get_enemies().size(), main.spawn_queue.size()]
 
 
 ## How much the player had to spare, 0..1, by what the battle is about: the castle's

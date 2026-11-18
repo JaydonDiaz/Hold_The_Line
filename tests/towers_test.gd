@@ -7,14 +7,20 @@ extends SceneTree
 ##                   onto it climbs in, keeps its upgrades, reaches 30% further (more with the
 ##                   Lookout path), and enemies go for the tower, not it; sent elsewhere (or
 ##                   the tower wrecked) it climbs down; melee troops can't go up
+##   C  crews       every ranged kind keeps its attack, upgrades, targeting and support up in
+##                   a Tower: reach x(1 + the tower's perch), attack time x its crew_rate, and
+##                   nothing more however often upgrades are reapplied or it climbs up and down;
+##                   what the crew does trains the crew's kind, what the tower takes trains the
+##                   Tower (the two kept apart)
 ##   B  ballista    aims for flyers first and hits them twice as hard; a bolt goes on through
 ##                   everything in its line; the Chain Net slows flyers; Blasting Tips burst
 ##   O  obelisk     Mages near it hit harder; a Storm Rune strikes, Sunfire Glyphs burn the
 ##                   crowd they're laid under, a Rift Rune throws the enemy furthest down the
 ##                   field back up it (not a boss); nothing like the Medic Bay or War Statue
 ##   S  sappers     go for the nearest of your emplacements in reach (any kind, walls too) and
-##                   blow up against it, an emplacement taking it as a wall does; with none
-##                   near, they make for the castle as before
+##                   blow up against it, an emplacement taking it as a wall does; it's marked
+##                   for the player, and the charge takes time to plant (killed then: no blast);
+##                   with none near, they make for the castle as before
 ##   U  unlocks     Stonehollow brings Towers and Ballistae; the Conclave the Obelisk; the old
 ##                   Archer, Mage and Frost Towers are gone
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
@@ -83,6 +89,7 @@ func _foe(kind: String, at: Vector2, hp := 0.0):
 func _run() -> void:
 	_archer_paths()
 	await _tower()
+	await _crews()
 	await _ballista()
 	await _obelisk()
 	await _sappers()
@@ -112,6 +119,73 @@ func _archer_paths() -> void:
 	check(t4.get("pierce", 0) > tricks[1]["effect"]["pierce"] and t4["burn"][0] > tricks[2]["effect"]["burn"][0]
 			and t4["rain"]["damage"] > tricks[2]["effect"]["rain"]["damage"] and t4["rain"]["cooldown"] < tricks[2]["effect"]["rain"]["cooldown"],
 			"A  ...and Tier IV sharpens every trick: more pierce, hotter burn, bigger and quicker rain")
+
+
+# --- C ---------------------------------------------------------------------------------------
+
+## For each ranged kind: its stats on the ground, up a Tower with two Lookout and four Hoardings
+## upgrades, after reapplying upgrades and climbing up and down, and what training it earns.
+func _crews() -> void:
+	var builds := {"archer": [2, 0, 2, 0], "mage": [0, 2, 0, 2], "frost": [2, 2, 0, 0], "alchemist": [0, 0, 2, 2], "bard": [2, 0, 0, 2]}
+	for kind in builds:
+		await _fresh()
+		var t = _hire("tower", Vector2(320, 500))
+		for k in 2:
+			t.upgrade(1)
+		for k in 4:
+			t.upgrade(2)
+		var c = _hire(kind, Vector2(160, 640))
+		c.tiers = builds[kind].duplicate()
+		c._apply_upgrades()
+		var reach: float = c.attack_range
+		var cool: float = c.cooldown
+		var song: float = c.song_radius
+		main.selected = c
+		main.order_move(t.position)
+		main.selected = null
+		await _frames(60 * 4)
+		var up: bool = c.garrison == t
+		var want_r: float = reach * (1.0 + t.perch)
+		var want_c: float = cool * t.crew_rate
+		var same: bool = is_equal_approx(c.attack_range, want_r) and is_equal_approx(c.cooldown, want_c) and is_equal_approx(c.song_radius, song * (1.0 + t.perch))
+		for k in 3:
+			c._apply_upgrades()
+			t._apply_upgrades()
+		await _frames(2)
+		var still: bool = is_equal_approx(c.attack_range, want_r) and is_equal_approx(c.cooldown, want_c)
+		check(absf(1.0 / t.crew_rate - 1.4) < 0.005 and is_equal_approx(t.perch, 0.4), "C  %s ...two Lookout and four Hoardings: reach +40%%, attacks 40%% faster, as their cards say" % kind)
+		check(up and same and still and c.tiers == builds[kind],
+				"C  %s up a Tower keeps %s; reach %.0f -> %.0f (x%.2f), attack time %.2fs -> %.2fs, unchanged after reapplying" %
+				[kind, str(builds[kind]), reach, c.attack_range, 1.0 + t.perch, cool, c.cooldown])
+		# Up and down three times: back to its ground stats exactly, then the same again up there.
+		for k in 3:
+			main.selected = c
+			main.climb_down()
+			main.selected = null
+			await _frames(20)
+			main.selected = c
+			main.order_move(t.position)
+			main.selected = null
+			await _frames(60 * 2)
+		check(c.garrison == t and is_equal_approx(c.attack_range, want_r) and is_equal_approx(c.cooldown, want_c),
+				"C  %s ...after climbing down and up three times, still x%.2f and no more" % [kind, 1.0 + t.perch])
+		# It fights from up there: a foe past its ground reach but in its tower reach.
+		main.campaign = true   # (so training is counted)
+		main.battle_xp = {}
+		main.wave_active = true
+		var foe = _foe("orc", t.position + Vector2(0, -minf(reach * 1.15, want_r - 8.0)), 1e5)
+		foe.speed = 0.0
+		await _frames(60 * 6)
+		var hit: bool = foe.hp < foe.max_hp
+		check(hit and main.battle_xp.get(kind, 0.0) > 0.0 and not main.battle_xp.has("tower"),
+				"C  %s attacks (or plays) from the tower past its ground reach; the %s trains, not the Tower (%s)" % [kind, kind, str(main.battle_xp.keys())])
+		foe.queue_free()
+		# The tower takes a beating: that trains the Tower, not the crew.
+		main.battle_xp = {}
+		t.take_damage(40.0)
+		check(main.battle_xp.get("tower", 0.0) > 0.0 and not main.battle_xp.has(kind), "C  %s ...damage the tower takes trains the Tower only" % kind)
+		main.wave_active = false
+		main.campaign = false
 
 
 # --- T ---------------------------------------------------------------------------------------
@@ -203,6 +277,13 @@ func _tower() -> void:
 
 func _ballista() -> void:
 	await _fresh()
+	# Its flyer bonus adds up along Skyhunter (2x base, 4x at Wyvernbane), never multiplies.
+	var bb = _hire("ballista", Vector2(500, 650))
+	bb.tiers = [0, 4, 0, 0]
+	bb._apply_upgrades()
+	check(is_equal_approx(bb.air_mult, 4.0) and bb.air_crit == [0.35, 2.0], "B  Skyhunter IV: 4x on flyers in all (the base 2x included, not multiplied), a 35%% crit (%.1fx)" % bb.air_mult)
+	bb.queue_free()
+	await _frames(2)
 	main.wave_active = true
 	var b = _hire("ballista", Vector2(320, 650))
 	var orc = _foe("orc", Vector2(320, 520), 1e5)
@@ -328,6 +409,26 @@ func _sappers() -> void:
 		if sap.position.x > start.x + 60.0:
 			went = true
 	check(went and b.hp < hp0 - 100.0, "S  a Sapper goes for the Ballista (not the castle) and blows up against it (%d -> %d)" % [hp0, b.hp])
+	# Warned: the Sapper's mark is on it and the player's told; at it, the charge takes time
+	# to plant, and killing the Sapper then means no blast.
+	await _fresh()
+	main.wave_active = true
+	var b2 = _hire("cannon", Vector2(500, 560))
+	var sap2 = _foe("sapper", Vector2(420, 470), 1e5)
+	var told := false
+	var lit := -1.0
+	for i in 60 * 6:
+		await process_frame
+		if "Sapper's going for your" in main.hud.message_label.text:
+			told = true
+		if is_instance_valid(sap2) and sap2.fuse >= 0.0:
+			lit = sap2.fuse
+			break
+	check(told and is_instance_valid(sap2) and sap2.sap_target == b2 and lit > sap2.FUSE, "S  told, marked for the player, the Sapper plants its charge at the Cannoneer (%.1fs to go, not %.1fs)" % [lit, sap2.FUSE])
+	var hp_c: float = b2.hp
+	sap2.take_damage(1e6)
+	await _frames(60 * 2)
+	check(b2.hp == hp_c and b2.is_active(), "S  ...killed while the fuse fizzes: no blast, the Cannoneer's whole")
 	await _fresh()
 	main.wave_active = true
 	var lone = _foe("sapper", Vector2(320, 300))
