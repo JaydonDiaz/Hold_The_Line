@@ -1866,7 +1866,11 @@ func _engage_reach() -> float:
 func _engageable(e, slack := 0.0) -> bool:
 	if not zoned():
 		return true
-	return rect_gap(zone_rect(), e.position) - RADIUS - e.radius <= _engage_reach() + slack
+	if rect_gap(zone_rect(), e.position) - RADIUS - e.radius > _engage_reach() + slack:
+		return false
+	# Behind a castle's wall: a troop that has to keep to its ground doesn't go after what it
+	# can't see from there (it would only press against the wall and back, over and over).
+	return main.paths.sight_clear(position, e.position) or main.paths.sight_clear(post, e.position)
 
 
 ## Moves toward `p` (at most `max_dist`) to fight, but never out of its zone: the stop

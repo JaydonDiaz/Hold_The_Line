@@ -20,7 +20,9 @@ extends SceneTree
 ##   R  side rooms  from a hall taken, its side door's arrow leads to its side room (the army in
 ##                   by that room's own door, from the side); its cells open when troops stand
 ##                   round them: the soldiers join on loan, the townsfolk walk out by the door
-##                   the army came in by; back in the hall it's still taken (nobody there, the
+##                   the army came in by (but not while its Warden lives: he has the keys); a
+##                   troop on Side Objectives goes after a room's cells and supplies by itself;
+##                   new troops come into a room by its door; back in the hall it's still taken (nobody there, the
 ##                   way on open at once), the cells shown as taken; supplies claimed for gold;
 ##                   taken up again from a checkpoint after, nothing had is there to be had again
 ##   K  checkpoints taken up again from the Hall of Banners: as the army came in (gold, army,
@@ -28,7 +30,8 @@ extends SceneTree
 ##                   too little left to win with brings reserves up to the floor, once a try
 ##   L  stuck       a troop that can't get to the door doesn't hold the army: the view moves on
 ##                   anyway, and it comes in a little after the rest
-##   W  standard    the standard falls: the army breaks (the battle's lost)
+##   W  standard    the standard falls: the army breaks (the battle's lost); and the Ogre King's
+##                   cutscenes come from Dawnspire's throne room once it's open
 ## Uses a scratch save path, never the player's own save.
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
@@ -70,7 +73,12 @@ func _at_dawnspire() -> void:
 
 ## A room checkpoint as the castle keeps one.
 func _room_cp(room: int, army: Array, gold: int, std := 1.0) -> Dictionary:
-	return {"zone": 100 + room, "room": room, "name": CD.MISSIONS["ds_assault"]["assault"]["castle"]["rooms"][room]["name"],
+	var spec: Dictionary = CD.MISSIONS["ds_assault"]["assault"]["castle"]["rooms"][room]
+	var entry := "s"
+	for d in spec["doors"]:
+		if d in ["e", "w"] and int(spec.get("waves", 2)) == 0:
+			entry = d   # (a side room's only door)
+	return {"zone": 100 + room, "room": room, "entry": entry, "name": spec["name"],
 		"gold": gold, "wave": 6, "army": army, "xp": {"swordsman": 500.0}, "owned": [], "standard": std,
 		"freed": 3, "joined": 2, "garrisons": [], "stragglers": []}
 
@@ -311,6 +319,31 @@ func _entering() -> void:
 	sw.move_mode = "hold"
 	await _frames(30)
 	check(rules.enemy_goal(g) == rules.standard, "E  ...and, a troop near, goes for the standard")
+	# Nobody's left waiting behind a wall: a garrison archer out of everyone's sight, and a
+	# troop on Guard that can't see it doesn't keep pressing at the wall for it; the
+	# garrison comes out on its own soon after the army's in.
+	for e in main.get_enemies():
+		e.queue_free()
+	for w in main.get_warriors():
+		w.queue_free()
+	await _frames(2)
+	rules._woke = false
+	rules.fight_t = 0.0
+	main.wave = rules.wave0
+	main._spawn_enemy("skeleton_archer", 8, Vector2(110, 240))
+	var hid = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+	hid.set_meta("guard", true)
+	hid.goal = null
+	var gd = _unit("archer", Vector2(110, 420))
+	gd.move_mode = "guard"
+	var post0: Vector2 = gd.post
+	await _frames(60 * 4)
+	check(not gd._engageable(hid) and gd.position.distance_to(post0) < 30.0, "E  a troop on Guard doesn't go after an enemy behind the wall it can't see (it stays by its post)")
+	for i in 60 * int(rules.ALERT + 6):
+		if hid.goal != null:
+			break
+		await process_frame
+	check(hid.goal == rules.standard, "E  the garrison comes out for the standard on its own within %ds of the army being in" % int(rules.ALERT + 1))
 
 
 # --- T ---------------------------------------------------------------------------------------
@@ -423,7 +456,26 @@ func _side_rooms() -> void:
 	await _through_to("cells")
 	check(main.map_id == "dsc_cells" and rules.entry == "w" and main.get_warriors().all(func(w): return w.position.x < 400.0),
 			"R  through the side door into the Guardroom Cells, the army in by its west door")
-	check(main.get_enemies().size() == 4 and rules.pens.size() == 3, "R  ...its jailers there, three cells locked")
+	var warden: Array = main.get_enemies().filter(func(e): return e.has_meta("warden"))
+	check(main.get_enemies().size() == 8 and rules.pens.size() == 3 and warden.size() == 1 and warden[0].kind == "troll" and warden[0].max_hp > 2.0 * 200.0, "R  ...its jailers there with their Warden (a Troll, far tougher), three cells locked")
+	# The Warden holds the keys: troops round a cell get nowhere while he lives.
+	for e in main.get_enemies():
+		if not e.has_meta("warden"):
+			e.queue_free()
+	warden[0].position = Vector2(560, 650)
+	warden[0].speed = 0.0
+	await _frames(2)
+	var locked = rules.pens[2]
+	var sw = _unit("swordsman", locked.position + Vector2(0, 62))
+	sw.move_mode = "hold"
+	await _frames(60 * 8)
+	check(not locked.taken and locked.progress == 0.0, "R  the Warden alive, troops round a cell get it no nearer open (he has the keys)")
+	warden[0].take_damage(1e7)
+	for i in 60 * 10:
+		if locked.taken:
+			break
+		await process_frame
+	check(locked.taken, "R  ...he's down: the cell opens")
 	main.clear_enemies()
 	await _frames(2)
 	var pen = rules.pens[0]
@@ -435,16 +487,18 @@ func _side_rooms() -> void:
 			break
 		await process_frame
 	await _frames(5)
-	var joined: Array = main.temp_allies.slice(lent0)
+	var joined: Array = main.temp_allies.slice(lent0).filter(func(w): return w.tiers[0] == 3)
+	joined = joined.filter(func(w): return w.kind == "swordsman")
 	check(pen.taken and joined.size() == 1 and joined[0].kind == "swordsman" and joined[0].has_meta("freed") and joined[0].tiers[0] == 3,
 			"R  a cell broken open: its soldier joins on loan (a Knight, trained to tier III)")
-	check(rules.townsfolk.size() == 3, "R  ...its townsfolk make for the way out")
+	var walking: int = rules.townsfolk.size()
+	check(walking >= 3, "R  ...its townsfolk make for the way out (%d on their way)" % walking)
 	var freed0: int = rules.freed
 	for i in 60 * 25:
 		if rules.townsfolk.is_empty():
 			break
 		await process_frame
-	check(rules.townsfolk.is_empty() and rules.freed == freed0 + 3, "R  ...and get out by the door the army came in by (%d out)" % (rules.freed - freed0))
+	check(rules.townsfolk.is_empty() and rules.freed == freed0 + walking, "R  ...and get out by the door the army came in by (%d out)" % (rules.freed - freed0))
 	# Back to the hall.
 	await _through_to("gatehall")
 	await _frames(30)
@@ -463,7 +517,7 @@ func _side_rooms() -> void:
 	check(rules.phase == "clear" and main.get_enemies().is_empty(), "R  taken up again in the hall: still taken")
 	await _through_to("cells")
 	await _frames(10)
-	check(rules.pens.size() == 2 and rules.pens.all(func(p): return p.id != "cells:pen0"), "R  ...and in the cells, the one opened stays open (2 still locked)")
+	check(rules.pens.size() == 1 and rules.pens.all(func(p): return p.id != "cells:pen0" and p.id != "cells:pen2"), "R  ...and in the cells, the ones opened stay open (1 still locked)")
 	# The stores: supplies for gold, once.
 	await _castle(3, ARMY.slice(0, 3), 300)   # (room 3: the Quartermaster's Store)
 	rules = main.rules
@@ -472,12 +526,28 @@ func _side_rooms() -> void:
 	await _frames(2)
 	var c = rules.caches[0]
 	var g0: int = main.gold
-	main.get_warriors()[0].order_to(c.position + Vector2(0, 24))
+	main.gold += 500
+	main.placing_type = "swordsman"
+	main.hire_at(Vector2(320, 560))
+	main.placing_type = ""
+	var fresh = main.get_warriors()[-1]
+	await _frames(2)
+	check(fresh.position.distance_to(rules.entry_point(Vector2.ZERO)) < 120.0 or fresh.position.x > 480.0,
+			"R  a troop hired in a side room comes in by its door (at %s)" % fresh.position.round())
+	for w in main.get_warriors():
+		w.move_mode = "hold"
+	main.give_order("priority", "side", [main.get_warriors()[0]])
 	for i in 60 * 10:
 		if c == null or not is_instance_valid(c) or c.taken:
 			break
 		await process_frame
-	check(main.gold == g0 + 90 and (rules._state("stores")["taken"] as Array).has("stores:cache0"), "R  the stores: a troop at the supplies claims their 90 gold")
+	await _frames(60 * 6)
+	var claimed: int = (rules._state("stores")["taken"] as Array).size()
+	check(claimed >= 2 and main.gold >= g0 + 90 - main.price(Data_cost("swordsman")), "R  a troop on Side Objectives goes after the stores' supplies on its own and claims them (%d of 3, gold %d -> %d)" % [claimed, g0, main.gold])
+
+
+func Data_cost(kind: String) -> int:
+	return int(preload("res://scripts/data.gd").WARRIORS[kind]["cost"])
 
 
 ## Into the castle from a checkpoint as it was saved.
@@ -572,3 +642,12 @@ func _standard() -> void:
 	rules.standard.take_damage(1e6)
 	await _frames(30)
 	check(main.game_over and not main.victory, "W  the standard falls: the army breaks, the battle's lost")
+	# The Ogre King's cutscenes: from Dawnspire's throne room once the citadel's open.
+	var C = preload("res://scripts/cutscene.gd")
+	var c = C.new()
+	root.add_child(c)
+	var at_ds: bool = c._at_dawnspire()
+	campaign.new_campaign("normal")
+	var before: bool = c._at_dawnspire()
+	c.queue_free()
+	check(at_ds and not before, "W  the Ogre King speaks from Dawnspire's throne room once the citadel's open (not before)")

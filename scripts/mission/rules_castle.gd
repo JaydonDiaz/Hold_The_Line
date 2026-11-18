@@ -76,6 +76,7 @@ var room_state := {}          # room id -> {"cleared": bool, "taken": [ids of wh
 var pens: Array = []          # this room's prison pens (siege_works stockades, "iron")
 var caches: Array = []        # ...and its supplies (or treasure)
 var townsfolk: Array = []     # freed townsfolk on their way out
+var fight_t := 0.0            # seconds since the army was all in the room
 
 
 ## Draws the ways-on arrows over everything on the field.
@@ -117,7 +118,7 @@ func endless() -> bool:
 
 
 func side_objectives() -> bool:
-	return false
+	return true   # (troops on Side Objectives go to a room's cells and supplies)
 
 
 ## The standard's an objective: guard it.
@@ -236,10 +237,12 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 	townsfolk.clear()
 	if not st["cleared"]:
 		for g in r.get("garrison", []):
-			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), Vector2(g[1].x * k, g[1].y))
+			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)) + int(_c().get("level_bonus", 0)), Vector2(g[1].x * k, g[1].y))
 			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 			e.set_meta("guard", true)
 			e.goal = null
+			if g.size() > 2 and g[2] == "warden":
+				_make_warden(e)
 	var n := 0
 	for p in r.get("pens", []):
 		var id := "%s:pen%d" % [r["id"], n]
@@ -313,6 +316,14 @@ func _arrive(rec: Dictionary, post: Vector2, at_post := false) -> void:
 	main.warriors_changed()
 
 
+## New troops (and Engineers) come into a room by the door the army came in by.
+func entry_point(_post: Vector2) -> Vector2:
+	if room_i < 0 or rooms.is_empty():
+		return Vector2.INF
+	var door := _door(entry)
+	return main.paths.open_spot(_door_at(door) + _inward(door["side"]) * 40.0)
+
+
 func objectives() -> Array:
 	var out := []
 	if standard != null and is_instance_valid(standard) and not standard.dead:
@@ -329,19 +340,30 @@ func enemy_goal(e):
 	return standard if standard != null and is_instance_valid(standard) and standard.is_target() else null
 
 
-## The garrison wakes once a troop's near, or the room's waves have begun.
+## The garrison wakes once a troop's near, one of them is hurt, the room's waves have
+## begun, or the army's been in the room ALERT seconds: then it comes for the standard (so
+## nobody's left waiting behind a wall for good).
+const ALERT := 15.0
 var _woke := false
 func _awake() -> bool:
 	if _woke:
 		return true
-	if main.wave > wave0:
+	if main.wave > wave0 or (phase == "fight" and fight_t >= ALERT):
 		_woke = true
 		return true
 	for e in main.get_enemies():
-		if e.has_meta("guard") and not main.warriors_near(e.position, WAKE).filter(func(w): return w.is_active() and not w.is_emplacement()).is_empty():
+		if not e.has_meta("guard"):
+			continue
+		if e.hp < e.max_hp or not main.warriors_near(e.position, WAKE).filter(func(w): return w.is_active() and not w.is_emplacement()).is_empty():
 			_woke = true
 			return true
 	return false
+
+
+## The enemy here is only ever after the standard (asked again every second, so a garrison
+## that wakes sets out for it).
+func objective_only() -> bool:
+	return true
 
 
 func wait_y() -> float:
@@ -384,6 +406,7 @@ func process(delta: float) -> void:
 	if phase in ["fight", "clear"]:
 		_pens(delta)
 		_caches()
+		_send_side(delta)
 	match phase:
 		"enter":
 			arrive_t += delta
@@ -392,9 +415,11 @@ func process(delta: float) -> void:
 				_arrive(a[0], a[2], restored_entry)
 			if arrivals.is_empty():
 				phase = "fight"
+				fight_t = 0.0
 				_woke = false
 				_stragglers_come()
 		"fight":
+			fight_t += delta
 			var done: bool = main.wave - wave0 >= _waves() and main.spawn_queue.is_empty()
 			if done and main.get_enemies().is_empty() and _downed() == 0:
 				_room_taken()
@@ -408,8 +433,39 @@ func process(delta: float) -> void:
 
 # --- What's in a room: cells and supplies ---------------------------------------------------
 
-## A pen opens once troops have stood round it a while with no enemy there.
+## A cell room's Warden: its jailer, far tougher than the rest (WARDEN times their health,
+## harder blows, shrugging off half of what would stun or slow it), and he holds the keys:
+## no cell in the room opens while he lives.
+const WARDEN := {"hp": 2.6, "damage": 1.35, "cc": 0.5}
+
+func _make_warden(e) -> void:
+	e.set_meta("title", "The Warden")
+	e.set_meta("warden", true)
+	e.max_hp *= WARDEN["hp"]
+	e.hp = e.max_hp
+	e.damage *= WARDEN["damage"]
+	e.wall_damage *= WARDEN["damage"]
+	e.cc_mult *= WARDEN["cc"]
+	e.bounty *= 3
+
+
+func _warden_alive() -> bool:
+	for e in main.get_enemies():
+		if not e.dead and e.has_meta("warden"):
+			return true
+	return false
+
+
+## A pen opens once troops have stood round it a while with no enemy there (and, in a
+## room with a Warden, once he's down: he holds the keys).
+var told_keys := false
 func _pens(delta: float) -> void:
+	if not pens.is_empty() and _warden_alive():
+		for pen in pens:
+			if is_instance_valid(pen) and not pen.taken and not told_keys and not main.warriors_near(pen.position, pen.capture_r()).is_empty():
+				told_keys = true
+				main.hud.show_message("Locked fast: the Warden has the keys. Bring him down first.")
+		return
 	for pen in pens:
 		if not is_instance_valid(pen) or pen.taken:
 			continue
@@ -492,6 +548,51 @@ func _caches() -> void:
 				main.hud.show_message("%s: +%d gold" % [c.label, c.gold])
 				c.queue_free()
 				break
+
+
+## Troops on Side Objectives (every half second): each goes to a cell still locked or
+## supplies still unclaimed in this room, the nearest, the work shared out; with nothing
+## left here, back by the standard.
+var side_t := 0.0
+
+func _send_side(delta: float) -> void:
+	side_t -= delta
+	if side_t > 0.0:
+		return
+	side_t = 0.5
+	var jobs := (pens + caches).filter(func(o): return is_instance_valid(o) and not o.taken and not o.is_queued_for_deletion())
+	var troops: Array = main.get_warriors().filter(func(w): return w.is_active() and w.priority == Warrior.SIDE_PRIORITY \
+			and not w.is_emplacement() and not w.summoned and w.clone_of == null and not w.held)
+	var busy := {}
+	for w in troops:
+		var j = w.get_meta("side_job") if w.has_meta("side_job") else null
+		if j != null and jobs.has(j):
+			busy[j] = busy.get(j, 0) + 1
+	for w in troops:
+		var j = w.get_meta("side_job") if w.has_meta("side_job") else null
+		if j != null and jobs.has(j):
+			continue
+		var best = null
+		var best_cost := INF
+		for o in jobs:
+			var cost: float = w.position.distance_to(o.position) + 160.0 * busy.get(o, 0)
+			if cost < best_cost:
+				best_cost = cost
+				best = o
+		if best == null:
+			if w.has_meta("side_job"):
+				w.remove_meta("side_job")
+				# Nothing left to do here: back by the standard.
+				if standard != null and is_instance_valid(standard):
+					var off := Vector2.from_angle((w.get_instance_id() % 8) * TAU / 8.0) * 70.0
+					w.order_to(main.paths.open_spot(main._clamp_post(standard.position + off)))
+			continue
+		var n: int = busy.get(best, 0)
+		busy[best] = n + 1
+		w.set_meta("side_job", best)
+		w.anchor = null
+		var rr: float = best.capture_r() * (0.25 if best.kind == "cache" else 0.6)
+		w.order_to(main.paths.open_spot(main._clamp_post(best.position + Vector2.from_angle(PI * 0.5 + n * 1.3) * rr)))
 
 
 ## Something in this room had (a cell opened, supplies claimed): not to be had again.

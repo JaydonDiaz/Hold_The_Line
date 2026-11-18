@@ -917,6 +917,16 @@ func _sap_pick(delta: float) -> void:
 ## A Sapper's mark on what it's going for: a dotted line to it and a blinking red ring
 ## round it with a bomb sign, so the player sees which emplacement is in danger.
 func _draw_sap_mark() -> void:
+	if has_meta("title") and not dead:
+		# A named enemy (a castle cell's Warden): its title over its head, with his keys.
+		var y := -radius * 3.4 - 8.0
+		var f := ThemeDB.fallback_font
+		draw_string_outline(f, Vector2(-60, y), str(get_meta("title")), HORIZONTAL_ALIGNMENT_CENTER, 120, 13, 4, Color(0, 0, 0, 0.9))
+		draw_string(f, Vector2(-60, y), str(get_meta("title")), HORIZONTAL_ALIGNMENT_CENTER, 120, 13, Color(1.0, 0.75, 0.35))
+		if has_meta("warden"):
+			draw_circle(Vector2(0, y + 6), 3.0, Color(0.85, 0.7, 0.3))
+			draw_line(Vector2(0, y + 9), Vector2(0, y + 15), Color(0.85, 0.7, 0.3), 2.0)
+			draw_line(Vector2(0, y + 13), Vector2(3, y + 13), Color(0.85, 0.7, 0.3), 2.0)
 	if bomb.is_empty() or dead:
 		return
 	if fuse >= 0.0:

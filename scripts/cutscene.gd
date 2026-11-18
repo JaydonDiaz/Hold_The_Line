@@ -248,7 +248,10 @@ func _draw() -> void:
 			"horde":
 				_draw_horde()
 			"ogre":
-				_draw_ogre_court()
+				if _at_dawnspire():
+					_draw_ogre_throne()   # (Dawnspire's open: he speaks from the throne he took)
+				else:
+					_draw_ogre_court()
 			"marshal":
 				_draw_marshal_road()
 			"ashwatch":
@@ -1246,6 +1249,93 @@ func _draw_horde() -> void:
 
 ## The Ogre King in his war camp: a blood-red sky, his host filing along the ridge behind,
 ## war banners and braziers, and the King himself on a throne of bones.
+## Whether the campaign's reached Dawnspire (the Spires' beacon lit, the citadel open).
+func _at_dawnspire() -> bool:
+	var c = get_node_or_null("/root/Campaign")
+	return c != null and c.territories.has("spires") and c.beacon_lit("spires")
+
+
+## The Ogre King in Dawnspire's throne hall: the pale citadel stone and its gold, the Line's
+## sun window behind the throne cracked and bled red by the corrupted beacon's glow, the old
+## sun banners torn down and his red ones hung over them, braziers, his guards either side,
+## and the Line's own Dawn Throne, his now, a pelt thrown over it and skulls on its back.
+func _draw_ogre_throne() -> void:
+	var stone := Color(0.62, 0.58, 0.52)
+	var shade := Color(0.38, 0.34, 0.32)
+	var gold := Color(0.85, 0.68, 0.3)
+	# The back wall in courses of pale stone.
+	_b(0, 0, GW, 100, shade)
+	for row in 10:
+		var y := row * 10
+		for x in range(-(row % 2) * 6, GW, 12):
+			_b(x + 1, y + 1, 11, 9, stone.darkened(0.25 + 0.05 * ((x / 12 + row) % 3)))
+	# Pillars down either side, gold-banded.
+	for px in [8, 34, 118, 144]:
+		_b(px, 0, 10, 112, OUTLINE)
+		_b(px + 1, 0, 8, 112, stone)
+		_b(px + 1, 0, 3, 112, stone.lightened(0.12))
+		for gy in [20, 60, 100]:
+			_b(px, gy, 10, 2, gold)
+	# The great sun window behind the throne: its glass cracked, the glow through it red.
+	var glow := 0.75 + 0.25 * sin(t * 1.6)
+	_b(56, 6, 48, 48, OUTLINE)
+	_b(58, 8, 44, 44, Color(0.45 * glow, 0.06, 0.05))
+	for k in 12:
+		var a := k * TAU / 12.0
+		for r in range(6, 22, 2):
+			_b(80 + cos(a) * r, 30 + sin(a) * r, 1, 1, Color(1.0, 0.35 + 0.2 * glow, 0.15, 0.8))
+	_b(76, 26, 8, 8, Color(1.0, 0.55, 0.25))
+	_b(72, 10, 1, 40, OUTLINE)   # the crack
+	_b(73, 22, 1, 12, OUTLINE)
+	_b(88, 14, 1, 20, OUTLINE)
+	# His red banners hung over the Line's torn blue ones.
+	for bx in [22, 130]:
+		var wave := int(t * 2.0 + bx) % 2
+		_b(bx, 8, 8, 30, Color(0.2, 0.3, 0.55))
+		_b(bx + 2, 30, 4, 12, Color(0.2, 0.3, 0.55))   # torn tails of the old banner
+		_b(bx - 1, 6, 10, 2, gold)
+		_b(bx, 8 + wave, 8, 22, Color(0.5, 0.07, 0.06))
+		_b(bx + 2, 14 + wave, 4, 4, Color(0.85, 0.82, 0.72))   # his skull mark
+		_b(bx + 3, 18 + wave, 2, 2, Color(0.85, 0.82, 0.72))
+	# The floor: dark flags, a red carpet up the steps.
+	_b(0, 100, GW, 50, Color(0.24, 0.22, 0.24))
+	for row in 5:
+		for x in range(-(row % 2) * 8, GW, 16):
+			_b(x + 1, 101 + row * 10, 15, 9, Color(0.3, 0.28, 0.3))
+	_b(70, 100, 20, 50, Color(0.42, 0.08, 0.07))
+	_b(70, 100, 1, 50, gold)
+	_b(89, 100, 1, 50, gold)
+	# The steps up to the dais.
+	for k in 3:
+		_b(46 - k * 6, 112 - k * 4 + 8, 68 + k * 12, 4, stone.darkened(0.1 * k))
+	# Braziers either side of the steps.
+	for bx in [44, 116]:
+		_b(bx - 4, 104, 8, 3, Color(0.3, 0.26, 0.24))
+		_b(bx - 1, 107, 2, 12, Color(0.3, 0.26, 0.24))
+		_flame(bx, 104, 1.8, bx * 0.1)
+	# The Dawn Throne: tall-backed, gold, a sun on its crest; his pelt over it, skulls on it.
+	_b(64, 56, 32, 52, OUTLINE)
+	_b(66, 58, 28, 50, Color(0.72, 0.56, 0.24))
+	_b(68, 60, 24, 4, gold.lightened(0.2))
+	_b(76, 50, 8, 8, gold)
+	_b(78, 52, 4, 4, Color(1.0, 0.85, 0.4))
+	_b(66, 82, 28, 26, Color(0.45, 0.32, 0.2))   # the pelt
+	for i in 4:
+		_b(68 + i * 6, 62 - (i % 2) * 2, 4, 5, Color(0.85, 0.82, 0.72))
+		_b(69 + i * 6, 63 - (i % 2) * 2, 1, 1, OUTLINE)
+		_b(71 + i * 6, 63 - (i % 2) * 2, 1, 1, OUTLINE)
+	# His guards at the foot of the dais.
+	_figure_at("warlord", 30, 136, 3.5, Color(0.85, 0.75, 0.72))
+	_figure_at("warlord", 130, 136, 3.5, Color(0.85, 0.75, 0.72))
+	var breathe := 1.0 if int(t * 1.2) % 2 == 0 else 0.0
+	_figure_at("ogre_king", 80, 120 - breathe * 0.25, 6.5)
+	# Embers drifting from the braziers, red light through the window.
+	for k in 12:
+		var age := fmod(t * 0.3 + k / 12.0, 1.0)
+		_b((44.0 if k % 2 == 0 else 116.0) + sin(t * 2.0 + k) * 4.0, 104 - age * 60.0, 1, 1, Color(1.0, 0.6, 0.25, 1.0 - age))
+	_b(56, 54, 48, 60, Color(1.0, 0.2, 0.1, 0.06 * glow))
+
+
 func _draw_ogre_court() -> void:
 	_sky(Color(0.18, 0.03, 0.04), Color(0.62, 0.18, 0.08))
 	# A swollen red moon behind the smoke.
