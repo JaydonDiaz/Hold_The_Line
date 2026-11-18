@@ -303,6 +303,12 @@ func boss_beaten(e) -> void:
 	e.take_damage(1e9, false)
 
 
+## Whether the battle music plays (or the field's peaceful music): during a wave, as ever.
+## A battle can keep it going through the breathers between its waves.
+func battle_on() -> bool:
+	return main.wave_active
+
+
 ## A click on the field that the battle takes (a way on's arrow, say): true if it did.
 func click(_p: Vector2) -> bool:
 	return false

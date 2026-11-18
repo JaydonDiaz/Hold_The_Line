@@ -105,6 +105,18 @@ const STAGE_TRACKS := ["calm", "mountain", "battle"]   # the music Bards play al
 # note, "maj"/"min"), "seed" (the lead's turns), "lead" (its wave), "bass" ("eighths",
 # "gallop", "offbeat", "pedal"), "drums" ("rock", "march", "tribal", "halftime"), "arp"
 # ("pendulum", "up", "triplet", "none"), "range" (the lead's lowest and highest notes).
+# Dawnspire's (the final siege) add: "motif": true (the Dawnspire hymn, DAWN_MOTIF, carries
+# the lead through the first four bars of every eight), "horns" (the lead doubled an octave
+# down, brassy), "choir" (the chord held under each bar), and the "war" drums (great low
+# drums on the beat, a snare, rolls into each phrase, a crash at its head).
+# The Dawnspire hymn: four bars, each note [16th it starts on, 16ths it lasts, the chord's
+# tone (0 root, 1 third, 2 fifth), octave], so it fits whatever chord it falls on.
+const DAWN_MOTIF := [
+	[[0, 4, 0, 0], [4, 2, 1, 0], [6, 2, 2, 0], [8, 6, 0, 1], [14, 2, 2, 0]],
+	[[0, 4, 1, 0], [4, 4, 2, 0], [8, 4, 0, 1], [12, 4, 2, 0]],
+	[[0, 3, 2, 0], [3, 1, 0, 1], [4, 4, 1, 1], [8, 4, 0, 1], [12, 4, 2, 0]],
+	[[0, 6, 0, 1], [6, 2, 2, 0], [8, 8, 0, 0]],
+]
 const BATTLES := {
 	"ridge": {"bpm": 132, "chords": [[50, "min"], [46, "maj"], [48, "maj"], [45, "maj"], [50, "min"], [46, "maj"], [43, "min"], [45, "maj"],
 			[46, "maj"], [48, "maj"], [50, "min"], [45, "maj"], [43, "min"], [46, "maj"], [45, "maj"], [50, "min"]],
@@ -149,37 +161,37 @@ const BATTLES := {
 	# Dawnspire: the assault on the walls (a drumbeat for the ram), the fight in the bailey,
 	# and the last charge at the Dawn Gate.
 	"siege": {"bpm": 126, "chords": [[45, "min"], [41, "maj"], [43, "maj"], [40, "min"], [45, "min"], [48, "maj"], [43, "maj"], [44, "maj"]],
-		"seed": 163, "lead": "saw", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [60, 79]},
+		"seed": 163, "lead": "saw", "bass": "pedal", "drums": "war", "arp": "pendulum", "range": [60, 79], "motif": true, "horns": true},
 	"bailey": {"bpm": 140, "chords": [[50, "min"], [48, "maj"], [46, "maj"], [45, "maj"], [50, "min"], [53, "maj"], [48, "maj"], [45, "maj"]],
-		"seed": 167, "lead": "square", "bass": "gallop", "drums": "rock", "arp": "up", "range": [62, 82]},
+		"seed": 167, "lead": "square", "bass": "gallop", "drums": "rock", "arp": "up", "range": [62, 82], "motif": true, "horns": true},
 	"dawngate": {"bpm": 148, "chords": [[52, "min"], [48, "maj"], [50, "maj"], [47, "maj"], [52, "min"], [55, "maj"], [50, "maj"], [47, "maj"]],
-		"seed": 173, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "triplet", "range": [64, 86]},
+		"seed": 173, "lead": "saw", "bass": "gallop", "drums": "war", "arp": "triplet", "range": [64, 86], "motif": true, "horns": true, "choir": true},
 	# Inside the citadel: the Gatehouse Hall (close stone, a grim march), and the Hall of
 	# Banners (wider, faster, the old hymn's chords turned dark).
 	"gatehall": {"bpm": 132, "chords": [[47, "min"], [43, "maj"], [45, "maj"], [42, "maj"], [47, "min"], [50, "maj"], [45, "maj"], [42, "maj"]],
-		"seed": 179, "lead": "square", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [59, 79]},
+		"seed": 179, "lead": "square", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [59, 79], "motif": true},
 	"banners": {"bpm": 154, "chords": [[49, "min"], [45, "maj"], [47, "maj"], [44, "maj"], [49, "min"], [52, "maj"], [47, "maj"], [44, "min"]],
-		"seed": 181, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "up", "range": [61, 84]},
+		"seed": 181, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "up", "range": [61, 84], "motif": true, "horns": true},
 	# ...and the rest of the citadel: its cells, its stores, the defiled chapel, the deep
 	# cells, the Long Gallery, the treasury.
 	"cells": {"bpm": 136, "chords": [[45, "min"], [44, "maj"], [45, "min"], [41, "maj"], [45, "min"], [48, "maj"], [44, "maj"], [44, "maj"]],
-		"seed": 197, "lead": "square", "bass": "pedal", "drums": "march", "arp": "none", "range": [57, 77]},
+		"seed": 197, "lead": "square", "bass": "pedal", "drums": "march", "arp": "none", "range": [57, 77], "motif": true},
 	"stores": {"bpm": 150, "chords": [[48, "min"], [46, "maj"], [44, "maj"], [43, "maj"], [48, "min"], [51, "maj"], [46, "maj"], [43, "maj"]],
-		"seed": 199, "lead": "tri", "bass": "eighths", "drums": "rock", "arp": "up", "range": [60, 82]},
+		"seed": 199, "lead": "tri", "bass": "eighths", "drums": "rock", "arp": "up", "range": [60, 82], "motif": true},
 	"chapel": {"bpm": 120, "chords": [[50, "min"], [46, "maj"], [43, "min"], [45, "maj"], [50, "min"], [53, "maj"], [46, "maj"], [45, "maj"]],
-		"seed": 211, "lead": "saw", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [62, 84]},
+		"seed": 211, "lead": "saw", "bass": "pedal", "drums": "march", "arp": "pendulum", "range": [62, 84], "motif": true, "choir": true},
 	"dungeon": {"bpm": 140, "chords": [[44, "min"], [40, "maj"], [42, "maj"], [39, "min"], [44, "min"], [47, "maj"], [42, "maj"], [39, "maj"]],
-		"seed": 223, "lead": "square", "bass": "gallop", "drums": "tribal", "arp": "triplet", "range": [56, 76]},
+		"seed": 223, "lead": "square", "bass": "gallop", "drums": "tribal", "arp": "triplet", "range": [56, 76], "motif": true},
 	"gallery": {"bpm": 160, "chords": [[51, "min"], [47, "maj"], [49, "maj"], [46, "maj"], [51, "min"], [54, "maj"], [49, "maj"], [46, "maj"]],
-		"seed": 227, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [63, 87]},
+		"seed": 227, "lead": "saw", "bass": "gallop", "drums": "war", "arp": "triplet", "range": [63, 87], "motif": true, "horns": true, "choir": true},
 	# The Throne Room: the Ogre King himself.
 	"throne": {"bpm": 168, "chords": [[45, "min"], [41, "maj"], [43, "maj"], [40, "maj"], [45, "min"], [48, "maj"], [41, "maj"], [44, "maj"]],
-		"seed": 269, "lead": "saw", "bass": "gallop", "drums": "rock", "arp": "triplet", "range": [57, 86]},
+		"seed": 269, "lead": "saw", "bass": "gallop", "drums": "war", "arp": "triplet", "range": [57, 86], "motif": true, "horns": true, "choir": true},
 	# The Fields of Dawn: the last battle, every people of the Line on the field.
 	"dawnfield": {"bpm": 156, "chords": [[50, "maj"], [45, "maj"], [47, "min"], [43, "maj"], [50, "maj"], [52, "min"], [43, "maj"], [45, "maj"]],
-		"seed": 271, "lead": "saw", "bass": "gallop", "drums": "march", "arp": "up", "range": [62, 88]},
+		"seed": 271, "lead": "saw", "bass": "gallop", "drums": "war", "arp": "up", "range": [62, 88], "motif": true, "horns": true, "choir": true},
 	"treasury": {"bpm": 146, "chords": [[46, "min"], [42, "maj"], [44, "maj"], [41, "maj"], [46, "min"], [49, "maj"], [44, "maj"], [41, "min"]],
-		"seed": 229, "lead": "tri", "bass": "gallop", "drums": "march", "arp": "up", "range": [58, 80]},
+		"seed": 229, "lead": "tri", "bass": "gallop", "drums": "march", "arp": "up", "range": [58, 80], "motif": true},
 	"carnival": {"bpm": 144, "chords": [[53, "maj"], [50, "min"], [46, "maj"], [48, "maj"], [53, "maj"], [57, "min"], [46, "maj"], [48, "maj"]],
 		"seed": 151, "lead": "tri", "bass": "eighths", "drums": "tribal", "arp": "triplet", "range": [65, 86]},
 	"ashen": {"bpm": 128, "chords": [[54, "min"], [50, "maj"], [52, "maj"], [49, "min"], [54, "min"], [47, "min"], [49, "maj"], [49, "maj"]],
@@ -1302,6 +1314,18 @@ static func _compose_battle_style(name: String) -> AudioStreamWAV:
 		for i in 16:
 			var at := int((t0 + i * step) * RATE)
 			match st["drums"]:
+				"war":
+					# Great drums on the beat, the snare on two and four, a roll into each
+					# phrase, a crash at its head.
+					if i % 4 == 0:
+						_voice(buf, at, 0.32, 95.0 if i % 8 == 0 else 120.0, 38.0, "sine", 0.55, 1.6)
+					if i in [4, 12]:
+						_voice(buf, at, 0.12, 3200.0, 1100.0, "noise", 0.22, 2.2, 0.5, [], 71 + i)
+					if b % 4 == 3 and i >= 12:
+						_voice(buf, at, 0.1, 160.0 - (i - 12) * 15.0, 60.0, "sine", 0.4, 2.0)
+						_voice(buf, at + int(step * 0.5 * RATE), 0.05, 2800.0, 1200.0, "noise", 0.12, 2.5, 0.5, [], 91 + i)
+					if b % 4 == 0 and i == 0:
+						_voice(buf, at, 0.9, 7000.0, 3500.0, "noise", 0.1, 1.2, 0.5, [], 333)
 				"march":
 					if i % 4 == 0:
 						_voice(buf, at, 0.14, 120.0, 40.0, "sine", 0.45, 2.0)
@@ -1326,10 +1350,20 @@ static func _compose_battle_style(name: String) -> AudioStreamWAV:
 						_voice(buf, at, 0.12, 3500.0, 1200.0, "noise", 0.2, 2.5, 0.5, [], 77 + i)
 					if i % 2 == 0:
 						_voice(buf, at, 0.03, 9000.0, 9000.0, "noise", 0.05, 3.0, 0.5, [], 99 + i)
-		# Lead: chord tones, each near the last; the first phrase comes back once.
+		# Lead: chord tones, each near the last; the first phrase comes back once. (Dawnspire's:
+		# the hymn in the first four bars of every eight.)
 		var notes := []
 		var half := n / 2
-		if b >= half / 2 and b < half and phrase.has(b - half / 2) and b != half - 1:
+		if st.get("motif", false) and b % 8 < 4:
+			for m in DAWN_MOTIF[b % 4]:
+				var midi: int = root + 12 + int(tones[int(m[2]) % tones.size()]) + 12 * int(m[3])
+				while midi > hi:
+					midi -= 12
+				while midi < lo:
+					midi += 12
+				notes.append([m[0], m[1], midi])
+				last = midi
+		elif b >= half / 2 and b < half and phrase.has(b - half / 2) and b != half - 1:
 			notes = phrase[b - half / 2]
 		else:
 			for r in (ra if b < half else rb):
@@ -1345,6 +1379,16 @@ static func _compose_battle_style(name: String) -> AudioStreamWAV:
 		for nt in notes:
 			_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.95, _hz(nt[2]), _hz(nt[2]), lead,
 					0.075 if lead == "tri" else (0.05 if lead == "saw" else 0.07), 0.9, 0.5)
+			if st.get("horns", false):
+				# The horns: the line an octave down, brassy and broad.
+				_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.98, _hz(nt[2] - 12), _hz(nt[2] - 12), "saw", 0.035, 0.6, 0.5)
+				_voice(buf, int((t0 + nt[0] * step) * RATE), step * nt[1] * 0.98, _hz(nt[2] - 12) * 1.004, _hz(nt[2] - 12) * 1.004, "square", 0.018, 0.6, 0.35)
+		if st.get("choir", false):
+			# The choir: the chord held under the bar, voices a hair apart.
+			for k in tones.size():
+				var midi: int = root + 12 + int(tones[k])
+				for d in [0.997, 1.003]:
+					_voice(buf, int(t0 * RATE), step * 15.8, _hz(midi) * d, _hz(midi) * d, "sine", 0.022, 0.25)
 	return _to_stream(buf, true)
 
 

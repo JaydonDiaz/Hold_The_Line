@@ -487,7 +487,7 @@ func _process(delta: float) -> void:
 			audio.set_layers(bard_instruments)
 		# Between waves, a Bard on every instrument strikes up a song together.
 		var ensemble: bool = song_on and audio._music.has("ensemble") and all_bards_present()
-		audio.set_track(battle_music if wave_active else ("ensemble" if ensemble else stage_music))
+		audio.set_track(battle_music if rules.battle_on() else ("ensemble" if ensemble else stage_music))
 		if audio._playing_track != last_track:
 			if audio._playing_track == "ensemble":
 				hud.show_message("The Bards strike up a song together!")

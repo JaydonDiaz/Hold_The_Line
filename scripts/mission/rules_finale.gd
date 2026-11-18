@@ -78,6 +78,11 @@ func wave_cleared(_n: int) -> bool:
 	return false
 
 
+## The last battle: its music all the way through, until it's won.
+func battle_on() -> bool:
+	return not over
+
+
 func holds_waves() -> bool:
 	return over
 

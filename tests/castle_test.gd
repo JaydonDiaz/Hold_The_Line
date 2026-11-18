@@ -26,6 +26,9 @@ extends SceneTree
 ##                   new troops come into a room by its door; back in the hall it's still taken (nobody there, the
 ##                   way on open at once), the cells shown as taken; supplies claimed for gold;
 ##                   taken up again from a checkpoint after, nothing had is there to be had again
+##   M  music       a room's first wave comes as the army comes in, and the battle music holds
+##                   through the breathers until the room's taken; the siege's battles all carry
+##                   the Dawnspire hymn
 ##   K  checkpoints taken up again from the Hall of Banners: as the army came in (gold, army,
 ##                   the standard's health), the XP before it banked once; a checkpoint with
 ##                   too little left to win with brings reserves up to the floor, once a try
@@ -342,6 +345,8 @@ func _entering() -> void:
 	await _frames(2)
 	rules._woke = false
 	rules.fight_t = 0.0
+	main.spawn_queue.clear()   # (the room's first wave held off: only the hidden archer here)
+	main.wave_active = false
 	main.wave = rules.wave0
 	main._spawn_enemy("skeleton_archer", 8, Vector2(110, 240))
 	var hid = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
@@ -365,6 +370,18 @@ func _through() -> void:
 	await _castle(0, ARMY, 420)
 	var rules = main.rules
 	await _all_in()
+	# The room's first wave comes at once; the battle music holds through the breathers until
+	# the room's taken.
+	check(main.wave == rules.wave0 + 1 and main.wave_active and rules.battle_on(), "M  in a room: its first wave at once, the battle music on")
+	main.clear_enemies()
+	main.spawn_queue.clear()
+	main.wave_active = false
+	await _frames(5)
+	check(rules.phase == "fight" and rules.battle_on(), "M  ...between its waves, still the battle music (no peaceful music till the room's taken)")
+	var A = preload("res://scripts/audio.gd")
+	var siege := ["siege", "bailey", "dawngate", "gatehall", "banners", "cells", "stores", "chapel", "dungeon", "gallery", "treasury", "throne", "dawnfield"]
+	check(siege.all(func(k): return A.BATTLES[k].get("motif", false)) and not A.BATTLES["ridge"].get("motif", false),
+			"M  every battle of Dawnspire's siege carries the Dawnspire hymn (nowhere else does)")
 	main.clear_enemies()
 	main.wave = rules.wave0 + int(rules.room()["waves"])
 	main.spawn_queue.clear()
@@ -380,6 +397,7 @@ func _through() -> void:
 		await process_frame
 	var ways: Array = rules.arrows.map(func(a): return a["to"])
 	check(rules.phase == "clear" and ways.has("banners") and ways.has("cells") and rules.action_label() != "", "T  the room taken: an arrow at each way on: the hall beyond, the cells (%s)" % str(ways))
+	check(not rules.battle_on(), "M  the room taken: the peaceful music at last")
 	var before := {}
 	for w in main.get_warriors():
 		if w != fallen:

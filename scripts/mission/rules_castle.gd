@@ -374,15 +374,15 @@ func enemy_goal(e):
 	return standard if standard != null and is_instance_valid(standard) and standard.is_target() else null
 
 
-## The garrison wakes once a troop's near, one of them is hurt, the room's waves have
-## begun, or the army's been in the room ALERT seconds: then it comes for the standard (so
+## The garrison wakes once a troop's near, one of them is hurt, or the army's been in the
+## room ALERT seconds (its waves come in meanwhile): then it comes for the standard (so
 ## nobody's left waiting behind a wall for good).
 const ALERT := 15.0
 var _woke := false
 func _awake() -> bool:
 	if _woke:
 		return true
-	if main.wave > wave0 or (phase == "fight" and fight_t >= ALERT):
+	if phase == "fight" and fight_t >= ALERT:
 		_woke = true
 		return true
 	for e in main.get_enemies():
@@ -427,6 +427,12 @@ func wave_cleared(_n: int) -> bool:
 	return false
 
 
+## The battle music plays from the army coming into a room until it's taken (its waves all
+## beaten), through the breathers between them; and all the way out, escaping.
+func battle_on() -> bool:
+	return escaping or phase in ["enter", "fight"] or main.wave_active
+
+
 func wave_text() -> String:
 	if room_i < 0 or rooms.is_empty():
 		return ""
@@ -459,6 +465,9 @@ func process(delta: float) -> void:
 				_stragglers_come()
 				if escaping:
 					_room_taken()   # (no clearing it: out, as fast as the army can)
+				elif _waves() > 0:
+					main.deploying = false
+					main.start_wave(true)   # (the room's first wave at once: no lull on coming in)
 				elif king != null and is_instance_valid(king) and not told_throne:
 					told_throne = true
 					_story("ds_throne", func(): pass)

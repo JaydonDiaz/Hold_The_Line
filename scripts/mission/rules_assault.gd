@@ -591,6 +591,11 @@ func wait_y() -> float:
 	return 0.0
 
 
+## The battle music plays once the fighting's begun, until the field's clear.
+func battle_on() -> bool:
+	return main.wave_active or (main.wave > 0 and phase != "ready" and not moving_on)
+
+
 func waves_done_here() -> bool:
 	return phase == "clear" or phase == "ready"
 
