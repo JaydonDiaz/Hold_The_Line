@@ -248,6 +248,19 @@ func _towers() -> void:
 			"T  a troop following the ram too close keeps just clear of it (and gets there)")
 	close.queue_free()
 	check(low < hp0, "T  an enemy tower shoots a troop in reach")
+	# No tower stands on the ram's road (the nine-beacon route's extra ones too): the ram
+	# would roll through it.
+	var Maps = preload("res://scripts/maps.gd")
+	var on_road := []
+	var zs: Array = CD.MISSIONS["ds_assault"]["assault"]["zones"]
+	var prep: Array = CD.MISSIONS["ds_assault"]["assault"]["prepared"]["towers"]
+	for zi in zs.size():
+		var road: Array = Maps.get_map(zs[zi]["map"])["route"]
+		for at in zs[zi].get("towers", []) + (prep[zi] if zi < prep.size() else []):
+			for j in road.size() - 1:
+				if Geometry2D.get_closest_point_to_segment(at, road[j], road[j + 1]).distance_to(at) < 22.0 + 26.0 + 20.0:
+					on_road.append([zs[zi]["map"], at])
+	check(on_road.is_empty(), "T  no enemy tower stands on the ram's road, in any field (%s)" % str(on_road))
 	# At once, and as far as a plain Archer up a plain Tower reaches.
 	var reach: float = Data.WARRIORS["archer"]["range"] * 1.3
 	sw.queue_free()

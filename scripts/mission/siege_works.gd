@@ -125,10 +125,11 @@ func make_roof(layer: Node2D) -> void:
 	if kind != "siege_tower":
 		return
 	roof_mask = RoofMask.new()
-	roof_mask.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
 	roof = Roof.new()
 	roof.obj = self
 	roof_mask.add_child(roof)
+	roof.material = roof_material()
+	add_xray(roof)
 	layer.add_child(roof_mask)
 	roof_mask.position = position
 	tree_exiting.connect(func(): if is_instance_valid(roof_mask): roof_mask.queue_free())

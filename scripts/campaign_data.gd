@@ -511,7 +511,7 @@ const MISSIONS := {
 			# often, his King's Guard in the last halls. Beaten in his throne room, he draws on
 			# the corrupted beacon instead of falling: the army escapes the castle, and meets
 			# him on the open field (rules_finale.gd, "finale").
-			"prepared": {"towers": [[Vector2(320, 300)], [Vector2(200, 300)], [Vector2(320, 300)]], "sally_every": 2,
+			"prepared": {"towers": [[Vector2(510, 300)], [Vector2(200, 300)], [Vector2(100, 330)]], "sally_every": 2,
 				"garrison": [[["orc", Vector2(320, 230)], ["skeleton_archer", Vector2(120, 260)]], [["troll", Vector2(320, 230)]],
 					[["warlord", Vector2(180, 260), "guard"], ["skeleton_archer", Vector2(460, 240)]]]},
 			"castle": {"reserve": 500, "standard": 900, "level_bonus": 1, "rooms": [

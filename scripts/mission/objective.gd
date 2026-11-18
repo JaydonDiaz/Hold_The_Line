@@ -65,16 +65,43 @@ var line_y := 0.0
 # part is drawn again on a layer over the troops and enemies (clipped to above a troop's
 # height, so whoever's in front of the foot still stands in front), and turns see-through
 # while someone's back there.
-const TALL := ["watchtower", "beacon", "bell", "exchange"]
+const TALL := ["watchtower", "beacon", "bell", "exchange", "spire"]
 const ROOF_CUT := -54.0   # px above its foot where the part drawn over everyone starts
 var cv: CanvasItem = self  # what the drawing goes on (itself, or its roof)
 var roof_mask: Node2D = null
 var roof: Node2D = null
 
 
+## What holds a tall structure's roof (over everyone), at the structure's place.
 class RoofMask extends Node2D:
-	func _draw() -> void:
-		draw_rect(Rect2(-160, -420, 320, 420 + ROOF_CUT), Color.WHITE)
+	pass
+
+
+## The roof shows only the part of the structure above ROOF_CUT (what stands over the troops
+## behind it): cut off by its shader, not a clip, so its silhouettes can clip to it.
+const ROOF_SHADER := """
+shader_type canvas_item;
+uniform float cut;
+varying float local_y;
+void vertex() {
+	local_y = VERTEX.y;
+}
+void fragment() {
+	if (local_y > cut) {
+		discard;
+	}
+}
+"""
+static var _roof_shader: Shader = null
+
+static func roof_material() -> ShaderMaterial:
+	if _roof_shader == null:
+		_roof_shader = Shader.new()
+		_roof_shader.code = ROOF_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = _roof_shader
+	m.set_shader_parameter("cut", ROOF_CUT)
+	return m
 
 
 class Roof extends Node2D:
@@ -83,6 +110,43 @@ class Roof extends Node2D:
 		obj.cv = self
 		obj._draw_body()
 		obj.cv = obj
+
+
+## The troops behind a tall structure, seen through it as silhouettes in their own colours
+## (as behind the castle): a child of its roof, which clips it to what the roof draws.
+class Xray extends Node2D:
+	const SHADER := """
+shader_type canvas_item;
+void fragment() {
+	COLOR = vec4(COLOR.rgb, COLOR.a * texture(TEXTURE, UV).a);
+}
+"""
+	var main
+	var obj
+	func _ready() -> void:
+		var mat := ShaderMaterial.new()
+		mat.shader = Shader.new()
+		mat.shader.code = SHADER
+		material = mat
+	func _process(_delta: float) -> void:
+		queue_redraw()
+	func _draw() -> void:
+		var at: Vector2 = obj.position
+		for w in main.warriors_near(at + Vector2(0, -80), 200.0):
+			if not w.visible or w.xray_tex == null or w.position.y >= at.y:
+				continue   # (only those standing behind it)
+			draw_set_transform_matrix(Transform2D(0, w.position - at) * w.xray_xform)
+			draw_texture_rect(w.xray_tex, w.xray_rect, false, Color(w.data["color"].lightened(0.2), 0.6))
+		draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## Silhouettes through `r` (a roof) of the troops behind this.
+func add_xray(r: Node2D) -> void:
+	r.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	var x := Xray.new()
+	x.main = main
+	x.obj = self
+	r.add_child(x)
 
 
 ## From mission data: {"id", "kind", "name", "at" (as drawn up, 640 wide), "hp", and for
@@ -187,10 +251,11 @@ func make_roof(layer: Node2D) -> void:
 	if not kind in TALL:
 		return
 	roof_mask = RoofMask.new()
-	roof_mask.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
 	roof = Roof.new()
 	roof.obj = self
 	roof_mask.add_child(roof)
+	roof.material = roof_material()
+	add_xray(roof)
 	layer.add_child(roof_mask)
 	roof_mask.position = position
 	tree_exiting.connect(func(): if is_instance_valid(roof_mask): roof_mask.queue_free())
@@ -213,8 +278,6 @@ func _process(delta: float) -> void:
 	if roof_mask != null:
 		roof_mask.position = position
 		roof_mask.visible = not dead
-		if not dead and Engine.get_process_frames() % 6 == 0:
-			roof_mask.modulate.a = 0.45 if _anyone_behind() else 1.0
 		roof.queue_redraw()
 	hit = maxf(hit - delta, 0.0)
 	panic = maxf(panic - delta, 0.0)

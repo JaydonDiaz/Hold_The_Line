@@ -353,18 +353,19 @@ func _battle_modes() -> void:
 	check(main.survival() and main.hud.stat_text(main.hud.wave_label) == "Wave 0" and main.hud.stat_text(main.hud.lives_label) == "Towers 3/3",
 			"...a survival battle: no last wave (%s, %s)" % [main.hud.stat_text(main.hud.wave_label), main.hud.stat_text(main.hud.lives_label)])
 	var towers: Array = main.rules.objectives()
-	# A watchtower stands over whoever's behind it: its top is drawn over the troops (and
-	# goes see-through while someone's back there).
+	# A watchtower stands over whoever's behind it: its top is drawn over the troops, and a
+	# troop back there shows through it as a silhouette (as behind the castle).
 	var t0 = towers[0]
 	var behind = main.get_warriors()[-1]
 	var was: Vector2 = behind.position
 	behind.position = t0.position + Vector2(0, -90)
 	await _frames(8)
+	var xr: Array = t0.roof.get_children().filter(func(n): return n.get_script() == t0.Xray) if t0.roof != null else []
 	check(t0.roof_mask != null and t0.roof_mask.get_parent() == main.roof_layer and main.roof_layer.get_index() > main.warrior_layer.get_index() \
-			and t0.roof_mask.modulate.a < 1.0, "A troop behind a watchtower is behind its roof (drawn over the troops, see-through)")
+			and t0.roof_mask.modulate.a == 1.0 and xr.size() == 1 and t0.roof.clip_children == CanvasItem.CLIP_CHILDREN_AND_DRAW and behind.xray_tex != null,
+			"A troop behind a watchtower is behind its roof (drawn over the troops), seen through it as a silhouette")
 	behind.position = was
 	await _frames(8)
-	check(t0.roof_mask.modulate.a == 1.0, "...and it's solid again once nobody's there")
 	towers[0].hp = towers[0].max_hp * 0.5
 	main.wave = 7
 	main.start_wave()
