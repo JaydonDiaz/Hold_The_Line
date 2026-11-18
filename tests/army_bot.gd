@@ -448,7 +448,7 @@ var sent := {}   # troop id -> the work it was sent to
 
 func _assault() -> void:
 	var r = main.rules
-	if r.get("standard") != null:
+	if not ("wagon" in r) or r.wagon == null:
 		return   # (the castle's taken over: no ram any more)
 	for id in sent.keys():
 		var o = sent[id]
