@@ -328,7 +328,7 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 			"crystal":
 				_crystal(ci, poly, tint, rng)
 			"curtain":
-				_curtain(ci, poly, tint, String(m.get("wall", "outer")), w, rng)
+				_curtain(ci, poly, tint, String(m.get("wall", "outer")), w, rng, bool(m.get("ruined", false)))
 			"deadwood":
 				WarArt.deadwood(ci, poly, tint, rng)
 			"wreck":
@@ -380,7 +380,7 @@ static func draw_battlefield(ci: CanvasItem, w: float, tint: Color, raw: Diction
 ## tower at each end that stands by a gap (the gate's, or a postern's), with the Ogre
 ## King's red banners hung from it. "outer": weathered grey, soot from the burning;
 ## "inner": darker stone; "citadel": pale stone trimmed in gold.
-static func _curtain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, style: String, w: float, rng: RandomNumberGenerator) -> void:
+static func _curtain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, style: String, w: float, rng: RandomNumberGenerator, ruined := false) -> void:
 	var box := Rect2(poly[0], Vector2.ZERO)
 	for q in poly:
 		box = box.expand(q)
@@ -466,6 +466,69 @@ static func _curtain(ci: CanvasItem, poly: PackedVector2Array, tint: Color, styl
 		ci.draw_rect(Rect2(bx + 9, by + 9, 2, 2), Color(0.62, 0.12, 0.1) * tint)
 		ci.draw_rect(Rect2(bx + 4, by + 14, 1, 3), Color(0.9, 0.86, 0.78))
 		ci.draw_rect(Rect2(bx + 11, by + 14, 1, 3), Color(0.9, 0.86, 0.78))
+	if ruined:
+		_broken_wall(ci, x0, x1, face_top, foot, stone, tint, w, rng)
+
+
+## Dawnspire broken by the Ogre King's power (the true final battle): bites torn out of the
+## wall and its towers down to the stumps, rubble spilled at its foot, and the beacon's fire
+## glowing in the cracks.
+static func _broken_wall(ci: CanvasItem, x0: float, x1: float, face_top: float, foot: float, stone: Color, tint: Color, w: float, rng: RandomNumberGenerator) -> void:
+	var glow := Color(1.0, 0.42, 0.12)
+	# Breaches torn out from the top, some all the way down the face: broken edges, the
+	# stone behind in shadow, and what fell piled in the bottom of each.
+	var shade := stone.darkened(0.55) * tint
+	var x := x0 + rng.randf_range(4.0, 30.0)
+	while x < x1 - 16.0:
+		var bw := rng.randf_range(30.0, 58.0)
+		var deep := rng.randf_range(face_top - 10.0, foot - 8.0)
+		var r := minf(x + bw, x1)
+		var pts := PackedVector2Array([Vector2(x, -4)])
+		var y := 0.0
+		while y < deep:   # the left edge, jagged, going down
+			y = minf(y + rng.randf_range(8.0, 16.0), deep)
+			pts.append(Vector2(x + rng.randf_range(0.0, 6.0) + y / deep * 6.0, y))
+		var bx := x + 6.0
+		while bx < r - 6.0:   # the bottom, broken stone
+			bx = minf(bx + rng.randf_range(6.0, 12.0), r - 6.0)
+			pts.append(Vector2(bx, deep + rng.randf_range(-6.0, 3.0)))
+		y = deep
+		while y > 0.0:   # the right edge, going up
+			y = maxf(y - rng.randf_range(8.0, 16.0), 0.0)
+			pts.append(Vector2(r - rng.randf_range(0.0, 6.0) - y / deep * 6.0, y))
+		pts.append(Vector2(r, -4))
+		ci.draw_colored_polygon(pts, shade)
+		ci.draw_polyline(pts, stone.lightened(0.1) * tint, 1.5)
+		# Fallen stone heaped in the bottom of it.
+		for i in int(bw / 6.0):
+			var sx := rng.randf_range(x + 4.0, r - 10.0)
+			var sy := deep - rng.randf_range(0.0, minf(20.0, deep * 0.4))
+			var sz := rng.randf_range(5.0, 10.0)
+			ci.draw_rect(Rect2(sx - 1, sy - 1, sz + 2, sz * 0.7 + 2), OUTLINE)
+			ci.draw_rect(Rect2(sx, sy, sz, sz * 0.7), (stone if rng.randf() < 0.5 else stone.darkened(0.2)) * tint)
+		x += bw + rng.randf_range(40.0, 90.0)
+	# Cracks down the face, the beacon's fire glowing in them.
+	for i in int((x1 - x0) / 40.0):
+		var cx := rng.randf_range(x0 + 6.0, x1 - 6.0)
+		var p := Vector2(cx, face_top + rng.randf_range(0.0, 10.0))
+		var crack := PackedVector2Array([p])
+		while p.y < foot - 4.0:
+			p += Vector2(rng.randf_range(-6.0, 6.0), rng.randf_range(6.0, 12.0))
+			crack.append(Vector2(p.x, minf(p.y, foot - 4.0)))
+		ci.draw_polyline(crack, Color(glow, 0.35), 4.0)
+		ci.draw_polyline(crack, glow, 1.5)
+	# Rubble spilled at its foot.
+	for i in int((x1 - x0) / 9.0):
+		var rx := rng.randf_range(x0 - 6.0, x1 + 6.0)
+		var ry := foot + rng.randf_range(-4.0, 22.0)
+		var sz := rng.randf_range(4.0, 11.0)
+		ci.draw_rect(Rect2(rx - 1, ry - 1, sz + 2, sz * 0.7 + 2), OUTLINE)
+		ci.draw_rect(Rect2(rx, ry, sz, sz * 0.7), (stone if rng.randf() < 0.5 else stone.darkened(0.15)) * tint)
+	# Embers smouldering in it.
+	for i in int((x1 - x0) / 60.0) + 1:
+		var e := Vector2(rng.randf_range(x0, x1), rng.randf_range(face_top, foot + 10.0))
+		ci.draw_circle(e, 6.0, Color(glow, 0.25))
+		ci.draw_circle(e, 2.5, Color(1.0, 0.75, 0.3))
 
 
 ## A square paved in dressed stone: a dark kerb, big pale flags in courses, and a round

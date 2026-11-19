@@ -69,6 +69,7 @@ var roof_layer: Node2D = null        # ...and the tops of the tall ones, over ev
 var classic_map := ""      # Classic on one of the campaign's battlefields ("" = the open meadow)
 var map_id := ""           # the battlefield this game is on (a maps.gd id, "" for the meadow)
 var stage_music := "calm"   # this battlefield's peaceful music between waves (audio.gd STAGE_TRACKS)
+var map_extra := {}   # changes the battle makes to how its field looks (Dawnspire in ruins: {"ruined": true}); cleared on a new field
 var battle_music := "battle"   # ...and its own battle music during waves (audio.gd BATTLES)
 var credit := ""             # campaign XP: the unit kind whose doing the damage dealt right now is
 var battle_xp := {}          # campaign XP earned this battle: unit kind -> XP
@@ -362,6 +363,7 @@ func choose_mode(mode: String) -> void:
 	# one the campaign has opened, or the open meadow.
 	var classic := not campaign and battle_id == "" and Data.DIFFICULTIES.has(mode)
 	map_id = mission.get("map", "") if scripted() else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
+	map_extra = {}
 	# Battles fill the window: a map stretches across the field like the meadow does (the
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
 	_lock_portrait(false)
@@ -2950,7 +2952,7 @@ func _repaint_ground() -> void:
 ## Pixel ground: dirt where enemies enter, grass (with the odd flower patch) below,
 ## lit for the mode's mood; then the scenery on it (see field_art.gd).
 func _paint_ground(ci: CanvasItem) -> void:
-	var map: Dictionary = Maps.get_map(map_id)
+	var map: Dictionary = Maps.get_map(map_id).merged(map_extra, true)
 	FieldArt.paint_field(ci, FIELD_W, FIELD_H, ambience.ground_tint() * map.get("tint", Color.WHITE), map)
 
 

@@ -246,6 +246,7 @@ func change_field(map_id: String) -> void:
 		c.queue_free()
 	var maps = load("res://scripts/maps.gd")
 	main.map_id = map_id
+	main.map_extra = {}
 	main.paths.set_map(maps.get_map(map_id))
 	main._repaint_ground()
 	main.queue_redraw()

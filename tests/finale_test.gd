@@ -389,14 +389,30 @@ func _field() -> void:
 	for fac in f.FIELDS[0]["help"]:
 		here += f.help_points(fac)
 	check(main.temp_allies.size() == here and here < want, "F  ...only the peoples waiting on this field are here at first (%d of %d)" % [main.temp_allies.size(), want])
-	check(f.escaped >= 9 and main.get_enemies().size() == f.escaped, "F  ...and his that got out of the castle are on the field (%d: the Cells' guards among them)" % f.escaped)
 	check(campaign.checkpoint("ds_assault", 300).get("zone", 0) == 300, "F  ...a checkpoint for the field")
-	# He comes out with the second wave.
-	main.clear_enemies()
-	main.wave = f.wave0 + f.KING_AT_WAVE
-	await _frames(5)
+	# Out of the castle: it comes down, and he bursts out through the ruins, swelling to a giant.
+	var shook := false
+	var grew_from := 0.0
+	for i in 60 * 8:
+		await process_frame
+		_skip_story()
+		if f.intro_t > f.INTRO_SHAKE and f.intro_t < f.INTRO_FALL and main.position != Vector2.ZERO:
+			shook = true
+		if f.king != null and is_instance_valid(f.king) and grew_from == 0.0:
+			grew_from = f.king.sprite_scale
+		if f.intro_t < 0.0 and f.king != null:
+			break
+	main.get_tree().paused = false
 	var k = f.king
-	check(k != null and k.kind == "ogre_unbound" and k.aura.a > 0.0, "F  the Ogre King, Unbound, comes out with the second wave")
+	var d: Dictionary = Data.ENEMIES["ogre_unbound"]
+	check(shook and f.collapsed and main.map_extra.get("ruined", false), "F  out of the castle, the ground shakes and Dawnspire's walls come down: in ruins")
+	check(k != null and k.kind == "ogre_unbound" and k.aura.a > 0.0 and grew_from < k.sprite_scale, "F  the Ogre King, Unbound, bursts out through the ruins...")
+	check(is_equal_approx(k.sprite_scale, float(d["scale"]) * f.GROW) and is_equal_approx(k.radius, float(d["radius"]) * f.GROW),
+			"F  ...and the broken oath swells him to a giant (x%.2f)" % (k.sprite_scale / float(d["scale"])))
+	check(main.position == Vector2.ZERO, "F  ...the view steady again after")
+	await _frames(5)
+	check(f.escaped >= 9 and main.get_enemies().filter(func(e): return e != k).size() == f.escaped, "F  ...and his that got out of the castle are on the field (%d: the Cells' guards among them)" % f.escaped)
+	main.clear_enemies() if false else null
 	# His charge: its line first, then the rush, then he's exposed.
 	main.clear_enemies() if false else null
 	for w in main.get_warriors():
@@ -590,8 +606,8 @@ func _arts() -> void:
 	# The Free Cities': a dirge: the army round him weakened, his horde driven on.
 	var near = f._make_unit({"kind": "swordsman", "post": k.position + Vector2(60, 120)})
 	near.move_mode = "hold"
-	main.spawn_minion("orc", 10, k.position + Vector2(-60, 40))
-	var minion = main.get_enemies()[-1]
+	main._spawn_enemy("orc", 10, k.position + Vector2(-90, 60))
+	var minion = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	minion.speed = 0.0
 	f.use_art("freecities")
 	await _frames(20)
@@ -601,8 +617,8 @@ func _arts() -> void:
 		w.queue_free()
 	var keep = f._make_unit({"kind": "swordsman", "post": Vector2(600, 700)})   # (one left: the army isn't gone)
 	keep.move_mode = "hold"
-	main.spawn_minion("orc", 10, k.position + Vector2(60, 40))
-	minion = main.get_enemies()[-1]
+	main._spawn_enemy("orc", 10, k.position + Vector2(90, 60))
+	minion = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	minion.speed = 0.0
 	await _frames(2)
 	minion.hp = minion.max_hp * 0.3

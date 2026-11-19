@@ -14,6 +14,9 @@ extends "res://scripts/mission/rules.gd"
 ##   His moves     one more each field: the slam and the charge; then burning ground; then
 ##                 enraged, with his war horn. And his arts (ARTS, oath_arts.gd): the Line's own,
 ##                 drawn from the oaths its peoples broke, more of them each field and more often
+##   Out of the castle  the oath's power tears Dawnspire apart as the army comes out (the
+##                 collapse: INTRO), and he bursts out through the broken gate and swells to a
+##                 giant (GROW); its walls lie in ruins on every field after
 ##   The retreat   worn to a field's mark, he calls up the beacon's fire (BeaconWrath): a wall
 ##                 of flame rolls down the field from him, burning whoever it catches; the army
 ##                 runs before it, and once it's swept the field the battle goes on below
@@ -50,6 +53,15 @@ const KING_LEVEL := 13
 const KING_HP := 0.7                  # his health, times his data's (against an army of ARMY_REF)
 const ARMY_REF := 6000.0              # an army worth this much (gold to field it) meets him at KING_HP; more, and he's that much the stronger
 const WRATH_SPEED := 75.0             # how fast the beacon's fire comes down the field
+const GROW := 1.45                    # out of the castle, the broken oath swells him: this much bigger
+const KING_Y := 175.0                 # where he comes onto a field (below its wall: he's too big for the gaps now)
+# The collapse, as the army comes out (seconds in): the shaking starts; the walls come down;
+# he bursts out; he's done growing; the field's story.
+const INTRO_SHAKE := 0.8
+const INTRO_FALL := 2.2
+const INTRO_KING := 2.4
+const INTRO_GROWN := 4.0
+const INTRO_END := 4.4
 const OathArts = preload("res://scripts/mission/oath_arts.gd")
 const Assault = preload("res://scripts/mission/rules_assault.gd")
 # His arts, by field: which he has (each the art of one people of the Line), and how often.
@@ -78,6 +90,11 @@ var last_art := ""
 var mercy_t := -1.0        # > 0: he's drawing Stolen Mercy (hit hard enough, it's broken off)
 var mercy_hp := 0.0
 var seen_arts := {}        # those he's used (each named the first time)
+var intro_t := -1.0        # >= 0: the castle coming down as the army comes out (seconds in)
+var burst_t := 0.0
+var shake_base := Vector2.ZERO
+var collapsed := false     # Dawnspire's in ruins
+var base_size := {}        # his size as he came out, before the oath swelled him
 var over := false
 var garrisons: Array = []
 var freed := 0
@@ -153,7 +170,7 @@ func take_over(c, coming: Array, std_hp: float) -> void:
 	var army: Array = coming.map(func(r): return r[0])
 	_set_field(army, std_hp, false)
 	checkpoint()
-	_story_then_fight()
+	intro_t = 0.0   # (the castle comes down, he comes out; then the field's story: _intro_step)
 
 
 ## Taken up again from its checkpoint.
@@ -173,12 +190,12 @@ func resume(cp: Dictionary) -> void:
 	garrisons = (cp.get("garrisons", []) as Array).duplicate(true)
 	field = clampi(int(cp.get("field", 0)), 0, FIELDS.size() - 1)
 	king_hp = float(cp.get("king", 1.0))
+	collapsed = true
 	_set_field(cp.get("army", []), float(cp.get("standard", 1.0)), true, not cp.has("field"))
 	wave0 = main.wave
 	if field == 0:
 		_escaped_out()
-	else:
-		king_in = KING_EARNED
+	king_in = KING_EARNED
 	main.hud.show_message("Taken up again on %s." % FIELDS[field]["name"])
 
 
@@ -188,6 +205,8 @@ func resume(cp: Dictionary) -> void:
 func _set_field(army: Array, std_hp: float, restored: bool, help_again := false) -> void:
 	var f: Dictionary = FIELDS[field]
 	change_field(f["map"])
+	if collapsed:
+		_ruins()
 	if standard != null and is_instance_valid(standard):
 		standard.queue_free()
 	standard = Works.new()
@@ -300,6 +319,9 @@ func _escaped_out() -> void:
 func process(delta: float) -> void:
 	if over or main.game_over:
 		return
+	if intro_t >= 0.0:
+		_intro_step(delta)
+		return
 	if fall_t > 0.0:
 		fall_t -= delta
 		if fall_t <= 0.0:
@@ -312,13 +334,9 @@ func process(delta: float) -> void:
 			_fall_back(true)
 		return
 	if not king_out:
-		if field == 0 and king_in < 0.0:
-			if main.wave - wave0 >= KING_AT_WAVE:
-				_king_comes()
-		else:
-			king_in -= delta
-			if king_in <= 0.0:
-				_king_comes()
+		king_in -= delta
+		if king_in <= 0.0:
+			_king_comes()
 		return
 	if last_field() and king != null and is_instance_valid(king) and not king.dead and king.position.y >= CAMP_Y:
 		main.hud.show_message("The Ogre King has reached the camp!")
@@ -332,8 +350,11 @@ func process(delta: float) -> void:
 ## health as it was, his mark on this field, and one more of his moves each field.
 func _king_comes() -> void:
 	king_out = true
-	main._spawn_enemy("ogre_unbound", KING_LEVEL, Vector2(main.FIELD_W / 2.0, 60.0))
+	main._spawn_enemy("ogre_unbound", KING_LEVEL, Vector2(main.FIELD_W / 2.0, KING_Y))
 	king = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+	base_size = {"scale": king.sprite_scale, "radius": king.radius, "stomp": float(king.stomp.get("radius", 0.0)),
+			"reach": float(king.cleave.get("reach", 0.0))}
+	_grow(1.0 if intro_t < 0.0 else 0.0)
 	king.max_hp *= KING_HP * army_mult()
 	king.hp = king.max_hp * clampf(king_hp, 0.02, 1.0)
 	art_t = 4.0
@@ -352,11 +373,80 @@ func _king_comes() -> void:
 			king.enrage_at = 0.0
 		_:
 			king.enrage_at = 2.0      # (enraged from the start here, his war horn too)
-	if field == 0:
-		main.hud.show_message("The Ogre King comes out of the Dawn Gate, the beacon's fire all round him!")
+	if field == 0 and intro_t >= 0.0:
+		main.hud.show_message("The Ogre King bursts out through the ruins of the Dawn Gate!")
 	else:
 		main.hud.show_message("The Ogre King comes on after you!")
 	main.sfx("horn", 0.6)
+
+
+## How far the broken oath has swelled him (0: as he came out of the castle; 1: a giant).
+func _grow(k: float) -> void:
+	if king == null or not is_instance_valid(king) or base_size.is_empty():
+		return
+	var g: float = 1.0 + (GROW - 1.0) * clampf(k, 0.0, 1.0)
+	king.sprite_scale = float(base_size["scale"]) * g
+	king.radius = float(base_size["radius"]) * g
+	if not king.stomp.is_empty():
+		king.stomp["radius"] = float(base_size["stomp"]) * (1.0 + (g - 1.0) * 0.5)
+	if float(base_size["reach"]) > 0.0:
+		if king.cleave.is_read_only():
+			king.cleave = king.cleave.duplicate()   # (his own, not the data's)
+		king.cleave["reach"] = float(base_size["reach"]) * g
+	king.queue_redraw()
+
+
+## Dawnspire in ruins on this field (its walls broken by his power).
+func _ruins() -> void:
+	main.map_extra = {"ruined": true}
+	main._repaint_ground()
+
+
+## The army comes out, and the broken oath's power tears Dawnspire apart: the ground shakes,
+## the walls come down, he bursts out through the ruins and swells to a giant. Then the
+## field's story, and the battle.
+func _intro_step(delta: float) -> void:
+	var was := intro_t
+	intro_t += delta
+	var crossed := func(at: float) -> bool: return was < at and intro_t >= at
+	if crossed.call(INTRO_SHAKE):
+		shake_base = main.position
+		main.hud.show_message("Dawnspire shakes. The broken oath is tearing it apart!")
+		main.sfx("crumble", 0.6)
+	if intro_t >= INTRO_SHAKE and intro_t < INTRO_END:
+		# The ground shaking, hardest as the walls fall.
+		var amp: float = 6.0 if intro_t < INTRO_FALL + 0.6 else 2.5
+		main.position = shake_base + Vector2(randf_range(-amp, amp), randf_range(-amp, amp))
+		# Bursts of stone and fire along the walls.
+		burst_t -= delta
+		if burst_t <= 0.0 and intro_t < INTRO_GROWN:
+			burst_t = 0.12
+			var at := Vector2(randf_range(20.0, main.FIELD_W - 20.0), randf_range(30.0, 140.0))
+			main.spawn_burst(at, randf_range(24.0, 50.0), Color(0.6, 0.55, 0.5) if randf() < 0.6 else Color(1.0, 0.45, 0.15))
+			if randf() < 0.3:
+				main.sfx("crumble", randf_range(0.6, 0.9))
+	if crossed.call(INTRO_FALL):
+		collapsed = true
+		_ruins()
+		for i in 9:
+			main.spawn_burst(Vector2(main.FIELD_W * (i + 0.5) / 9.0, 90.0), 60.0, Color(0.55, 0.5, 0.46))
+		main.spawn_flash(Vector2(main.FIELD_W / 2.0, 90.0), 160.0)
+		main.sfx("boom", 0.5)
+	if crossed.call(INTRO_KING):
+		_king_comes()
+		king.boss_hold = INTRO_END - INTRO_KING + 0.5
+		main.spawn_burst(king.position, 120.0, Color(1.0, 0.3, 0.1))
+	if intro_t > INTRO_KING and intro_t <= INTRO_GROWN + 0.05:
+		_grow((intro_t - INTRO_KING) / (INTRO_GROWN - INTRO_KING))
+	if crossed.call(INTRO_GROWN):
+		_grow(1.0)
+		main.spawn_flash(king.position, 130.0)
+		main.spawn_text(king.position + Vector2(0, -150), "The broken oath swells him!", Color(1.0, 0.45, 0.2))
+		main.sfx("stomp", 0.5)
+	if intro_t >= INTRO_END:
+		intro_t = -1.0
+		main.position = shake_base
+		_story_then_fight()
 
 
 ## He's been worn down to this field's mark: he roars, drawing on the beacon, and the
@@ -657,8 +747,8 @@ func status() -> String:
 		text += "  ·  The Ogre King %d%%" % roundi(king.hp / king.max_hp * 100.0)
 		if not last_field():
 			text += " (fall back at %d%%)" % roundi(float(FIELDS[field]["floor"]) * 100.0)
-	elif not king_out and field == 0 and king_in < 0.0:
-		text += "  ·  he comes out with wave %d" % (wave0 + KING_AT_WAVE)
+	elif intro_t >= 0.0:
+		text += "  ·  Dawnspire is coming down!"
 	elif not king_out and king_in > 0.0:
 		text += "  ·  he's coming: %ds" % ceili(king_in)
 	return text
