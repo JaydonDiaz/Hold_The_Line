@@ -19,6 +19,7 @@ const COMBO_GAP := 0.12   # seconds between hits in a combo, and between blasts 
 const KI_COLOR := Color(1.0, 0.88, 0.35)
 const OUTLINE_COLOR := Color(0.1, 0.07, 0.1)
 const BEAM_CHARGE := 0.5   # seconds spent gathering ki before the beam fires
+const BOMB_CHARGE := 0.7   # seconds a Spirit Bomb takes to gather: its bolts drawn together into one
 const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.0, 0.5, 0.15), Color(0.55, 0.95, 0.45)]
 const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.0, 0.45, 0.15), Color(0.95, 0.3, 0.25)]
 const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
@@ -301,6 +302,7 @@ var volley_hand := 1.0    # alternates which side each blast leaves from
 var volley_target = null  # a volley stays on its first target while it lives
 var beam_timer := 0.0
 var beam_charge := 0.0    # > 0 while charging the beam
+var bomb_charge := 0.0    # > 0 while gathering a Spirit Bomb (he stands, the bolts circling in to his hands)
 var beam_target = null
 var teleport_timer := 0.0
 var stun_timer := 0.0
@@ -1487,6 +1489,15 @@ func _process(delta: float) -> void:
 	elif not beam.is_empty() and beam_timer <= 0.0 and volley_left == 0 and _beam_target() != null:
 		beam_target = _beam_target()
 		beam_charge = BEAM_CHARGE
+	elif bomb_charge > 0.0:
+		# Gathering the Spirit Bomb: he holds his ground, hands out, as it gathers; then it goes.
+		bomb_charge -= delta
+		_hold_pose("punch", 0.1)
+		if volley_target != null and _is_valid(volley_target):
+			facing = position.direction_to(volley_target.position)
+		if bomb_charge <= 0.0:
+			bomb_charge = 0.0
+			_continue_volley(0.0)
 	elif volley_left > 0:
 		_continue_volley(delta)
 	elif not blast.is_empty() and blast_timer <= 0.0 and _start_volley():
@@ -1636,7 +1647,11 @@ func _start_volley() -> bool:
 	volley_timer = 0.0
 	volley_target = _blast_target()
 	if blast.has("merge"):
-		volley_left = 1   # (Spirit Bomb: the whole volley in one blast: see _continue_volley)
+		# Spirit Bomb: the whole volley in one blast, gathered first (see _bomb_step).
+		volley_left = 1
+		bomb_charge = BOMB_CHARGE
+		main.sfx("powerup", 1.4)
+		return true
 	_continue_volley(0.0)
 	return true
 
@@ -4466,6 +4481,22 @@ func _draw() -> void:
 			var k := _readying()
 			var orb := _sprite_px(origin, 14, 2) if kind == "mage" else _sprite_px(origin, 14, 1.5)
 			Sprites.disc(self, orb, 3.0 + 6.0 * k, Color(glow, 0.45 * k))
+	if bomb_charge > 0.0:
+		# Gathering a Spirit Bomb: a ki orb for each bolt it holds, circling in to his hands and
+		# merging there into one growing ball of light.
+		var k := 1.0 - bomb_charge / BOMB_CHARGE
+		var hands := Vector2(0, feet - size.y * 0.5) + facing * 12.0
+		var spin := Time.get_ticks_msec() / 120.0
+		var n := maxi(blast_count, 1)
+		for i in n:
+			var a := spin + i * TAU / n
+			var r := 34.0 * (1.0 - k)
+			var p := hands + Vector2(cos(a), sin(a) * 0.6) * r
+			Sprites.disc(self, p, 7.0 * (1.0 - k * 0.5), Color(KI_COLOR, 0.35))
+			Sprites.disc(self, p, 3.5, Color(1, 1, 0.9, 0.9))
+		var flick := 1.0 + 0.12 * sin(Time.get_ticks_msec() / 22.0)
+		Sprites.disc(self, hands, (3.0 + 13.0 * k) * flick, Color(KI_COLOR, 0.4))
+		Sprites.disc(self, hands, (1.5 + 7.0 * k) * flick, Color(1, 1, 0.9, 0.95))
 	if charging:
 		# Gathering ki for the beam: a growing, flickering orb in front of the hands.
 		var k := 1.0 - beam_charge / BEAM_CHARGE

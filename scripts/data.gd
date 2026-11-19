@@ -411,8 +411,8 @@ const WARRIORS := {
 					"effect": {"blast": {"damage": 15.0, "count": 3, "range": 175.0, "cooldown": 1.2}}},
 				{"name": "Blazing Spirit", "cost": 230, "desc": "Bolts hit for 24 dmg each and burst, splashing a 3\u00a0ft area; every 1.0s",
 					"effect": {"blast": {"damage": 24.0, "count": 3, "range": 190.0, "cooldown": 1.0, "splash": 32.0}}},
-				{"name": "Spirit Bomb", "cost": 380, "desc": "All bolts fuse into one blast: 1.2x their 30 dmg each, 5\u00a0ft splash; every 1.2s",
-					"effect": {"blast": {"damage": 30.0, "count": 3, "range": 200.0, "cooldown": 1.2, "splash": 50.0, "merge": 1.2}}},
+				{"name": "Spirit Bomb", "cost": 380, "desc": "Gathers all his bolts into one blast: 1.35x their 30 dmg each, 5.5\u00a0ft splash",
+					"effect": {"blast": {"damage": 30.0, "count": 3, "range": 200.0, "cooldown": 1.2, "splash": 55.0, "merge": 1.35}}},
 			]},
 			{"name": "Brawling", "note": "With Spirit his main art, extra hits become extra bolts per volley.", "tiers": [
 				{"name": "Quick Hands", "cost": 80, "desc": "+1 hit per combo", "effect": {"combo": 1}},
