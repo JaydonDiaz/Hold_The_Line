@@ -906,7 +906,11 @@ func _refresh(main) -> void:
 	target_btn.visible = _takes_orders(w) or (in_group and main.group.any(_takes_orders))
 	_refresh_orders(main, w)
 	song_btn.visible = w != null and w.kind == "bard" and main.all_bards_present()
-	climb_btn.visible = w != null and w.garrison != null and is_instance_valid(w.garrison)
+	climb_btn.visible = w != null and ((w.garrison != null and is_instance_valid(w.garrison)) or w.broken)
+	if climb_btn.visible:
+		climb_btn.text = ("Rebuild\n%dg [L]" % w.rebuild_cost()) if w.broken else "Climb\ndown [L]"
+		climb_btn.tooltip_text = "Have an Engineer rebuild it, upgrades and all [L]" if w.broken else "Come down out of the tower, to its foot [L]"
+		climb_btn.disabled = w.broken and main.gold < w.rebuild_cost()
 	if not compact:
 		climb_btn.position.x = ui_w - (406 if song_btn.visible else 314)
 	if grave != null:
@@ -922,7 +926,7 @@ func _refresh(main) -> void:
 		info_label.size = Vector2(ui_w - (26 if not target_btn.visible else ui_w - target_btn.position.x + 8.0), _panel_h() - CONTENT_Y - CONTENT_H - 12.0)
 		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
 		info_label.text = "%d troops selected. Right-click to move them together (they keep their formation)%s. Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them." % [
-				main.group.size(), "" if main.wave_active else "; or drag one of them to move the group"]
+				main.group.size(), "" if main.fighting() else "; or drag one of them to move the group"]
 		target_btn.text = "Orders [O]\n%d troops" % main.group.filter(_takes_orders).size()
 		return
 	if castle_sel:
@@ -966,9 +970,9 @@ func _refresh(main) -> void:
 		info_label.position = Vector2(14, 296)
 		info_label.size = Vector2(ui_w - 28, _panel_h() - 296 - 66)
 	info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
-	var how := "right-click to send it somewhere" if main.wave_active else "drag to reposition"
+	var how := "right-click to send it somewhere" if main.fighting() else "drag to reposition"
 	if w.is_emplacement():
-		how = "holds its ground" if main.wave_active else "drag to reposition"
+		how = "holds its ground" if main.fighting() else "drag to reposition"
 	if not w.uses_targeting():
 		how += "  (no targeting)"
 	info_label.text = "%s - %s   Upgrades %d/%d\n%s" % [w.data["name"], how, w.total_upgrades(), Warrior.MAX_UPGRADES, w.stats_text()]

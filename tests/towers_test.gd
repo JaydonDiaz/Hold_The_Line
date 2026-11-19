@@ -12,6 +12,12 @@ extends SceneTree
 ##                   nothing more however often upgrades are reapplied or it climbs up and down;
 ##                   what the crew does trains the crew's kind, what the tower takes trains the
 ##                   Tower (the two kept apart)
+##   R  rubble      a Tower brought down is broken: out of the fight, its crew down off it, worth
+##                   nothing sold, and no Healer brings it back; rebuilt for half what's been
+##                   spent on it (more, the more it's upgraded), an Engineer puts it up again,
+##                   its upgrades kept
+##   F  fighting    while an enemy's on the field, troops can't be picked up and moved (the
+##                   battle's on, wave or no wave); once it's gone, they can
 ##   B  ballista    aims for flyers first and hits them twice as hard; a bolt goes on through
 ##                   everything in its line; the Chain Net slows flyers; Blasting Tips burst
 ##   O  obelisk     Mages near it hit harder; a Storm Rune strikes, Sunfire Glyphs burn the
@@ -90,6 +96,8 @@ func _run() -> void:
 	_archer_paths()
 	await _tower()
 	await _crews()
+	await _rubble()
+	await _fighting()
 	await _ballista()
 	await _obelisk()
 	await _sappers()
@@ -186,6 +194,59 @@ func _crews() -> void:
 		check(main.battle_xp.get("tower", 0.0) > 0.0 and not main.battle_xp.has(kind), "C  %s ...damage the tower takes trains the Tower only" % kind)
 		main.wave_active = false
 		main.campaign = false
+
+
+# --- R, F ------------------------------------------------------------------------------------
+
+func _rubble() -> void:
+	await _fresh()
+	var t = _hire("tower", Vector2(320, 480))
+	t.upgrade(0)
+	t.upgrade(1)
+	var a = _hire("archer", Vector2(200, 620))
+	a.order_to(t.position)
+	await _frames(60 * 4)
+	var h = _hire("healer", t.position + Vector2(50, 40))
+	main.wave_active = true
+	t.take_damage(1e6)
+	await _frames(5)
+	check(t.broken and not t.is_active() and a.garrison == null and a.is_active() and t.sell_value() == 0,
+			"R  a Tower brought down is broken: out of the fight, its crew down off it, worth nothing sold")
+	await _frames(60 * 6)
+	check(t.broken and not t.is_queued_for_deletion(), "R  ...and stays broken: no Healer brings it back (nor does it vanish)")
+	var cost: int = t.rebuild_cost()
+	var bare = _hire("tower", Vector2(480, 480))
+	bare.take_damage(1e6)
+	await _frames(2)
+	check(cost >= main.price(t.spent * 0.5) - 1 and cost > bare.rebuild_cost(), "R  rebuilding costs half what's gone into it: more for an upgraded one (%d against %d)" % [cost, bare.rebuild_cost()])
+	main.gold = cost + 5
+	main.selected = t
+	main.climb_down()   # (L, or the panel's Rebuild button)
+	check(main.gold == 5 and not t.broken and t.build_left > 0.0, "R  ...rebuilt: paid for, an Engineer sets out to it")
+	for i in 60 * 30:
+		if t.build_left <= 0.0:
+			break
+		await process_frame
+	check(t.is_active() and t.hp == t.max_hp and t.tiers[0] == 1 and t.tiers[1] == 1, "R  ...and puts it up again, its upgrades kept")
+	main.wave_active = false
+
+
+func _fighting() -> void:
+	await _fresh()
+	var sw = _hire("swordsman", Vector2(320, 560))
+	main.wave_active = false
+	var e = _foe("orc", Vector2(320, 200), 1e5)
+	e.speed = 0.0
+	await _frames(2)
+	main.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
+	check(main.fighting() and main.dragging == null, "F  an enemy on the field (no wave on): the battle's on, a troop can't be picked up and moved")
+	main._end_drag() if main.dragging != null else null
+	e.queue_free()
+	await _frames(3)
+	main.selected = null
+	main.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
+	check(not main.fighting() and main.dragging == sw, "F  ...the field clear: it can")
+	main._end_drag()
 
 
 # --- T ---------------------------------------------------------------------------------------

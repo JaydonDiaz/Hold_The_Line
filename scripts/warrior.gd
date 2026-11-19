@@ -242,6 +242,8 @@ const GARRISON_KINDS := ["archer", "mage", "frost", "alchemist", "bard"]
 const PERCH_BASE := 0.3      # how much further a crew reaches from a Tower (before its Lookout upgrades)
 const CLIMB_REACH := 30.0    # a troop ordered this near an empty Tower climbs into it
 var garrison = null          # the Tower this troop is posted in (null: on the ground)
+var broken := false          # a Tower brought down: rubble, out of the fight for good (no Healer brings it back); Engineers can rebuild it
+const REBUILD_TIME := 8.0    # seconds an Engineer works at a broken Tower to put it up again
 var crew_in = null           # a Tower's crew
 var perch := 0.0             # a Tower: how much further its crew reaches (0.3: 30%)
 var crew_rate := 1.0         # a Tower: its crew's attack time, times this
@@ -821,7 +823,7 @@ func _update_buffs() -> void:
 
 
 func is_active() -> bool:
-	return down_timer <= 0.0 and not is_queued_for_deletion()
+	return down_timer <= 0.0 and not broken and not is_queued_for_deletion()
 
 
 ## Something a Healer can keep with (as an anchor): there to follow while it's on the
@@ -1011,11 +1013,15 @@ func upgrade(p: int) -> void:
 
 
 func sell_value() -> int:
+	if broken:
+		return 0   # (rubble's worth nothing: rebuild it, or leave it)
 	var step: int = main.price_step
 	return int(spent * 0.6) if step <= 1 else roundi(spent * 0.6 / step) * step
 
 
 func stats_text() -> String:
+	if broken:
+		return "Broken - its crew's down off it. An Engineer can rebuild it, upgrades and all, for %dg (Rebuild, L)" % rebuild_cost()
 	if build_left > 0.0:
 		return "Under construction - an Engineer has %.1fs of work left on it" % build_left
 	var s := "HP %d/%d   Damage %.0f   Every %.2fs" % [ceili(hp), ceili(max_hp), damage, cooldown]
@@ -1279,6 +1285,9 @@ func take_damage(amount: float) -> void:
 	if hp <= 0.0 and summoned:
 		_crumble()
 		return
+	if hp <= 0.0 and kind == "tower":
+		_break()
+		return
 	if hp <= 0.0:
 		hp = 0.0
 		# Dies after the difficulty's down time unless it's revived first (in the Tutorial
@@ -1301,12 +1310,14 @@ func take_damage(amount: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if broken:
+		return   # (rubble: nothing to do until it's rebuilt)
 	if main.campaign:
 		main.credit = xp_kind()   # whatever this unit hurts this frame counts toward its training
 	if build_left > 0.0 and down_timer <= 0.0:
 		queue_redraw()   # a construction site: nothing works until the Engineer's done
 		return
-	if summoned and (not main.wave_active or not is_instance_valid(summoner) or summoner.is_queued_for_deletion()
+	if summoned and (not main.fighting() or not is_instance_valid(summoner) or summoner.is_queued_for_deletion()
 			or (clone_of != null and not summoner.is_active())):
 		_crumble()
 		return
@@ -2196,6 +2207,38 @@ func instrument_sound() -> String:
 
 
 ## An Engineer has finished building this emplacement: it starts working.
+## A Tower brought down: broken, rubble where it stood, its crew down off it; no Healer or
+## Medic Bay can bring it back. The player can have an Engineer rebuild it (rebuild_cost).
+func _break() -> void:
+	broken = true
+	hp = 0.0
+	down_timer = 0.0
+	target = null
+	if crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self:
+		crew_in.leave_tower()
+	main.spawn_burst(position + Vector2(0, -30), 40.0, Color(0.6, 0.58, 0.55))
+	main.spawn_text(position + Vector2(0, -50), "Broken!", Color(1, 0.4, 0.35))
+	main.sfx("crumble", 1.0)
+	main.paths.invalidate()
+	main.warriors_changed()
+	queue_redraw()
+
+
+## What it costs to have a broken Tower rebuilt: half of all that's been spent on it (its
+## upgrades included, so a well-upgraded tower costs more), never less than a third of a new one.
+func rebuild_cost() -> int:
+	return main.price(maxf(spent * 0.5, float(data["cost"]) / 3.0))
+
+
+## The order to rebuild it: an Engineer comes out and puts it up again, upgrades and all.
+func start_rebuild() -> void:
+	broken = false
+	hp = max_hp
+	build_left = REBUILD_TIME
+	main.send_engineer("build", self, position)
+	main.warriors_changed()
+
+
 func finish_build() -> void:
 	build_left = 0.0
 	main.spawn_burst(position + Vector2(0, -20), 30.0, Color(1.0, 0.9, 0.6))
@@ -2776,7 +2819,7 @@ func _support_update(delta: float) -> void:
 	match data["attack"]:
 		"perch":
 			# A Tower: its masons mend it while a wave is on.
-			if tower_repair > 0.0 and main.wave_active and hp < max_hp:
+			if tower_repair > 0.0 and main.fighting() and hp < max_hp:
 				_mend(tower_repair * delta)
 		"rune":
 			_rune_step(delta)
@@ -3118,7 +3161,7 @@ func _forms_step(delta: float) -> void:
 
 ## Necromancy: raise a skeleton now and then while a wave is on.
 func _summon_step(delta: float) -> void:
-	if not main.wave_active:
+	if not main.fighting():
 		summon_timer = minf(summon_timer, 2.0)
 		return
 	summon_timer -= delta
@@ -3132,7 +3175,7 @@ func _summon_step(delta: float) -> void:
 
 ## Mirror Self: once fighting in a wave, split off copies (again a while after one falls).
 func _multiform_step(delta: float) -> void:
-	if not main.wave_active:
+	if not main.fighting():
 		multiform_timer = 0.0
 		return
 	multiform_timer = maxf(multiform_timer - delta, 0.0)
@@ -4018,6 +4061,26 @@ func _draw_mounted(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Co
 ## A plain Tower: the stone tower, and on its battlements whoever's posted in it (as it
 ## looks, in its own upgrades, turned to what it's fighting, going through its own poses);
 ## empty battlements without a crew.
+## A broken Tower: the stump of its walls, its stones fallen round it, dust.
+func _draw_broken() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = get_instance_id()
+	draw_texture_rect(Sprites.shadow(), Rect2(-RADIUS * 1.5, RADIUS - 6, RADIUS * 3.0, 14), false, Color(0, 0, 0, 0.3))
+	var stone := Color(0.55, 0.53, 0.5)
+	draw_rect(Rect2(-17, -6, 34, 22), Color(0.1, 0.07, 0.1))
+	draw_rect(Rect2(-16, -5, 32, 20), stone.darkened(0.2))
+	for k in 3:
+		var h := 6.0 + rng.randf_range(0, 12)
+		draw_rect(Rect2(-16 + k * 11, -5 - h, 10, h), Color(0.1, 0.07, 0.1))
+		draw_rect(Rect2(-15 + k * 11, -4 - h, 8, h), stone if k % 2 == 0 else stone.darkened(0.1))
+	for k in 9:
+		var p := Vector2(rng.randf_range(-28, 28), rng.randf_range(4, 20))
+		draw_rect(Rect2(p, Vector2(rng.randf_range(4, 8), rng.randf_range(3, 6))), stone.darkened(rng.randf_range(0, 0.3)))
+	var font := ThemeDB.fallback_font
+	draw_string_outline(font, Vector2(-60, -30), "Broken", HORIZONTAL_ALIGNMENT_CENTER, 120, 12, 3, Color(0, 0, 0, 0.8))
+	draw_string(font, Vector2(-60, -30), "Broken", HORIZONTAL_ALIGNMENT_CENTER, 120, 12, Color(1.0, 0.6, 0.45))
+
+
 func _draw_tower(look: Dictionary, foot: Vector2, base_foot: Vector2, tint: Color) -> void:
 	var base_tex: Texture2D = look["mount"][0]
 	var c = crew_in if crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self else null
@@ -4093,6 +4156,9 @@ func _pose_tex(look: Dictionary, pose_name: String):
 
 
 func _draw() -> void:
+	if broken:
+		_draw_broken()
+		return
 	if build_left > 0.0:
 		_draw_construction()
 		return

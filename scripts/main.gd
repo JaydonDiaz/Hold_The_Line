@@ -417,7 +417,7 @@ func choose_mode(mode: String) -> void:
 func _process(delta: float) -> void:
 	mouse = pointer if mouse_stand_in == Vector2.INF else mouse_stand_in
 	# Between waves, the troop under the mouse perks up (it can be picked up and moved).
-	hovered = _warrior_at(mouse) if started and not wave_active and dragging == null and not group_drag \
+	hovered = _warrior_at(mouse) if started and not fighting() and dragging == null and not group_drag \
 			and placing_type == "" and mouse.y <= FIELD_H else null
 	_update_calls(delta)
 	if dragging != null:
@@ -460,7 +460,7 @@ func _process(delta: float) -> void:
 		elif auto_play and started and not wave_active:
 			if forced_auto:
 				auto_timer -= delta   # (a forced pace keeps the battle's own time)
-				if not deploying:
+				if not deploying and not fighting():
 					_rest(delta)
 			else:
 				auto_timer -= delta / maxf(Engine.time_scale, 1.0)   # real seconds, whatever the speed
@@ -1724,12 +1724,37 @@ func can_post_at(p: Vector2, ignore: Warrior = null) -> bool:
 ## L (or the Climb down button): the selected troop comes down out of its Tower, to its
 ## foot (and stays there until it's sent somewhere).
 func climb_down() -> void:
+	if selected is Warrior and selected.broken:
+		rebuild_selected()
+		return
 	if selected == null or not (selected is Warrior) or selected.garrison == null or not is_instance_valid(selected.garrison):
 		return
 	var t = selected.garrison
 	selected.leave_tower()
 	selected.set_post(paths.open_spot(_clamp_post(t.position + Vector2(0, 34))))
 	spawn_text(selected.position + Vector2(0, -40), "Climbs down", Color(0.75, 0.9, 1.0))
+
+
+## The selected broken Tower rebuilt (if there's the gold): an Engineer comes out to it.
+func rebuild_selected() -> void:
+	if not (selected is Warrior) or not selected.broken:
+		return
+	var cost: int = selected.rebuild_cost()
+	if gold < cost:
+		hud.show_message("Rebuilding it takes %dg." % cost)
+		return
+	gold -= cost
+	selected.spent += cost
+	selected.start_rebuild()
+	spawn_text(selected.position + Vector2(0, -50), "Rebuilding", Color(1.0, 0.9, 0.6))
+	sfx("place")
+
+
+## Whether the battle's on: a wave, or anything hostile on the field (an enemy, or one of
+## the battle's own, like the assault's archer towers). Troops can't be picked up and
+## moved about, and the breathers' mending waits, until it's over.
+func fighting() -> bool:
+	return wave_active or not get_enemies().is_empty() or rules.hostiles()
 
 
 ## An empty Tower at p that troop w could climb into (its own, if it's already in one), or
@@ -1983,7 +2008,7 @@ func _finish_box() -> void:
 		_set_group(now)
 		if now.is_empty():
 			selected = null
-	elif box_touch and wave_active and (selected != null or not group.is_empty()):
+	elif box_touch and fighting() and (selected != null or not group.is_empty()):
 		_order_at(box_start)   # a tap on open ground, on a touchscreen: send them there
 	else:
 		# Just a click on open field: clear the selection.
@@ -2048,7 +2073,7 @@ func _start_group_drag() -> void:
 
 
 func _update_group_drag() -> void:
-	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or wave_active:
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or fighting():
 		_end_group_drag()
 		return
 	var shift := mouse - drag_origin
@@ -2563,13 +2588,13 @@ func pointer_down(p: Vector2, button: int, shift := false, touch := false) -> vo
 		if w is Warrior and w.kind == "tower" and w.crew_in != null and is_instance_valid(w.crew_in) and w.crew_in.garrison == w \
 				and selected != w.crew_in:
 			w = w.crew_in   # a manned Tower: a click picks its crew (click again for the tower itself)
-		if touch and wave_active and w != null and w == selected and group.is_empty():
+		if touch and fighting() and w != null and w == selected and group.is_empty():
 			_cancel()   # a tap on the selected troop: let it go
 			return
 		if shift and w != null and _groupable(w):
 			_toggle_in_group(w)   # Shift+click: add or remove one troop
 			return
-		if w != null and group.has(w) and not wave_active:
+		if w != null and group.has(w) and not fighting():
 			_start_group_drag()   # drag the whole group between waves
 			return
 		if w == null and not on_castle(p) and _grave_at(p) == null:
@@ -2585,7 +2610,7 @@ func pointer_down(p: Vector2, button: int, shift := false, touch := false) -> vo
 		selected = w
 		selected_grave = _grave_at(p) if selected == null else null
 		castle_selected = selected == null and selected_grave == null and on_castle(p)
-		if selected != null and not wave_active:
+		if selected != null and not fighting():
 			_start_drag(selected)
 
 

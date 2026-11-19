@@ -248,6 +248,10 @@ func _towers() -> void:
 			"T  a troop following the ram too close keeps just clear of it (and gets there)")
 	close.queue_free()
 	check(low < hp0, "T  an enemy tower shoots a troop in reach")
+	main.clear_enemies()
+	main.wave_active = false
+	await _frames(2)
+	check(main.get_enemies().is_empty() and main.fighting(), "T  an enemy archer tower standing keeps the battle on (no troops picked up and moved meanwhile)")
 	# No tower stands on the ram's road (the nine-beacon route's extra ones too): the ram
 	# would roll through it.
 	var Maps = preload("res://scripts/maps.gd")

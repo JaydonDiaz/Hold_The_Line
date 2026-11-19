@@ -303,6 +303,12 @@ func boss_beaten(e) -> void:
 	e.take_damage(1e9, false)
 
 
+## Anything hostile of the battle's own on the field besides its enemies (the assault's
+## archer towers), so the battle's still on while it stands.
+func hostiles() -> bool:
+	return false
+
+
 ## Whether the battle music plays (or the field's peaceful music): during a wave, as ever.
 ## A battle can keep it going through the breathers between its waves.
 func battle_on() -> bool:

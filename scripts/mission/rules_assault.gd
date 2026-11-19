@@ -591,6 +591,14 @@ func wait_y() -> float:
 	return 0.0
 
 
+## An enemy archer tower still standing (not taken) keeps the battle on.
+func hostiles() -> bool:
+	for t in towers:
+		if is_instance_valid(t) and not t.taken:
+			return true
+	return false
+
+
 ## The battle music plays once the fighting's begun, until the field's clear.
 func battle_on() -> bool:
 	return main.wave_active or (main.wave > 0 and phase != "ready" and not moving_on)
