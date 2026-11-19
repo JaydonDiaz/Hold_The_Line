@@ -937,6 +937,7 @@ const STORY := {
 		{"who": "kaito", "text": "Breathe, Commander. Then strike.", "if": {"ally": "monastery"}},
 		{"who": "coralie", "text": "The Free Cities have paid for this battle in full. We intend to see it won.", "if": {"ally": "freecities"}},
 		{"who": "ysolde", "text": "When he charges, he leaves himself open after. That is when every one of us strikes."},
+		{"who": "hale", "text": "We can't hold him here. We fight him back the way we came, field by field, down to the camp, and every people of the Line waiting along the road. He doesn't reach that camp."},
 		{"who": "unbound", "text": "All of you, on one field. Good. Then I only have to win once."},
 	],
 	"ds_assault_outro": [

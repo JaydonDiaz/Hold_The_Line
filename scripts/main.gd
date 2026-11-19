@@ -544,6 +544,29 @@ func enemies_near(p: Vector2, r: float) -> Array:
 
 ## Your units (active or not) whose centres may be within r of p, from a grid built
 ## once a frame like enemies_near's.
+## The ground about to be hit by something warned (an Arrow Storm's or a Fireball's ring,
+## falling stone, burning ground, a boss's slam or charge): {"c", "r"} circles and
+## {"a", "b", "r"} lines. Troops get out of them (warrior._dodge). Worked out once a frame.
+func dangers() -> Array:
+	var f := Engine.get_process_frames()
+	if f == _dangers_frame:
+		return _dangers
+	_dangers_frame = f
+	_dangers = []
+	for n in get_tree().get_nodes_in_group("danger"):
+		var z: Dictionary = n.danger_zone()
+		if not z.is_empty():
+			_dangers.append(z)
+	for e in enemy_layer.get_children():
+		if not e.dead and (e.stomp_wind > 0.0 or e.charge_warn > 0.0):
+			_dangers.append_array(e.danger_zones())
+	return _dangers
+
+
+var _dangers: Array = []
+var _dangers_frame := -1
+
+
 func warriors_near(p: Vector2, r: float) -> Array:
 	var f := Engine.get_process_frames()
 	if f != _wgrid_frame:

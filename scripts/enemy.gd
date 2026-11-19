@@ -99,6 +99,7 @@ static var slimes_out := 0  # Slimes on the field, so troops only look out for t
 var breath_timer := 1.0
 var horn_timer := 15.0
 var enrage_at := 0.0
+var hp_floor := 0.0         # > 0: worn down to this, it goes no lower (rules.floor_reached is told, once)
 var enraged := false
 const STOMP_WARN := 0.9   # seconds a boss's slam shows its ring before it lands
 var stomp_wind := 0.0     # > 0 while it's winding up a slam
@@ -476,6 +477,17 @@ func _process(delta: float) -> void:
 ## How hard its blows land: less weakened, more when the Marshal's banner drives it on.
 func _hit_mult() -> float:
 	return (1.0 - weaken) * (1.0 + rally_dmg if rally > 0.0 else 1.0)
+
+
+## The ground about to be hit by this one's warned attacks (a slam winding up, a charge's
+## line), for troops to get out of: main.dangers().
+func danger_zones() -> Array:
+	var out := []
+	if stomp_wind > 0.0:
+		out.append({"c": position, "r": float(stomp["radius"])})
+	if charge_warn > 0.0:   # (warned charges only: an unwarned rush, the Ash Marshal's, can't be seen coming)
+		out.append({"a": position, "b": position + charge_dir * charge_len, "r": radius})
+	return out
 
 
 ## Ogre King: stomps when anything of yours is close, calls in help, and gets
@@ -1171,10 +1183,16 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 			amount *= ICE_BONUS
 			ice_over()
 	if main.campaign:
-		main.earn_xp(main.credit, minf(hp, amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))))
+		main.earn_xp(main.credit, minf(maxf(hp - hp_floor, 0.0), amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))))
 	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
 	if show_hit:
 		flash = 0.08
+	if hp_floor > 0.0 and hp < hp_floor:
+		hp = hp_floor
+		if not has_meta("floored"):
+			set_meta("floored", true)
+			if main.rules.has_method("floor_reached"):
+				main.rules.floor_reached(self)
 	if hp <= 0.0 and has_meta("undying"):
 		# Beaten, but this one isn't killed by it: the battle decides what happens (see the
 		# rules' boss_beaten).

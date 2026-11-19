@@ -207,6 +207,7 @@ func _slimes() -> void:
 	check(ki.can_hurt(sl), "S  a Martial Artist with Spirit Bolts does")
 	check(not tower.can_hurt(sl), "S  an Archer Tower doesn't")
 	check(cannon.can_hurt(sl), "S  a Cannoneer does (its shells explode)")
+	units["frost"].queue_free()   # (her cold ices it over, and then blades and arrows do bite: kept out of this)
 	await _frames(240)
 	check(sl.hp < sl.max_hp, "S  the magic users and the Spirit Bolt user wear it down (%.0f damage)" % (sl.max_hp - sl.hp))
 	check(units["swordsman"].target != sl and units["archer"].target != sl, "S  the Swordsman and Archer leave it alone")

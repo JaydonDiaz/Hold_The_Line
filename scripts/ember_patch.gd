@@ -12,6 +12,15 @@ var t := 0.0
 var tick := 0.0
 
 
+func _ready() -> void:
+	add_to_group("danger")
+
+
+## The patch, marked or burning: troops get off it (main.dangers()).
+func danger_zone() -> Dictionary:
+	return {"c": position, "r": radius}
+
+
 func _process(delta: float) -> void:
 	if main.game_over:
 		queue_free()

@@ -868,6 +868,13 @@ class Volley extends Node2D:
 	var landed := 0
 	var next_hit := 0.0
 
+	func _ready() -> void:
+		add_to_group("danger")
+
+	## Where it'll come down, for troops to get out of (main.dangers()).
+	func danger_zone() -> Dictionary:
+		return {"c": position, "r": radius} if landed < hits else {}
+
 	func _process(delta: float) -> void:
 		if main.game_over:
 			queue_free()

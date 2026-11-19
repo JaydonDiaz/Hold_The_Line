@@ -326,6 +326,11 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 		main.hud.show_message(r["note"])
 	if not restored:
 		checkpoint()
+	# The Ogre King speaks the moment the army comes into his throne room: the game holds
+	# still until he's done.
+	if king != null and is_instance_valid(king) and not told_throne:
+		told_throne = true
+		_story("ds_throne", func(): pass)
 
 
 ## A unit back on the field: at the door, walking on to its place.
@@ -468,9 +473,6 @@ func process(delta: float) -> void:
 				elif _waves() > 0:
 					main.deploying = false
 					main.start_wave(true)   # (the room's first wave at once: no lull on coming in)
-				elif king != null and is_instance_valid(king) and not told_throne:
-					told_throne = true
-					_story("ds_throne", func(): pass)
 		"fight":
 			fight_t += delta
 			if king != null and is_instance_valid(king) and not king.has_meta("beaten"):
@@ -901,6 +903,9 @@ func _pan() -> void:
 	var size := Vector2(main.FIELD_W, main.FIELD_H)
 	var start_pos: Vector2 = main.position
 	var tw = main.create_tween()
+	# (It goes on while the game's held still: a story the new room starts with, his in the
+	# throne room or the field's, would otherwise leave the view stopped a whole field off.)
+	tw.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	tw.tween_property(main, "position", start_pos - out * size, PAN_TIME * 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	tw.tween_callback(func():
 		var coming := through.duplicate()
@@ -1055,6 +1060,10 @@ class RockFall extends Node2D:
 	var main
 	var damage := 40.0
 	var t := 0.0
+	func _ready() -> void:
+		add_to_group("danger")
+	func danger_zone() -> Dictionary:
+		return {"c": position, "r": RADIUS}
 	func _process(delta: float) -> void:
 		t += delta
 		if t >= WARN:

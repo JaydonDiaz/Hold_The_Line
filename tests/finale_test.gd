@@ -166,6 +166,7 @@ func _slam() -> void:
 	k.stomp_timer = 0.0
 	var stay = _unit("swordsman", k.position + Vector2(-40, 60))
 	stay.move_mode = "hold"
+	stay.dazed = 99.0   # (stunned: it can't get out)
 	var dodge = _unit("swordsman", k.position + Vector2(40, 60))
 	var hp_s: float = stay.hp
 	var hp_d: float = dodge.hp
@@ -176,11 +177,9 @@ func _slam() -> void:
 			warned = true
 			break
 	check(warned and stay.hp == hp_s, "S  his stomp shows its ring on the ground first (nobody's hit yet)")
-	dodge.position = k.position + Vector2(260, 200)
-	dodge.post = dodge.position
-	dodge.move_mode = "hold"
 	await _frames(70)
 	check(stay.hp < hp_s and dodge.hp == hp_d, "S  ...then lands on whoever's still in it, not on the troop that got clear")
+	check(dodge.position.distance_to(k.position) > float(k.stomp["radius"]), "S  ...the troop that could move got out of the ring by itself")
 
 
 func _unit(kind: String, at: Vector2):
@@ -236,6 +235,22 @@ func _throne_and_standard() -> void:
 	var gallery: Dictionary = CD.MISSIONS["ds_assault"]["assault"]["castle"]["rooms"][_room("gallery")]
 	check(gallery["doors"]["n"] == "throne", "T  the Long Gallery's way on is the Throne Room")
 	_minimum()
+	stories = 0
+	await _start(100 + _room("throne"), _throne_cp())
+	# Marching in (not taken up again): he speaks the moment the army comes through the door.
+	var rr = main.rules
+	for e in main.get_enemies():
+		e.queue_free()
+	for w in main.get_warriors():
+		w.queue_free()
+	await process_frame
+	rr.told_throne = false
+	stories = 0
+	rr._enter_room(rr.room_i, ARMY.map(func(rec): return [rec, 4.0]), 1.0, "s", false)
+	await process_frame
+	check(main.hud.story != null and main.get_tree().paused and rr.phase == "enter" and main.get_warriors().is_empty(),
+			"T  his cutscene plays the moment the army comes into the throne room, the game held still (nobody in yet)")
+	_skip_story()
 	stories = 0
 	await _start(100 + _room("throne"), _throne_cp())
 	var told := stories > 0
@@ -316,7 +331,7 @@ func _unbound_and_escape() -> void:
 
 
 ## Through the one way out, answered if asked.
-func _go(to: String) -> void:
+func _go(to: String, hold_on_arrival := false) -> void:
 	var r = main.rules
 	for i in 60 * 6:
 		if r.phase == "clear":
@@ -336,6 +351,8 @@ func _go(to: String) -> void:
 				c.pressed.emit()
 	for i in 60 * 20:
 		await _frames(1)
+		if hold_on_arrival and main.rules != r:
+			main.get_tree().paused = true   # (as a story the new ground starts with does)
 		if main.rules != r or (r.room()["id"] == to and r.phase == "clear"):
 			break
 
@@ -344,7 +361,14 @@ func _go(to: String) -> void:
 
 func _field() -> void:
 	var r = main.rules
-	await _go("field")
+	var view: Vector2 = main.position
+	await _go("field", true)
+	var mid: Vector2 = main.position
+	await _frames(90)
+	check(main.get_tree().paused and not mid.is_equal_approx(view) and main.position.is_equal_approx(view),
+			"F  the view slides all the way onto the field even with the game held still at once, as a story holds it (%s, was %s)" % [main.position, view])
+	_skip_story()
+	main.get_tree().paused = false
 	for i in 60 * 10:
 		await _frames(1)
 		if main.map_id == "ds_dawnfield":
@@ -357,7 +381,11 @@ func _field() -> void:
 	var want := 0
 	for fac in f.HELP:
 		want += f.help_points(fac)
-	check(main.temp_allies.size() == want and want >= 16, "F  ...every people's help, by what was done for them (%d units, %d points)" % [main.temp_allies.size(), want])
+	check(want >= 16, "F  every people's help, by what was done for them (%d points)" % want)
+	var here := 0
+	for fac in f.FIELDS[0]["help"]:
+		here += f.help_points(fac)
+	check(main.temp_allies.size() == here and here < want, "F  ...only the peoples waiting on this field are here at first (%d of %d)" % [main.temp_allies.size(), want])
 	check(f.escaped >= 9 and main.get_enemies().size() == f.escaped, "F  ...and his that got out of the castle are on the field (%d: the Cells' guards among them)" % f.escaped)
 	check(campaign.checkpoint("ds_assault", 300).get("zone", 0) == 300, "F  ...a checkpoint for the field")
 	# He comes out with the second wave.
@@ -387,12 +415,37 @@ func _field() -> void:
 			ex = k.vuln > vul0
 			break
 	check(warned and ex, "F  ...his charge shows its line on the ground first, and leaves him exposed (hit harder) after")
-	# Burning ground, shown first.
+	check(k.embers_timer == INF and k.horn.is_empty() and not k.enraged, "F  ...on the first field: the slam and the charge only")
 	for i in 60 * 5:
 		if k.exposed <= 0.0 and k.charging <= 0.0 and k.charge_warn <= 0.0:
 			break
 		await process_frame
+	# Worn down to his mark: he goes no lower, roars, and the army falls back.
 	k.charge_timer = 99.0
+	var army0: int = main.get_warriors().size()
+	k.take_damage(1e9)
+	check(not k.dead and is_equal_approx(k.hp, k.max_hp * 0.66) and f.fall_t > 0.0, "F  worn to 2/3 on the first field, he goes no lower: he roars, and it's time to fall back")
+	for i in 60 * 3:
+		await process_frame
+		if f.field == 1:
+			break
+	await _frames(5)
+	check(f.field == 1 and main.map_id == "ds_bailey", "F  ...the army falls back to the Outer Bailey")
+	here = 0
+	for fac in f.FIELDS[1]["help"]:
+		here += f.help_points(fac)
+	check(main.get_warriors().size() >= army0 + here, "F  ...carried as it stood, and the peoples dug in there join it (%d, was %d, +%d)" % [main.get_warriors().size(), army0, here])
+	var cp1: Dictionary = campaign.checkpoint("ds_assault", 301)
+	check(cp1.get("field", -1) == 1 and is_equal_approx(float(cp1.get("king", 0.0)), 0.66), "F  ...a checkpoint for the Bailey (him at 66%)")
+	check(f.king == null and f.king_in > 10.0, "F  ...with a lead on him (%.0fs)" % f.king_in)
+	f.king_in = 0.01
+	await _frames(3)
+	k = f.king
+	check(k != null and is_equal_approx(k.hp / k.max_hp, 0.66) and is_equal_approx(k.hp_floor / k.max_hp, 0.33), "F  he comes on after them, as he was; his mark here 1/3")
+	# Burning ground on the second field, shown first.
+	k.charge_timer = 99.0
+	k.stomp_timer = 99.0
+	k.speed = 0.0
 	k.position = Vector2(320, 300)
 	var near = _unit("archer", Vector2(260, 430))
 	if near != null:
@@ -400,7 +453,24 @@ func _field() -> void:
 	k.embers_timer = 0.0
 	await _frames(3)
 	var patches: Array = main.corpse_layer.get_children().filter(func(n): return n.get_script() == load("res://scripts/ember_patch.gd"))
-	check(not patches.is_empty() and patches[0].t < patches[0].warn, "F  ...his burning ground is marked before it catches")
+	check(not patches.is_empty() and patches[0].t < patches[0].warn, "F  ...here his burning ground too, marked before it catches")
+	await _frames(int(60 * 1.6))
+	check(near == null or near.position.distance_to(patches[0].position) > patches[0].radius, "F  ...and the troop it was marked under gets off it")
+	# He breaks through the bottom of the field: the army falls back anyway, the damage not done still to do.
+	k.position = Vector2(320, main.CASTLE_Y - 10.0)
+	k.speed = 40.0
+	for i in 60 * 4:
+		await process_frame
+		if f.field == 2:
+			break
+	await _frames(5)
+	check(f.field == 2 and main.map_id == "ds_approach" and f.king_hp > 0.6 and f.king_hp <= 0.66, "F  he breaks through the bottom of the Bailey: back to the Approach, him still at 66%")
+	check(f.king_in > 0.0 and f.king_in <= f.KING_PUSHED, "F  ...with less of a lead (%.0fs)" % f.king_in)
+	var cp2: Dictionary = campaign.checkpoint("ds_assault", 302).duplicate(true)
+	f.king_in = 0.01
+	await _frames(3)
+	k = f.king
+	check(k != null and k.enraged and not k.horn.is_empty() and k.hp_floor == 0.0, "F  on the Approach: enraged, his war horn, and nothing holding him up")
 	# Brought down: won, the fully united ending.
 	k.take_damage(1e9)
 	await _frames(30)
@@ -408,6 +478,17 @@ func _field() -> void:
 			"F  brought down, the horde breaks: the Liberation won, the fully united ending")
 	var outro: Array = campaign.story_lines("ds_assault_outro").map(func(l): return l["text"])
 	check(outro.any(func(t): return "tenth" in t), "F  ...its story the united ending's")
+	# Taken up again on the Approach: he reaches the camp, and it's lost.
+	_all_nine()
+	await _start(302, cp2)
+	await _frames(10)
+	f = main.rules
+	check(f.field == 2 and main.map_id == "ds_approach", "F  taken up again on the Approach")
+	f.king_in = 0.01
+	await _frames(3)
+	f.king.position = Vector2(320, f.CAMP_Y + 2.0)
+	await _frames(20)
+	check(main.game_over and not main.victory, "F  ...he reaches the camp: lost")
 	# Taken up again on the field.
 	_all_nine()
 	await _start(300, {"zone": 300, "name": "The Fields of Dawn", "gold": 333, "wave": 14, "army": ARMY, "xp": {}, "owned": [],

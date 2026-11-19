@@ -172,6 +172,7 @@ var regen_grant := []        # [fraction of max HP per second, seconds] given wi
 var revive := {}             # rez_speed, aura, full
 var rez_target = null        # downed ally this healer is reviving
 var rez_progress := 0.0      # seconds of channeling done on rez_target
+var rez_held := 0.0          # > 0 while a Healer is channeling a revive on this (downed) unit: its time doesn't run out
 # Support emplacements.
 var aura := {}               # statue buffs given: damage, rate, defense, speed
 var interest := []           # gold mine: [fraction, cap] paid at the end of each wave
@@ -318,6 +319,7 @@ var hurt := 0.0
 var down_timer := 0.0
 var walk := 0.0
 var moving := false
+var heading := Vector2.ZERO   # which way it last walked (for stepping round someone in its way)
 var build_left := 0.0      # an emplacement still being built: seconds of an Engineer's work left
 var build_total := 0.0
 var kiting := false        # a ranged troop backing away from an enemy that got too close
@@ -1400,7 +1402,11 @@ func _process(delta: float) -> void:
 		_garrison_step(delta)
 	if down_timer > 0.0:
 		# Healers and Medic Bays nearby keep a downed unit alive longer (or, without
-		# permadeath, get it up sooner).
+		# permadeath, get it up sooner). While one's reviving it, its time stands still.
+		if rez_held > 0.0:
+			rez_held -= delta
+			if main.permadeath:
+				return
 		down_timer -= delta / _recovery_aura() if main.permadeath else delta * _recovery_aura()
 		if down_timer <= 0.0:
 			if main.permadeath:
@@ -1451,6 +1457,11 @@ func _process(delta: float) -> void:
 	if call_help and in_danger() and not summoned:
 		main.call_for_help(self)
 	if _off_the_ice(delta):
+		_separate()
+		return
+	if _dodge(delta):
+		if absf(facing.x) > 0.2:
+			flip = signf(facing.x)
 		_separate()
 		return
 	if _fall_back(delta):
@@ -2115,7 +2126,8 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements() or main.paths.has_terrain()) \
 			and _way_blocked(stop, delta):
 		aim = _route_step(p, delta)
-	var next := position + position.direction_to(aim) * step
+	heading = position.direction_to(aim)
+	var next := position + heading * step
 	if not main.hazards.ice.is_empty() and main.hazards.cracking_at(next, RADIUS) and not main.hazards.cracking_at(position, RADIUS):
 		return   # ice cracking ahead: it won't step out onto it (it waits at the edge)
 	_step_to(next)
@@ -2193,6 +2205,11 @@ func _separate() -> void:
 		var d := off.length()
 		if d < RADIUS * 2.0 and d > 0.01:
 			position += off / d * (RADIUS * 2.0 - d) * (1.0 if w.is_emplacement() else 0.5)
+			# Someone in the way of where it's walking (two Healers meeting head on in a
+			# doorway): it steps to its right to get past, as the other does to its own right,
+			# instead of the two pushing each other back where they came from for ever.
+			if moving and heading.dot(-off / d) > 0.35 and not (w.moving and w.heading.dot(heading) > 0.3):
+				position += Vector2(-heading.y, heading.x) * 1.2
 	# Walls are solid to troops too (Phase Gates aside).
 	for b in main.paths.troop_walls:
 		var c := Geometry2D.get_closest_point_to_segment(position, b.seg_a(), b.seg_b())
@@ -2598,7 +2615,7 @@ func _healer_update(delta: float) -> void:
 	free_run = false
 	if c == "danger":
 		# Allies in danger first, wherever they are (its area doesn't hold it for them).
-		var urgent = _pick_in_danger()
+		var urgent = _pick_in_zone()
 		if urgent != null:
 			free_run = true
 			rez_target = null
@@ -2649,7 +2666,7 @@ func _healer_update(delta: float) -> void:
 
 
 ## The ally in the worst danger (in danger, or calling for help), or null.
-func _pick_in_danger():
+func _pick_in_zone():
 	var best = null
 	var best_frac := INF
 	for w in main.get_warriors():
@@ -2665,6 +2682,7 @@ func _pick_in_danger():
 ## Channels a revival on a downed ally; it gets up once the revive time is done.
 func _rez_step(downed, delta: float) -> void:
 	rez_progress += delta
+	downed.rez_held = 0.15   # (its dying time held while this goes on)
 	if rez_progress >= _revive_time():
 		downed.revived(1.0 if revive.get("full", false) else data["revive_hp"])
 		main.earn_xp(xp_kind(), 1.0, "revive")
@@ -3076,9 +3094,20 @@ func _within_reach(who):
 func _pick_downed(pool: Array = []):
 	var best = null
 	var best_score := INF
+	# A revival under way is seen through (its time's held, so it'd look the least urgent).
+	if rez_target != null and is_instance_valid(rez_target) and rez_progress > 0.0 and not rez_target.is_active() \
+			and not rez_target.is_queued_for_deletion() and rez_target.down_timer > 0.0 and (pool.is_empty() or pool.has(rez_target)):
+		return rez_target
+	# Those another Healer (or Medic Bay) is reviving already: left to it, for the others.
+	var taken := {}
+	for o in main.get_warriors():
+		if o != self and o.rez_target != null and o.is_active() and is_instance_valid(o.rez_target):
+			taken[o.rez_target] = true
 	for w in (pool if not pool.is_empty() else main.get_warriors()):
 		if w == self or w.is_active() or w.is_queued_for_deletion() or w.broken or w.down_timer <= 0.0 or not _ally_in_zone(w):
 			continue   # (a broken Tower, or one going up, isn't one to revive)
+		if taken.has(w):
+			continue
 		var score: float = w.down_timer * 100.0 if main.permadeath else position.distance_to(w.position)
 		if w == rez_target:
 			score -= 50.0   # don't abandon a revival halfway
@@ -3621,6 +3650,77 @@ func in_danger() -> bool:
 ## is), till it's mended or no enemy has come near for a moment. On the way a Healer keeps
 ## mending whoever's in reach (itself too) and a ranged troop keeps shooting; a melee troop
 ## just runs. Returns whether it's falling back this frame (it does nothing else then).
+## Out of the way of anything warned (main.dangers()): a troop standing where an Arrow
+## Storm, a Fireball, falling stone or the Ogre King's slam is about to land, or on
+## burning ground, or in the line of a charge, runs for the nearest open ground clear of
+## it, and goes back to what it was doing once it's out. True while it's getting clear.
+func _dodge(delta: float) -> bool:
+	if is_emplacement() or sheltered() or lift > 0.0:
+		dodging = false
+		return false
+	var zones: Array = main.dangers()
+	if zones.is_empty():
+		dodging = false
+		return false
+	var pad := RADIUS + (12.0 if dodging else 4.0)   # (once running, it gets well clear)
+	var hit = null
+	for z in zones:
+		if _in_danger_zone(z, position, pad):
+			hit = z
+			break
+	if hit == null:
+		dodging = false
+		return false
+	if not dodging:
+		dodging = true
+		dodge_to = _dodge_spot(hit, zones)
+	elif _in_danger_zone(hit, dodge_to, RADIUS + 10.0) or position.distance_to(dodge_to) < 3.0:
+		dodge_to = _dodge_spot(hit, zones)
+	facing = position.direction_to(dodge_to)
+	_move_toward(dodge_to, position.distance_to(dodge_to), delta)
+	return true
+
+
+var dodging := false
+var dodge_to := Vector2.ZERO
+
+
+static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
+	if z.has("c"):
+		return p.distance_to(z["c"]) < float(z["r"]) + pad
+	var c := Geometry2D.get_closest_point_to_segment(p, z["a"], z["b"])
+	return p.distance_to(c) < float(z["r"]) + pad
+
+
+## The nearest open ground out of `z` (and every other danger): round its edge, the
+## closest spot a troop can stand.
+func _dodge_spot(z: Dictionary, zones: Array) -> Vector2:
+	var away: Vector2
+	var edge: float = float(z["r"]) + RADIUS + 16.0
+	var c: Vector2
+	if z.has("c"):
+		c = z["c"]
+	else:
+		c = Geometry2D.get_closest_point_to_segment(position, z["a"], z["b"])
+	away = c.direction_to(position) if position.distance_to(c) > 1.0 else c.direction_to(post) if post.distance_to(c) > 1.0 else Vector2.DOWN
+	var best := position
+	var best_d := INF
+	for i in 16:
+		var dir := away.rotated(i * TAU / 16.0)
+		var spot: Vector2 = main._clamp_post(c + dir * edge)
+		if zones.any(func(o): return _in_danger_zone(o, spot, RADIUS + 4.0)):
+			continue
+		if not main.paths.terrain.is_empty() and main.paths.blocked(spot, RADIUS):
+			continue
+		var d := position.distance_to(spot)
+		if d < best_d:
+			best_d = d
+			best = spot
+	if best_d == INF:
+		best = main._clamp_post(c + away * edge)
+	return best
+
+
 func _fall_back(delta: float) -> bool:
 	if danger_mode != "fall_back" or is_emplacement() or wall_guard or summoned or clone_of != null:
 		retreating = false

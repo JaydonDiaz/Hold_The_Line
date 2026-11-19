@@ -431,6 +431,8 @@ func _volleys() -> void:
 	var a = _unit("swordsman", Vector2(320, 520))
 	var b = _unit("swordsman", Vector2(350, 520))
 	var far = _unit("swordsman", Vector2(520, 690))
+	a.dazed = 99.0   # (stunned: it can't get out of the ring)
+	b.dazed = 2.0    # (stunned for most of the warning, then it runs for it)
 	rules.volley_t = 0.01
 	await _frames(3)
 	var fall = null
@@ -439,12 +441,13 @@ func _volleys() -> void:
 			fall = n
 	check(fall != null and fall.position.distance_to(Vector2(335, 520)) < 30.0, "V  a volley aims at the knot of troops, with a ring on the ground first")
 	var hp_a: float = a.hp
+	var fall_at: Vector2 = fall.position
+	var fall_r: float = fall.radius
 	await _frames(int(60 * 2.0))
 	check(a.hp == hp_a, "V  ...nothing lands during the warning")
-	b.order_to(Vector2(335, 680))
-	b.post = Vector2(335, 680)
-	b.position = Vector2(335, 680)
-	await _frames(int(60 * 2.5))
+	await _frames(int(60 * 1.3))
+	check(b.position.distance_to(fall_at) > fall_r, "V  a troop free to move gets out of the ring by itself before it lands")
+	await _frames(int(60 * 1.2))
 	check(a.hp < hp_a and b.hp == b.max_hp and far.hp == far.max_hp, "V  then it hits who's still inside, and nobody who got clear")
 
 
