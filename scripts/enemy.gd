@@ -743,7 +743,7 @@ func _breathe(delta: float) -> void:
 		best = aggro   # whoever's attacking it gets the fire first
 	else:
 		for w in main.get_warriors():
-			if not w.is_active() or w.sheltered():
+			if not w.is_active() or w.sheltered() or w.unmanned_tower():
 				continue
 			var d: float = position.distance_to(w.position) - w.RADIUS
 			if d < best_d:
@@ -799,7 +799,7 @@ func _shoot_from_range() -> bool:
 	# arrows that don't bring anyone to it, it leaves the troops be and pushes on.
 	var troops: Array = [] if press_on > 0.0 else main.warriors_near(position, r + 40.0)
 	for w in troops:
-		if not w.is_active() or w.sheltered():
+		if not w.is_active() or w.sheltered() or w.unmanned_tower():
 			continue
 		var d: float = position.distance_to(w.position) - w.RADIUS - radius
 		if d <= r and d < best and not _wall_across(position, w.position):
@@ -1050,7 +1050,7 @@ func _sap_valid(o) -> bool:
 		return false
 	if o is BarricadeScript:
 		return true
-	return o.data.get("emplacement", false)
+	return o.data.get("emplacement", false) and not o.unmanned_tower()
 
 
 ## How far it is from the Sapper's reach (0: it's there).
@@ -1096,7 +1096,7 @@ func _find_blocker():
 	var best = null
 	var best_d := INF
 	for w in main.warriors_near(position, radius + REACH + 24.0):
-		if not w.is_active() or w.sheltered():
+		if not w.is_active() or w.sheltered() or w.unmanned_tower():
 			continue
 		var d: float = position.distance_to(w.position) - radius - w.RADIUS
 		if d <= REACH and d < best_d:

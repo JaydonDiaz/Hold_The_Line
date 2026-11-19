@@ -659,7 +659,7 @@ func _towers(delta: float) -> void:
 				var mark = null
 				var best := TOWER_RANGE
 				for w in main.warriors_near(t.position, TOWER_RANGE + 40.0):
-					if w.is_active() and not w.wall_guard and not w.sheltered():
+					if w.is_active() and not w.wall_guard and not w.sheltered() and not w.unmanned_tower():
 						var d: float = t.position.distance_to(w.position) - w.RADIUS
 						if d <= best:
 							best = d

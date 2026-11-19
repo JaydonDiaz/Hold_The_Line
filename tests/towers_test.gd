@@ -214,6 +214,7 @@ func _rubble() -> void:
 			"R  a Tower brought down is broken: out of the fight, its crew down off it, worth nothing sold")
 	await _frames(60 * 6)
 	check(t.broken and not t.is_queued_for_deletion(), "R  ...and stays broken: no Healer brings it back (nor does it vanish)")
+	check(h.rez_target != t and h._pick_downed() == null, "R  ...nor does one even try to")
 	var cost: int = t.rebuild_cost()
 	var bare = _hire("tower", Vector2(480, 480))
 	bare.take_damage(1e6)
@@ -260,6 +261,16 @@ func _tower() -> void:
 	await _frames(120)
 	check(t != null and e.hp == e.max_hp and not Data.WARRIORS.has("magetower") and not Data.WARRIORS.has("frosttower"),
 			"T  a plain Tower doesn't fight by itself (and there's no Mage or Frost Tower any more)")
+	# Nobody up it: nothing for the enemy to go after.
+	var by = _foe("orc", t.position + Vector2(0, 30), 1e5)
+	by.speed = 0.0
+	var sk = _foe("skeleton_archer", t.position + Vector2(0, -120), 1e5)
+	sk.speed = 0.0
+	var t_hp: float = t.hp
+	await _frames(60 * 3)
+	check(t.hp == t_hp and by._find_blocker() == null, "T  an empty Tower: the enemy doesn't go after it (no blows, no arrows)")
+	by.queue_free()
+	sk.queue_free()
 	e.queue_free()
 	main.wave_active = false
 	var a = _hire("archer", Vector2(200, 620))

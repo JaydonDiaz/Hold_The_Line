@@ -822,6 +822,11 @@ func _update_buffs() -> void:
 	buff["defense"] += field
 
 
+## An empty Tower (nobody up it): nothing for the enemy to go after, so it doesn't.
+func unmanned_tower() -> bool:
+	return kind == "tower" and not (crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self)
+
+
 func is_active() -> bool:
 	return down_timer <= 0.0 and not broken and not is_queued_for_deletion()
 
@@ -2984,8 +2989,8 @@ func _pick_downed(pool: Array = []):
 	var best = null
 	var best_score := INF
 	for w in (pool if not pool.is_empty() else main.get_warriors()):
-		if w == self or w.is_active() or w.is_queued_for_deletion() or not _ally_in_zone(w):
-			continue
+		if w == self or w.is_active() or w.is_queued_for_deletion() or w.broken or w.down_timer <= 0.0 or not _ally_in_zone(w):
+			continue   # (a broken Tower, or one going up, isn't one to revive)
 		var score: float = w.down_timer * 100.0 if main.permadeath else position.distance_to(w.position)
 		if w == rez_target:
 			score -= 50.0   # don't abandon a revival halfway
