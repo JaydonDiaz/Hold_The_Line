@@ -434,14 +434,14 @@ const WARRIORS := {
 					"effect": {"multiform": {"copies": 1, "power": 1.6, "hp": 0.8, "cooldown": 6.0},
 						"stun": {"radius": 140.0, "duration": 2.6, "cooldown": 6.0}, "teleport": {"cooldown": 2.5, "min_dist": 80.0}}},
 			]},
-			{"name": "Discipline", "note": "The crimson aura and the golden form stack.", "tiers": [
+			{"name": "Discipline", "note": "Golden Ascension turns the crimson aura golden.", "tiers": [
 				{"name": "Mountain Training", "cost": 85, "desc": "+15% damage, attacks 10% faster", "effect": {"damage": 1.15, "rate": 0.9}},
 				{"name": "Iron Will", "cost": 130, "desc": "30% chance to dodge enemy attacks. Below half health: +40% damage, attacks 25% faster",
 					"effect": {"evade": 0.3, "rage": {"below": 0.5, "damage": 1.4, "rate": 1.25}}},
 				{"name": "Crimson Aura", "cost": 220, "desc": "Every 15s, a crimson aura for 5s: 2x dmg, 50% faster attacks and moves; burns 3% HP/s",
 					"effect": {"crimson": {"cooldown": 15.0, "duration": 5.0, "damage": 2.0, "rate": 1.5, "speed": 1.5, "drain": 0.03}}},
-				{"name": "Golden Ascension", "cost": 380, "desc": "Goes golden for 12s (every 30s): 2.5x dmg, 40% faster attacks, 30% faster moves",
-					"effect": {"golden": {"cooldown": 30.0, "duration": 12.0, "damage": 2.5, "rate": 1.4, "speed": 1.3}}},
+				{"name": "Golden Ascension", "cost": 380, "desc": "The aura turns golden: 8s of 2.5x dmg, +60% attack and +50% move speed; no burn",
+					"effect": {"golden": {"cooldown": 15.0, "duration": 8.0, "damage": 2.5, "rate": 1.6, "speed": 1.5}}},
 			]},
 		],
 	},

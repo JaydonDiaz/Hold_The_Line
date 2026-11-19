@@ -478,6 +478,19 @@ func _martial() -> void:
 			and paths[2]["tiers"][0]["effect"]["multiform"]["copies"] == 1 and paths[2]["tiers"][1]["effect"].has("stun")
 			and paths[2]["tiers"][2]["effect"].has("teleport") and paths[2]["tiers"][3]["effect"].has("multiform")
 			and paths[3]["tiers"][3]["effect"]["golden"]["damage"] == 2.5, "...with the same effects")
+	# Golden Ascension is the Crimson Aura made golden, not a second form beside it: every
+	# figure better, no burn.
+	var gold_ma = Warrior.new()
+	gold_ma.setup("martial", Data.WARRIORS["martial"], main, Vector2(320, 600))
+	gold_ma.tiers = [0, 0, 0, 3]
+	gold_ma._apply_upgrades()
+	var cr: Dictionary = gold_ma.crimson.duplicate()
+	gold_ma.tiers = [0, 0, 0, 4]
+	gold_ma._apply_upgrades()
+	check(not cr.is_empty() and gold_ma.crimson.is_empty() and not gold_ma.golden.is_empty() and gold_ma.golden["damage"] > cr["damage"] and gold_ma.golden["rate"] > cr["rate"]
+			and gold_ma.golden["speed"] >= cr["speed"] and gold_ma.golden["duration"] > cr["duration"] and gold_ma.golden["cooldown"] <= cr["cooldown"],
+			"Golden Ascension replaces the Crimson Aura (one form, every figure better, no burn)")
+	gold_ma.free()
 	# Tier III wears the path's own outfit; two at tier III mix them.
 	var ma = _hire("martial", Vector2(320, 560))
 	main.selected = ma

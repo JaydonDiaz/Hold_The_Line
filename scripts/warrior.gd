@@ -543,6 +543,9 @@ func _apply_upgrades() -> void:
 					set(key, fx[key])
 			wave_bonus = fx.get("wave_bonus", wave_bonus)
 			hauls += fx.get("hauls", 0)
+	# Golden Ascension is the crimson aura made golden: the one form, not both at once.
+	if not golden.is_empty():
+		crimson = {}
 	# Up in a Tower: the high ground (and the tower's upgrades) carry it further.
 	if garrison != null and is_instance_valid(garrison):
 		attack_range *= 1.0 + garrison.perch
