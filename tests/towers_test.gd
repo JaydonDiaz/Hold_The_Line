@@ -235,11 +235,12 @@ func _ki() -> void:
 	var r: Array = await _volley([3, 0, 0, 0])
 	var shots: Array = r[1]
 	check(shots.size() >= 3 and shots.all(func(p): return p["splash"] > 0.0), "K  Blazing Spirit (tier III): its bolts burst on what they hit (%d bolts, splash %.0f)" % [shots.size(), shots[0]["splash"] if shots.size() > 0 else 0.0])
-	r = await _volley([4, 2, 0, 0])
+	r = await _volley([4, 2, 0, 0])   # (Spirit his main art: Brawling's extra hits are extra bolts)
 	var m = r[0]
 	shots = r[1]
 	var first: Array = shots.filter(func(p): return p["size"] > 1.0)
-	var want: float = 42.0 * m.blast_count * 1.2 * m._power()
+	var bomb: Dictionary = Data.WARRIORS["martial"]["paths"][0]["tiers"][3]["effect"]["blast"]
+	var want: float = float(bomb["damage"]) * m.blast_count * float(bomb["merge"]) * m._power()
 	check(m.blast_count == 5 and not first.is_empty() and is_equal_approx(first[0]["damage"], want) and first[0]["splash"] >= 50.0,
 			"K  Spirit Bomb (tier IV): the volley's %d bolts (Brawling's two extra counted) fused into one blast of %.0f, a bigger splash" % [m.blast_count, want])
 	await _frames(int(60 * 0.9) - 5)

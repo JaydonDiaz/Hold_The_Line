@@ -151,6 +151,7 @@ var combo_hits := 0          # hits per melee combo
 var knockback_chance := 0.0
 var knockback_force := 0.0
 var blast := {}              # damage, count, range, cooldown (Spirit path)
+var lifesteal := 0.0         # share of a punch's damage a Martial Artist gets back as health (Thousand Fists)
 var blast_count := 0         # blasts per volley (Brawling tiers add to this when Spirit is taken)
 var beam := {}               # damage, cooldown, width
 var evade := 0.0
@@ -430,6 +431,7 @@ func _apply_upgrades() -> void:
 	burst = 0.0
 	dash = {}
 	pierce = 0
+	lifesteal = 0.0
 	seek = false
 	magnet = {}
 	echo = {}
@@ -519,6 +521,7 @@ func _apply_upgrades() -> void:
 				if fx.has(key):
 					set(key, fx[key])
 			pierce = fx.get("pierce", pierce)
+			lifesteal = fx.get("lifesteal", lifesteal)
 			mortar = fx.get("mortar", mortar)
 			seek = fx.get("seek", seek)
 			thorns_dps = fx.get("thorns_dps", thorns_dps)
@@ -559,10 +562,13 @@ func _apply_upgrades() -> void:
 	if crew_in != null and is_instance_valid(crew_in):
 		crew_in.call_deferred("_apply_upgrades")   # (a Tower's upgrades reach its crew)
 	# Extra combo hits turn into extra blasts per volley once ki blasts are learned.
+	# (Only when Spirit's his main path: a brawler with Spirit on the side keeps his punches.)
 	blast_count = 0
-	if not blast.is_empty():
+	if not blast.is_empty() and spirit_first():
 		blast_count = int(blast["count"]) + extra_hits
 	else:
+		if not blast.is_empty():
+			blast_count = int(blast["count"])
 		combo_hits += extra_hits
 	queue_redraw()
 
@@ -671,6 +677,17 @@ func xp_kind() -> String:
 	if summoned:
 		return summoner.xp_kind() if is_instance_valid(summoner) else ""
 	return kind
+
+
+## A Martial Artist whose Spirit path is his main one (no other trained further): he fights
+## from bolt range. One with Spirit as a side art closes in to brawl like any other.
+func spirit_first() -> bool:
+	if blast.is_empty():
+		return false
+	for p in range(1, 4):
+		if int(tiers[p]) > int(tiers[0]):
+			return false
+	return true
 
 
 func is_melee() -> bool:
@@ -1515,8 +1532,10 @@ func _process(delta: float) -> void:
 		if not teleport.is_empty() and teleport_timer <= 0.0 and garrison == null and _should_blink(target, gap):
 			_blink_to(target)
 			gap = _gap_to(target)
-		if not blast.is_empty():
-			# Spirit users hold at blast range and fire volleys; they still punch anything that closes in.
+		if not blast.is_empty() and spirit_first():
+			# Spirit users hold at blast range and fire volleys; they still punch anything that
+			# closes in. (A brawler with a little Spirit closes in instead, throwing bolts on the
+			# way: see below.)
 			var r: float = blast["range"]
 			if not _sees(target):
 				_chase_move(target.position, gap, delta)   # a wall's in the way: go round it
@@ -1595,6 +1614,8 @@ func _continue_combo(delta: float) -> void:
 	main.sfx("punch", 0.85 if combo_left == 0 else 1.0 + 0.05 * combo_left)
 	v.take_damage(damage * _power())
 	_hit_spark(v)
+	if lifesteal > 0.0:
+		_mend(damage * _power() * lifesteal)   # (Thousand Fists: every blow puts some fight back in him)
 	# Only the finishing hit can knock back, so the combo isn't cut short.
 	if combo_left == 0 and randf() < knockback_chance:
 		v.apply_knockback(facing * knockback_force)
@@ -3203,6 +3224,8 @@ func _forms_step(delta: float) -> void:
 		golden_left = golden["duration"]
 		golden_timer = golden["cooldown"]
 		main.spawn_text(position + Vector2(0, -50), "Golden Ascension!", Color(1.0, 0.88, 0.3))
+		if golden.has("heal"):
+			_mend(max_hp * float(golden["heal"]))   # (a second wind as it goes golden)
 		main.sfx("powerup", 1.25)
 		main.spawn_flash(position + Vector2(0, -16), 46.0)
 	if not crimson.is_empty() and crimson_timer <= 0.0 and fighting:
