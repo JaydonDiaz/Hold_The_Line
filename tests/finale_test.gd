@@ -26,6 +26,8 @@ extends SceneTree
 
 const TEST_SAVE := "user://finale_test_campaign.cfg"
 const CD = preload("res://scripts/campaign_data.gd")
+const Data = preload("res://scripts/data.gd")
+const OathArts = preload("res://scripts/mission/oath_arts.gd")
 
 var main
 var fails := 0
@@ -137,6 +139,7 @@ func _run() -> void:
 	await _throne_and_standard()
 	await _unbound_and_escape()
 	await _field()
+	await _arts()
 	if main != null:
 		main.get_tree().paused = false
 		main.free()
@@ -424,8 +427,13 @@ func _field() -> void:
 	k.charge_timer = 99.0
 	var army0: int = main.get_warriors().size()
 	k.take_damage(1e9)
-	check(not k.dead and is_equal_approx(k.hp, k.max_hp * 0.66) and f.fall_t > 0.0, "F  worn to 2/3 on the first field, he goes no lower: he roars, and it's time to fall back")
-	for i in 60 * 3:
+	check(not k.dead and is_equal_approx(k.hp, k.max_hp * 0.66) and f.wrath != null, "F  worn to 2/3 on the first field, he goes no lower: he calls up the beacon's fire")
+	await _frames(60)
+	var front0: float = f.wrath.front
+	var burnt: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and w.position.y < front0)
+	check(f.field == 0 and f.wrath.front > k.position.y and burnt.is_empty(),
+			"F  ...a wall of flame rolls down the field from him, the army running ahead of it (%d caught)" % burnt.size())
+	for i in 60 * 15:
 		await process_frame
 		if f.field == 1:
 			break
@@ -434,7 +442,7 @@ func _field() -> void:
 	here = 0
 	for fac in f.FIELDS[1]["help"]:
 		here += f.help_points(fac)
-	check(main.get_warriors().size() >= army0 + here, "F  ...carried as it stood, and the peoples dug in there join it (%d, was %d, +%d)" % [main.get_warriors().size(), army0, here])
+	check(main.get_warriors().size() >= army0 + here - 1, "F  ...carried as it stood, and the peoples dug in there join it (%d, was %d, +%d)" % [main.get_warriors().size(), army0, here])
 	var cp1: Dictionary = campaign.checkpoint("ds_assault", 301)
 	check(cp1.get("field", -1) == 1 and is_equal_approx(float(cp1.get("king", 0.0)), 0.66), "F  ...a checkpoint for the Bailey (him at 66%)")
 	check(f.king == null and f.king_in > 10.0, "F  ...with a lead on him (%.0fs)" % f.king_in)
@@ -496,3 +504,115 @@ func _field() -> void:
 	await _frames(10)
 	check(main.rules.get_script() == load("res://scripts/mission/rules_finale.gd") and main.gold == 333 and main.get_warriors().filter(func(w): return not main.temp_allies.has(w)).size() == ARMY.size(),
 			"F  taken up again on the field: as the army came out onto it")
+
+
+# --- O ---------------------------------------------------------------------------------------
+
+## His arts, each the art of one people of the Line; his health by the army he faces.
+func _arts() -> void:
+	_all_nine()
+	await _start(300, {"zone": 300, "field": 2, "name": "The Approach", "gold": 100, "wave": 14, "army": ARMY, "xp": {}, "owned": [],
+			"standard": 1.0, "king": 1.0, "escaped": 0, "garrisons": []})
+	await _frames(5)
+	var f = main.rules
+	main.clear_enemies()
+	for w in main.get_warriors():
+		w.queue_free()
+	await _frames(2)
+	# His health, by the army.
+	var few = _unit("swordsman", Vector2(320, 600))
+	check(is_equal_approx(f.army_mult(), 1.0), "O  against a small army he's as strong as ever (x%.2f)" % f.army_mult())
+	for i in 14:
+		var w = _unit(["mage", "martial", "archer", "healer"][i % 4], Vector2(80 + (i % 7) * 70, 560 + (i / 7) * 60))
+		if w != null:
+			w.tiers = [4, 2, 0, 0]
+			w._apply_upgrades()
+	var mult: float = f.army_mult()
+	check(mult > 1.5, "O  against a big, well-trained army he's that much stronger (x%.2f)" % mult)
+	f.king_in = 0.01
+	await _frames(3)
+	var k = f.king
+	check(k != null and k.max_hp > Data.ENEMIES["ogre_unbound"]["hp"] * f.KING_HP * 1.4, "O  ...his health grown to match (%.0f)" % (k.max_hp if k else 0.0))
+	k.speed = 0.0
+	k.position = Vector2(320, 200)
+	k.stomp_timer = 999.0
+	k.charge_timer = 999.0
+	k.embers_timer = 999.0
+	k.horn_timer = 999.0
+	f.art_t = 999.0
+	# Greenwood's: fire arrows that follow their troops.
+	f.use_art("greenwood")
+	await _frames(2)
+	var arrows: Array = main.fx_layer.get_children().filter(func(n): return n is OathArts.OathArrow)
+	check(arrows.size() >= 4, "O  Greenwood's art turned on you: fire arrows, one at each of the farthest troops (%d)" % arrows.size())
+	var t0: Array = main.get_warriors().map(func(w): return w.hp)
+	await _frames(90)
+	var hurt := 0
+	var ws: Array = main.get_warriors()
+	for i in mini(ws.size(), t0.size()):
+		if ws[i].hp < t0[i]:
+			hurt += 1
+	check(hurt >= 4, "O  ...they find them (%d hurt)" % hurt)
+	# Stonehollow's: a bolt's line on the ground first, then through whoever's in it.
+	var pinned = f._make_unit({"kind": "swordsman", "post": Vector2(320, 450)})
+	pinned.dazed = 99.0
+	var hp_p: float = pinned.hp
+	f.use_art("stonehollow")
+	await _frames(2)
+	var lances: Array = main.corpse_layer.get_children().filter(func(n): return n is OathArts.OathLance)
+	check(lances.size() == 1 and main.dangers().size() >= 1, "O  Stonehollow's: a ballista bolt's line shown on the ground first")
+	await _frames(90)
+	check(pinned.hp < hp_p, "O  ...then the bolt, through whoever's still in its line")
+	# Frostmarch's: a ring of frost; whoever's still in it is frozen.
+	var cold = f._make_unit({"kind": "swordsman", "post": Vector2(330, 470)})
+	cold.dazed = 0.3
+	cold.move_mode = "hold"
+	f.use_art("frostmarch")
+	await _frames(2)
+	var rings: Array = main.corpse_layer.get_children().filter(func(n): return n is OathArts.WinterRing)
+	check(rings.size() == 1, "O  Frostmarch's: a ring of frost on the ground")
+	var ring_at: Vector2 = rings[0].position if rings.size() == 1 else Vector2.ZERO
+	cold.position = ring_at
+	cold.dazed = 99.0
+	await _frames(110)
+	check(cold.dazed > 1.0 and cold.hp < cold.max_hp, "O  ...whoever's still in it when it lands is frozen")
+	# Deepdelve's and the Monastery's: shells and a Spirit Bomb, rings on the ground first.
+	var shells0: int = main.dangers().size()
+	f.use_art("deepdelve")
+	f.use_art("monastery")
+	await _frames(2)
+	check(main.dangers().size() >= shells0 + 3, "O  Deepdelve's shells and the Monastery's Spirit Bomb, each marked on the ground (%d)" % (main.dangers().size() - shells0))
+	# The Spires': the dead rise round him.
+	var e0: int = main.get_enemies().size()
+	f.use_art("spires")
+	await _frames(2)
+	check(main.get_enemies().size() >= e0 + 3, "O  the Spires' necromancy: the dead rise round him (%d)" % (main.get_enemies().size() - e0))
+	# The Free Cities': a dirge: the army round him weakened, his horde driven on.
+	var near = f._make_unit({"kind": "swordsman", "post": k.position + Vector2(60, 120)})
+	near.move_mode = "hold"
+	main.spawn_minion("orc", 10, k.position + Vector2(-60, 40))
+	var minion = main.get_enemies()[-1]
+	minion.speed = 0.0
+	f.use_art("freecities")
+	await _frames(20)
+	check(near.hex_left > 0.0 and near.buff["damage"] < 0.0 and minion.rally > 0.0, "O  the Free Cities': a dirge: the army near him weakened, his horde driven on")
+	# Mercyvale's: Stolen Mercy, drawn first: hit him hard and it's broken off; let it be and it heals.
+	for w in main.get_warriors():
+		w.queue_free()
+	var keep = f._make_unit({"kind": "swordsman", "post": Vector2(600, 700)})   # (one left: the army isn't gone)
+	keep.move_mode = "hold"
+	main.spawn_minion("orc", 10, k.position + Vector2(60, 40))
+	minion = main.get_enemies()[-1]
+	minion.speed = 0.0
+	await _frames(2)
+	minion.hp = minion.max_hp * 0.3
+	k.hp = k.max_hp * 0.5
+	f.use_art("mercyvale")
+	await _frames(10)
+	k.take_damage(k.max_hp * 0.05)
+	await _frames(150)
+	check(minion.hp < minion.max_hp * 0.5, "O  Mercyvale's: Stolen Mercy, broken off by hitting him hard while he draws it")
+	f.use_art("mercyvale")
+	await _frames(150)
+	check(minion.hp > minion.max_hp * 0.6, "O  ...let be, it mends his horde round him")
+

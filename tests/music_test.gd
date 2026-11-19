@@ -65,6 +65,16 @@ func _run() -> void:
 		var sync: AudioStreamSynchronized = main.audio._music[track]
 		check(sync.stream_count == main.audio.INSTRUMENTS.size() + 1, "%s: a part for each of the %d Bard instruments" % [track, main.audio.INSTRUMENTS.size()])
 	check(await _playing() == "title", "the title screen plays the title music")
+	# A piece still being composed: what's playing goes on meanwhile (not the meadow's battle music).
+	var au = main.audio
+	var had_it: bool = au._music.has("battle_throne")
+	var kept = au._music.get("battle_throne")
+	au._music.erase("battle_throne")
+	au.set_track("battle_throne")
+	check(await _playing() == "title", "a piece still being composed: the music that's playing goes on till it's ready, not the meadow's")
+	if had_it:
+		au._music["battle_throne"] = kept
+	au.set_track("title")
 	# Classic: the meadow's peaceful music, the battle music in a wave.
 	main.hud.picking = true
 	main.choose_mode("normal")

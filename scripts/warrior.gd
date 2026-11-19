@@ -283,6 +283,8 @@ var gems := []               # Gold Mine Gemcutters
 var mortar := false          # Cannoneer Mortar: shells clear walls
 # Statue buffs this unit is standing in (the strongest nearby statue for each).
 var buff := {"damage": 0.0, "rate": 0.0, "defense": 0.0, "speed": 0.0, "regen": 0.0, "recover": 0.0}
+var hex := {}            # buffs taken off it for a while (the Ogre King's dirge): key -> share
+var hex_left := 0.0
 var buff_timer := 0.0
 # Regeneration received from a Healer.
 var regen_rate := 0.0
@@ -879,6 +881,17 @@ func _update_buffs() -> void:
 	for b in main.paths.walls:
 		field = maxf(field, b.aegis_at(position))
 	buff["defense"] += field
+	# Hexed (the Ogre King's dirge): weaker, slower for a while.
+	if hex_left > 0.0:
+		for key in hex:
+			buff[key] -= float(hex[key])
+
+
+## Weakened for `secs` seconds: `what` (buff key -> share) off its buffs.
+func hex_for(what: Dictionary, secs: float) -> void:
+	hex = what.duplicate()
+	hex_left = maxf(hex_left, secs)
+	buff_timer = 0.0
 
 
 ## An empty Tower (nobody up it): nothing for the enemy to go after, so it doesn't.
@@ -1454,6 +1467,10 @@ func _process(delta: float) -> void:
 		buff_timer = 0.25
 		_update_buffs()
 	danger_t = maxf(danger_t - delta, 0.0)
+	if hex_left > 0.0:
+		hex_left -= delta
+		if hex_left <= 0.0:
+			buff_timer = 0.0   # (its strength back at once)
 	if call_help and in_danger() and not summoned:
 		main.call_for_help(self)
 	if _off_the_ice(delta):
@@ -3686,6 +3703,8 @@ var dodge_to := Vector2.ZERO
 
 
 static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
+	if z.has("above"):
+		return p.y < float(z["above"]) + pad   # (fire rolling down the field: everything above its front)
 	if z.has("c"):
 		return p.distance_to(z["c"]) < float(z["r"]) + pad
 	var c := Geometry2D.get_closest_point_to_segment(p, z["a"], z["b"])
@@ -3695,6 +3714,8 @@ static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
 ## The nearest open ground out of `z` (and every other danger): round its edge, the
 ## closest spot a troop can stand.
 func _dodge_spot(z: Dictionary, zones: Array) -> Vector2:
+	if z.has("above"):
+		return main._clamp_post(Vector2(position.x, float(z["above"]) + RADIUS + 60.0))   # (down the field, ahead of it)
 	var away: Vector2
 	var edge: float = float(z["r"]) + RADIUS + 16.0
 	var c: Vector2
@@ -4473,6 +4494,8 @@ func _draw() -> void:
 	var tint := Color(1, 0.45, 0.45) if hurt > 0.0 else Color.WHITE
 	if goo_timer > 0.0 and hurt <= 0.0:
 		tint = Color(0.7, 1.15, 0.6)   # slimed: green and sticky
+	elif hex_left > 0.0 and hurt <= 0.0:
+		tint = Color(0.85, 0.65, 1.15)   # hexed by his dirge: a sickly violet
 	if clone_of != null:
 		# A Mirror Self copy: see-through, tinted blue and flickering, so it's never taken for the real one.
 		tint *= Color(0.6, 0.85, 1.3, 0.5 + 0.12 * sin(Time.get_ticks_msec() / 90.0))

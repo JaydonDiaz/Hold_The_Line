@@ -488,7 +488,11 @@ func _process(_delta: float) -> void:
 	_pick_up()
 	var want := _wanted_track
 	if on_demand(want) and not _music.has(want):
-		want = "battle" if want.begins_with("battle") else "calm"   # (its own piece is still being composed: the usual one till then)
+		# Its own piece is still being composed: what's playing goes on till it's ready (the
+		# last room's battle music into the next's). Only with nothing playing yet, the usual one.
+		if _playing_track != "":
+			return
+		want = "battle" if want.begins_with("battle") else "calm"
 	if want == _playing_track:
 		return
 	if want != "" and not _music.has(want):

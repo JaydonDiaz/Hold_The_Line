@@ -12,7 +12,13 @@ extends "res://scripts/mission/rules.gd"
 ##                 lead (KING_PUSHED), the damage not done still to do. On the Approach he can
 ##                 be brought down; if he reaches the camp (CAMP_Y), it's lost.
 ##   His moves     one more each field: the slam and the charge; then burning ground; then
-##                 enraged, with his war horn
+##                 enraged, with his war horn. And his arts (ARTS, oath_arts.gd): the Line's own,
+##                 drawn from the oaths its peoples broke, more of them each field and more often
+##   The retreat   worn to a field's mark, he calls up the beacon's fire (BeaconWrath): a wall
+##                 of flame rolls down the field from him, burning whoever it catches; the army
+##                 runs before it, and once it's swept the field the battle goes on below
+##   His strength  his health grows with the army he's up against (ARMY_REF: what it'd cost to
+##                 field, the Line's help counted), worked out again on each field
 ##   The army      everyone who came out of the castle, as they were, and the crews who held
 ##                 the towers outside the walls; carried from field to field as it stands
 ##   The Line      help from every people, by what the army did for them (HELP): a point
@@ -41,7 +47,19 @@ const KING_EARNED := 14.0             # seconds' lead, falling back once he's wo
 const KING_PUSHED := 5.0              # ...and once he's walked off the bottom of a field instead
 const FALL_DELAY := 1.5               # his roar before the army falls back
 const KING_LEVEL := 13
-const KING_HP := 0.7                  # his health, times his data's
+const KING_HP := 0.7                  # his health, times his data's (against an army of ARMY_REF)
+const ARMY_REF := 6000.0              # an army worth this much (gold to field it) meets him at KING_HP; more, and he's that much the stronger
+const WRATH_SPEED := 75.0             # how fast the beacon's fire comes down the field
+const OathArts = preload("res://scripts/mission/oath_arts.gd")
+const Assault = preload("res://scripts/mission/rules_assault.gd")
+# His arts, by field: which he has (each the art of one people of the Line), and how often.
+const ARTS := [
+	{"every": 8.0, "arts": ["greenwood", "deepdelve", "stonehollow"]},
+	{"every": 6.5, "arts": ["greenwood", "deepdelve", "stonehollow", "spires", "frostmarch", "monastery"]},
+	{"every": 5.0, "arts": ["greenwood", "deepdelve", "stonehollow", "spires", "frostmarch", "monastery", "freecities", "mercyvale"]},
+]
+const ART_NAMES := {"greenwood": "Oathbreaker's Volley", "deepdelve": "Deep Charges", "stonehollow": "Iron Bolt", "spires": "Grave Rite",
+	"frostmarch": "Oath of Winter", "monastery": "Spirit Bomb", "freecities": "Discordant Dirge", "mercyvale": "Stolen Mercy"}
 # Each people's help on the field: its kind, and the path it's trained on.
 const HELP := {"stonehollow": ["ballista", 0], "greenwood": ["archer", 2], "deepdelve": ["cannon", 0], "mercyvale": ["healer", 0],
 	"frostmarch": ["frost", 0], "monastery": ["martial", 0], "freecities": ["bard", 0], "spires": ["mage", 1]}
@@ -54,6 +72,12 @@ var king_hp := 1.0         # his health (share) as he comes onto the next field
 var field := 0             # which of FIELDS
 var fall_t := -1.0         # > 0: his roar, then the army falls back
 var fall_earned := false
+var wrath = null           # the beacon's fire sweeping the field (oath_arts.gd BeaconWrath)
+var art_t := 4.0           # seconds to his next art
+var last_art := ""
+var mercy_t := -1.0        # > 0: he's drawing Stolen Mercy (hit hard enough, it's broken off)
+var mercy_hp := 0.0
+var seen_arts := {}        # those he's used (each named the first time)
 var over := false
 var garrisons: Array = []
 var freed := 0
@@ -281,6 +305,12 @@ func process(delta: float) -> void:
 		if fall_t <= 0.0:
 			_fall_back(fall_earned)
 		return
+	if wrath != null:
+		if king != null and is_instance_valid(king):
+			king.boss_hold = 1.0   # (he stands in the fire he's called up)
+		if wrath.swept:
+			_fall_back(true)
+		return
 	if not king_out:
 		if field == 0 and king_in < 0.0:
 			if main.wave - wave0 >= KING_AT_WAVE:
@@ -293,6 +323,9 @@ func process(delta: float) -> void:
 	if last_field() and king != null and is_instance_valid(king) and not king.dead and king.position.y >= CAMP_Y:
 		main.hud.show_message("The Ogre King has reached the camp!")
 		_end(false)
+		return
+	if king != null and is_instance_valid(king) and not king.dead:
+		_arts_step(delta)
 
 
 ## He comes onto the field after the army: from the gate (or the way the army's come), his
@@ -301,8 +334,10 @@ func _king_comes() -> void:
 	king_out = true
 	main._spawn_enemy("ogre_unbound", KING_LEVEL, Vector2(main.FIELD_W / 2.0, 60.0))
 	king = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
-	king.max_hp *= KING_HP
+	king.max_hp *= KING_HP * army_mult()
 	king.hp = king.max_hp * clampf(king_hp, 0.02, 1.0)
+	art_t = 4.0
+	mercy_t = -1.0
 	king.hp_floor = king.max_hp * float(FIELDS[field]["floor"])
 	king.goal = enemy_goal(king)
 	king.died.connect(_slain)
@@ -329,12 +364,23 @@ func _king_comes() -> void:
 func floor_reached(e) -> void:
 	if e != king or over or fall_t > 0.0:
 		return
-	fall_earned = true
-	fall_t = FALL_DELAY
+	if wrath != null:
+		return
+	# The beacon's fire: a wall of flame from him, rolling down the field. The army runs
+	# before it; once it's swept the field, the battle goes on below.
+	mercy_t = -1.0
+	wrath = OathArts.BeaconWrath.new()
+	wrath.main = main
+	wrath.front = e.position.y
+	wrath.speed = WRATH_SPEED
+	wrath.bottom = main.CASTLE_Y - 40.0
+	main.corpse_layer.add_child(wrath)
+	e.boss_hold = 1.0
 	main.spawn_burst(e.position, 140.0, Color(1.0, 0.3, 0.1))
 	main.spawn_flash(e.position, 110.0)
-	main.spawn_text(e.position + Vector2(0, -80), "ROAR!", Color(1.0, 0.4, 0.2))
-	main.hud.show_message("He draws on the beacon again. Fall back to %s!" % FIELDS[field + 1]["name"])
+	main.spawn_text(e.position + Vector2(0, -80), "THE BEACON'S WRATH!", Color(1.0, 0.4, 0.2))
+	main.sfx("boom", 0.6)
+	main.hud.show_message("He calls up the beacon's fire! Fall back to %s, ahead of the flames!" % FIELDS[field + 1]["name"])
 
 
 ## He's walked off the bottom of the field, through the army: it falls back after him.
@@ -362,6 +408,7 @@ func _fall_back(earned: bool) -> void:
 	king = null
 	king_out = false
 	king_in = KING_EARNED if earned else KING_PUSHED
+	wrath = null
 	var army := []
 	for w in main.warrior_layer.get_children():
 		if w.is_queued_for_deletion() or w.summoned or w.clone_of != null:
@@ -373,6 +420,186 @@ func _fall_back(earned: bool) -> void:
 	field += 1
 	_set_field(army, std, false)
 	checkpoint()
+
+
+## How much stronger he is for the army he's up against: what it'd cost to field (every
+## troop and emplacement and their training, the Line's help counted), against ARMY_REF.
+func army_mult() -> float:
+	var worth := 0.0
+	for w in main.get_warriors():
+		if w.is_queued_for_deletion() or w.summoned or w.clone_of != null:
+			continue
+		var d: Dictionary = Data.WARRIORS[w.kind]
+		worth += float(d["cost"])
+		for p in mini(d.get("paths", []).size(), 4):
+			for t in int(w.tiers[p]):
+				worth += float(d["paths"][p]["tiers"][t]["cost"])
+	return maxf(1.0, worth / ARMY_REF)
+
+
+## His arts: one every so often (more often each field), never the same twice running.
+func _arts_step(delta: float) -> void:
+	if mercy_t > 0.0:
+		# Drawing Stolen Mercy: hurt hard enough while he does, and it's broken off.
+		king.boss_hold = 0.2
+		if mercy_hp - king.hp >= king.max_hp * 0.04:
+			mercy_t = -1.0
+			main.spawn_text(king.position + Vector2(0, -80), "Broken off!", Color(1.0, 0.9, 0.5))
+			return
+		mercy_t -= delta
+		if mercy_t <= 0.0:
+			_mercy_lands()
+		return
+	if king.stomp_wind > 0.0 or king.charge_warn > 0.0 or king.charging > 0.0:
+		return
+	art_t -= delta
+	if art_t > 0.0:
+		return
+	var pack: Dictionary = ARTS[field]
+	art_t = float(pack["every"])
+	var pick: Array = (pack["arts"] as Array).filter(func(a): return a != last_art)
+	var art: String = pick.pick_random()
+	last_art = art
+	use_art(art)
+
+
+## The troops he can see to use his arts on (not those up a tower), farthest first.
+func _marks() -> Array:
+	var out: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.sheltered() and not w.is_emplacement())
+	out.sort_custom(func(a, b): return a.position.distance_to(king.position) > b.position.distance_to(king.position))
+	return out
+
+
+## The middle of the thickest knot of troops (or the troop nearest it).
+func _knot():
+	var best = null
+	var most := 0
+	for w in _marks():
+		var n: int = main.warriors_near(w.position, 70.0).filter(func(o): return o.is_active()).size()
+		if n > most:
+			most = n
+			best = w.position
+	return best
+
+
+## Art `art` (a people of the Line's), now.
+func use_art(art: String) -> void:
+	var at: Vector2 = king.position
+	var title: String = ART_NAMES[art]
+	main.spawn_text(at + Vector2(0, -90), title + "!", Color(1.0, 0.55, 0.25))
+	if not seen_arts.has(art):
+		seen_arts[art] = true
+		main.hud.show_message("%s: he turns %s's own art on you!" % [title, CD.FACTIONS[art]["name"]])
+	var lvl: float = 1.0 + 0.25 * field
+	match art:
+		"greenwood":
+			# Fire arrows that follow their troops, burning through any on the way.
+			for w in _marks().slice(0, 4 + field):
+				var a := OathArts.OathArrow.new()
+				a.main = main
+				a.target = w
+				a.position = at + Vector2(0, -king.radius)
+				a.damage = 38.0 * lvl
+				main.add_projectile(a)
+			main.sfx("bow", 0.7)
+		"deepdelve":
+			# Mortar shells on where the army stands thickest (rings first).
+			var spots := []
+			var k = _knot()
+			if k != null:
+				spots.append(k)
+			for w in _marks().slice(0, 2 + field):
+				spots.append(w.position)
+			for p in spots.slice(0, 2 + field):
+				var v := Assault.Volley.new()
+				v.main = main
+				v.position = p + Vector2(randf_range(-15, 15), randf_range(-15, 15))
+				v.radius = 60.0
+				v.hits = 1
+				v.damage = 70.0 * lvl
+				v.color = Color(1.0, 0.6, 0.2)
+				v.fire = true
+				v.warn = 1.8
+				main.add_projectile(v)
+			main.sfx("cannon", 0.7)
+		"stonehollow":
+			# A ballista bolt's line, through the thickest of them, then the bolt.
+			var k = _knot()
+			if k == null:
+				return
+			var dir: Vector2 = at.direction_to(k)
+			var l := OathArts.OathLance.new()
+			l.main = main
+			l.from = at
+			l.to = at + dir * 900.0
+			l.damage = 75.0 * lvl
+			main.corpse_layer.add_child(l)
+			main.sfx("lance", 0.6)
+		"spires":
+			# Necromancy: the dead rise round him.
+			for i in 3 + field:
+				main.spawn_minion("skeleton_archer", main.wave_level(maxi(main.wave, 1)), at + Vector2.from_angle(PI * 0.15 + i * 0.6) * (king.radius + 30.0))
+			main.spawn_burst(at, 90.0, Color(0.55, 0.9, 0.55))
+			main.sfx("rise", 0.8)
+		"frostmarch":
+			# A ring of frost under the thickest of them: frozen, whoever's still in it.
+			var k = _knot()
+			if k == null:
+				return
+			var r := OathArts.WinterRing.new()
+			r.main = main
+			r.position = k
+			r.radius = 70.0 + 10.0 * field
+			r.damage = 30.0 * lvl
+			main.corpse_layer.add_child(r)
+			main.sfx("frost", 0.7)
+		"monastery":
+			# A Spirit Bomb, gathered and thrown at the far end of the army.
+			var m: Array = _marks()
+			if m.is_empty():
+				return
+			var v := Assault.Volley.new()
+			v.main = main
+			v.position = m[0].position
+			v.radius = 85.0
+			v.hits = 1
+			v.damage = 110.0 * lvl
+			v.color = Color(1.0, 0.9, 0.4)
+			v.fire = true
+			v.warn = 2.2
+			main.add_projectile(v)
+			main.sfx("ki", 0.6)
+		"freecities":
+			# A dirge: the army round him weakened and slowed; his horde driven on.
+			for w in main.warriors_near(at, 220.0):
+				if w.is_active():
+					w.hex_for({"damage": 0.3, "rate": 0.25, "speed": 0.2}, 6.0)
+			for e in main.enemies_near(at, 220.0):
+				if not e.dead and e != king:
+					e.rally = 6.0
+					e.rally_dmg = 0.3
+					e.rally_speed = 0.25
+			main.spawn_burst(at, 220.0, Color(0.7, 0.4, 0.9))
+			main.sfx("violin", 0.6)
+		"mercyvale":
+			# Stolen Mercy: he draws it for a moment (break it off by hitting him hard), then
+			# it mends his horde round him, and him a little.
+			mercy_t = 2.0
+			mercy_hp = king.hp
+			main.spawn_burst(at, 60.0, Color(0.5, 1.0, 0.6))
+			main.sfx("heal", 0.6)
+
+
+## Stolen Mercy, drawn: his horde round him healed, and him a little.
+func _mercy_lands() -> void:
+	mercy_t = -1.0
+	var at: Vector2 = king.position
+	for e in main.enemies_near(at, 220.0):
+		if not e.dead and e != king:
+			e.hp = minf(e.max_hp, e.hp + e.max_hp * 0.4)
+	king.hp = minf(king.max_hp, king.hp + king.max_hp * 0.04)
+	main.spawn_burst(at, 220.0, Color(0.5, 1.0, 0.6))
+	main.spawn_text(at + Vector2(0, -80), "Healed!", Color(0.5, 1.0, 0.6))
 
 
 ## Brought down (on the Approach): the horde breaks.
