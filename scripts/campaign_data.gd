@@ -42,42 +42,42 @@ const FACTIONS := {
 		"unlocks": ["barricade", "repair", "path:0", "tower", "ballista"],
 		"gives": "Engineers: emplacements, Towers, Ballistae, barricades, repairs and Fortify",
 		"leader": "vell", "folk": ["engineer", "engineer", "engineer"],
-		"people": "Stonehollow's masons and engineers carve their town out of the mountain. Stubborn, proud and practical, they built the beacon towers of the old Line, and they still keep the plans."},
+		"people": "Stonehollow's masons and engineers, dwarves for the most part, carve their town out of the mountain. Stubborn, proud and practical, they built the beacon towers of the old Line, and they still keep the plans."},
 	"greenwood": {"name": "The Woodland Watch", "home": "Greenwood", "color": Color(0.45, 0.85, 0.4),
 		"unlocks": ["archer", "path:1", "ability:arrows"],
 		"gives": "Archers, Wall Archers and Arrow Storm",
 		"leader": "thorne", "folk": ["archer", "archer", "archer"],
-		"people": "The elves of the Woodland Watch, green-haired archers all, guard a forest older than any kingdom. Patient and wary, they trust no road they did not cut themselves, and no promise they have not seen kept."},
+		"people": "The elves of the Woodland Watch, green-haired archers all, guard a forest older than any kingdom, beside the Fae who keep its oldest groves. Patient and wary, they trust no road they did not cut themselves, and no promise they have not seen kept."},
 	"deepdelve": {"name": "The Mining Guild", "home": "Deepdelve", "color": Color(1.0, 0.8, 0.3),
 		"unlocks": ["mine", "cannon"],
 		"gives": "Gold Mines and Cannoneers",
 		"leader": "dagna", "folk": ["miner", "miner"],   # and a gun crew test-firing a cannon (cutscene.gd)
-		"people": "Under the eastern peaks, the miners of Deepdelve dig gold and iron and cast cannon in roaring forges. Loud, generous and quick to bargain, their gold once paid for half the Line."},
+		"people": "Under the eastern peaks, the dwarven miners of Deepdelve dig gold and iron and cast cannon in roaring forges. Loud, generous and quick to bargain, their gold once paid for half the Line, and they have argued with Stonehollow's guild over it ever since."},
 	"mercyvale": {"name": "The Sanctuary", "home": "Mercy Vale", "color": Color(0.95, 0.95, 0.7),
 		"unlocks": ["healer", "medbay", "ability:heal"],
 		"gives": "Healers, Medic Bays and Healing Light",
 		"leader": "ilse", "folk": ["healer", "healer", "healer"],
-		"people": "In the valley of shrines, the healers of the Sanctuary tend anyone wounded who reaches their gates, friend or foe. Gentle but unbending, they have sworn never to turn anyone away."},
+		"people": "In the valley of shrines, the healers of the Sanctuary tend anyone wounded who reaches their gates, friend or foe, of any people. Gentle but unbending, they have sworn never to turn anyone away."},
 	"frostmarch": {"name": "The Northern Covenant", "home": "Frostmarch", "color": Color(0.6, 0.88, 1.0),
 		"unlocks": ["frost", "ability:frost"],
 		"gives": "Frost Witches and Frost Orb",
 		"leader": "ysra", "folk": ["frost", "frost", "frost"],
-		"people": "In the frozen passes of the north, the frost witches of the Covenant keep old pacts with winter itself. Solemn and self-reliant, they remember every promise the south ever broke."},
+		"people": "In the frozen passes of the north, the frost witches of the Covenant keep old pacts with winter itself. Solemn and self-reliant, they remember every promise the south ever broke, and every winter the south left them to face alone."},
 	"freecities": {"name": "The Free Cities", "home": "The Free Cities", "color": Color(1.0, 0.6, 0.85),
 		"unlocks": ["bard", "alchemist", "statue", "ability:horn"],
 		"gives": "Bards, Alchemists, War Statues and Rally Horn",
 		"leader": "coralie", "folk": ["bard", "alchemist", "bard"],
-		"people": "The Free Cities glitter with music, markets and alchemy. Clever, worldly and always practical, their councils have stayed out of every war, and some say they profited from all of them."},
+		"people": "The Free Cities glitter with music, markets and alchemy, and with folk of every people. Clever, worldly and always practical, their councils have stayed out of every war, and some say they profited from all of them."},
 	"monastery": {"name": "The Martial Order", "home": "The High Monastery", "color": Color(1.0, 0.5, 0.35),
 		"unlocks": ["martial"],
 		"gives": "Martial Artists",
 		"leader": "kaito", "folk": ["martial", "martial", "martial"],
-		"people": "High on the mountain, the fighters of the Martial Order train body and spirit in silence. Disciplined and humble, they swore long ago to serve no king's ambition."},
+		"people": "High on the mountain, the fighters of the Martial Order train body and spirit in silence, and take disciples of any people. Disciplined and humble, they swore long ago to serve no king's ambition."},
 	"spires": {"name": "The Mage Conclave", "home": "The Arcane Spires", "color": Color(0.75, 0.55, 1.0),
 		"unlocks": ["mage", "obelisk", "path:2", "path:3", "ability:fireball", "ability:lightning"],
 		"gives": "Mages, Arcane Obelisks, Wall Mages, Ability Power, Fireball and Thunderstrike",
 		"leader": "ysolde", "folk": ["mage", "mage", "mage"],
-		"people": "In towers of crystal and starglass, the mages of the Conclave study the deepest arts. Brilliant and secretive, they alone remember how the beacons were truly lit."},
+		"people": "In towers of crystal and starglass, the mages of the Conclave study the deepest arts of every people: elven, dwarven, Marshborn and older still. Brilliant and secretive, they alone remember how the beacons were truly lit."},
 }
 
 # A territory is a short regional campaign:
@@ -665,8 +665,8 @@ const SPEAKERS := {
 # The prologue that opens a new campaign (cutscene.gd draws each scene). Nation scenes
 # take their text and leader from FACTIONS ("people", "leader", "folk").
 const PROLOGUE := [
-	{"scene": "beacons", "text": "Long ago, the peoples of this land swore an oath: when one was threatened, all would come. Beacon towers carried the call from hill to hill. They called it the Line."},
-	{"scene": "dark", "text": "But oaths grow old. Rivals quarrelled, kingdoms looked away while their neighbours burned, and one by one the beacons went dark."},
+	{"scene": "beacons", "text": "Long ago, the peoples of this land, humans and elves, dwarves and Marshborn, the Beastfolk of the plains and the clans of the wastes, warred over every mine, forest and road. At last they swore an oath: when one was threatened, all would come. Beacon towers carried the call from hill to hill. They called it the Line."},
+	{"scene": "dark", "text": "But oaths grow old. In the Wars of the Fading Line, rivals quarrelled over mines and roads, kingdoms looked away while their neighbours burned, and one by one the beacons went dark."},
 	{"scene": "nation", "faction": "stonehollow"},
 	{"scene": "nation", "faction": "greenwood"},
 	{"scene": "nation", "faction": "deepdelve"},
@@ -675,7 +675,7 @@ const PROLOGUE := [
 	{"scene": "nation", "faction": "freecities"},
 	{"scene": "nation", "faction": "monastery"},
 	{"scene": "nation", "faction": "spires"},
-	{"scene": "horde", "who": "ogre", "text": "Now the Ogre King marches out of the wastes, and his herald, the Ash Marshal, burns the road ahead. He knows the old truth: alone, every people falls."},
+	{"scene": "horde", "who": "ogre", "text": "Now the Ogre King, who bound the warring clans of the wastes under one banner, marches on the land, and his herald, the Ash Marshal, burns the road ahead. He knows the old truth: alone, every people falls."},
 	{"scene": "ashwatch", "who": "hale", "text": "On the southern frontier stands Ashwatch Keep. Its garrison is small, and its commander is you. Tonight, there are torches on the ridge."},
 	{"scene": "title", "text": "No one holds the line alone."},
 ]
@@ -696,7 +696,7 @@ const STORY := {
 		{"who": "hale", "text": "Tamsin's tower held the whole time. Stubborn as the stone it's built from.", "if": {"flag": "watchtower_stood"}},
 		{"who": "hale", "text": "We lost the watchtower. Tamsin got out, but she says the old stones went down hard.", "if": {"no_flag": "watchtower_stood"}},
 		{"who": "hale", "text": "Look at this. It was in the cellar behind the barrels: a map of beacons, from when the peoples of this land still answered each other."},
-		{"who": "hale", "text": "They called it the Line. Every keep and every hold, sworn to come when a beacon was lit. Ours hasn't burned in two hundred years."},
+		{"who": "hale", "text": "They called it the Line. Every keep and every hold, of every people, sworn to come when a beacon was lit. Ours hasn't burned in two hundred years."},
 		{"who": "ogre", "text": "One little fire on the frontier? Let it flicker. They will fall one by one, as they always have."},
 		{"who": "hale", "text": "We can't stop an army alone. Stonehollow's guild built these beacons. If anyone remembers the oath, it's them."},
 	],
@@ -747,6 +747,7 @@ const STORY := {
 	],
 	"gw_watchfires_intro": [
 		{"who": "thorne", "text": "Before the beacons, the Watch spoke with fire: three watchfires at the edge of the clearing, each answering the next."},
+		{"who": "thorne", "text": "The Fae kept these groves before the first elf walked under them. The fires burn by their leave, and they are watching tonight."},
 		{"who": "thorne", "text": "Keep them burning tonight, and Greenwood's beacon will be lit from their flame. Lose two and the forest goes dark."},
 	],
 	"gw_watchfires_outro": [
@@ -755,6 +756,7 @@ const STORY := {
 	],
 	"fm_pass_intro": [
 		{"who": "ysra", "text": "So the south remembers the north at last. You've come a long way to stand in the snow, Commander."},
+		{"who": "ysra", "text": "When the old wars came north, your kingdoms closed the passes behind them and left us to the winter. The Covenant remembers."},
 		{"who": "ysra", "text": "The King's army is coming up the Frozen Pass. If it gets through, the Covenant's halls burn. Hold it, and we will talk."},
 		{"who": "ysra", "text": "Two of my sisters will stand with you, and more will answer if you call. Mind the lake: the ice at its edges is thin."},
 	],
@@ -786,6 +788,7 @@ const STORY := {
 	],
 	"mo_steps_outro": [
 		{"who": "kaito", "text": "You brought your people down the mountain and left none you didn't have to. That is a kind of discipline."},
+		{"who": "kaito", "text": "One of my masters is of the plains clans. Half her clan rides for the King, for land he promised them. The other half refused him, and lie on his road."},
 		{"who": "kaito", "text": "My masters came back with you, all three. The novices will speak of it for years.", "if": {"flag": "masters_stood"}},
 		{"who": "kaito", "text": "The Martial Order will walk with the Line. Not for your crown: for the ones on the steps."},
 		{"who": "ogre", "text": "Monks. Bare hands against a king. Let them come down from their mountain."},
@@ -813,6 +816,7 @@ const STORY := {
 	],
 	"fc_market_outro": [
 		{"who": "coralie", "text": "You got them out. The Guild counted, of course. Then it voted, rather quickly for once."},
+		{"who": "coralie", "text": "Dwarves, elves, Marshborn, plains clans: the Free Cities trade with every people. It seems we are learning to stand with them as well."},
 		{"who": "coralie", "text": "The Free Cities will stand with the Line. Our bards, our alchemists and our statues are yours. Do try to return the statues."},
 		{"who": "ogre", "text": "Merchants. They will sell you to me the moment the price is right."},
 	],
@@ -840,10 +844,12 @@ const STORY := {
 	],
 	"mv_wounded_intro": [
 		{"who": "ilse", "text": "Commander. Every road into the vale is full of the wounded, theirs and ours alike, and the King's raiders are hunting them."},
+		{"who": "ilse", "text": "Elves, Marshborn, plains clans, even goblins who would not march for him. The Sanctuary turns no one away."},
 		{"who": "ilse", "text": "Bring them to the hospice, down both flanks, through the gaps in the hedges. Sister Anwen will go with you. She can mend anyone you keep alive long enough."},
 	],
 	"mv_wounded_outro": [
 		{"who": "ilse", "text": "You brought them home. The Sanctuary has sworn to turn no one away, and now it will not turn you away either."},
+		{"who": "ilse", "text": "Our Marshborn herbalists lost their rivers to his army. They will walk with your troops too, and their fever-root with them."},
 		{"who": "ilse", "text": "Our healers will walk with your troops. Keep them alive, and they will keep your line alive."},
 		{"who": "marshal", "text": "Healers. The King's army does not need patching. Neither will theirs, when I am done.", "if": {"not_won": "sable_crossing"}},
 		{"who": "ogre", "text": "Healers. Mend them as fast as you like. I break things faster.", "if": {"won": "sable_crossing"}},
@@ -863,6 +869,7 @@ const STORY := {
 	"dd_entrance_outro": [
 		{"who": "dagna", "text": "That's how you hold a canyon! Deepdelve's gold and Deepdelve's guns are yours, Commander."},
 		{"who": "dagna", "text": "You'll get mines that dig while you fight, and cannon crews that hit like falling rock."},
+		{"who": "dagna", "text": "And tell Vell the Mining Guild still remembers who paid for his towers. Then tell him thanks, from me."},
 		{"who": "marshal", "text": "Gold buys swords. Swords can be broken. Cut their roads to the foundries.", "if": {"not_won": "sable_crossing"}},
 		{"who": "ogre", "text": "Gold buys swords, and I have broken every sword it ever bought. Let them dig.", "if": {"won": "sable_crossing"}},
 	],
@@ -888,6 +895,7 @@ const STORY := {
 	"sp_relight_intro": [
 		{"who": "ysolde", "text": "Three spires fed the beacons. Relight them and the Spires' beacon burns for the first time since the Line broke."},
 		{"who": "ysolde", "text": "Broke, Commander. The Ogre King didn't break it. We did. The Free Cities wanted the trade roads, the Guild wanted the mines, every people wanted the beacons for itself."},
+		{"who": "ysolde", "text": "He was a chieftain of the wastes once, who bound the warring clans under one banner. Not all came willingly, and some refuse him still."},
 		{"who": "ysolde", "text": "When he came, we were already at each other's throats, and the beacons went dark one by one. Hold the spires. Lose two and ours stays dark as well."},
 	],
 	"sp_relight_outro": [
@@ -901,6 +909,7 @@ const STORY := {
 		{"who": "ysolde", "text": "Three walls stand between us and the citadel: the outer gate, the iron portcullis of the bailey, and the Dawn Gate itself."},
 		{"who": "ysolde", "text": "The Guild has built you a ram. Keep it alive, and it will break what it can. What it can't, we'll find another way through."},
 		{"who": "hale", "text": "And they took prisoners on their way north. Ashwatch's own garrison is in there somewhere. If they live, we bring them out."},
+		{"who": "hale", "text": "And not only ours. Marshborn, plains clans, even ogres who would not bend the knee to him."},
 		{"who": "ogre", "text": "Knock, then, little commander. My walls have held for two hundred years. They will hold for one more day.", "if": {"beacons_below": 9}},
 		{"who": "hale", "text": "Commander, look at the walls. More towers than our scouts counted, and the gates braced. He knew we were coming.", "if": {"beacons": 9}},
 		{"who": "ysolde", "text": "Every beacon of the Line burns tonight, all nine. He has seen them from his tower, and he has made ready for us.", "if": {"beacons": 9}},
@@ -952,6 +961,7 @@ const STORY := {
 		{"who": "ysolde", "text": "Nine beacons, and now a tenth: Dawnspire's own, lit by every people together. The first time it has burned since the oath was broken.", "if": {"flag": "ds_united"}},
 		{"who": "vell", "text": "The Guild will raise the walls again. Properly, this time.", "if": {"flag": "ds_united"}},
 		{"who": "ilse", "text": "We'll tend the wounded of every side. That was always the oath, wasn't it?", "if": {"flag": "ds_united"}},
+		{"who": "hale", "text": "Look who's lighting it. Elves and dwarves, Marshborn and plains clans, ogres who refused him. More peoples than ever swore the first oath.", "if": {"flag": "ds_united"}},
 		{"who": "hale", "text": "No one holds the line alone. We swore it once and broke it. Let's not break it again.", "if": {"flag": "ds_united"}},
 	],
 	"sp_archive_intro": [
@@ -960,6 +970,7 @@ const STORY := {
 	],
 	"sp_archive_outro": [
 		{"who": "ysolde", "text": "The oaths: every people swore to hold the line for the others, whatever it cost them. And every people broke it, for gold or land or pride."},
+		{"who": "ysolde", "text": "The Dragonkin wrote it long before us, in records older than the Spires: an oath sworn with magic does not end when it is broken. Its power goes somewhere."},
 		{"who": "ysolde", "text": "You hold the line for others without being asked, Commander. Our mages have seen it. They'll learn from you, as you've learned from them."},
 	],
 	"sable_intro": [
