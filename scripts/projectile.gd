@@ -32,6 +32,7 @@ var corrode := {}    # flasks: amount, duration
 var melt := 0.0      # flasks: share of the direct target's max HP burned away
 var burst := 0.0     # flasks: enemies killed explode for this multiple of the damage
 var crit := false   # critical hit: glows gold and pops a "Crit!" on impact
+var size := 1.0      # drawn this much bigger (a Martial Artist's Spirit Bomb)
 var style := "arrow"
 var school := "physical"   # what it's made of (see the damage schools in enemy.gd)
 var color := Color.WHITE
@@ -341,7 +342,7 @@ func _draw() -> void:
 			if grade >= 4:
 				Sprites.disc(self, Vector2(9, 0), 4.0, Color(1.0, 0.5, 0.15, 0.4))
 		"ki":
-			var r := 9.0 if splash <= 0.0 else 12.0
+			var r := (9.0 if splash <= 0.0 else 12.0) * size
 			Sprites.disc(self, Vector2.ZERO, r, Color(color, 0.35))
 			Sprites.disc(self, Vector2.ZERO, r * 0.6, color)
 			Sprites.disc(self, Vector2.ZERO, 3, Color.WHITE)

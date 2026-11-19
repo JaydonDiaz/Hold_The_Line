@@ -460,7 +460,7 @@ func _martial() -> void:
 	for p in paths:
 		for t in p["tiers"]:
 			tiers.append(t["name"])
-	check(tiers == ["Spirit Bolts", "Bolt Volley", "Blazing Spirit", "Sunburst Volley", "Quick Hands", "Tiger Claw", "Fighting Instinct",
+	check(tiers == ["Spirit Bolts", "Bolt Volley", "Blazing Spirit", "Spirit Bomb", "Quick Hands", "Tiger Claw", "Fighting Instinct",
 			"Thousand Fists", "Mirror Self", "Shadow Step", "Blinding Flash", "Piercing Light", "Mountain Training", "Iron Will",
 			"Crimson Aura", "Golden Ascension"], "...with new names for every tier (%s)" % ", ".join(tiers))
 	var text := ""
@@ -470,8 +470,10 @@ func _martial() -> void:
 			text += t["name"] + " " + t["desc"] + " "
 	var old := ["Ki", "Prince", "Turtle", "Wolf Fang", "Multiform", "Tenfold", "Limit Break", "Kamehameha", "Desert Bandit", "Starburst"]
 	check(old.all(func(o): return not (" " + text).contains(" " + o)), "...and nothing left of the old Dragon Ball names")
-	# The effects are what they were.
-	check(paths[0]["tiers"][3]["effect"]["blast"] == {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 40.0}
+	# The effects are what they were (but the Spirit path's last two: its bolts burst from
+	# tier III, and fuse into one Spirit Bomb at tier IV).
+	check(paths[0]["tiers"][3]["effect"]["blast"] == {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 50.0, "merge": 1.2}
+			and paths[0]["tiers"][2]["effect"]["blast"].get("splash", 0.0) > 0.0
 			and paths[1]["tiers"][3]["effect"] == {"combo": 2, "knockback": [0.25, 60.0], "damage": 1.4}
 			and paths[2]["tiers"][0]["effect"]["multiform"]["copies"] == 1 and paths[2]["tiers"][3]["effect"]["beam"]["damage"] == 350.0
 			and paths[3]["tiers"][3]["effect"]["golden"]["damage"] == 2.5, "...with the same effects")

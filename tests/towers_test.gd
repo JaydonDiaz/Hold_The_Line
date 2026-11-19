@@ -12,6 +12,9 @@ extends SceneTree
 ##                   nothing more however often upgrades are reapplied or it climbs up and down;
 ##                   what the crew does trains the crew's kind, what the tower takes trains the
 ##                   Tower (the two kept apart)
+##   K  ki          a Martial Artist's Spirit path: at tier III its bolts burst on what they hit;
+##                   at tier IV the volley's bolts fuse into one blast (1.2x their total, Brawling's
+##                   extra bolts counted), a bigger splash
 ##   R  rubble      a Tower brought down is broken: out of the fight, its crew down off it, worth
 ##                   nothing sold, and no Healer brings it back; rebuilt for half what's been
 ##                   spent on it (more, the more it's upgraded), an Engineer puts it up again,
@@ -96,6 +99,7 @@ func _run() -> void:
 	_archer_paths()
 	await _tower()
 	await _crews()
+	await _ki()
 	await _rubble()
 	await _fighting()
 	await _ballista()
@@ -194,6 +198,51 @@ func _crews() -> void:
 		check(main.battle_xp.get("tower", 0.0) > 0.0 and not main.battle_xp.has(kind), "C  %s ...damage the tower takes trains the Tower only" % kind)
 		main.wave_active = false
 		main.campaign = false
+
+
+# --- K ---------------------------------------------------------------------------------------
+
+## The projectiles a Martial Artist on `tiers` sends at an enemy out of punching reach in one volley.
+func _volley(tiers: Array) -> Array:
+	await _fresh()
+	var m = _hire("martial", Vector2(320, 600))
+	m.tiers = tiers
+	m._apply_upgrades()
+	m.move_mode = "hold"
+	var e = _foe("orc", Vector2(320, 470), 1e6)
+	e.speed = 0.0
+	main.wave_active = true
+	var shots := []
+	var seen := []
+	for i in 60 * 3:
+		await process_frame
+		for n in main.fx_layer.get_children():
+			if n.get_script() == preload("res://scripts/projectile.gd") and n.style == "ki" and not seen.has(n):
+				seen.append(n)
+				shots.append({"splash": n.splash, "size": n.size, "damage": n.damage})   # (as fired: it's gone once it lands)
+		if shots.size() >= 1 and i > 60:
+			break
+	return [m, shots]
+
+
+func _ki() -> void:
+	var r: Array = await _volley([3, 0, 0, 0])
+	var shots: Array = r[1]
+	check(shots.size() >= 3 and shots.all(func(p): return p["splash"] > 0.0), "K  Blazing Spirit (tier III): its bolts burst on what they hit (%d bolts, splash %.0f)" % [shots.size(), shots[0]["splash"] if shots.size() > 0 else 0.0])
+	r = await _volley([4, 2, 0, 0])
+	var m = r[0]
+	shots = r[1]
+	var first: Array = shots.filter(func(p): return p["size"] > 1.0)
+	var want: float = 42.0 * m.blast_count * 1.2 * m._power()
+	check(m.blast_count == 5 and not first.is_empty() and is_equal_approx(first[0]["damage"], want) and first[0]["splash"] >= 50.0,
+			"K  Spirit Bomb (tier IV): the volley's %d bolts (Brawling's two extra counted) fused into one blast of %.0f, a bigger splash" % [m.blast_count, want])
+	await _frames(int(60 * 0.9) - 5)
+	var bolts := 0
+	for n in main.fx_layer.get_children():
+		if n.get_script() == preload("res://scripts/projectile.gd") and n.style == "ki":
+			bolts += 1
+	check(bolts <= 2, "K  ...one blast a volley, not a stream of bolts (%d in flight)" % bolts)
+	main.wave_active = false
 
 
 # --- R, F ------------------------------------------------------------------------------------

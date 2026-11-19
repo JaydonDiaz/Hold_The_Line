@@ -1150,7 +1150,10 @@ func stats_text() -> String:
 	if combo_hits > 0:
 		s += "   Combo %d hits" % combo_hits
 	if not blast.is_empty():
-		s += "   Spirit %.0f x%d / %.1fs, range %s" % [blast["damage"], blast_count, blast["cooldown"], Data.ft(blast["range"])]
+		if blast.has("merge"):
+			s += "   Spirit Bomb %.0f / %.1fs, range %s" % [blast["damage"] * blast_count * float(blast["merge"]), blast["cooldown"], Data.ft(blast["range"])]
+		else:
+			s += "   Spirit %.0f x%d / %.1fs, range %s" % [blast["damage"], blast_count, blast["cooldown"], Data.ft(blast["range"])]
 	if not beam.is_empty():
 		s += "   Beam %.0f / %.0fs" % [beam["damage"], beam["cooldown"]]
 	if knockback_chance > 0.0:
@@ -1569,6 +1572,8 @@ func _start_volley() -> bool:
 	volley_left = blast_count
 	volley_timer = 0.0
 	volley_target = _blast_target()
+	if blast.has("merge"):
+		volley_left = 1   # (Spirit Bomb: the whole volley in one blast: see _continue_volley)
 	_continue_volley(0.0)
 	return true
 
@@ -1603,7 +1608,12 @@ func _continue_volley(delta: float) -> void:
 	p.target_pos = e.position
 	p.position = position + facing * 16.0 + facing.orthogonal() * volley_hand * 6.0
 	p.damage = blast["damage"] * _power()
-	p.splash = blast.get("splash", 0.0)   # Sunburst Volley: every blast explodes
+	p.splash = blast.get("splash", 0.0)   # Blazing Spirit on: every blast bursts
+	if blast.has("merge"):
+		# Spirit Bomb: every bolt of the volley (Brawling's extra ones too) fused into one
+		# great blast, worth more than all of them together.
+		p.damage = blast["damage"] * blast_count * float(blast["merge"]) * _power()
+		p.size = 1.0 + 0.25 * blast_count
 	# Like the punch combo, only the volley's last blast can knock back.
 	p.knockback_chance = knockback_chance if volley_left == 0 else 0.0
 	p.knockback_force = knockback_force
