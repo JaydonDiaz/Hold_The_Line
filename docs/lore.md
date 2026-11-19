@@ -14,10 +14,10 @@ Tone: solemn, mythic medieval fantasy. The theme, in both games: **no one holds 
 | Era | When | What happened |
 |---|---|---|
 | The Age of Kingdoms | Before the Line | Many peoples, no single power. Trade and alliances, but also generations of war over mines, forests, farmland and roads. |
-| The Founding | About two hundred years before the game (see *Open questions*) | The peoples' delegates swear the oath in the Circle below the Arcane Spires. Stonehollow builds the beacons; the Mage Conclave enchants them. Dawnspire becomes the alliance's heart. |
+| The Founding | Centuries before the game | The peoples' delegates swear the oath at Dawnspire, the oath's birthplace and the alliance's heart. Stonehollow builds the beacons; the Mage Conclave enchants them, and first lights them from the Circle below the Arcane Spires. |
 | The Wars of the Fading Line | After the Founding | Old rivalries return as open war. Members refuse to defend rivals, close roads, withhold supplies. **The prequel's era.** |
-| The Breaking | The end of those wars | Dawnspire's beacon goes dark first; the rest follow. The oaths are sealed in the Lost Archive. |
-| The Ogre King's conquest | After the Breaking | A chieftain of the wastes, having united the Monster Clans, walks into a Dawnspire no one defends and takes the Line's throne. |
+| The Breaking | About two hundred years before the game | Dawnspire's beacon goes dark first; the rest follow. The oaths are sealed in the Lost Archive. Dawnspire stands empty, its beacon cold, for some 150 years. |
+| The Ogre King's conquest | About fifty years before the game | A chieftain of the wastes, then around thirty, having united the Monster Clans, walks into a Dawnspire no one defends and takes the Line's throne. For fifty years he spreads his reach a little further each year, while every people tells itself it's someone else's border. |
 | *Hold the Line* | Now | The Commander at Ashwatch relights the beacons, region by region, and marches on Dawnspire. |
 
 ### The Line
@@ -70,6 +70,8 @@ Archive*: "every people broke it, for gold or land or pride").
   became conquest.
 - **His followers** believe in him, want revenge for old wars, want land and plunder, or
   obey from fear. Not every clan joined him; some resist him still, some fled.
+- **Age.** Ogres live 90 to 120 years; he is around eighty in the game, and has held Dawnspire
+  for fifty of them.
 - **Dawnspire.** He did not cause the Breaking. He found a continent that could no longer
   defend itself and took a citadel nobody held ("They left it lying in the road. I only
   picked it up.").
@@ -238,22 +240,19 @@ Monastery), Discordant Dirge (the Free Cities), Stolen Mercy (Mercy Vale).
 
 ---
 
-## Open questions
+## Settled questions
 
-1. **How long ago, and how long dark?** The game says the Line was sworn "two hundred years
-   ago" (Ysolde, *The Broken Circle*) and also that the beacons have been dark for two
-   hundred years (Hale at Ashwatch; Vell; Ysolde at the Spires; Dawnspire's map blurb). Read
-   literally, the Line failed the moment it was made, leaving no room for the Wars of the
-   Fading Line. Not changed; one of the two needs to move (e.g. sworn "centuries ago").
-2. **How long has he held Dawnspire?** The Ogre King's taunt on the seven-or-eight-beacon
-   route, "My walls have held for two hundred years", and the standard ending's "Two hundred
-   years, and the citadel at the heart of the Line is free" both read as him holding
-   Dawnspire since the Breaking. That clashes with him arriving after the Line had already
-   failed. Could read as the walls' age; worth rewording if not.
-3. **Where was the oath sworn?** The game has both: in the Circle below the Spires (Ysolde)
-   and on Dawnspire's throne ("They sat here and swore their oaths", the Ogre King). One
-   reading that keeps both: sworn first in the Circle, then renewed at Dawnspire whenever
-   the delegations met. Not changed.
-4. **Art:** the Engineer unit (hard hat, vest, overalls) doesn't read as dwarven; the Deepdelve
-   miner (beard, lamp helmet) does. Fine for "dwarves for the most part"; worth a look when
-   racial variants come.
+1. **When:** the Line was sworn **centuries ago**; its beacons have been dark for **two hundred
+   years** (since the Breaking). In the game: Ysolde, "sworn at Dawnspire, centuries ago";
+   Vell, "Centuries, and the old work still stands"; every "two hundred years dark" stays.
+2. **The Ogre King's reign:** about eighty years old (ogres live 90 to 120), he has held
+   Dawnspire for **fifty years**, after it had stood empty for some 150. In the game:
+   "Dawnspire has been mine for fifty years" (seven-or-eight-beacon route); Ysolde at the
+   Spires, "For fifty years he has sat in Dawnspire, reaching a little further every year";
+   the standard ending, "Fifty years under him, two hundred years dark".
+3. **Where:** **Dawnspire is the birthplace of the oath**; the Line sat and swore on its throne
+   (as the Ogre King says). The Circle below the Spires is where the Conclave first lit the
+   beacons. In the game: Ysolde, "The Line was sworn at Dawnspire... Its beacons were first
+   lit from this Circle."
+4. **The Engineer's look:** redrawn as a dwarf (short and broad, a great ginger beard over a
+   leather apron, a leather cap with brass goggles, a tool belt, the hammer on his shoulder).

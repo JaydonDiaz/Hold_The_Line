@@ -725,7 +725,7 @@ const STORY := {
 		{"who": "vell", "text": "My crews will raise walls wherever you point and patch the gate between waves. You keep the brutes off my masons."},
 		{"who": "vell", "text": "Mind the ones with the powder kegs. Sappers. They love a good wall almost as much as I do."},
 		{"who": "hale", "text": "Guildmaster, Tamsin's watchtower held at Ashwatch. Your stone is still doing its job.", "if": {"flag": "watchtower_stood"}},
-		{"who": "vell", "text": "Ha! Two hundred years and the old work stands. Let's give them some new work to break their teeth on.", "if": {"flag": "watchtower_stood"}},
+		{"who": "vell", "text": "Ha! Centuries, and the old work still stands. Let's give them some new work to break their teeth on.", "if": {"flag": "watchtower_stood"}},
 	],
 	"stonehollow_outro": [
 		{"who": "vell", "text": "The guild has voted. Stonehollow stands with the Line, the first to do it in two hundred years."},
@@ -889,13 +889,14 @@ const STORY := {
 	"sp_circle_outro": [
 		{"who": "ysolde", "text": "The Circle is ours again, and the Mage Conclave stands with the Line. Our mages and our towers are yours, and the old fire and thunder of the walls."},
 		{"who": "ysolde", "text": "The Magi who held the Circle beside you came back, every one. The Conclave won't forget it.", "if": {"flag": "magi_stood"}},
-		{"who": "ysolde", "text": "You should know what you are rebuilding, Commander. The Line was sworn in this Circle, two hundred years ago, by every people of the continent."},
+		{"who": "ysolde", "text": "You should know what you are rebuilding, Commander. The Line was sworn at Dawnspire, centuries ago, by every people of the continent. Its beacons were first lit from this Circle."},
 		{"who": "ogre", "text": "Mages. They lit the beacons against me once. Let them remember how that ended."},
 	],
 	"sp_relight_intro": [
 		{"who": "ysolde", "text": "Three spires fed the beacons. Relight them and the Spires' beacon burns for the first time since the Line broke."},
 		{"who": "ysolde", "text": "Broke, Commander. The Ogre King didn't break it. We did. The Free Cities wanted the trade roads, the Guild wanted the mines, every people wanted the beacons for itself."},
 		{"who": "ysolde", "text": "He was a chieftain of the wastes once, who bound the warring clans under one banner. Not all came willingly, and some refuse him still."},
+		{"who": "ysolde", "text": "For fifty years he has sat in Dawnspire, reaching a little further every year, while each of us told ourselves it was someone else's border."},
 		{"who": "ysolde", "text": "When he came, we were already at each other's throats, and the beacons went dark one by one. Hold the spires. Lose two and ours stays dark as well."},
 	],
 	"sp_relight_outro": [
@@ -910,7 +911,7 @@ const STORY := {
 		{"who": "ysolde", "text": "The Guild has built you a ram. Keep it alive, and it will break what it can. What it can't, we'll find another way through."},
 		{"who": "hale", "text": "And they took prisoners on their way north. Ashwatch's own garrison is in there somewhere. If they live, we bring them out."},
 		{"who": "hale", "text": "And not only ours. Marshborn, plains clans, even ogres who would not bend the knee to him."},
-		{"who": "ogre", "text": "Knock, then, little commander. My walls have held for two hundred years. They will hold for one more day.", "if": {"beacons_below": 9}},
+		{"who": "ogre", "text": "Knock, then, little commander. Dawnspire has been mine for fifty years. It will be mine for one more day.", "if": {"beacons_below": 9}},
 		{"who": "hale", "text": "Commander, look at the walls. More towers than our scouts counted, and the gates braced. He knew we were coming.", "if": {"beacons": 9}},
 		{"who": "ysolde", "text": "Every beacon of the Line burns tonight, all nine. He has seen them from his tower, and he has made ready for us.", "if": {"beacons": 9}},
 		{"who": "ogre", "text": "Nine fires. The whole Line, come back from the dead to knock at my door. Then I will open every gate I have, and bury it here.", "if": {"beacons": 9}},
@@ -938,7 +939,7 @@ const STORY := {
 	# Out of the castle, onto the Fields of Dawn: the whole Line comes.
 	"ds_field": [
 		{"who": "hale", "text": "Dawnspire... the whole citadel's coming down behind us."},
-		{"who": "ysolde", "text": "He has torn the beacon out of its heart, and every broken oath with it. Two hundred years of stone could not hold what he is drawing on."},
+		{"who": "ysolde", "text": "He has torn the beacon out of its heart, and every broken oath with it. Centuries of stone could not hold what he is drawing on."},
 		{"who": "unbound", "text": "Your Line raised these walls to stand forever. They stood exactly as long as your promises did."},
 		{"who": "hale", "text": "Then let them fall. Dawnspire was never the walls. It was the people inside them, and they're out here with us now."},
 		{"who": "hale", "text": "We're out. And look: the Line's come for us. Every banner we've fought beside."},
@@ -955,7 +956,7 @@ const STORY := {
 	],
 	"ds_assault_outro": [
 		{"who": "hale", "text": "The Ogre King is dead. Dawnspire is ours.", "if": {"no_flag": "ds_united"}},
-		{"who": "ysolde", "text": "Two hundred years, and the citadel at the heart of the Line is free. The beacon here is cold, but it can be lit again.", "if": {"no_flag": "ds_united"}},
+		{"who": "ysolde", "text": "Fifty years under him, two hundred years dark, and the citadel at the heart of the Line is free. The beacon here is cold, but it can be lit again.", "if": {"no_flag": "ds_united"}},
 		{"who": "hale", "text": "Not every people came to this fight, Commander. The Line holds today. Whether it holds tomorrow is up to all of them.", "if": {"no_flag": "ds_united"}},
 		{"who": "hale", "text": "He's gone. Truly gone. Dawnspire's in ruins, but it's free.", "if": {"flag": "ds_united"}},
 		{"who": "ysolde", "text": "Nine beacons, and now a tenth: Dawnspire's own, lit by every people together. The first time it has burned since the oath was broken.", "if": {"flag": "ds_united"}},
