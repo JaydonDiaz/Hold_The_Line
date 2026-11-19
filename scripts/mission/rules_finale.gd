@@ -329,7 +329,10 @@ func process(delta: float) -> void:
 		return
 	if wrath != null:
 		if king != null and is_instance_valid(king):
-			king.boss_hold = 1.0   # (he stands in the fire he's called up)
+			king.boss_hold = 1.0   # (he stands in the fire he's called up, drawing on the beacon:
+			king.stomp_timer = maxf(king.stomp_timer, 1.0)   # no slams or burning ground meanwhile)
+			king.embers_timer = maxf(king.embers_timer, 1.0)
+			king.cd_timer = maxf(king.cd_timer, 0.5)   # (nor blows: wholly taken up with it, open to the army's)
 		if wrath.swept:
 			_fall_back(true)
 		return

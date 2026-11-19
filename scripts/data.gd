@@ -100,10 +100,14 @@ const HP_GROWTH := 1.12      # enemy health multiplier per wave
 const DAMAGE_GROWTH := 1.03  # enemy damage multiplier per wave
 const BOUNTY_GROWTH := 0.04  # extra bounty per wave (0.04 = +4%)
 # Past the final wave (endless), enemies toughen faster and gold comes in slower.
-const LATE_HP_GROWTH := 1.16      # health multiplier per wave past FINAL_WAVE (instead of HP_GROWTH)
-const LATE_DAMAGE_GROWTH := 1.06  # damage multiplier per wave past FINAL_WAVE (instead of DAMAGE_GROWTH)
-const LATE_GOLD_STEP := 0.02      # past FINAL_WAVE, bounties and wave bonuses pay this much less per wave...
-const LATE_GOLD_MIN := 0.4        # ...down to this share (mines and interest always pay in full)
+# Endless (past FINAL_WAVE) is a long, slow climb: the aim is to get as far as you can, and a
+# well-built army with good tactics should get a long way past it.
+const LATE_HP_GROWTH := 1.06      # health multiplier per wave past FINAL_WAVE (instead of HP_GROWTH)
+const LATE_DAMAGE_GROWTH := 1.03  # damage multiplier per wave past FINAL_WAVE (instead of DAMAGE_GROWTH)
+const LATE_GOLD_STEP := 0.01      # past FINAL_WAVE, bounties and wave bonuses pay this much less per wave...
+const LATE_GOLD_MIN := 0.6        # ...down to this share (mines and interest always pay in full)
+const LATE_COUNT_STEP := 1        # past FINAL_WAVE, a wave has this many more enemies than the last (2 before it)...
+const MAX_WAVE_SIZE := 80         # ...up to this many (beyond it, they only get tougher)
 
 
 ## A price at a difficulty: base x mult, rounded to the nearest `step` gold (Hard

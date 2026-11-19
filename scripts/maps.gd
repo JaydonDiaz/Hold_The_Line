@@ -726,7 +726,7 @@ const ZONES := {
 	# arrows everywhere, Dawnspire's sun banners trampled, and his own war-banners and
 	# skull pikes planted over all of it. Fires still burn. A timber gate in the wall.
 	"ds_approach": {
-		"name": "The Approach", "battle": "siege", "music": "calm_dsapproach", "biome": "meadow", "ground": "war", "camp": false,
+		"name": "The Approach", "blurb": "The road up to\nDawnspire, through\nits outer gate", "battle": "siege", "music": "calm_dsapproach", "biome": "meadow", "ground": "war", "camp": false,
 		"tint": Color(0.98, 0.88, 0.8), "wall": "outer",
 		"lanes": [[40, 100], [540, 600]],
 		"terrain": [
@@ -762,7 +762,7 @@ const ZONES := {
 	# The Outer Bailey: the ward between the walls, its houses burnt out, market stalls
 	# overturned; an iron portcullis in the inner wall, raised from a winch house.
 	"ds_bailey": {
-		"name": "The Outer Bailey", "battle": "bailey", "music": "calm_bailey", "biome": "city", "ground": "war", "camp": false,
+		"name": "The Outer Bailey", "blurb": "The burnt-out ward\nbetween Dawnspire's\nwalls", "battle": "bailey", "music": "calm_bailey", "biome": "city", "ground": "war", "camp": false,
 		"tint": Color(0.94, 0.9, 0.88), "wall": "inner",
 		"lanes": [[40, 100], [540, 600]],
 		"terrain": [
@@ -789,7 +789,7 @@ const ZONES := {
 	# The Dawn Gate: the citadel's great gate, gilded and sun-crowned, at the head of a
 	# courtyard of broken pillars; the walls above it loose Arrow Storms and Fireballs.
 	"ds_dawngate": {
-		"name": "The Dawn Gate", "battle": "dawngate", "music": "calm_dawngate", "biome": "city", "camp": false,
+		"name": "The Dawn Gate", "blurb": "The great gate\nof the citadel\nitself", "battle": "dawngate", "music": "calm_dawngate", "biome": "city", "camp": false,
 		"tint": Color(1.0, 0.92, 0.82), "wall": "citadel",
 		"lanes": [[40, 100], [540, 600]],
 		"terrain": [
@@ -824,7 +824,7 @@ const ZONES := {
 	# The Fields of Dawn (the nine-beacon finale): the open ground below Dawnspire's walls, the
 	# Dawn Gate broken open, the Line's whole host drawn up across it at morning.
 	"ds_dawnfield": {
-		"name": "The Fields of Dawn", "battle": "dawnfield", "music": "calm_dawnfield", "biome": "meadow", "ground": "war", "camp": false,
+		"name": "The Fields of Dawn", "blurb": "The open ground\nbelow Dawnspire,\nthe Line drawn up", "battle": "dawnfield", "music": "calm_dawnfield", "biome": "meadow", "ground": "war", "camp": false,
 		"tint": Color(1.0, 0.94, 0.84), "wall": "citadel",
 		"lanes": [[40, 100], [284, 356], [540, 600]],
 		"terrain": [

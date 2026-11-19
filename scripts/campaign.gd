@@ -580,7 +580,20 @@ func open_maps() -> Array:
 		var map: String = d.get("map", "")
 		if map != "" and not out.has(map) and (completed.has(m) or mission_open(m)):
 			out.append(map)
+	# Dawnspire's fields, once the army's reached the citadel (the Liberation's own stages, not
+	# a mission's map); the Fields of Dawn once the Line's won them, on the nine-beacon route.
+	if completed.has("ds_assault") or mission_open("ds_assault"):
+		for map in DAWNSPIRE_MAPS:
+			if not out.has(map):
+				out.append(map)
+	if completed.has("ds_assault") and flags.has("ds_united") and not out.has("ds_dawnfield"):
+		out.append("ds_dawnfield")
 	return out
+
+
+## Dawnspire's battlefields outside the citadel, open in Classic and the Battle Modes once the
+## campaign reaches it (the Fields of Dawn separately: see open_maps).
+const DAWNSPIRE_MAPS := ["ds_approach", "ds_bailey", "ds_dawngate"]
 
 
 # --- The map --------------------------------------------------------------------

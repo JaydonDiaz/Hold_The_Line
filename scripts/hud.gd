@@ -1604,6 +1604,11 @@ func _show_cards(set_name: String) -> void:
 			var where: String = "on the meadow" if sc["map"] == "" else Maps.get_map(sc["map"]).get("name", sc["map"])
 			if sc["type"] == "escort":
 				where = "from %s on" % where
+			if String(sc["map"]).begins_with("ds_") and not Campaign.open_maps().has(sc["map"]):
+				# Dawnspire's: locked until the campaign gets there (no spoiling it).
+				modes.append(["goto:bm:" + t, sc["name"], "Locked\nReach %s\nin the campaign" % ("the Fields of Dawn" if sc["map"] == "ds_dawnfield" else "Dawnspire"),
+						Color(0.5, 0.5, 0.5), Scenarios.TYPES[t]["look"], t])
+				continue
 			modes.append(["goto:bmd:" + id, sc["name"], "Survive as\nmany waves\nas you can\n%s" % where,
 					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], t])
 		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
@@ -1734,7 +1739,7 @@ func show_battlefields(diff: String) -> void:
 
 
 func _battlefield_name(map: String) -> String:
-	return "The Meadow" if map == "" else Maps.MAPS[map].get("name", map)
+	return "The Meadow" if map == "" else Maps.get_map(map).get("name", map)
 
 
 ## A difficulty's card (Classic, or a new campaign's), keyed `key`.

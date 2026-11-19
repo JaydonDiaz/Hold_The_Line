@@ -445,6 +445,7 @@ func _field() -> void:
 		if e != k:
 			e.queue_free()   # (the fire alone: nothing else fighting the army here)
 	var slow = f._make_unit({"kind": "alchemist", "post": k.position + Vector2(40, 170)})   # (the slowest troop there is, just outside his slam)
+	seed(5150)   # (where the bursts land is random: the same each run here)
 	for w in main.get_warriors():
 		w.hp = w.max_hp   # (the charge's bait mended: only what the fire does counts here)
 	var army0: int = main.get_warriors().size()
@@ -464,12 +465,16 @@ func _field() -> void:
 			"F  ...then bursts of fire across the field from him, marked first, the army getting ahead of them (%d bursts; hurt: %s; king at %.0f, bursts from %.0f)" % [fires.size(), burnt.map(func(w): return "%s %.0f/%.0f" % [w.kind, w.hp, w.max_hp]), k.position.y, fires.map(func(b): return b.position.y).min() if not fires.is_empty() else 0.0])
 	var gap := 0.0
 	var slow_fell := false
+	var burnt_bad := false
 	for i in 60 * 40:
 		await process_frame
 		if f.field == 1:
 			break
 		if not is_instance_valid(slow) or not slow.is_active():
 			slow_fell = true
+		for w in main.get_warriors():
+			if w.is_active() and not w.is_emplacement() and w.hp < w.max_hp * 0.5:
+				burnt_bad = true
 		for e in main.get_enemies():
 			if e != k:
 				e.queue_free()   # (the fire alone)
@@ -477,7 +482,7 @@ func _field() -> void:
 			for w in main.get_warriors():
 				if w.is_active() and not w.is_emplacement():
 					gap = maxf(gap, f.wrath.front - w.position.y)
-	check(gap < 40.0 and not slow_fell, "F  ...slow enough that nobody's overtaken as it creeps down the field, even an Alchemist that started just below him (worst %.0f px behind it)" % gap)
+	check(gap < 70.0 and not slow_fell and not burnt_bad, "F  ...slow enough that nobody's caught as it creeps down the field, even an Alchemist that started just below him (worst %.0f px behind its front, getting round him)" % gap)
 	await _frames(5)
 	check(f.field == 1 and main.map_id == "ds_bailey", "F  ...the army falls back to the Outer Bailey")
 	here = 0

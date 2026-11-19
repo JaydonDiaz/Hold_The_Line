@@ -362,7 +362,7 @@ func choose_mode(mode: String) -> void:
 	# The battlefield: a campaign mission's own map (terrain, lanes, castle), Classic on
 	# one the campaign has opened, or the open meadow.
 	var classic := not campaign and battle_id == "" and Data.DIFFICULTIES.has(mode)
-	map_id = mission.get("map", "") if scripted() else (classic_map if classic and Maps.MAPS.has(classic_map) else "")
+	map_id = mission.get("map", "") if scripted() else (classic_map if classic and not Maps.get_map(classic_map).is_empty() else "")
 	map_extra = {}
 	# Battles fill the window: a map stretches across the field like the meadow does (the
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
@@ -713,7 +713,7 @@ func _build_wave(n: int) -> Array:
 	if n >= 7:
 		pool.append("sapper")
 	var list := []
-	for i in 6 + n * 2:
+	for i in wave_size(n):
 		list.append(pool.pick_random())
 	if n == 4 or n == 5:
 		list.insert(list.size() / 2, "troll")  # a single troll as an early taste
@@ -722,6 +722,13 @@ func _build_wave(n: int) -> Array:
 	for i in _wyverns(n):
 		list.insert(list.size() * (i + 1) / (_wyverns(n) + 1), "wyvern")
 	return list
+
+
+## How many make up Classic's wave `n` (before its Warlords and Wyverns): two more each
+## wave to the final wave, then one more each wave, up to Data.MAX_WAVE_SIZE.
+static func wave_size(n: int) -> int:
+	var to_final := 6 + mini(n, Data.FINAL_WAVE) * 2
+	return mini(to_final + maxi(0, n - Data.FINAL_WAVE) * Data.LATE_COUNT_STEP, Data.MAX_WAVE_SIZE)
 
 
 ## Warlords lead every fifth wave; past the final wave, one more for every ten waves.
@@ -807,11 +814,16 @@ func _boss_due() -> bool:
 
 func _spawn_boss() -> void:
 	boss_spawned = true
-	_spawn_enemy("ogre_king", wave)
+	# Back every tenth wave at full strength; from UNBOUND_WAVE on, in his full power (the
+	# Ogre King, Unbound: the beacon's fire round him, his burning ground and his charge).
+	_spawn_enemy("ogre_unbound" if wave >= UNBOUND_WAVE else "ogre_king", wave)
+
+
+const UNBOUND_WAVE := 50   # Classic: the wave from which the Ogre King comes back unbound
 
 
 ## Share of bounties and wave bonuses paid: all of it up to the final wave, then a
-## little less each endless wave (2% per wave, down to 40%).
+## little less each endless wave (Data.LATE_GOLD_STEP per wave, down to Data.LATE_GOLD_MIN).
 func late_gold_share() -> float:
 	return maxf(Data.LATE_GOLD_MIN, 1.0 - Data.LATE_GOLD_STEP * maxi(0, wave - Data.FINAL_WAVE))
 

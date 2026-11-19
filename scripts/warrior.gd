@@ -2238,13 +2238,20 @@ func _separate() -> void:
 				off = Vector2.DOWN
 				d = 1.0
 			position = c + off / d * min_d
-	# The Ogre King is too big to shove: troops step out of his way.
+	# The Ogre King is too big to shove: troops step out of his way, and one walking into him
+	# slides round his side (rather than pressing against him on the spot).
 	for e in main.get_enemies():
-		if e.boss:
+		if e.boss and not dodging:   # (running from something warned, it slips past between his legs)
 			var off: Vector2 = position - e.position
 			var min_d: float = RADIUS + e.radius
 			if off.length() < min_d:
-				position = e.position + (off.normalized() if off.length() > 0.01 else Vector2.DOWN) * min_d
+				var out := off.normalized() if off.length() > 0.01 else Vector2.DOWN
+				position = e.position + out * min_d
+				if moving and heading.dot(-out) > 0.2:
+					var round := Vector2(-out.y, out.x)
+					if round.dot(heading) < 0.0:
+						round = -round
+					position += round * 2.0
 	# Terrain: put back anything a push left overlapping rock (the safety net; steps
 	# themselves slide along it).
 	if not main.paths.terrain.is_empty():
@@ -3694,9 +3701,9 @@ func _dodge(delta: float) -> bool:
 	if hit == null:
 		dodging = false
 		return false
-	if not dodging:
+	if not dodging or hit.has("above"):
 		dodging = true
-		dodge_to = _dodge_spot(hit, zones)
+		dodge_to = _dodge_spot(hit, zones)   # (a moving front: aimed afresh each step)
 	elif _in_danger_zone(hit, dodge_to, RADIUS + 10.0) or position.distance_to(dodge_to) < 3.0:
 		dodge_to = _dodge_spot(hit, zones)
 	facing = position.direction_to(dodge_to)
@@ -3721,7 +3728,23 @@ static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
 ## closest spot a troop can stand.
 func _dodge_spot(z: Dictionary, zones: Array) -> Vector2:
 	if z.has("above"):
-		return main._clamp_post(Vector2(position.x, float(z["above"]) + RADIUS + 140.0))   # (down the field, well ahead of it)
+		# Down the field, well ahead of it; round the side of anything too big to go through
+		# (the Ogre King standing in the fire he's called up).
+		var x := position.x
+		for e in main.get_enemies():
+			if e.boss and not e.dead and e.position.y > position.y - e.radius:
+				var clear: float = e.radius + RADIUS + 16.0
+				if absf(e.position.x - x) < clear:
+					x = e.position.x + (clear if x >= e.position.x else -clear)
+		var y := float(z["above"]) + RADIUS + 140.0
+		var spot: Vector2 = main._clamp_post(Vector2(x, y))
+		if main.paths.has_terrain() and not _walkable_line(position, spot):
+			# Rock, a wreck, a wall in the way: the nearest line down that's clear.
+			for d in [40.0, -40.0, 80.0, -80.0, 130.0, -130.0, 190.0, -190.0]:
+				var alt: Vector2 = main._clamp_post(Vector2(x + d, y))
+				if _walkable_line(position, alt):
+					return alt
+		return spot
 	var away: Vector2
 	var edge: float = float(z["r"]) + RADIUS + 16.0
 	var c: Vector2
@@ -3746,6 +3769,16 @@ func _dodge_spot(z: Dictionary, zones: Array) -> Vector2:
 	if best_d == INF:
 		best = main._clamp_post(c + away * edge)
 	return best
+
+
+## Whether a troop could walk straight from `a` to `b` (nothing on the ground it can't
+## cross, low scenery included, every 8px along the way).
+func _walkable_line(a: Vector2, b: Vector2) -> bool:
+	var n := maxi(1, int(a.distance_to(b) / 8.0))
+	for i in range(1, n + 1):
+		if main.paths.blocked(a.lerp(b, float(i) / n), RADIUS):
+			return false
+	return true
 
 
 func _fall_back(delta: float) -> bool:

@@ -63,10 +63,15 @@ var count_label: Label
 var start_button: Button
 
 
+const CLASSIC_ZONES := ["ds_approach", "ds_bailey", "ds_dawngate", "ds_dawnfield"]
+
+
 func setup(diff: String, opened: Array, first := "") -> void:
 	difficulty = diff
 	open_maps = opened
-	maps = [""] + Maps.MAPS.keys()
+	# The campaign's battlefields, and Dawnspire's fields outside the citadel (from the
+	# Liberation's stages: not its halls, or the convoy roads).
+	maps = [""] + Maps.MAPS.keys() + CLASSIC_ZONES
 	at = maxi(0, maps.find(first))
 
 
@@ -185,8 +190,8 @@ func show_map(i: int) -> void:
 	at = posmod(i, maps.size())
 	var id: String = maps[at]
 	var opened := id == "" or open_maps.has(id)
-	name_label.text = "The Meadow" if id == "" else Maps.MAPS[id].get("name", id)
-	blurb.text = "Open fields with no terrain: the classic game." if id == "" else Maps.MAPS[id].get("blurb", "").replace("\n", " ") + "."
+	name_label.text = "The Meadow" if id == "" else Maps.get_map(id).get("name", id)
+	blurb.text = "Open fields with no terrain: the classic game." if id == "" else Maps.get_map(id).get("blurb", "").replace("\n", " ") + "."
 	count_label.text = "%d of %d" % [at + 1, maps.size()]
 	var best := 0
 	if records != "":
@@ -222,6 +227,10 @@ func _paint() -> void:
 
 
 func _territory(map: String) -> String:
+	if map == "ds_dawnfield":
+		return "the Fields of Dawn (all nine beacons lit)"
+	if map.begins_with("ds_"):
+		return "Dawnspire"
 	for m in CD.MISSIONS:
 		if CD.MISSIONS[m].get("map", "") == map:
 			return CD.TERRITORIES[CD.MISSIONS[m]["territory"]]["name"]

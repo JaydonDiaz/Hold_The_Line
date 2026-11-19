@@ -956,7 +956,7 @@ func _classic_maps() -> void:
 	await _frames(3)
 	var v = main.hud.battlefields
 	check(v != null and v.name_label.text == "The Meadow" and not v.start_button.disabled, "K  ...then the battlefield viewer, on the meadow")
-	check(v.maps == [""] + Maps.MAPS.keys() and v.maps.slice(0, 3) == ["", "ashwatch_ridge", "stonehollow_quarry"], "K  ...with every battlefield to go through (%s)" % str(v.maps))
+	check(v.maps == [""] + Maps.MAPS.keys() + ["ds_approach", "ds_bailey", "ds_dawngate", "ds_dawnfield"] and v.maps.slice(0, 3) == ["", "ashwatch_ridge", "stonehollow_quarry"], "K  ...with every battlefield to go through (%s)" % str(v.maps))
 	var key := InputEventKey.new()
 	key.keycode = KEY_RIGHT
 	key.pressed = true

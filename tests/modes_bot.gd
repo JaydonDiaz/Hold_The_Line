@@ -10,6 +10,10 @@ extends "res://tests/campaign_test.gd"
 ##   Godot --headless --path . --fixed-fps 60 -s tests/modes_bot.gd -- mission:ashwatch_road
 var type := ""
 var prio := ""   # (a second argument: every troop on this target priority, to compare)
+var minutes := 5.0   # how long (real time, at 4x) a game may run before it's stopped
+var only_diffs: Array = ["easy", "normal", "hard"]
+var games := 2
+var speed := 4.0     # game speed (a sixth argument; 8 is as fast as the simulation stays faithful)
 
 ## A campaign mission's state when it's played: missions won, peoples joined.
 const CAMPAIGN_AT := {
@@ -117,6 +121,14 @@ func _run() -> void:
 	campaign.reset()
 	var only: String = OS.get_cmdline_user_args()[0] if OS.get_cmdline_user_args().size() > 0 else ""
 	prio = OS.get_cmdline_user_args()[1] if OS.get_cmdline_user_args().size() > 1 else ""
+	if OS.get_cmdline_user_args().size() > 2:
+		minutes = float(OS.get_cmdline_user_args()[2])   # (a third: real minutes a game may run before it's stopped, for long endless runs)
+	if OS.get_cmdline_user_args().size() > 3:
+		only_diffs = Array(OS.get_cmdline_user_args()[3].split(","))   # (a fourth: just these difficulties)
+	if OS.get_cmdline_user_args().size() > 4:
+		games = int(OS.get_cmdline_user_args()[4])   # (a fifth: games (seeds) a difficulty)
+	if OS.get_cmdline_user_args().size() > 5:
+		speed = float(OS.get_cmdline_user_args()[5])
 	if prio == "-":
 		prio = ""   # (no priority given, to pass a third argument)
 	if only.begins_with("mission:"):
@@ -126,8 +138,8 @@ func _run() -> void:
 	for id in ["classic", "three_towers", "open_road", "signal_beacon", "village_road", "old_fort", "supply_wagon", "long_retreat"]:
 		if only != "" and id != only:
 			continue
-		for diff in ["easy", "normal", "hard"]:
-			for s in 2:
+		for diff in only_diffs:
+			for s in games:
 				seed(700 + s)
 				await _fresh_main()
 				main.hud.hide_mode_select()
@@ -140,10 +152,10 @@ func _run() -> void:
 				main._lock_portrait(true)
 				await process_frame
 				type = main.mission["type"]
-				Engine.time_scale = 4.0
+				Engine.time_scale = speed
 				var guard := 0
 				var tick := 0
-				while not main.game_over and guard < 60 * 60 * 5:
+				while not main.game_over and guard < 60 * 60 * minutes:
 					tick -= 1
 					if tick <= 0:
 						tick = 60
