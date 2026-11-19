@@ -461,7 +461,7 @@ func _martial() -> void:
 		for t in p["tiers"]:
 			tiers.append(t["name"])
 	check(tiers == ["Spirit Bolts", "Bolt Volley", "Blazing Spirit", "Spirit Bomb", "Quick Hands", "Tiger Claw", "Fighting Instinct",
-			"Thousand Fists", "Mirror Self", "Shadow Step", "Blinding Flash", "Piercing Light", "Mountain Training", "Iron Will",
+			"Thousand Fists", "Mirror Self", "Blinding Flash", "Shadow Step", "Shadow Mastery", "Mountain Training", "Iron Will",
 			"Crimson Aura", "Golden Ascension"], "...with new names for every tier (%s)" % ", ".join(tiers))
 	var text := ""
 	for p in paths:
@@ -475,7 +475,8 @@ func _martial() -> void:
 	check(paths[0]["tiers"][3]["effect"]["blast"] == {"damage": 42.0, "count": 3, "range": 200.0, "cooldown": 0.9, "splash": 50.0, "merge": 1.2}
 			and paths[0]["tiers"][2]["effect"]["blast"].get("splash", 0.0) > 0.0
 			and paths[1]["tiers"][3]["effect"] == {"combo": 2, "knockback": [0.25, 60.0], "damage": 1.4}
-			and paths[2]["tiers"][0]["effect"]["multiform"]["copies"] == 1 and paths[2]["tiers"][3]["effect"]["beam"]["damage"] == 350.0
+			and paths[2]["tiers"][0]["effect"]["multiform"]["copies"] == 1 and paths[2]["tiers"][1]["effect"].has("stun")
+			and paths[2]["tiers"][2]["effect"].has("teleport") and paths[2]["tiers"][3]["effect"].has("multiform")
 			and paths[3]["tiers"][3]["effect"]["golden"]["damage"] == 2.5, "...with the same effects")
 	# Tier III wears the path's own outfit; two at tier III mix them.
 	var ma = _hire("martial", Vector2(320, 560))

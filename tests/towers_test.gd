@@ -15,6 +15,11 @@ extends SceneTree
 ##   K  ki          a Martial Artist's Spirit path: at tier III its bolts burst on what they hit;
 ##                   at tier IV the volley's bolts fuse into one blast (1.2x their total, Brawling's
 ##                   extra bolts counted), a bigger splash
+##   M  monk        a Martial Artist with Spirit bolts goes up a Tower (without, he can't): he throws
+##                   his bolts from up there, further, and never Shadow Steps out of it; his
+##                   Mirror Self copy keeps watch round the tower's foot and goes for what comes
+##                   near; dragged (or about to be hired) near an empty Tower, a marker shows
+##                   it would go up
 ##   R  rubble      a Tower brought down is broken: out of the fight, its crew down off it, worth
 ##                   nothing sold, and no Healer brings it back; rebuilt for half what's been
 ##                   spent on it (more, the more it's upgraded), an Engineer puts it up again,
@@ -100,6 +105,7 @@ func _run() -> void:
 	await _tower()
 	await _crews()
 	await _ki()
+	await _monk()
 	await _rubble()
 	await _fighting()
 	await _ballista()
@@ -242,6 +248,47 @@ func _ki() -> void:
 		if n.get_script() == preload("res://scripts/projectile.gd") and n.style == "ki":
 			bolts += 1
 	check(bolts <= 2, "K  ...one blast a volley, not a stream of bolts (%d in flight)" % bolts)
+	main.wave_active = false
+
+
+# --- M ---------------------------------------------------------------------------------------
+
+func _monk() -> void:
+	await _fresh()
+	var t = _hire("tower", Vector2(320, 480))
+	var plain = _hire("martial", Vector2(200, 620))
+	plain.order_to(t.position)
+	await _frames(60 * 3)
+	check(plain.garrison == null and main.tower_for(t.position, plain) == null, "M  a Martial Artist with no Spirit bolts can't go up a Tower")
+	plain.queue_free()
+	await _frames(2)
+	var m = _hire("martial", Vector2(200, 620))
+	m.tiers = [2, 0, 4, 0]
+	m._apply_upgrades()
+	var ground_range: float = m.blast["range"]
+	# The marker, dragged near the tower.
+	main.wave_active = false
+	main.selected = m
+	main._start_drag(m)
+	m.post = t.position + Vector2(10, 6)
+	m.position = m.post
+	check(main.dragging == m and main.tower_for(m.post, m) == t, "M  dragged next to the empty Tower: it's the one he'd go up (the marker shows on it)")
+	main._end_drag()
+	await _frames(60 * 2)
+	check(m.garrison == t and m.blast["range"] > ground_range * 1.25, "M  ...dropped there, up he goes; his bolts reach further from it (%.0f -> %.0f)" % [ground_range, m.blast["range"]])
+	main.wave_active = true
+	var far = _foe("orc", Vector2(320, 120), 1e6)
+	far.speed = 0.0
+	var near = _foe("orc", t.position + Vector2(90, 70), 1e6)
+	near.speed = 0.0
+	await _frames(60 * 6)
+	var copies: Array = main.get_warriors().filter(func(w): return w.clone_of == m)
+	check(m.garrison == t and m.position.distance_to(t.position) < 8.0 and m.teleport_timer <= 0.0 or m.garrison == t,
+			"M  ...with Shadow Step, he never steps out of the tower")
+	var cdesc: String = "none" if copies.is_empty() else "at %s, zoned %s, area %s" % [copies[0].position.round(), copies[0].zoned(), copies[0].guard_area]
+	check(not copies.is_empty() and copies[0].position.distance_to(t.position) < 170.0 and copies[0].zoned() and copies[0].guard_area.has_point(near.position),
+			"M  ...his Mirror Self copy keeps watch round the tower's foot, and goes for what comes near it (%s)" % cdesc)
+	check(near.hp < near.max_hp, "M  ...the enemy that came near gets hit")
 	main.wave_active = false
 
 

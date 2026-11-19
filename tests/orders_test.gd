@@ -340,7 +340,8 @@ func _specials() -> void:
 	var ma = _hire("martial", post, "guard", 110.0)
 	main.selected = ma
 	main.upgrade_selected(2)
-	main.upgrade_selected(2)   # Mirror Self, Shadow Step
+	main.upgrade_selected(2)
+	main.upgrade_selected(2)   # Mirror Self, Blinding Flash, Shadow Step (third now)
 	main.selected = null
 	for p in [Vector2(320, 460), Vector2(200, 260), Vector2(520, 380)]:
 		_foe("orc", p)   # one it can reach from its area (Shadow Step lands inside), two it can't

@@ -525,15 +525,15 @@ func _send_side(delta: float) -> void:
 	# Those already on a job that's still open keep it.
 	for w in troops:
 		var j = (w.get_meta("side_job") if w.has_meta("side_job") else null)
-		if j != null and is_instance_valid(j) and ((jobs.has(j)) or (crews.has(j) and Warrior.GARRISON_KINDS.has(w.kind))):
+		if j != null and is_instance_valid(j) and ((jobs.has(j)) or (crews.has(j) and Warrior.can_garrison(w))):
 			busy[j] = busy.get(j, 0) + 1
 	for w in troops:
 		var j = (w.get_meta("side_job") if w.has_meta("side_job") else null)
-		if j != null and is_instance_valid(j) and (jobs.has(j) or (crews.has(j) and Warrior.GARRISON_KINDS.has(w.kind))):
+		if j != null and is_instance_valid(j) and (jobs.has(j) or (crews.has(j) and Warrior.can_garrison(w))):
 			continue
 		var best = null
 		var best_cost := INF
-		var pool: Array = (crews if Warrior.GARRISON_KINDS.has(w.kind) else []) + jobs
+		var pool: Array = (crews if Warrior.can_garrison(w) else []) + jobs
 		for o in pool:
 			if crews.has(o) and busy.get(o, 0) > 0:
 				continue   # (one crew to a tower)

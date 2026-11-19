@@ -239,6 +239,14 @@ var burn := []               # Archer / Cannoneer / Ballista
 # all its own upgrades, reaches further from the high ground, and enemies can't get at it
 # (they go for the tower). Ordered anywhere else, it climbs down.
 const GARRISON_KINDS := ["archer", "mage", "frost", "alchemist", "bard"]
+
+
+## Whether troop `w` can go up a Tower: a ranged kind, or a Martial Artist with Spirit bolts
+## to throw from up there (a Spirit-path upgrade). Not a copy or a summoned thing.
+static func can_garrison(w) -> bool:
+	if w == null or w.summoned or w.clone_of != null:
+		return false
+	return GARRISON_KINDS.has(w.kind) or (w.kind == "martial" and int(w.tiers[0]) > 0)
 const PERCH_BASE := 0.3      # how much further a crew reaches from a Tower (before its Lookout upgrades)
 const CLIMB_REACH := 30.0    # a troop ordered this near an empty Tower climbs into it
 var garrison = null          # the Tower this troop is posted in (null: on the ground)
@@ -540,6 +548,11 @@ func _apply_upgrades() -> void:
 		attack_range *= 1.0 + garrison.perch
 		song_radius *= 1.0 + garrison.perch
 		cooldown *= garrison.crew_rate
+		if not blast.is_empty():
+			# (a Martial Artist up there: his bolts carry further, and come quicker)
+			blast = blast.duplicate()
+			blast["range"] = float(blast["range"]) * (1.0 + garrison.perch)
+			blast["cooldown"] = float(blast["cooldown"]) * garrison.crew_rate
 	if crew_in != null and is_instance_valid(crew_in):
 		crew_in.call_deferred("_apply_upgrades")   # (a Tower's upgrades reach its crew)
 	# Extra combo hits turn into extra blasts per volley once ki blasts are learned.
@@ -742,6 +755,28 @@ func _body_share() -> float:
 	return 1.0 if bodies == 1 else real.multiform["power"] / bodies
 
 
+## A Mirror Self copy whose Martial Artist is up a Tower: it keeps watch round the tower's
+## foot, walking a round about it, and goes for whatever comes near.
+var patrol_t := 0.0
+var patrol_i := 0
+const PATROL_R := 70.0
+
+func _patrol_step(delta: float) -> void:
+	var real = clone_of
+	if real == null or not is_instance_valid(real) or real.garrison == null or not is_instance_valid(real.garrison):
+		return
+	var t = real.garrison
+	anchor = null
+	move_mode = "guard"
+	guard_area = Rect2(t.position - Vector2(140, 110), Vector2(280, 230))   # (it fights what comes near the tower)
+	patrol_t -= delta
+	if patrol_t <= 0.0 and (target == null or not _is_valid(target)):
+		patrol_t = 2.2
+		patrol_i += 1
+		var a := patrol_i * TAU / 6.0
+		post = main.paths.open_spot(main._clamp_post(t.position + Vector2(cos(a) * PATROL_R, 26.0 + sin(a) * PATROL_R * 0.6)))
+
+
 func _clones() -> Array:
 	return main.get_warriors().filter(func(w): return w.clone_of == self)
 
@@ -901,7 +936,7 @@ func _garrison_step(delta: float) -> void:
 		position = garrison.position + Vector2(0, -2)
 		post = position
 		return
-	if summoned or clone_of != null or not is_active() or held:
+	if not can_garrison(self) or not is_active() or held:
 		return
 	garrison_check -= delta
 	if garrison_check > 0.0:
@@ -1337,7 +1372,9 @@ func _process(delta: float) -> void:
 	block_flash = maxf(block_flash - delta, 0.0)
 	queue_redraw()
 	_animate(delta)
-	if garrison != null or GARRISON_KINDS.has(kind):
+	if clone_of != null:
+		_patrol_step(delta)   # (its Martial Artist up a Tower: it keeps watch round the foot)
+	if garrison != null or GARRISON_KINDS.has(kind) or kind == "martial":
 		_garrison_step(delta)
 	if down_timer > 0.0:
 		# Healers and Medic Bays nearby keep a downed unit alive longer (or, without
@@ -1472,7 +1509,7 @@ func _process(delta: float) -> void:
 	elif target != null:
 		var gap := _gap_to(target)
 		facing = position.direction_to(target.position)
-		if not teleport.is_empty() and teleport_timer <= 0.0 and _should_blink(target, gap):
+		if not teleport.is_empty() and teleport_timer <= 0.0 and garrison == null and _should_blink(target, gap):
 			_blink_to(target)
 			gap = _gap_to(target)
 		if not blast.is_empty():
@@ -1561,6 +1598,8 @@ func _continue_combo(delta: float) -> void:
 
 
 func _in_combat() -> bool:
+	if garrison != null and not blast.is_empty():
+		return _blast_target() != null   # (up a Tower, a Martial Artist fights with his bolts)
 	var reach: float = maxf(attack_range, blast.get("range", 0.0)) + 40.0
 	return target != null and _is_valid(target) and _gap_to(target) <= reach
 
@@ -3199,6 +3238,8 @@ func _multiform_step(delta: float) -> void:
 	multiform_timer = multiform["cooldown"]
 	var side := Vector2(-facing.y, facing.x) if facing != Vector2.ZERO else Vector2.RIGHT
 	var spot := _clear_of_walls(_zone_clamp(position + side * RADIUS * 2.2), position)   # (inside its zone)
+	if garrison != null and is_instance_valid(garrison):
+		spot = main.paths.open_spot(garrison.position + Vector2(0, 40))   # (up a Tower: the copy steps down at its foot)
 	var w = get_script().new()
 	w.tiers = tiers.duplicate()
 	w.last_path = last_path

@@ -1735,6 +1735,26 @@ func climb_down() -> void:
 	spawn_text(selected.position + Vector2(0, -40), "Climbs down", Color(0.75, 0.9, 1.0))
 
 
+## The marker on a Tower a troop would go up if dropped (or hired) where it is: a pulsing
+## ring round it, an arrow up into it, and a word saying so.
+func _draw_into_tower(t) -> void:
+	var k := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 140.0)
+	var c := Color(0.55, 0.85, 1.0)
+	var foot: Vector2 = t.position + Vector2(0, Warrior.RADIUS * 0.6)
+	overlay.draw_set_transform(foot, 0, Vector2(1.0, 0.55))
+	overlay.draw_circle(Vector2.ZERO, Warrior.CLIMB_REACH, Color(c, 0.12 * k), true, -1.0, true)
+	overlay.draw_arc(Vector2.ZERO, Warrior.CLIMB_REACH, 0.0, TAU, 40, Color(c, 0.9 * k), 3.0, true)
+	overlay.draw_set_transform(Vector2.ZERO)
+	var top: Vector2 = t.position + Vector2(0, -62 - 5.0 * k)
+	var arrow := PackedVector2Array([top + Vector2(0, -12), top + Vector2(10, 0), top + Vector2(4, 0), top + Vector2(4, 12),
+			top + Vector2(-4, 12), top + Vector2(-4, 0), top + Vector2(-10, 0)])
+	overlay.draw_colored_polygon(arrow, Color(c, 0.95))
+	overlay.draw_polyline(arrow + PackedVector2Array([arrow[0]]), Color(0.1, 0.15, 0.25), 1.5)
+	var f := ThemeDB.fallback_font
+	overlay.draw_string_outline(f, top + Vector2(-70, -18), "Into the tower", HORIZONTAL_ALIGNMENT_CENTER, 140, 13, 4, Color(0, 0, 0, 0.85))
+	overlay.draw_string(f, top + Vector2(-70, -18), "Into the tower", HORIZONTAL_ALIGNMENT_CENTER, 140, 13, c)
+
+
 ## The selected broken Tower rebuilt (if there's the gold): an Engineer comes out to it.
 func rebuild_selected() -> void:
 	if not (selected is Warrior) or not selected.broken:
@@ -1764,7 +1784,7 @@ func tower_for(p: Vector2, w) -> Warrior:
 		if not Warrior.GARRISON_KINDS.has(w):
 			return null   # (hiring: a ranged kind can be hired straight onto a Tower)
 		w = null
-	elif w == null or not (w is Warrior) or not Warrior.GARRISON_KINDS.has(w.kind) or w.summoned or w.clone_of != null:
+	elif w == null or not (w is Warrior) or not Warrior.can_garrison(w):
 		return null
 	for t in get_warriors():
 		if t.kind == "tower" and t.is_active() and t.build_left <= 0.0 and t.position.distance_to(p) <= Warrior.CLIMB_REACH \
@@ -2967,6 +2987,14 @@ func _draw_overlay() -> void:
 		var reach: float = d["range"] + Warrior.RADIUS
 		overlay.draw_circle(mouse, reach, Color(1, 1, 1, 0.08), true, -1.0, true)
 		overlay.draw_arc(mouse, reach, 0, TAU, 64, Color(1, 1, 1, 0.5), 2.0, true)
+	# Dropped (or hired) here, it would go up a Tower: show which.
+	var into = null
+	if is_instance_valid(dragging) and not dragging is Barricade:
+		into = tower_for(dragging.post, dragging)   # (where it'd be dropped: see _end_drag)
+	elif placing_type != "" and Data.WARRIORS.has(placing_type) and not Data.WARRIORS[placing_type].get("emplacement", false):
+		into = tower_for(mouse, placing_type)
+	if into != null:
+		_draw_into_tower(into)
 	if is_instance_valid(dragging) and dragging is Barricade:
 		if wall_problem(dragging.seg_a(), dragging.seg_b()) != "":
 			overlay.draw_line(dragging.seg_a(), dragging.seg_b(), Color(1, 0.25, 0.25, 0.45), 18.0)

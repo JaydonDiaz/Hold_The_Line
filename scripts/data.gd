@@ -426,12 +426,13 @@ const WARRIORS := {
 			{"name": "Secret Arts", "tiers": [
 				{"name": "Mirror Self", "cost": 85, "desc": "Splits into 2 in battle, each with 60% of his power; a fallen copy gives it back",
 					"effect": {"multiform": {"copies": 1, "power": 1.2, "hp": 0.6, "cooldown": 10.0}}},
-				{"name": "Shadow Step", "cost": 130, "desc": "Teleports straight to distant targets (every 4s)",
-					"effect": {"teleport": {"cooldown": 4.0, "min_dist": 90.0}}},
-				{"name": "Blinding Flash", "cost": 220, "desc": "Blinds and stuns nearby enemies for 2s (every 9s)",
+				{"name": "Blinding Flash", "cost": 130, "desc": "Blinds and stuns nearby enemies for 2s (every 9s)",
 					"effect": {"stun": {"radius": 110.0, "duration": 2.0, "cooldown": 9.0}}},
-				{"name": "Piercing Light", "cost": 360, "desc": "Every 5s, a beam that hits every enemy in a line: 350 dmg",
-					"effect": {"beam": {"damage": 350.0, "cooldown": 5.0, "width": 30.0, "range": 260.0}}},
+				{"name": "Shadow Step", "cost": 220, "desc": "Teleports straight to distant targets (every 4s; not from a Tower)",
+					"effect": {"teleport": {"cooldown": 4.0, "min_dist": 90.0}}},
+				{"name": "Shadow Mastery", "cost": 360, "desc": "Sharper arts: stronger copies back in 6s; a wider, longer flash; steps every 2.5s",
+					"effect": {"multiform": {"copies": 1, "power": 1.6, "hp": 0.8, "cooldown": 6.0},
+						"stun": {"radius": 140.0, "duration": 2.6, "cooldown": 6.0}, "teleport": {"cooldown": 2.5, "min_dist": 80.0}}},
 			]},
 			{"name": "Discipline", "note": "The crimson aura and the golden form stack.", "tiers": [
 				{"name": "Mountain Training", "cost": 85, "desc": "+15% damage, attacks 10% faster", "effect": {"damage": 1.15, "rate": 0.9}},
