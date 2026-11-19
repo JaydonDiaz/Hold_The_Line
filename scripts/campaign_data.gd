@@ -928,6 +928,10 @@ const STORY := {
 	],
 	# Out of the castle, onto the Fields of Dawn: the whole Line comes.
 	"ds_field": [
+		{"who": "hale", "text": "Dawnspire... the whole citadel's coming down behind us."},
+		{"who": "ysolde", "text": "He has torn the beacon out of its heart, and every broken oath with it. Two hundred years of stone could not hold what he is drawing on."},
+		{"who": "unbound", "text": "Your Line raised these walls to stand forever. They stood exactly as long as your promises did."},
+		{"who": "hale", "text": "Then let them fall. Dawnspire was never the walls. It was the people inside them, and they're out here with us now."},
 		{"who": "hale", "text": "We're out. And look: the Line's come for us. Every banner we've fought beside."},
 		{"who": "vell", "text": "The Guild's here, Commander, with every engine we could haul up the road.", "if": {"ally": "stonehollow"}},
 		{"who": "thorne", "text": "The Watch holds the high ground. Point us at him.", "if": {"ally": "greenwood"}},
@@ -944,7 +948,7 @@ const STORY := {
 		{"who": "hale", "text": "The Ogre King is dead. Dawnspire is ours.", "if": {"no_flag": "ds_united"}},
 		{"who": "ysolde", "text": "Two hundred years, and the citadel at the heart of the Line is free. The beacon here is cold, but it can be lit again.", "if": {"no_flag": "ds_united"}},
 		{"who": "hale", "text": "Not every people came to this fight, Commander. The Line holds today. Whether it holds tomorrow is up to all of them.", "if": {"no_flag": "ds_united"}},
-		{"who": "hale", "text": "He's gone. Truly gone, and Dawnspire with him gone free.", "if": {"flag": "ds_united"}},
+		{"who": "hale", "text": "He's gone. Truly gone. Dawnspire's in ruins, but it's free.", "if": {"flag": "ds_united"}},
 		{"who": "ysolde", "text": "Nine beacons, and now a tenth: Dawnspire's own, lit by every people together. The first time it has burned since the oath was broken.", "if": {"flag": "ds_united"}},
 		{"who": "vell", "text": "The Guild will raise the walls again. Properly, this time.", "if": {"flag": "ds_united"}},
 		{"who": "ilse", "text": "We'll tend the wounded of every side. That was always the oath, wasn't it?", "if": {"flag": "ds_united"}},
