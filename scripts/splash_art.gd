@@ -5,9 +5,8 @@ extends Control
 ## life of its own: breathing, the Mage's and Frost Witch's staves glowing, the Healer's
 ## aura, the Bard's notes drifting up, the Alchemist's flask fizzing. Round them: a crescent
 ## moon and drifting cloud; his host's torches, tents and banners along the hills; mist at
-## their foot; the Line's camp on the field: a campfire, its blue-and-gold standard, and
-## Ashwatch's beacon burning on its tower, the first light of the Line; a path, grass,
-## stones and flowers.
+## their foot; the Line's camp on the field: a campfire, a tent, its blue-and-gold
+## standard, supplies; a path, grass, stones and flowers.
 
 const Sprites = preload("res://scripts/sprites.gd")
 const W := 640.0
@@ -57,7 +56,6 @@ func _draw() -> void:
 	_field()
 	_tent(Vector2(66, 708))
 	_supplies(Vector2(560, 968))
-	_beacon_tower(Vector2(592, 788))
 	_standard(Vector2(52, 920))
 	_campfire(Vector2(320, 716))
 	for tr in TROOPS:
@@ -185,24 +183,6 @@ func _field() -> void:
 				_px(p.x, p.y + 4, 4, 4, Color(0.2, 0.32, 0.15))
 
 
-## Ashwatch's beacon on its stone tower, burning: the first light of the Line.
-func _beacon_tower(foot: Vector2) -> void:
-	var stone := Color(0.32, 0.3, 0.36)
-	_px(foot.x - 20, foot.y - 128, 40, 128, OUTLINE)
-	_px(foot.x - 16, foot.y - 124, 32, 124, stone)
-	for y in range(int(foot.y) - 120, int(foot.y), 12):
-		_px(foot.x - 16, y, 32, 4, stone.darkened(0.2))
-		_px(foot.x - 8 + (y / 12 % 2) * 12, y + 4, 4, 8, stone.darkened(0.2))
-	_px(foot.x + 4, foot.y - 124, 12, 124, Color(0, 0, 0, 0.2))
-	_px(foot.x - 4, foot.y - 92, 8, 16, Color(1.0, 0.7, 0.3))   # a lit slit window
-	_px(foot.x - 28, foot.y - 136, 56, 12, OUTLINE)
-	_px(foot.x - 24, foot.y - 132, 48, 4, stone.lightened(0.1))
-	_flame_px(Vector2(foot.x, foot.y - 136), 1.4)
-	for r in [70.0, 46.0, 26.0]:
-		draw_circle(Vector2(foot.x, foot.y - 150), r, Color(1.0, 0.55, 0.15, 0.03 + 0.01 * sin(t * 5.0)))
-	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-34, -10), Vector2(68, 20)), false, Color(0, 0, 0, 0.35))
-
-
 ## A fire in pixel blocks: a few tongues of flame flickering at `base`, `s` its size.
 func _flame_px(base: Vector2, s: float) -> void:
 	# Tongues that taper as they rise: the middle ones tallest, a hot core low down.
@@ -231,7 +211,7 @@ func _tent(foot: Vector2) -> void:
 	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-56, -8), Vector2(112, 16)), false, Color(0, 0, 0, 0.3))
 
 
-## Supplies stacked under the beacon: crates and a barrel.
+## The camp's supplies: crates and a barrel.
 func _supplies(foot: Vector2) -> void:
 	var wood := Color(0.45, 0.3, 0.16)
 	for c in [[-28, 0, 28], [4, 0, 24], [-16, -24, 24]]:
