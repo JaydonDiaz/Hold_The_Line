@@ -889,14 +889,14 @@ const STORY := {
 	"sp_circle_outro": [
 		{"who": "ysolde", "text": "The Circle is ours again, and the Mage Conclave stands with the Line. Our mages and our towers are yours, and the old fire and thunder of the walls."},
 		{"who": "ysolde", "text": "The Magi who held the Circle beside you came back, every one. The Conclave won't forget it.", "if": {"flag": "magi_stood"}},
-		{"who": "ysolde", "text": "You should know what you are rebuilding, Commander. The Line was sworn at Dawnspire, centuries ago, by every people of the continent. Its beacons were first lit from this Circle."},
+		{"who": "ysolde", "text": "You should know what you are rebuilding, Commander. The Line was sworn at Dawnspire, centuries ago, by every people of the continent. Its beacons were first lit from this Circle.", "scene": "oath"},
 		{"who": "ogre", "text": "Mages. They lit the beacons against me once. Let them remember how that ended."},
 	],
 	"sp_relight_intro": [
 		{"who": "ysolde", "text": "Three spires fed the beacons. Relight them and the Spires' beacon burns for the first time since the Line broke."},
-		{"who": "ysolde", "text": "Broke, Commander. The Ogre King didn't break it. We did. The Free Cities wanted the trade roads, the Guild wanted the mines, every people wanted the beacons for itself."},
-		{"who": "ysolde", "text": "He was a chieftain of the wastes once, who bound the warring clans under one banner. Not all came willingly, and some refuse him still."},
-		{"who": "ysolde", "text": "For fifty years he has sat in Dawnspire, reaching a little further every year, while each of us told ourselves it was someone else's border."},
+		{"who": "ysolde", "text": "Broke, Commander. The Ogre King didn't break it. We did. The Free Cities wanted the trade roads, the Guild wanted the mines, every people wanted the beacons for itself.", "scene": "wars"},
+		{"who": "ysolde", "text": "He was a chieftain of the wastes once, who bound the warring clans under one banner. Not all came willingly, and some refuse him still.", "scene": "clans"},
+		{"who": "ysolde", "text": "For fifty years he has sat in Dawnspire, reaching a little further every year, while each of us told ourselves it was someone else's border.", "scene": "conquest"},
 		{"who": "ysolde", "text": "When he came, we were already at each other's throats, and the beacons went dark one by one. Hold the spires. Lose two and ours stays dark as well."},
 	],
 	"sp_relight_outro": [
@@ -940,7 +940,7 @@ const STORY := {
 	"ds_field": [
 		{"who": "hale", "text": "Dawnspire... the whole citadel's coming down behind us."},
 		{"who": "ysolde", "text": "He has torn the beacon out of its heart, and every broken oath with it. Centuries of stone could not hold what he is drawing on."},
-		{"who": "unbound", "text": "Your Line raised these walls to stand forever. They stood exactly as long as your promises did."},
+		{"who": "unbound", "text": "Your Line raised these walls to stand forever. They stood exactly as long as your promises did.", "scene": "unbound_ruins"},
 		{"who": "hale", "text": "Then let them fall. Dawnspire was never the walls. It was the people inside them, and they're out here with us now."},
 		{"who": "hale", "text": "We're out. And look: the Line's come for us. Every banner we've fought beside."},
 		{"who": "vell", "text": "The Guild's here, Commander, with every engine we could haul up the road.", "if": {"ally": "stonehollow"}},
@@ -952,7 +952,7 @@ const STORY := {
 		{"who": "coralie", "text": "The Free Cities have paid for this battle in full. We intend to see it won.", "if": {"ally": "freecities"}},
 		{"who": "ysolde", "text": "When he charges, he leaves himself open after. That is when every one of us strikes."},
 		{"who": "hale", "text": "We can't hold him here. We fight him back the way we came, field by field, down to the camp, and every people of the Line waiting along the road. He doesn't reach that camp."},
-		{"who": "unbound", "text": "All of you, on one field. Good. Then I only have to win once."},
+		{"who": "unbound", "text": "All of you, on one field. Good. Then I only have to win once.", "scene": "unbound_ruins"},
 	],
 	"ds_assault_outro": [
 		{"who": "hale", "text": "The Ogre King is dead. Dawnspire is ours.", "if": {"no_flag": "ds_united"}},
@@ -966,7 +966,7 @@ const STORY := {
 		{"who": "hale", "text": "No one holds the line alone. We swore it once and broke it. Let's not break it again.", "if": {"flag": "ds_united"}},
 	],
 	"sp_archive_intro": [
-		{"who": "ysolde", "text": "Under the tower lies the Archive: the oaths of the Line, sealed when it fell, so no one could read what we had broken."},
+		{"who": "ysolde", "text": "Under the tower lies the Archive: the oaths of the Line, sealed when it fell, so no one could read what we had broken.", "scene": "dark"},
 		{"who": "ysolde", "text": "My mages will open its wards. It takes time, and the King wants those oaths burned. Keep them off the Archive while we read."},
 	],
 	"sp_archive_outro": [

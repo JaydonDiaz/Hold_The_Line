@@ -127,8 +127,8 @@ func _archer_paths() -> void:
 	var paths: Array = Data.WARRIORS["archer"]["paths"]
 	var volley: Array = paths[2]["tiers"]
 	check(paths[2]["name"] == "Volley" and volley[0]["effect"].has("rate") and volley[1]["effect"].has("rate")
-			and volley[2]["effect"].get("multishot", 1) == 2 and volley[3]["effect"].get("multishot", 1) == 3,
-			"A  the Archer's third path: faster, faster, then 2 arrows, then 3")
+			and volley[2]["effect"].get("multishot", 1) == 2 and volley[3]["effect"].get("multishot", 1) == 4,
+			"A  the Archer's third path: faster, faster, then 2 arrows, then 4")
 	var tricks: Array = paths[3]["tiers"]
 	check(tricks[0]["effect"].get("pierce", 0) == 1 and tricks[1]["effect"].get("seek", false) and tricks[2]["effect"].has("burn") and tricks[2]["effect"].has("rain")
 			and tricks.all(func(t): return not t["effect"].has("multishot")),

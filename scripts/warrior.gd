@@ -2274,6 +2274,8 @@ func _attack(e) -> void:
 	while targets.size() < multishot:
 		var nxt = _pick(others)
 		if nxt == null:
+			if kind == "archer":
+				break   # (an Archer's volley goes to different enemies: with only the one, one arrow)
 			nxt = e
 		else:
 			others.erase(nxt)
@@ -3402,18 +3404,22 @@ func _crumble() -> void:
 	queue_free()
 
 
-## Trapcraft: drops a charge every so often while walking.
+## Trapcraft: drops a charge every so often while walking; holding its post with a foe in
+## reach, throws one into the foe's path instead (between it and the foe).
 func _trap_step(delta: float) -> void:
 	my_traps = my_traps.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
+	var at := position + Vector2(0, RADIUS * 0.6)
 	if not moving:
-		return
+		if target == null or not is_instance_valid(target) or target.dead or not _in_range(target):
+			return
+		at = position.lerp(target.position, 0.55)   # (in its path, short of where it is now)
 	trap_timer -= delta
 	if trap_timer > 0.0:
 		return
 	for t in my_traps:
-		if t.position.distance_to(position) < 30.0:
+		if t.position.distance_to(at) < 30.0:
 			return   # already one here
-	trap_timer = traps["every"]
+	trap_timer = traps["every"] * (1.0 if moving else 2.0)   # (thrown from its post at half the pace it drops them walking)
 	while my_traps.size() >= int(traps["max"]):
 		my_traps.pop_front().queue_free()   # the oldest is taken up again
 	var t := Trap.new()
@@ -3426,7 +3432,7 @@ func _trap_step(delta: float) -> void:
 	if traps["brew"]:
 		t.poison = poison
 		t.corrode = corrode
-	t.position = position + Vector2(0, RADIUS * 0.6)
+	t.position = at
 	main.add_projectile(t)
 	my_traps.append(t)
 
@@ -3715,7 +3721,7 @@ static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
 ## closest spot a troop can stand.
 func _dodge_spot(z: Dictionary, zones: Array) -> Vector2:
 	if z.has("above"):
-		return main._clamp_post(Vector2(position.x, float(z["above"]) + RADIUS + 60.0))   # (down the field, ahead of it)
+		return main._clamp_post(Vector2(position.x, float(z["above"]) + RADIUS + 140.0))   # (down the field, well ahead of it)
 	var away: Vector2
 	var edge: float = float(z["r"]) + RADIUS + 16.0
 	var c: Vector2

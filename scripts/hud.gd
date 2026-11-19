@@ -2189,9 +2189,9 @@ func play_story(lines: Array, then: Callable = Callable()) -> void:
 			play_story(rest, then)
 	if villain:
 		var c := Cutscene.new()
-		c.scenes = lines.slice(0, n).map(func(l): return {"scene": l["who"], "who": l["who"], "text": l["text"]})
+		c.scenes = lines.slice(0, n).map(func(l): return {"scene": l.get("scene", l.get("who", "")), "who": l.get("who", ""), "text": l["text"]})
 		story = c
-		scene_music = "villain"
+		scene_music = "villain" if lines.slice(0, n).any(func(l): return VILLAINS.has(l.get("who", ""))) else "story"
 		c.finished.connect(func():
 			scene_music = ""
 			centered.erase(c)
@@ -2215,7 +2215,7 @@ func play_story(lines: Array, then: Callable = Callable()) -> void:
 ## Whether a story line plays as a cutscene of its own: the enemy's, unless it's marked
 ## "box" (a villain who's there on the battlefield talks in the dialogue box like anyone).
 func _cutscene_line(line: Dictionary) -> bool:
-	return VILLAINS.has(line["who"]) and not line.get("box", false)
+	return (VILLAINS.has(line.get("who", "")) or line.has("scene")) and not line.get("box", false)
 
 
 ## The campaign's prologue cutscene; `then` runs once it's over (or skipped).

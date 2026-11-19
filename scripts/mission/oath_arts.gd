@@ -137,46 +137,133 @@ class WinterRing extends Node2D:
 		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(0.7, 0.95, 1.0, 0.95), 2.5, true)
 
 
-## The beacon's fire, rolling down the field from him: everything above its front burns;
-## the army falls back before it. Done once it's swept down to the bottom (`swept`).
+## The beacon's fire, when he's worn to a field's mark. First a warning (WARN seconds: he
+## draws on the beacon, a line of fire glowing where it'll start, time for the army to fall
+## back); then bursts of flame, each marked on the ground before it catches, landing across
+## the field and creeping down it (a front moving at `speed`), every one burning on where it
+## landed, until the field's alight from end to end (`swept`: the battle goes on below).
 class BeaconWrath extends Node2D:
+	const WARN := 6.0
+	const EVERY := 0.3        # a burst every this many seconds
+	const COLUMNS := 7        # the field's width in strips, the bursts going round them
 	var main
-	var front := 0.0         # its leading edge (y)
-	var speed := 70.0        # how fast it comes down the field
-	var dps := 45.0
-	var bottom := 700.0      # where it stops: the field's been swept
+	var front := 0.0         # how far down the field the bursts have reached (y)
+	var speed := 26.0        # how fast that front creeps down (slower than any troop walks)
+	var dps := 40.0
+	var bottom := 700.0      # where the front stops: the field's been swept
 	var swept := false
+	var t := 0.0
+	var spawn_t := 0.0
+	var col := 0
+	var left := 0.0          # once the front's at the bottom: the last bursts catching
+
+	func _ready() -> void:
+		add_to_group("danger")
+
+	func warning() -> bool:
+		return t < WARN
+
+	## Ground well behind the bursts, burning end to end: troops caught back there get out.
+	func danger_zone() -> Dictionary:
+		return {} if t < WARN or swept else {"above": front - 70.0}
+
+	func _process(delta: float) -> void:
+		if main.game_over or swept:
+			return
+		var was := t
+		t += delta
+		queue_redraw()
+		if t < WARN:
+			return
+		if was < WARN:
+			main.hud.show_message("The beacon's fire bursts across the field! Fall back ahead of it!")
+			main.sfx("boom", 0.6)
+		if front < bottom:
+			front = minf(front + speed * delta, bottom)
+			spawn_t -= delta
+			while spawn_t <= 0.0:
+				spawn_t += EVERY
+				_burst()
+		else:
+			left += delta
+			if left >= WrathFire.WARN + 0.4:
+				swept = true
+
+	## A burst: in the next strip across the field, a little behind the front.
+	func _burst() -> void:
+		col = (col + 3) % COLUMNS   # (round the strips out of order, so it spreads unevenly)
+		var w: float = main.FIELD_W
+		var f := WrathFire.new()
+		f.main = main
+		f.radius = randf_range(46.0, 64.0)
+		f.dps = dps
+		f.position = Vector2((col + randf_range(0.15, 0.85)) * w / COLUMNS, front - randf_range(0.0, 60.0))
+		main.corpse_layer.add_child(f)
+
+	func _draw() -> void:
+		var w: float = main.FIELD_W
+		if t < WARN:
+			# The warning: a line of fire glowing across the field where it'll start, brighter
+			# as it comes, and the field behind it reddening.
+			var k := t / WARN
+			var pulse := 0.5 + 0.5 * sin(t * (4.0 + 8.0 * k))
+			draw_rect(Rect2(0, -200, w, front + 200), Color(1.0, 0.25, 0.05, 0.08 + 0.1 * k))
+			draw_rect(Rect2(0, front - 3, w, 6), Color(1.0, 0.45, 0.1, 0.35 + 0.5 * pulse * k))
+			return
+		# Behind the bursts: the field alight, a red haze over it.
+		draw_rect(Rect2(0, -200, w, maxf(front - 60.0, 0.0) + 200), Color(0.9, 0.25, 0.05, 0.12))
+
+
+## One of the beacon's bursts: its ring on the ground first, then it catches and burns on
+## (whoever stands in it burns, troops only) until the battle leaves this field.
+class WrathFire extends Node2D:
+	const WARN := 1.6
+	var main
+	var radius := 55.0
+	var dps := 40.0
+	var t := 0.0
 	var tick := 0.0
 
 	func _ready() -> void:
 		add_to_group("danger")
 
-	## Everything above the front, and a little below it (troops get well ahead of it).
 	func danger_zone() -> Dictionary:
-		return {} if swept else {"above": front + 30.0}
+		return {"c": position, "r": radius}
 
 	func _process(delta: float) -> void:
-		if main.game_over or swept:
+		if main.game_over:
 			return
-		front = minf(front + speed * delta, bottom)
-		if front >= bottom:
-			swept = true
-		tick -= delta
-		if tick <= 0.0:
-			tick = 0.25
-			for w in main.get_warriors():
-				if w.is_active() and not w.is_emplacement() and w.position.y < front:
-					w.take_damage(dps * 0.25)
+		var was := t
+		t += delta
+		if t >= WARN:
+			if was < WARN:
+				main.spawn_burst(position, radius, Color(1.0, 0.45, 0.12))
+				if randf() < 0.3:
+					main.sfx("boom", randf_range(0.8, 1.0))
+			tick -= delta
+			if tick <= 0.0:
+				tick = 0.25
+				for w in main.warriors_near(position, radius + 20.0):
+					if w.is_active() and not w.is_emplacement() and w.position.distance_to(position) <= radius + w.RADIUS * 0.5:
+						w.take_damage(dps * 0.25)
 		queue_redraw()
 
 	func _draw() -> void:
-		var w: float = main.FIELD_W
-		var t := Time.get_ticks_msec() / 1000.0
-		draw_rect(Rect2(0, -200, w, front + 200 - 24), Color(0.9, 0.25, 0.05, 0.22))
-		draw_rect(Rect2(0, front - 24, w, 24), Color(1.0, 0.45, 0.1, 0.35))
-		var n := int(w / 18.0) + 1
+		draw_set_transform(Vector2.ZERO, 0, Vector2(1.0, 0.6))
+		if t < WARN:
+			var k := t / WARN
+			draw_circle(Vector2.ZERO, radius, Color(1.0, 0.3, 0.08, 0.12))
+			draw_circle(Vector2.ZERO, radius * k, Color(1.0, 0.45, 0.12, 0.28))
+			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(1.0, 0.4, 0.12, 0.95), 2.5, true)
+			return
+		var flick := 0.85 + 0.15 * sin(t * 9.0 + position.x)
+		draw_circle(Vector2.ZERO, radius, Color(0.9, 0.25, 0.05, 0.35 * flick))
+		draw_circle(Vector2.ZERO, radius * 0.7, Color(1.0, 0.5, 0.12, 0.35 * flick))
+		draw_set_transform(Vector2.ZERO)
+		var n := int(radius / 9.0)
 		for i in n:
-			var x := i * 18.0
-			var h := 14.0 + 8.0 * sin(t * 9.0 + i * 1.7)
-			draw_colored_polygon(PackedVector2Array([Vector2(x - 9, front), Vector2(x, front - h - 10), Vector2(x + 9, front)]), Color(1.0, 0.55, 0.12, 0.85))
-			draw_colored_polygon(PackedVector2Array([Vector2(x - 5, front), Vector2(x, front - h * 0.6), Vector2(x + 5, front)]), Color(1.0, 0.9, 0.4, 0.9))
+			var a := i * TAU / n + position.x
+			var p := Vector2(cos(a), sin(a) * 0.6) * radius * (0.35 + 0.5 * fmod(i * 0.37, 1.0))
+			var h := 8.0 + 5.0 * sin(t * 10.0 + i * 1.3)
+			draw_colored_polygon(PackedVector2Array([p + Vector2(-5, 0), p + Vector2(0, -h - 6), p + Vector2(5, 0)]), Color(1.0, 0.55, 0.12, 0.85))
+			draw_colored_polygon(PackedVector2Array([p + Vector2(-2.5, 0), p + Vector2(0, -h * 0.55), p + Vector2(2.5, 0)]), Color(1.0, 0.9, 0.4, 0.9))

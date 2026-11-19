@@ -131,7 +131,7 @@ func _next() -> void:
 			name_label.text = f["name"]
 			name_label.add_theme_color_override("font_color", f["color"])
 			sub_label.text = "%s  ·  led by %s" % [f["home"], CD.SPEAKERS[who]["name"]]
-		"ogre", "marshal", "unbound":
+		"ogre", "marshal", "unbound", "unbound_ruins":
 			who = s["who"]
 			name_label.text = CD.SPEAKERS[who]["name"]
 			name_label.add_theme_color_override("font_color", CD.SPEAKERS[who]["color"])
@@ -144,6 +144,13 @@ func _next() -> void:
 		"title":
 			title_label.text = text
 			text = ""
+		"oath", "wars", "clans", "conquest", "dark", "beacons":
+			# History, told over its scene: by whoever's telling it (or plain narration).
+			who = s.get("who", "")
+			if who != "":
+				name_label.text = CD.SPEAKERS[who]["name"]
+				name_label.add_theme_color_override("font_color", CD.SPEAKERS[who]["color"])
+				sub_label.text = CD.SPEAKERS[who]["role"]
 	frame.visible = who != ""
 	if who != "":
 		portrait.texture = Portraits.texture(who, CD.SPEAKERS[who]["look"])
@@ -249,6 +256,16 @@ func _draw() -> void:
 				_draw_horde()
 			"unbound":
 				_draw_ogre_throne(true)   # (the throne room, the beacon's fire pouring into him)
+			"unbound_ruins":
+				_draw_unbound_ruins()     # (out on the field, Dawnspire burning behind him)
+			"oath":
+				_draw_oath()
+			"wars":
+				_draw_wars()
+			"clans":
+				_draw_clans()
+			"conquest":
+				_draw_conquest()
 			"ogre":
 				if _at_dawnspire():
 					_draw_ogre_throne()   # (Dawnspire's open: he speaks from the throne he took)
@@ -1532,3 +1549,346 @@ func _draw_title() -> void:
 	if t > 1.0:
 		_flame(p.x, p.y - 19, minf(2.0, (t - 1.0) * 2.0), 0.0)
 	title_label.modulate.a = clampf((t - 1.6) / 1.0, 0.0, 1.0)
+
+
+# --- History, and the Unbound outside the walls ----------------------------------------
+
+## Dawnspire's citadel on its hill, centred on `cx`, its foot at `base`: pale stone in
+## courses, trimmed in gold, four towers with lit windows and the Line's blue-and-gold
+## banners, the gate, and the tall spire with the tenth beacon on top. `lit`: the beacon
+## burning; `ruined`: towers broken, the spire snapped, fire in the breaches; `overgrown`:
+## long empty: weeds in the stone, the windows dark, the banners rags. `hill`: its slope's colour.
+func _citadel(cx: float, base: float, lit: bool, ruined := false, overgrown := false, stone := Color(0.82, 0.78, 0.68), hill := Color(0.3, 0.36, 0.26)) -> void:
+	var gold := Color(0.9, 0.72, 0.3)
+	var lightc := Color(1.0, 0.75, 0.35) if not overgrown else Color(0.14, 0.12, 0.14)
+	var x0 := int(cx) - 45
+	# The hill it stands on, speckled like the ground round it.
+	for r in 20:
+		var half := 46.0 + r * 4.0
+		_b(cx - half, base + r, half * 2.0, 1, hill.darkened(0.04 * (r % 3)))
+	_speckle(int(cx) - 60, int(base), 120, 14, hill.darkened(0.15), 0.12)
+	# The curtain wall.
+	_b(x0 - 1, base - 23, 92, 23, OUTLINE)
+	_b(x0, base - 22, 90, 22, stone)
+	_bricks(x0, base - 22, 90, 22, stone)
+	_b(x0, base - 22, 90, 2, gold)
+	for k in range(0, 90, 6):   # crenels along the top
+		if ruined and (k / 6) % 4 == 1:
+			continue
+		_b(x0 + k - 1, base - 27, 5, 5, OUTLINE)
+		_b(x0 + k, base - 26, 3, 4, stone.lightened(0.06))
+	# Four towers.
+	var towers := [x0 - 4, x0 + 22, x0 + 60, x0 + 86]
+	for n in towers.size():
+		var tx: int = towers[n]
+		var h := 38 if n == 0 or n == 3 else 44
+		if ruined and n % 2 == 1:
+			h = 24
+		var tc := stone.darkened(0.06)
+		_b(tx - 1, base - h - 1, 11, h + 1, OUTLINE)
+		_b(tx, base - h, 9, h, tc)
+		_bricks(tx, base - h, 9, h, tc)
+		_b(tx + 6, base - h, 3, h, Color(0, 0, 0, 0.1))   # its shaded side
+		if ruined and n % 2 == 1:
+			# Broken off: a jagged top, burning.
+			for k in 4:
+				_b(tx + k * 2, base - h - 2 - (k % 2) * 2, 2, 3, tc)
+			_flame(tx + 4, base - h - 1, 1.6, n)
+			continue
+		_b(tx - 1, base - h - 4, 11, 4, OUTLINE)
+		for k in 3:
+			_b(tx + k * 3, base - h - 3, 2, 3, tc.lightened(0.08))
+		_b(tx, base - h, 9, 1, gold)
+		_b(tx + 3, base - h + 8, 3, 5, OUTLINE)
+		_b(tx + 4, base - h + 9, 1, 3, lightc)   # a window
+		# A banner from its top: the Line's blue and gold (rags, long abandoned).
+		_b(tx + 4, base - h - 12, 1, 8, Color(0.3, 0.25, 0.2))
+		var wave := int(t * 3.0 + n) % 2
+		if overgrown:
+			_b(tx + 5, base - h - 11, 3, 2, Color(0.3, 0.34, 0.45))
+		else:
+			_b(tx + 5, base - h - 11 + wave, 5, 4, Color(0.22, 0.32, 0.6))
+			_b(tx + 6, base - h - 10 + wave, 2, 2, gold)
+	# The gate: an arch of gold-trimmed stone, its doors.
+	_b(int(cx) - 7, base - 16, 14, 16, OUTLINE)
+	_b(int(cx) - 6, base - 15, 12, 15, Color(0.32, 0.22, 0.14) if not ruined else Color(0.1, 0.06, 0.05))
+	_b(int(cx) - 6, base - 16, 12, 1, gold)
+	if not ruined and not overgrown:
+		_b(int(cx) - 1, base - 15, 1, 15, Color(0.2, 0.14, 0.09))
+	elif overgrown:
+		_b(int(cx) - 6, base - 15, 4, 15, Color(0.1, 0.08, 0.08))   # one door hanging open
+	# The spire.
+	var top := base - 76.0 if not ruined else base - 50.0
+	_b(cx - 7, top - 1, 14, base - top - 21, OUTLINE)
+	_b(cx - 6, top, 12, base - top - 22, stone.lightened(0.08))
+	_bricks(int(cx) - 6, int(top), 12, int(base - top) - 22, stone.lightened(0.08))
+	_b(cx - 6, top, 3, base - top - 22, Color(1, 1, 1, 0.12))   # its lit side
+	_b(cx + 3, top, 3, base - top - 22, Color(0, 0, 0, 0.1))
+	for y in range(int(top) + 10, int(base) - 26, 12):
+		_b(cx - 6, y, 12, 1, gold)
+		_b(cx - 1, y + 3, 3, 5, OUTLINE)
+		_b(cx, y + 4, 1, 3, lightc)
+	if not ruined:
+		_b(cx - 9, top - 5, 18, 5, OUTLINE)
+		_b(cx - 8, top - 4, 16, 3, gold)
+		_b(cx - 8, top - 4, 16, 1, gold.lightened(0.3))
+		if lit:
+			_flame(cx, top - 5, 3.0, 0.0)
+			for k in 3:   # its light on the sky
+				_b(cx - 12 - k * 6, top - 14 - k * 4, 24 + k * 12, 20 + k * 8, Color(1.0, 0.8, 0.4, 0.05))
+		else:
+			_b(cx - 4, top - 7, 8, 2, Color(0.2, 0.18, 0.18))   # its brazier, cold
+	else:
+		# Snapped off, the jagged stump burning, the beacon's fire pouring out of it.
+		for k in 6:
+			_b(cx - 6 + k * 2, top - (k % 3) * 2 - 2, 2, 3, stone.lightened(0.08))
+		_flame(cx - 2, top - 2, 3.4, 0.3)
+		_flame(cx + 4, top, 2.4, 1.1)
+	if ruined:
+		# Breaches torn out of the wall, fire in them, rubble spilled down the hill.
+		for bx in [-36, -14, 26]:
+			_b(cx + bx, base - 23, 10, 12, Color(0.12, 0.07, 0.06))
+			_b(cx + bx + 2, base - 12, 6, 2, Color(1.0, 0.45, 0.15, 0.6))
+			_flame(cx + bx + 5, base - 13, 1.8, bx * 0.2)
+		for k in 28:
+			var rx := cx - 55.0 + _h(k, 1.0) * 110.0
+			var ry := base + _h(k, 2.0) * 8.0
+			_b(rx - 1, ry - 1, 4, 3, OUTLINE)
+			_b(rx, ry, 2 + int(_h(k, 3.0) * 2.0), 2, stone.darkened(0.15 * _h(k, 4.0)))
+		# Cracks down the face, glowing.
+		for k in 5:
+			var cxk := float(x0) + 8.0 + k * 18.0
+			for y in range(int(base) - 20, int(base) - 2, 2):
+				_b(cxk + (y % 4) * 0.5, y, 1, 2, Color(1.0, 0.45, 0.15, 0.8))
+	if overgrown:
+		# Weeds and ivy in the stone.
+		for k in 46:
+			var wx := float(x0) + _h(k, 5.0) * 90.0
+			var wy := base - 22.0 + _h(k, 6.0) * 21.0
+			_b(wx, wy, 1, 2, Color(0.24, 0.4, 0.2) if k % 3 else Color(0.32, 0.5, 0.26))
+		for k in 14:
+			_b(cx - 6 + _h(k, 7.0) * 12.0, top + 4 + _h(k, 8.0) * (base - top - 30.0), 1, 2, Color(0.24, 0.4, 0.2))
+
+
+## A banner on its pole in a people's colour, flapping.
+func _banner(x: float, y: float, col: Color, h := 16.0) -> void:
+	_b(x, y - h, 1, h, Color(0.3, 0.22, 0.14))
+	var flap := int(t * 3.0 + x) % 2
+	_b(x + 1, y - h + flap, 6, 5, col)
+	_b(x + 1, y - h + 5 + flap, 3, 2, col.darkened(0.2))
+
+
+## The Ogre King, Unbound, out on the Fields of Dawn: Dawnspire broken and burning on its
+## hill behind him, the beacon's fire streaming down from the snapped spire into him, a giant.
+func _draw_unbound_ruins() -> void:
+	_sky(Color(0.22, 0.04, 0.04), Color(1.0, 0.45, 0.15), 12, 100)
+	for k in 26:   # smoke rolling off the citadel
+		var age := fmod(t * 0.2 + k / 26.0, 1.0)
+		var r := 5.0 + age * 14.0
+		_b(60 + sin(k * 1.7) * 34.0 + age * 22.0 - r / 2.0, 62 - age * 62.0, r, r, Color(0.16, 0.08, 0.08, 0.5 * (1.0 - age)))
+	_ridge(78, 5, 6.0, Color(0.24, 0.1, 0.08))
+	_citadel(80, 82, false, true, false, Color(0.78, 0.72, 0.62), Color(0.26, 0.16, 0.12))
+	_b(0, 100, GW, 50, Color(0.22, 0.13, 0.1))
+	_speckle(0, 100, GW, 50, Color(0.3, 0.16, 0.1), 0.1)
+	_speckle(0, 100, GW, 50, Color(0.16, 0.09, 0.07), 0.08, 3.0)
+	# Burning ground and the Line's broken banners in the foreground.
+	for fx in [14, 142]:
+		_flame(fx, 132, 1.6, fx)
+	for k in 2:
+		# The Line's banners, torn and burning, their poles knocked askew.
+		var fx := 28 + k * 96
+		for q in 10:
+			_b(fx + q, 128 + q * 0.6, 1, 1, Color(0.3, 0.22, 0.14))
+		_b(fx + 2, 129, 6, 1, OUTLINE)
+		_b(fx + 2, 130, 5, 3, Color(0.22, 0.32, 0.6))
+		_b(fx + 3, 131, 2, 1, Color(0.9, 0.72, 0.3))
+		_b(fx + 6, 133, 2, 1, Color(0.22, 0.32, 0.6))
+	# Falling stone.
+	for k in 6:
+		var age := fmod(t * 0.6 + k / 6.0, 1.0)
+		_b(40 + k * 16, 20 + age * 66.0, 2, 2, Color(0.55, 0.5, 0.45, 1.0 - age))
+	# The fire pouring down into him, and his glow.
+	var pulse := 0.75 + 0.25 * sin(t * 2.2)
+	for k in 4:
+		var x := 76.0 + k * 3.0 + sin(t * 3.0 + k) * 2.0
+		_b(x, 34, 2, 64, Color(1.0, 0.35 + 0.1 * k, 0.15, 0.45))
+	for r in [38.0, 30.0, 22.0]:
+		_b(80 - r, 142 - r * 2.2, r * 2.0, r * 2.2, Color(1.0, 0.3, 0.1, 0.06 * pulse))
+	_walker("ogre_king", 80, 148, 0.0, 11.0)
+	for k in 14:   # embers swirling round him
+		var a := t * 1.4 + k * TAU / 14.0
+		_b(80 + cos(a) * (30 + (k % 3) * 6), 112 + sin(a) * 18.0, 1, 1, Color(1.0, 0.7, 0.3))
+
+
+## Beacon towers far off on the hills, lit (the Line answering).
+func _far_beacons(points: Array, col: Color) -> void:
+	for i in points.size():
+		var p: Vector2 = points[i]
+		_b(p.x - 2, p.y - 7, 4, 8, OUTLINE)
+		_b(p.x - 1, p.y - 6, 2, 7, col)
+		if t > 0.4 + i * 0.25:
+			_flame(p.x, p.y - 7, 0.8, i)
+
+
+## The Line sworn at Dawnspire, centuries ago: the citadel at dawn, its beacon lit, the
+## beacons answering on the far hills, and the peoples' delegates before it under their banners.
+func _draw_oath() -> void:
+	_sky(Color(0.3, 0.42, 0.72), Color(1.0, 0.82, 0.55), 12, 96)
+	_b(70, 62, 20, 20, Color(1.0, 0.92, 0.65, 0.35))   # the sun coming up behind the spire
+	_b(74, 66, 12, 12, Color(1.0, 0.95, 0.75))
+	for k in 3:   # thin morning clouds
+		_b(fmod(10 + k * 58 + t * 1.5, GW + 30) - 20, 18 + k * 9, 22, 2, Color(1.0, 0.95, 0.88, 0.6))
+	_ridge(84, 7, 2.0, Color(0.42, 0.44, 0.6))
+	_far_beacons([Vector2(10, 80), Vector2(24, 76), Vector2(136, 77), Vector2(150, 81)], Color(0.5, 0.5, 0.58))
+	_ridge(94, 4, 5.0, Color(0.3, 0.38, 0.32))
+	for k in 12:
+		_pine(4 + k * 6 + (k % 2) * 2, 98, 7 + (k * 3) % 3, Color(0.2, 0.3, 0.22))
+		_pine(118 + k * 4, 98, 6 + (k * 5) % 3, Color(0.2, 0.3, 0.22))
+	_citadel(80, 98, t > 0.8, false, false, Color(0.86, 0.82, 0.72), Color(0.34, 0.46, 0.3))
+	_b(0, 112, GW, 38, Color(0.36, 0.48, 0.3))
+	_speckle(0, 112, GW, 38, Color(0.42, 0.56, 0.34), 0.12)
+	_speckle(0, 112, GW, 38, Color(0.9, 0.85, 0.5), 0.02, 2.0)   # flowers
+	# The road up to the gate.
+	for row in range(112, 150):
+		var half := 5.0 + (row - 112) * 0.35
+		_b(80 - half, row, half * 2.0, 1, Color(0.62, 0.55, 0.42))
+	# The delegates in a half circle, each under their people's banner.
+	var who := [["swordsman", Color(0.95, 0.55, 0.25)], ["engineer", Color(0.85, 0.62, 0.32)], ["archer", Color(0.45, 0.85, 0.4)],
+		["healer", Color(0.95, 0.95, 0.7)], ["miner", Color(1.0, 0.8, 0.3)], ["frost", Color(0.6, 0.88, 1.0)],
+		["martial", Color(1.0, 0.5, 0.35)], ["bard", Color(1.0, 0.6, 0.85)], ["mage", Color(0.75, 0.55, 1.0)]]
+	for i in who.size():
+		var x := 11.0 + i * 17.0
+		var y := 142.0 - absf(i - 4.0) * 2.5
+		if absf(x - 80.0) < 8.0:
+			y += 4.0   # (the one before the road stands a step down)
+		_banner(x + 5, y - 10, who[i][1])
+		_figure_at(who[i][0], x, y, 3.2)
+
+
+## The Wars of the Fading Line: two of the Line's own peoples at each other, a farmstead
+## burning, and the beacon on the hill gone dark.
+func _draw_wars() -> void:
+	_sky(Color(0.2, 0.16, 0.22), Color(0.75, 0.42, 0.3), 10, 96)
+	_ridge(74, 6, 5.0, Color(0.26, 0.2, 0.24))
+	_ridge(84, 5, 8.0, Color(0.2, 0.16, 0.2))
+	for k in 20:
+		_pine(k * 8 + (k % 3), 88, 6 + (k * 7) % 4, Color(0.15, 0.14, 0.17))
+	# The dark beacon on its hill: stone in courses, its brazier cold.
+	var bx := 118
+	_b(bx - 1, 48, 10, 36, OUTLINE)
+	_b(bx, 49, 8, 35, Color(0.42, 0.4, 0.44))
+	_bricks(bx, 49, 8, 35, Color(0.42, 0.4, 0.44))
+	_b(bx + 5, 49, 3, 35, Color(0, 0, 0, 0.15))
+	_b(bx - 2, 45, 12, 4, OUTLINE)
+	_b(bx - 1, 46, 10, 2, Color(0.32, 0.3, 0.34))
+	_b(bx + 2, 43, 4, 2, Color(0.16, 0.14, 0.15))
+	# A farmstead burning: walls, a thatched roof, fire in the window, smoke.
+	_b(16, 70, 24, 16, OUTLINE)
+	_b(17, 71, 22, 15, Color(0.48, 0.38, 0.26))
+	for k in 8:
+		_b(14 + k, 70 - k, 28 - k * 2, 1, Color(0.55, 0.42, 0.2).darkened(0.05 * (k % 2)))
+	_b(24, 76, 4, 4, Color(1.0, 0.55, 0.2))
+	_flame(30, 62, 2.4, 0.0)
+	_flame(20, 66, 1.4, 1.3)
+	for k in 16:
+		var age := fmod(t * 0.3 + k / 16.0, 1.0)
+		var r := 3.0 + age * 10.0
+		_b(28 + age * 16.0 - r / 2.0, 56 - age * 50.0, r, r, Color(0.2, 0.14, 0.14, 0.5 * (1.0 - age)))
+	_b(0, 92, GW, 58, Color(0.3, 0.3, 0.22))
+	_speckle(0, 92, GW, 58, Color(0.24, 0.24, 0.18), 0.12)
+	_speckle(0, 92, GW, 58, Color(0.36, 0.36, 0.26), 0.06, 4.0)
+	# A trampled field fence between the lines, and the Line's own banner in the mud.
+	for k in 6:
+		_b(62 + k * 7, 118 + (k % 2), 1, 5, Color(0.36, 0.26, 0.16))
+	_b(62, 119, 36, 1, Color(0.36, 0.26, 0.16))
+	_b(70, 136, 20, 1, Color(0.3, 0.22, 0.14))
+	_b(73, 133, 10, 5, OUTLINE)
+	_b(74, 134, 8, 3, Color(0.22, 0.32, 0.6))
+	_b(77, 135, 2, 1, Color(0.9, 0.72, 0.3))
+	_b(76, 136, 4, 1, Color(0.24, 0.2, 0.14))   # (a boot print through it)
+	# Two lines facing each other under their banners.
+	for i in 4:
+		_banner(18 + i * 12, 128 - (i % 2) * 6, Color(0.95, 0.55, 0.25))
+		_figure_at("swordsman" if i % 2 == 0 else "archer", 14 + i * 12, 134 - (i % 2) * 6, 3.0)
+	for i in 4:
+		_banner(146 - i * 12, 128 - (i % 2) * 6, Color(1.0, 0.8, 0.3))
+		_figure_at("miner" if i % 2 == 0 else "cannoneer", 150 - i * 12, 134 - (i % 2) * 6, 3.0)
+	# Arrows crossing the gap.
+	for k in 5:
+		var age := fmod(t * 0.9 + k * 0.2, 1.0)
+		_b(60 + age * 40.0, 108 - sin(age * PI) * 18.0 + k * 2.0, 3, 1, Color(0.85, 0.82, 0.72))
+
+
+## A chieftain of the wastes, long ago: on a crag above the warring clans, his banner
+## raised, the clans turning to him; their camp's fires on the ridge behind.
+func _draw_clans() -> void:
+	_sky(Color(0.35, 0.15, 0.08), Color(0.9, 0.55, 0.25), 10, 100)
+	_ridge(76, 5, 8.0, Color(0.36, 0.2, 0.12))
+	# Hide tents and fires of the clans along the ridge.
+	for k in 7:
+		var tx := 8 + k * 22
+		_b(tx, 74, 9, 1, OUTLINE)
+		for r in 6:
+			_b(tx + r * 0.7, 74 - r, 9 - r * 1.4, 1, Color(0.45, 0.3, 0.2).darkened(0.1 * (k % 2)))
+		if k % 2 == 0:
+			_flame(tx + 13, 74, 0.9, k)
+	_ridge(88, 4, 3.0, Color(0.3, 0.17, 0.11))
+	_b(0, 100, GW, 50, Color(0.36, 0.24, 0.16))
+	_speckle(0, 100, GW, 50, Color(0.3, 0.2, 0.13), 0.12)
+	_speckle(0, 100, GW, 50, Color(0.85, 0.82, 0.72), 0.01, 5.0)   # bones in the dust
+	# The crag: a lit face and a shaded one, outlined, cracks down it.
+	for r in 32:
+		var half := 5.0 + r * 0.85
+		_b(80 - half - 1, 88 + r, half * 2.0 + 2, 1, OUTLINE)
+		_b(80 - half, 88 + r, half, 1, Color(0.46, 0.34, 0.26))
+		_b(80, 88 + r, half, 1, Color(0.3, 0.22, 0.18))
+	for k in 4:
+		_b(74 + k * 4, 96 + k * 5, 1, 4, Color(0.22, 0.16, 0.13))
+	# His banner: red, a tusked skull.
+	_b(92, 58, 1, 32, Color(0.25, 0.16, 0.1))
+	var flap := int(t * 3.0) % 2
+	_b(93, 58 + flap, 11, 9, OUTLINE)
+	_b(93, 59 + flap, 10, 7, Color(0.6, 0.12, 0.1))
+	_b(96, 60 + flap, 4, 3, Color(0.85, 0.82, 0.72))
+	_b(96, 63 + flap, 1, 2, Color(0.85, 0.82, 0.72))
+	_b(99, 63 + flap, 1, 2, Color(0.85, 0.82, 0.72))
+	_figure_at("ogre_king", 82, 90, 5.0)
+	# The clans below, turning to him; a rival chief's banner thrown down in the dust.
+	var kinds := ["goblin", "orc", "troll", "goblin", "wolf", "orc", "goblin", "troll"]
+	for i in kinds.size():
+		var x := 12.0 + i * 19.0 if i < 4 else 70.0 + i * 11.0
+		_figure_at(kinds[i], x, 140 - (i % 2) * 4, 3.0)
+	_b(86, 142, 16, 1, Color(0.25, 0.16, 0.1))
+	_b(87, 139, 8, 4, OUTLINE)
+	_b(88, 140, 6, 2, Color(0.3, 0.4, 0.25))
+	_b(90, 140, 2, 1, Color(0.85, 0.82, 0.72))
+
+
+## Fifty years ago: Dawnspire standing empty, its beacon long cold and weeds in its walls,
+## and his horde coming up the road to it, the King at its head.
+func _draw_conquest() -> void:
+	_sky(Color(0.16, 0.16, 0.24), Color(0.55, 0.45, 0.45), 10, 90)
+	for k in 3:
+		_b(fmod(20 + k * 50 + t * 1.0, GW + 30) - 20, 16 + k * 10, 26, 3, Color(0.3, 0.3, 0.38, 0.6))
+	_ridge(80, 6, 3.0, Color(0.24, 0.22, 0.28))
+	for k in 14:
+		_pine(k * 6 + (k % 2) * 2, 86, 6 + (k * 7) % 3, Color(0.17, 0.2, 0.18))
+	_citadel(104, 88, false, false, true, Color(0.66, 0.63, 0.58), Color(0.28, 0.3, 0.22))
+	_b(0, 106, GW, 44, Color(0.3, 0.32, 0.24))
+	_speckle(0, 106, GW, 44, Color(0.26, 0.28, 0.2), 0.1)
+	_speckle(0, 106, GW, 44, Color(0.38, 0.4, 0.3), 0.05, 6.0)
+	# The road up to the gate, grown over at its edges.
+	for row in range(106, 150):
+		var x := 104.0 - (row - 106) * 1.5
+		var w := 8.0 + (row - 106) * 0.3
+		_b(x - w / 2.0, row, w, 1, Color(0.45, 0.4, 0.32))
+		if row % 3 == 0:
+			_b(x - w / 2.0 + _h(row, 9.0) * w, row, 1, 1, Color(0.3, 0.4, 0.24))
+	# The horde marching up it, the King at its head; an old milestone of the Line, toppled.
+	_b(120, 128, 6, 3, OUTLINE)
+	_b(121, 128, 4, 2, Color(0.6, 0.58, 0.54))
+	_walker("ogre_king", 76 + sin(t * 0.3) * 2.0, 128, 0.0, 5.0)
+	var kinds := ["orc", "goblin", "troll", "goblin", "orc", "wolf"]
+	for i in kinds.size():
+		_walker(kinds[i], 60 - i * 9 + (i % 2) * 4, 136 + i * 2.5, i * 0.3, 3.0)
+

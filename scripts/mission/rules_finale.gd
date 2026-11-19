@@ -52,7 +52,7 @@ const FALL_DELAY := 1.5               # his roar before the army falls back
 const KING_LEVEL := 13
 const KING_HP := 0.7                  # his health, times his data's (against an army of ARMY_REF)
 const ARMY_REF := 6000.0              # an army worth this much (gold to field it) meets him at KING_HP; more, and he's that much the stronger
-const WRATH_SPEED := 75.0             # how fast the beacon's fire comes down the field
+const WRATH_SPEED := 26.0             # how fast the beacon's bursts creep down the field (the slowest troop walks 85)
 const GROW := 1.45                    # out of the castle, the broken oath swells him: this much bigger
 const KING_Y := 175.0                 # where he comes onto a field (below its wall: he's too big for the gaps now)
 # The collapse, as the army comes out (seconds in): the shaking starts; the walls come down;
@@ -468,9 +468,9 @@ func floor_reached(e) -> void:
 	e.boss_hold = 1.0
 	main.spawn_burst(e.position, 140.0, Color(1.0, 0.3, 0.1))
 	main.spawn_flash(e.position, 110.0)
-	main.spawn_text(e.position + Vector2(0, -80), "THE BEACON'S WRATH!", Color(1.0, 0.4, 0.2))
-	main.sfx("boom", 0.6)
-	main.hud.show_message("He calls up the beacon's fire! Fall back to %s, ahead of the flames!" % FIELDS[field + 1]["name"])
+	main.spawn_text(e.position + Vector2(0, -80), "He draws on the beacon!", Color(1.0, 0.4, 0.2))
+	main.sfx("horn", 0.5)
+	main.hud.show_message("He's drawing on the beacon: in moments this field will burn. Pull your troops back down the field, toward %s!" % FIELDS[field + 1]["name"])
 
 
 ## He's walked off the bottom of the field, through the army: it falls back after him.
@@ -743,7 +743,9 @@ func status() -> String:
 	var text := "%s (%d of %d)" % [FIELDS[field]["name"], field + 1, FIELDS.size()]
 	if standard != null and is_instance_valid(standard):
 		text += "  ·  Standard %d%%" % roundi(standard.hp / standard.max_hp * 100.0)
-	if king != null and is_instance_valid(king) and not king.dead:
+	if wrath != null and is_instance_valid(wrath):
+		text += ("  ·  The field burns in %ds: fall back!" % ceili(wrath.WARN - wrath.t)) if wrath.warning() else "  ·  The field's burning: fall back!"
+	elif king != null and is_instance_valid(king) and not king.dead:
 		text += "  ·  The Ogre King %d%%" % roundi(king.hp / king.max_hp * 100.0)
 		if not last_field():
 			text += " (fall back at %d%%)" % roundi(float(FIELDS[field]["floor"]) * 100.0)
