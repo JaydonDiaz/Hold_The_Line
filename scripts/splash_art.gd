@@ -3,7 +3,11 @@ extends Control
 ## the Ogre King's silhouette over the hills with a red rim and eyes that smoulder, and
 ## below him the Line's nine kinds of troop (the game's own sprites), each with a little
 ## life of its own: breathing, the Mage's and Frost Witch's staves glowing, the Healer's
-## aura, the Bard's notes drifting up, the Alchemist's flask fizzing.
+## aura, the Bard's notes drifting up, the Alchemist's flask fizzing. Round them: a crescent
+## moon and drifting cloud; his host's torches, tents and banners along the hills; mist at
+## their foot; the Line's camp on the field: a campfire, its blue-and-gold standard, and
+## Ashwatch's beacon burning on its tower, the first light of the Line; a path, grass,
+## stones and flowers.
 
 const Sprites = preload("res://scripts/sprites.gd")
 const W := 640.0
@@ -43,10 +47,250 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	_sky()
+	_moon()
+	_clouds()
 	_ogre()
 	_hills()
+	_hill_details()
+	_host()
+	_mist()
+	_field()
+	_tent(Vector2(66, 708))
+	_supplies(Vector2(560, 968))
+	_beacon_tower(Vector2(592, 788))
+	_standard(Vector2(52, 920))
+	_campfire(Vector2(320, 716))
 	for tr in TROOPS:
 		_troop(tr[0], Vector2(tr[1], tr[2]), tr[3])
+	_foreground()
+
+
+## A block on the art's 4px grid.
+func _px(x: float, y: float, w: float, h: float, c: Color) -> void:
+	draw_rect(Rect2(snappedf(x, PIX), snappedf(y, PIX), snappedf(w, PIX), snappedf(h, PIX)), c)
+
+
+## A crescent moon high to the right, faintly haloed.
+func _moon() -> void:
+	var m := Vector2(540, 116)
+	for r in [64.0, 48.0]:
+		draw_circle(m, r, Color(1.0, 0.92, 0.75, 0.035))
+	for y in range(-28, 32, 4):
+		for x in range(-28, 32, 4):
+			var d := Vector2(x, y).length()
+			var bite := Vector2(x - 14, y - 6).length()
+			if d <= 28.0 and bite > 24.0:
+				var shade := 0.85 if (x + y) % 16 == 0 else 1.0
+				_px(m.x + x, m.y + y, 4, 4, Color(0.98, 0.93, 0.78) * shade)
+	_px(m.x - 20, m.y + 4, 4, 4, Color(0.82, 0.76, 0.62))   # (a crater or two)
+	_px(m.x - 12, m.y + 16, 4, 4, Color(0.82, 0.76, 0.62))
+
+
+## Long thin wisps of cloud drifting across the stars, lit from below by the red glow.
+func _clouds() -> void:
+	for i in 7:
+		var y := 150.0 + i * 52.0 + sin(i * 2.1) * 20.0
+		var w := 160.0 + fmod(i * 73.0, 140.0)
+		var x := fmod(i * 211.0 + t * (5.0 + i), W + EXT + w) - EXT * 0.5 - w
+		var c := Color(0.16, 0.07, 0.1, 0.55) if i % 2 else Color(0.2, 0.08, 0.1, 0.4)
+		_px(x, y, w, 4, c)
+		_px(x + 24, y - 4, w - 60, 4, Color(c, c.a * 0.7))
+		_px(x + 12, y + 4, w - 28, 4, Color(0.3, 0.1, 0.08, 0.25))   # (the underside, red-lit)
+	# Now and then a shooting star.
+	var k := fmod(t, 9.0)
+	if k < 0.6:
+		var a := Vector2(80 + fmod(floorf(t / 9.0) * 173.0, 420.0), 60)
+		for j in 6:
+			_px(a.x + (k * 300.0) - j * 8, a.y + (k * 120.0) - j * 3, 4, 4, Color(1, 0.97, 0.88, (1.0 - j / 6.0) * (1.0 - k / 0.6)))
+
+
+## His host along the hills behind him: tents, war banners, and torches moving on the crest.
+func _host() -> void:
+	var crest := func(x: float) -> float:
+		var k := x / 40.0
+		return 596 + sin(k * 1.3) * 18.0 + sin(k * 0.5) * 12.0
+	# Tents and banners, dark against the red glow.
+	for i in 14:
+		var x := -EXT * 0.4 + i * 196.0 + fmod(i * 61.0, 80.0)
+		if x > 40.0 and x < W - 40.0:
+			continue   # (behind him: only out at the sides)
+		var y: float = crest.call(x) + 4.0
+		for r in 5:
+			_px(x - 12 + r * 4, y - r * 4, 24 - r * 8 + 4, 4, Color(0.1, 0.03, 0.04))
+		_px(x + 20, y - 36, 4, 36, Color(0.08, 0.03, 0.03))
+		_px(x + 24, y - 36 + (int(t * 3.0 + i) % 2) * 4, 12, 8, Color(0.38, 0.06, 0.05))
+	# Torches along the crest, some moving.
+	for i in 46:
+		var base := -EXT * 0.5 + i * 72.0
+		var x := base + sin(t * 0.3 + i) * (12.0 if i % 3 == 0 else 0.0)
+		var y: float = crest.call(x) - 6.0
+		var flick := 0.6 + 0.4 * sin(t * 9.0 + i * 1.7)
+		draw_circle(Vector2(x, y), 10.0, Color(1.0, 0.45, 0.1, 0.1 * flick))
+		_px(x, y, 4, 4, Color(1.0, 0.6 + 0.3 * flick, 0.2))
+
+
+## Dead trees and rocks on the hills, out at the sides of him.
+func _hill_details() -> void:
+	for i in 8:
+		var x := -EXT * 0.3 + i * 140.0 + fmod(i * 53.0, 60.0)
+		if x > 0.0 and x < 120.0:
+			x -= 140.0   # (clear of the standard)
+		var k := x / 40.0
+		var y := 600.0 + sin(k * 1.3) * 18.0 + sin(k * 0.5) * 12.0
+		if i % 2 == 0:   # a dead tree, branches bare
+			_px(x, y - 40, 4, 40, Color(0.08, 0.03, 0.04))
+			_px(x - 8, y - 32, 8, 4, Color(0.08, 0.03, 0.04))
+			_px(x + 4, y - 24, 8, 4, Color(0.08, 0.03, 0.04))
+			_px(x - 12, y - 36, 4, 4, Color(0.08, 0.03, 0.04))
+		else:            # a boulder
+			_px(x - 8, y - 8, 20, 12, Color(0.1, 0.04, 0.05))
+			_px(x - 4, y - 12, 12, 4, Color(0.13, 0.05, 0.06))
+
+
+## Mist lying along the foot of the hills, drifting.
+func _mist() -> void:
+	for i in 12:
+		var w := 120.0 + fmod(i * 47.0, 100.0)
+		var x := fmod(i * 157.0 + t * 6.0, W + EXT * 2.0 + w) - EXT - w
+		_px(x, 636 + (i % 3) * 8, w, 4, Color(0.55, 0.45, 0.55, 0.06))
+		_px(x + 16, 640 + (i % 3) * 8, w - 40, 4, Color(0.55, 0.45, 0.55, 0.05))
+
+
+## The field: a path up through the camp, grass tufts, stones and flowers.
+func _field() -> void:
+	# The path, winding up from the foot of the picture to the hills.
+	for y in range(640, int(H), 4):
+		var k := (y - 640.0) / (H - 640.0)
+		var half := 8.0 + k * 40.0
+		var cx := 320.0 + sin(k * 3.4) * 30.0 * k
+		_px(cx - half, y, half * 2.0, 4, Color(0.27, 0.22, 0.14))
+		if y % 12 == 0:
+			_px(cx - half + fmod(y * 7.3, half * 2.0), y, 4, 4, Color(0.34, 0.28, 0.18))
+	# Tufts of taller grass, stones, flowers.
+	for i in 90:
+		var p := Vector2(fmod(i * 173.7, W + 600.0) - 300.0, 660 + fmod(i * 91.3, H - 680))
+		match i % 6:
+			0, 1, 2:
+				var c := Color(0.16, 0.28, 0.13) if i % 2 else Color(0.22, 0.36, 0.16)
+				_px(p.x, p.y - 8, 4, 8, c)
+				_px(p.x - 4, p.y - 4, 4, 4, c)
+				_px(p.x + 4, p.y - 12, 4, 12, c.lightened(0.05))
+			3:
+				_px(p.x, p.y, 12, 8, OUTLINE)
+				_px(p.x + 4, p.y, 8, 4, Color(0.4, 0.4, 0.42))
+			4:
+				_px(p.x, p.y, 4, 4, [Color(0.95, 0.9, 0.7), Color(0.95, 0.8, 0.3), Color(0.6, 0.7, 1.0)][i % 3])
+			5:
+				_px(p.x, p.y, 4, 4, Color(0.95, 0.85, 0.95))
+				_px(p.x, p.y + 4, 4, 4, Color(0.2, 0.32, 0.15))
+
+
+## Ashwatch's beacon on its stone tower, burning: the first light of the Line.
+func _beacon_tower(foot: Vector2) -> void:
+	var stone := Color(0.32, 0.3, 0.36)
+	_px(foot.x - 20, foot.y - 128, 40, 128, OUTLINE)
+	_px(foot.x - 16, foot.y - 124, 32, 124, stone)
+	for y in range(int(foot.y) - 120, int(foot.y), 12):
+		_px(foot.x - 16, y, 32, 4, stone.darkened(0.2))
+		_px(foot.x - 8 + (y / 12 % 2) * 12, y + 4, 4, 8, stone.darkened(0.2))
+	_px(foot.x + 4, foot.y - 124, 12, 124, Color(0, 0, 0, 0.2))
+	_px(foot.x - 4, foot.y - 92, 8, 16, Color(1.0, 0.7, 0.3))   # a lit slit window
+	_px(foot.x - 28, foot.y - 136, 56, 12, OUTLINE)
+	_px(foot.x - 24, foot.y - 132, 48, 4, stone.lightened(0.1))
+	_flame_px(Vector2(foot.x, foot.y - 136), 1.4)
+	for r in [70.0, 46.0, 26.0]:
+		draw_circle(Vector2(foot.x, foot.y - 150), r, Color(1.0, 0.55, 0.15, 0.03 + 0.01 * sin(t * 5.0)))
+	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-34, -10), Vector2(68, 20)), false, Color(0, 0, 0, 0.35))
+
+
+## A fire in pixel blocks: a few tongues of flame flickering at `base`, `s` its size.
+func _flame_px(base: Vector2, s: float) -> void:
+	# Tongues that taper as they rise: the middle ones tallest, a hot core low down.
+	for i in 5:
+		var tall := (1.0 - absf(i - 2) * 0.28) * (20.0 + 8.0 * sin(t * 8.0 + i * 1.9)) * s
+		var x := base.x + (i - 2) * 5.0 * s
+		var rows := int(tall / PIX)
+		for r in rows:
+			var k := float(r) / maxf(rows, 1)
+			var w := (8.0 if k < 0.4 else 4.0) * s
+			var c := Color(1.0, 0.85, 0.35) if k < 0.3 and absf(i - 2) <= 1 else (Color(1.0, 0.55, 0.12) if k < 0.7 else Color(0.9, 0.3, 0.08))
+			_px(x - w / 2.0 + sin(t * 6.0 + r + i) * 2.0 * k, base.y - (r + 1) * PIX, w, PIX, c)
+
+
+## A tent of the camp: blue canvas striped white, its flap open on a lamp inside.
+func _tent(foot: Vector2) -> void:
+	var blue := Color(0.22, 0.32, 0.58)
+	for r in 12:
+		var half := 4.0 + r * 4.0
+		_px(foot.x - half - 4, foot.y - 48 + r * 4, half * 2.0 + 8, 4, OUTLINE)
+		_px(foot.x - half, foot.y - 48 + r * 4, half * 2.0, 4, blue if r % 3 else Color(0.85, 0.85, 0.82))
+	_px(foot.x - 8, foot.y - 24, 16, 24, Color(0.08, 0.06, 0.05))   # the open flap
+	_px(foot.x - 4, foot.y - 12, 8, 8, Color(1.0, 0.75, 0.35, 0.8 + 0.2 * sin(t * 4.0)))   # a lamp lit inside
+	_px(foot.x - 2, foot.y - 64, 4, 16, Color(0.3, 0.22, 0.14))   # its pole, a pennant
+	_px(foot.x + 2, foot.y - 64 + (int(t * 3.0) % 2) * 4, 12, 4, Color(0.95, 0.75, 0.3))
+	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-56, -8), Vector2(112, 16)), false, Color(0, 0, 0, 0.3))
+
+
+## Supplies stacked under the beacon: crates and a barrel.
+func _supplies(foot: Vector2) -> void:
+	var wood := Color(0.45, 0.3, 0.16)
+	for c in [[-28, 0, 28], [4, 0, 24], [-16, -24, 24]]:
+		var x: float = foot.x + c[0]
+		var y: float = foot.y + c[1]
+		var sz: float = c[2]
+		_px(x - 4, y - sz - 4, sz + 8, sz + 8, OUTLINE)
+		_px(x, y - sz, sz, sz, wood)
+		_px(x, y - sz, sz, 4, wood.lightened(0.15))
+		_px(x + sz / 2.0 - 2, y - sz, 4, sz, wood.darkened(0.25))
+	_px(foot.x + 32, foot.y - 32, 24, 36, OUTLINE)   # a barrel
+	_px(foot.x + 36, foot.y - 28, 16, 28, Color(0.4, 0.26, 0.14))
+	_px(foot.x + 36, foot.y - 24, 16, 4, Color(0.3, 0.3, 0.32))
+	_px(foot.x + 36, foot.y - 8, 16, 4, Color(0.3, 0.3, 0.32))
+	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-44, -8), Vector2(108, 16)), false, Color(0, 0, 0, 0.3))
+
+
+## The Line's standard planted at the camp's edge: blue and gold, the rising sun on it.
+func _standard(foot: Vector2) -> void:
+	_px(foot.x - 2, foot.y - 168, 4, 168, Color(0.3, 0.22, 0.14))
+	_px(foot.x - 6, foot.y - 172, 12, 4, Color(0.9, 0.72, 0.3))
+	var wave := int(t * 3.0) % 2
+	_px(foot.x + 2, foot.y - 160 + wave * 4, 48, 56, OUTLINE)
+	_px(foot.x + 4, foot.y - 156 + wave * 4, 40, 48, Color(0.2, 0.3, 0.6))
+	_px(foot.x + 4, foot.y - 112 + wave * 4, 16, 8, Color(0.2, 0.3, 0.6))
+	_px(foot.x + 28, foot.y - 112 + wave * 4, 16, 8, Color(0.2, 0.3, 0.6))
+	# The sun: a disc with rays.
+	var sun := Vector2(foot.x + 24, foot.y - 132 + wave * 4)
+	var gold := Color(0.95, 0.75, 0.3)
+	_px(sun.x - 4, sun.y - 4, 8, 8, gold)
+	for d in [Vector2(0, -12), Vector2(0, 8), Vector2(-12, 0), Vector2(8, 0)]:
+		_px(sun.x + d.x, sun.y + d.y, 4, 4, gold)
+	for d in [Vector2(-8, -8), Vector2(4, -8), Vector2(-8, 4), Vector2(4, 4)]:
+		_px(sun.x + d.x, sun.y + d.y, 4, 4, gold.darkened(0.15))
+	draw_texture_rect(Sprites.shadow(), Rect2(foot + Vector2(-14, -6), Vector2(28, 12)), false, Color(0, 0, 0, 0.35))
+
+
+## The camp's fire: logs, flames, embers rising, its light on the grass.
+func _campfire(at: Vector2) -> void:
+	draw_circle(at + Vector2(0, -8), 70.0, Color(1.0, 0.55, 0.15, 0.07 + 0.02 * sin(t * 6.0)))
+	_px(at.x - 20, at.y - 4, 40, 8, OUTLINE)
+	_px(at.x - 16, at.y - 4, 32, 4, Color(0.4, 0.26, 0.14))
+	for k in 6:   # stones round it
+		_px(at.x - 28 + k * 11, at.y + 4, 8, 4, Color(0.38, 0.37, 0.4))
+	_flame_px(at + Vector2(0, -4), 0.8)
+	for i in 6:
+		var k := fmod(t * 0.7 + i / 6.0, 1.0)
+		_px(at.x + sin(k * 7.0 + i) * 10.0, at.y - 24 - k * 70.0, 4, 4, Color(1.0, 0.7, 0.3, 1.0 - k))
+
+
+## Dark grass and a pine or two at the very bottom corners, framing the picture.
+func _foreground() -> void:
+	for side in [-1.0, 1.0]:
+		var x0: float = 0.0 if side < 0 else W
+		for i in 4:
+			var x: float = x0 - side * (8.0 + i * 20.0) + (0.0 if side < 0 else -4.0)
+			var h := 28.0 + fmod(i * 17.0, 24.0)
+			_px(x, H - h, 4, h, Color(0.05, 0.09, 0.05))
+			_px(x + 4 * side, H - h * 0.7, 4, h * 0.7, Color(0.05, 0.09, 0.05))
 
 
 func _sky() -> void:
