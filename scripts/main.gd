@@ -1272,8 +1272,11 @@ func _on_mode_chosen(key: String) -> void:
 		play_prologue()
 	elif key.begins_with("battle:"):
 		# A Battle Modes scenario: "battle:<scenario>:<difficulty>".
-		battle_id = key.get_slice(":", 1)
-		choose_mode(key.get_slice(":", 2))
+		# (The difficulty is the last part: a campaign battle's id has a colon of its own,
+		# "story:<mission>".)
+		var cut := key.rfind(":")
+		battle_id = key.substr(7, cut - 7)
+		choose_mode(key.substr(cut + 1))
 	else:
 		# Classic on a campaign battlefield comes as "<difficulty>|<map>".
 		classic_map = key.get_slice("|", 1) if "|" in key else ""

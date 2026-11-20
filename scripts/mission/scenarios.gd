@@ -134,10 +134,61 @@ const SCENARIOS := {
 }
 
 
-## The scenarios of battle type `t`, in order.
+## The scenarios of battle type `t`, in order: the Battle Modes' own, then every battle
+## of that kind from the campaign ("story:<mission>"), in the campaign's order.
 static func of_type(t: String) -> Array:
-	return SCENARIOS.keys().filter(func(k): return SCENARIOS[k]["type"] == t)
+	var out: Array = SCENARIOS.keys().filter(func(k): return SCENARIOS[k]["type"] == t)
+	for m in CD.MISSIONS:
+		if CD.MISSIONS[m].get("type", "castle") == t and STORY_TYPES.has(t):
+			out.append("story:" + m)
+	return out
+
+
+const CD = preload("res://scripts/campaign_data.gd")
+const STORY_TYPES := ["positions", "pass", "protect", "evac", "capture", "escort", "retreat"]   # (the castle's battlefields are Classic's)
+# What a campaign mission keeps of its story when it's played as a Battle Mode: none of it.
+const STORY_ONLY := ["intro", "outro", "reward", "track", "help", "requires", "waves", "story", "unlocks", "training"]
 
 
 static func get_scenario(id: String) -> Dictionary:
+	if id.begins_with("story:"):
+		return from_story(id.substr(6))
 	return SCENARIOS.get(id, {})
+
+
+## Campaign mission `m` as a Battle Mode: its battlefield and everything set on it (its
+## objectives, roads, convoy, lines, its waves' foes, the units lent), endless, without
+## its story.
+static func from_story(m: String) -> Dictionary:
+	if not CD.MISSIONS.has(m):
+		return {}
+	var out: Dictionary = (CD.MISSIONS[m] as Dictionary).duplicate(true)
+	for k in STORY_ONLY:
+		out.erase(k)
+	out["endless"] = true
+	out["from_story"] = m
+	return out
+
+
+## Whether scenario `id` can be played yet: a campaign battle once the campaign's reached
+## it, Dawnspire's once the army's there; the Battle Modes' own always.
+static func is_open(id: String, campaign) -> bool:
+	if id.begins_with("story:"):
+		var m := id.substr(6)
+		return campaign.completed.has(m) or campaign.mission_open(m)
+	var map: String = SCENARIOS.get(id, {}).get("map", "")
+	if map.begins_with("ds_"):
+		return campaign.open_maps().has(map)
+	return true
+
+
+## Where the campaign has to have got to for scenario `id` to open.
+static func where_to_open(id: String) -> String:
+	var map: String = get_scenario(id).get("map", "")
+	if map == "ds_dawnfield":
+		return "the Fields of Dawn (all nine beacons lit)"
+	if map.begins_with("ds_"):
+		return "Dawnspire"
+	if id.begins_with("story:"):
+		return CD.TERRITORIES[CD.MISSIONS[id.substr(6)]["territory"]]["name"]
+	return "it"

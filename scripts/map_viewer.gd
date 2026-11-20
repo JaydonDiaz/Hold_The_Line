@@ -6,6 +6,9 @@ extends Control
 ## with its name and a few words. The arrows (or Left and Right) go through them; Start
 ## (or Enter) begins on the one showing; Back (or Esc) returns to the difficulties.
 ## Maps the campaign hasn't reached yet show too, greyed, locked, and can't be started.
+## For a kind of battle in Battle Modes (setup_battles), the same, through its battlefields:
+## its own scenarios and every one from the campaign; Start picks that one (`start` gets
+## the scenario's id).
 
 signal start(map: String)
 signal back
@@ -64,6 +67,33 @@ var start_button: Button
 
 
 const CLASSIC_ZONES := ["ds_approach", "ds_bailey", "ds_dawngate", "ds_dawnfield"]
+const Scenarios = preload("res://scripts/mission/scenarios.gd")
+const Rules = preload("res://scripts/mission/rules.gd")
+var battle_type := ""      # Battle Modes: the kind of battle ("" for Classic)
+var battles: Array = []    # ...its battlefields: {id, map, name, blurb, open, where, castle}
+
+
+## Battle Modes: the battlefields of kind `t` (scenario ids `ids`), those the campaign has
+## reached open.
+func setup_battles(t: String, ids: Array, campaign, first := "") -> void:
+	battle_type = t
+	difficulty = "normal"
+	battles = []
+	for id in ids:
+		var sc: Dictionary = Scenarios.get_scenario(id)
+		var map: String = sc.get("map", "")
+		var rules = Rules.make(sc)
+		rules.mission = sc
+		var where: String = "on the meadow" if map == "" else "on " + Maps.get_map(map).get("name", map)
+		var blurb_text: String
+		if id.begins_with("story:"):
+			blurb_text = "From the campaign (%s): survive as many waves as you can %s." % [CD.TERRITORIES[CD.MISSIONS[id.substr(6)]["territory"]]["name"], where]
+		else:
+			blurb_text = "Survive as many waves as you can %s." % where
+		battles.append({"id": id, "map": map, "name": sc.get("name", id), "blurb": blurb_text,
+				"open": Scenarios.is_open(id, campaign), "where": Scenarios.where_to_open(id), "castle": rules.has_castle()})
+	maps = battles.map(func(b): return b["map"])
+	at = maxi(0, ids.find(first))
 
 
 func setup(diff: String, opened: Array, first := "") -> void:
@@ -119,7 +149,8 @@ func _ready() -> void:
 	top_bar.color = Color(0.06, 0.05, 0.04, 0.85)
 	add_child(top_bar)
 	head = _label(Vector2.ZERO, Vector2.ZERO, 18, Color(0.88, 0.85, 0.78))
-	head.text = "Classic Survival · %s · choose your battlefield" % CD_name(difficulty)
+	head.text = "Classic Survival · %s · choose your battlefield" % CD_name(difficulty) if battle_type == "" \
+			else "Battle Modes · %s · choose your battlefield" % Scenarios.TYPES[battle_type]["name"]
 	panel = ColorRect.new()
 	panel.color = Color(0.06, 0.05, 0.04, 0.88)
 	add_child(panel)
@@ -194,15 +225,27 @@ func show_map(i: int) -> void:
 	blurb.text = "Open fields with no terrain: the classic game." if id == "" else Maps.get_map(id).get("blurb", "").replace("\n", " ") + "."
 	count_label.text = "%d of %d" % [at + 1, maps.size()]
 	var best := 0
+	var b: Dictionary = battles[at] if not battles.is_empty() else {}
+	if not b.is_empty():
+		opened = b["open"]
+		name_label.text = b["name"]
+		blurb.text = b["blurb"]
 	if records != "":
 		var cfg := ConfigFile.new()
 		cfg.load(records)
-		best = cfg.get_value("best", difficulty + ("@" + id if id != "" else ""), 0)
+		if b.is_empty():
+			best = cfg.get_value("best", difficulty + ("@" + id if id != "" else ""), 0)
+		else:
+			for d in ["easy", "normal", "hard"]:
+				best = maxi(best, int(cfg.get_value("survive", "%s@%s" % [b["id"], d], 0)))
 	if best > 0:
 		count_label.text += "  ·  your best here: %d waves" % best
 	lock_band.visible = not opened
 	lock_label.visible = not opened
-	lock_label.text = "Locked\nReach %s in the campaign" % _territory(id)
+	lock_label.text = "Locked\nReach %s in the campaign" % (b["where"] if not b.is_empty() else _territory(id))
+	if castle != null:
+		castle.visible = b.is_empty() or b["castle"]
+		castle.top_part.visible = castle.visible
 	picture.modulate = Color.WHITE if opened else Color(0.45, 0.45, 0.45)
 	backdrop.modulate = Color(0.2, 0.2, 0.2) if opened else Color(0.12, 0.12, 0.12)
 	start_button.disabled = not opened
@@ -211,6 +254,10 @@ func show_map(i: int) -> void:
 
 
 func _start() -> void:
+	if not battles.is_empty():
+		if battles[at]["open"]:
+			start.emit(battles[at]["id"])
+		return
 	var id: String = maps[at]
 	if id == "" or open_maps.has(id):
 		start.emit(id)

@@ -325,9 +325,11 @@ func _battle_modes() -> void:
 		seen[t] = true
 	check(seen.size() == looks.size(), "The main menu cards each have their own character too")
 	hud._show_cards("bm:positions")
-	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
-	check(names[0] == "The Three Watchtowers", "...each with a battle to play without a campaign (%s)" % names[0])
-	hud._show_cards("bmd:three_towers")
+	await _frames(2)
+	var bv = hud.battlefields
+	check(bv != null and bv.battles[0]["name"] == "The Three Watchtowers" and bv.battles[0]["open"], "...each with battlefields to go through, its own open without a campaign (%s)" % (bv.battles[0]["name"] if bv else "none"))
+	bv.start.emit("three_towers")
+	await _frames(2)
 	names = hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(names == ["Easy", "Normal", "Hard", "Back"], "...on any difficulty")
 	main.records_path = "user://missions_test_records.cfg"

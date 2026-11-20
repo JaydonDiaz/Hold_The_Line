@@ -1519,6 +1519,9 @@ func show_mode_select() -> void:
 ## "new": a new campaign's difficulty. Each card is [key, name, text, colour, icon,
 ## the title scene's look]; a "goto:<set>" key opens another set of cards.
 func _show_cards(set_name: String) -> void:
+	if set_name.begins_with("bm:"):
+		show_battle_maps(set_name.substr(3))   # (a kind of battle: through its battlefields, in the viewer)
+		return
 	for c in mode_cards:
 		if not is_instance_valid(c):
 			continue
@@ -1596,28 +1599,10 @@ func _show_cards(set_name: String) -> void:
 		modes.append(["delete:%d" % n, "Delete", "Erase Save %d\nfor good" % n, Color(1.0, 0.5, 0.45), "ogre_king", ""])
 		modes.append(["goto:slot:%d" % n, "Keep It", "Back to the\nsave", Color(0.8, 0.8, 0.8), "swordsman", "campaign"])
 		spots = _row_spots(2)
-	elif set_name.begins_with("bm:"):
-		# A kind of battle: its scenarios.
-		var t := set_name.substr(3)
-		mode_sub.text = "%s: choose a battle" % Scenarios.TYPES[t]["name"]
-		for id in Scenarios.of_type(t):
-			var sc: Dictionary = Scenarios.SCENARIOS[id]
-			var where: String = "on the meadow" if sc["map"] == "" else Maps.get_map(sc["map"]).get("name", sc["map"])
-			if sc["type"] == "escort":
-				where = "from %s on" % where
-			if String(sc["map"]).begins_with("ds_") and not Campaign.open_maps().has(sc["map"]):
-				# Dawnspire's: locked until the campaign gets there (no spoiling it).
-				modes.append(["goto:bm:" + t, sc["name"], "Locked\nReach %s\nin the campaign" % ("the Fields of Dawn" if sc["map"] == "ds_dawnfield" else "Dawnspire"),
-						Color(0.5, 0.5, 0.5), Scenarios.TYPES[t]["look"], t])
-				continue
-			modes.append(["goto:bmd:" + id, sc["name"], "Survive as\nmany waves\nas you can\n%s" % where,
-					Scenarios.TYPES[t]["color"], Scenarios.TYPES[t]["look"], t])
-		modes.append(["goto:battle", "Back", "Back to the\nkinds of battle", Color(0.8, 0.8, 0.8), "goblin", ""])
-		spots = _row_spots(modes.size() - 1) + [Vector2(225, 834)]
 	elif set_name.begins_with("bmd:"):
 		# A scenario: its difficulty.
 		var id := set_name.substr(4)
-		mode_sub.text = "%s: choose your difficulty" % Scenarios.SCENARIOS[id]["name"]
+		mode_sub.text = "%s: choose your difficulty" % Scenarios.get_scenario(id)["name"]
 		var cfg := ConfigFile.new()
 		cfg.load(get_parent().records_path if get_parent().records_path != "" else "user://none.cfg")
 		for key in Data.DIFFICULTIES:
@@ -1627,7 +1612,7 @@ func _show_cards(set_name: String) -> void:
 			card[2] = (card[2] as String).replace("Castle %d HP" % roundi(Data.CASTLE_HP * Data.DIFFICULTIES[key]["castle"]),
 					"Best: %d waves" % best if best > 0 else "No run yet")
 			modes.append(card)
-		modes.append(["goto:bm:" + Scenarios.SCENARIOS[id]["type"], "Back", "Back to the\nbattles", Color(0.8, 0.8, 0.8), "goblin", ""])
+		modes.append(["goto:bm:%s|%s" % [Scenarios.get_scenario(id)["type"], id], "Back", "Back to the\nbattlefields", Color(0.8, 0.8, 0.8), "goblin", ""])
 		spots = top + [Vector2(225, 834)]
 	var cards := []
 	for i in modes.size():
@@ -1665,6 +1650,12 @@ func _show_cards(set_name: String) -> void:
 					title_scene.set_look("")
 					_show_cards("campaign")
 					show_message("Save %d deleted" % n))
+		elif key.begins_with("goto:bm:"):
+			# A kind of battle: through its battlefields, in the viewer.
+			card.pressed.connect(func():
+				if not picking:
+					var rest := key.substr(8)
+					show_battle_maps(rest.get_slice("|", 0), rest.get_slice("|", 1) if "|" in rest else ""))
 		elif key.begins_with("goto:"):
 			card.pressed.connect(func():
 				if not picking:
@@ -1745,6 +1736,29 @@ func _place_battlefields() -> void:
 	var view := get_viewport().get_visible_rect().size
 	battlefields.position = Vector2(-offset.x, -offset.y) / ui_scale
 	battlefields.size = view / ui_scale
+
+
+## Battle Modes, a kind of battle chosen: the viewer, through its battlefields (its own
+## scenarios and the campaign's battles of that kind). Start goes on to the difficulty;
+## Back to the kinds of battle.
+func show_battle_maps(t: String, first := "") -> void:
+	if battlefields != null:
+		return
+	for c in mode_cards:
+		if is_instance_valid(c):
+			c.visible = false
+	var v := MapViewer.new()
+	v.records = get_parent().records_path
+	v.setup_battles(t, Scenarios.of_type(t), Campaign, first)
+	battlefields = v
+	var close := func(then: String):
+		battlefields = null
+		v.queue_free()
+		_show_cards(then)
+	v.start.connect(func(id: String): close.call("bmd:" + id))
+	v.back.connect(func(): close.call("battle"))
+	add_child(v)
+	_place_battlefields()
 
 
 func _battlefield_name(map: String) -> String:

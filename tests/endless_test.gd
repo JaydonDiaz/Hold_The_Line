@@ -111,6 +111,43 @@ func _run() -> void:
 		main.start_wave(true)
 		await _frames(60 * 8)
 		check(main.map_id == sc["map"] and not main.game_over and not main.get_enemies().is_empty(), "D  ...it plays: %s on %s" % [sc["name"], main.map_id])
+	# --- B ---
+	const CD = preload("res://scripts/campaign_data.gd")
+	for t in ["positions", "pass", "protect", "evac", "capture", "escort", "retreat"]:
+		var story: Array = CD.MISSIONS.keys().filter(func(m): return CD.MISSIONS[m].get("type", "castle") == t)
+		var ids: Array = Scenarios.of_type(t)
+		check(story.all(func(m): return ids.has("story:" + m)), "B  %s: every campaign battle of its kind is a Battle Mode battlefield (%d of them, %d in all)" % [Scenarios.TYPES[t]["name"], story.size(), ids.size()])
+	# The viewer: through a kind's battlefields, the campaign's locked till it's reached them.
+	campaign.reset()
+	campaign.new_campaign("normal")
+	await _fresh()
+	main.hud.show_battle_maps("protect")
+	await _frames(3)
+	var bv = main.hud.battlefields
+	var ids2: Array = bv.battles.map(func(b): return b["id"])
+	var shut: Array = bv.battles.filter(func(b): return not b["open"]).map(func(b): return b["id"])
+	check(bv != null and ids2.has("signal_beacon") and ids2.has("story:fc_council") and shut.has("story:fc_council") and not shut.has("signal_beacon"),
+			"B  Protect the Objective's viewer: its own and the campaign's battlefields, the campaign's locked for a new campaign (%s)" % ", ".join(ids2))
+	bv.show_map(ids2.find("story:fc_council"))
+	check(bv.lock_label.visible and bv.start_button.disabled and "Free Cities" in bv.lock_label.text, "B  ...a locked one says where to get it, and can't be started")
+	bv.show_map(bv.at + 1)
+	bv.show_map(bv.at - 1)
+	check(bv.name_label.text == "The Council's Price", "B  ...the arrows go through them (%s)" % bv.name_label.text)
+	# Every campaign battle plays as a Battle Mode.
+	for m in CD.MISSIONS:
+		var t: String = CD.MISSIONS[m].get("type", "castle")
+		if not Scenarios.STORY_TYPES.has(t):
+			continue
+		await _fresh()
+		main.hud.hide_mode_select()
+		main._on_mode_chosen("battle:story:%s:normal" % m)
+		await _frames(5)
+		main.deploying = false
+		if not main.wave_active:
+			main.start_wave(true)
+		await _frames(60 * 6)
+		check(main.map_id == CD.MISSIONS[m]["map"] and not main.game_over and main.survival() and main.mission.get("from_story", "") == m,
+				"B  %s (%s) plays as a Battle Mode, endless" % [CD.MISSIONS[m]["name"], t])
 	if main != null:
 		main.free()
 	if FileAccess.file_exists("user://endless_test.cfg"):
