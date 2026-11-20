@@ -1467,7 +1467,7 @@ func _draw_marshal_road() -> void:
 	_b(103, 74 + wave, 14, 10, Color(0.6, 0.18, 0.08))
 	_b(103, 84 + wave, 7, 3, Color(0.6, 0.18, 0.08))
 	_b(108, 77 + wave, 4, 4, Color(1.0, 0.6, 0.2, 0.7 + 0.3 * sin(t * 6.0)))
-	_figure_at("warlord", 80, 134, 6.0, Color(0.8, 0.62, 0.55))
+	_figure_at("ash_marshal", 80, 134, 6.0)   # (his own: horned black armour, the soot-red tabard, the ember-edged axe)
 	# Ash and embers falling.
 	for k in 22:
 		var fall := fmod(t * (6.0 + k % 4) + k * 13.0, 150.0)

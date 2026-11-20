@@ -452,7 +452,7 @@ func _missions() -> void:
 	var m: Dictionary = CD.MISSIONS["ashwatch"]
 	check(main.gold == m["gold"] and main.last_wave() == m["waves"] and main.wave == 0, "M  starting gold %d, %d waves" % [m["gold"], m["waves"]])
 	var kinds: Array = main.get_warriors().map(func(w): return w.kind)
-	check(kinds.count("tower") == 1 and kinds.count("swordsman") == 2, "M  the garrison's watchtower and two swordsmen are on the field")
+	check(kinds.count("tower") == 0 and kinds.count("swordsman") == 2, "M  the garrison's two swordsmen are on the field (no watchtower)")
 	check(main.get_warriors().all(func(w): return w.sell_value() == 0), "M  ...and are on loan: selling them pays nothing")
 	# Waves come from the mission's pool, at the mission's level.
 	var w1: Array = main._build_wave(1)
@@ -486,7 +486,7 @@ func _missions() -> void:
 	await _win_mission()
 	check(main.game_over and main.victory, "M  clearing the last wave wins (no endless offer)")
 	check(campaign.completed == ["ashwatch"] and campaign.allies.is_empty(), "M  Ashwatch is recorded as won (it brings no faction)")
-	check(campaign.flags.has("watchtower_stood"), "M  the watchtower stood, so its story flag is set")
+	check(campaign.flags.is_empty() and main.get_warriors().all(func(w): return w.kind != "tower"), "M  Ashwatch's battle has no tower (its two knights, and whoever's hired), and sets no story flags")
 	var cfg := ConfigFile.new()
 	cfg.load(TEST_SAVE)
 	check((cfg.get_value("state", "completed", []) as Array).has("ashwatch"), "M  ...and saved straight away")
@@ -495,12 +495,8 @@ func _missions() -> void:
 	main.back_to_map()
 	await _fresh_main()
 	check(main.hud.world_map != null and main.hud.world_map.overlay != null, "M  the map opens with the outro playing")
-	var lines: Array = campaign.story_lines("ashwatch_outro")
-	check(lines.any(func(l): return "held the whole time" in l["text"]) and not lines.any(func(l): return "lost the watchtower" in l["text"]),
-			"M  the outro picks the line for a watchtower that stood")
-	check(campaign.story_lines("stonehollow_intro").size() == CD.STORY["stonehollow_intro"].size(), "M  Stonehollow's intro includes the watchtower lines")
-	campaign.flags.erase("watchtower_stood")
-	check(campaign.story_lines("stonehollow_intro").size() == CD.STORY["stonehollow_intro"].size() - 2, "M  ...and leaves them out when it fell")
+	check(campaign.story_lines("ashwatch_outro").size() == CD.STORY["ashwatch_outro"].size() and campaign.story_lines("stonehollow_intro").size() == CD.STORY["stonehollow_intro"].size(),
+			"M  Ashwatch's outro and Stonehollow's intro play in full (no watchtower lines to choose between)")
 	# Stonehollow: the Engineers join.
 	await _play("stonehollow")
 	await _win_mission()

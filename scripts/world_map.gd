@@ -847,7 +847,16 @@ const STAMPS := {
 	"shrine": ["..y..", ".kyk.", "kcccck", "kcnck.", "kkkkk."],
 	"mine": [".kkkkk.", "kbbbbbk", "kbnnnbk", "kbnnnbk", "kkkkkkk"],
 	"pagoda": ["..k..", ".kok.", "kkkkk", ".kok.", "kkkkk", ".knk."],
+	"bridge": ["kbk", "kck", "kbk", "kck", "kbk", "kck"],   # planks across the river, north to south
+	"quarry": ["kkkkkkkk", "kggdggdk", "kdgddgdk", ".kddddk.", "..kkkk.."],   # a stepped pit cut in the rock
+	"forge": ["..g..", ".g...", "..k..", ".kkk.", "kgggk", "kgrgk", "kkkkk"],   # a workshop, smoke from its chimney
+	"tent": ["..k..", ".krk.", "krrrk", "kknkk"],   # his host's, dark red
+	"steps": ["...c", "..c.", ".c..", "..c.", "...c", "..c.", ".c..", "..c."],   # the Thousand Steps up the mountain
+	"bells": ["kyk", "kyk", "kkk"],   # a bell tower
+	"boat": ["..k...", "..wk..", "..wwk.", "kbbbbk", ".kkkk."],   # moored in the Free Cities' harbour
+	"islet": [".kPk.", "kgggk", ".kgk.", "..k.."],   # a floating island of the Spires, a crystal on it
 }
+const SEA_STAMPS := ["boat", "islet"]   # stamps that go on the water
 const SNOW := [Vector2(44, 128), Vector2(96, 74), Vector2(184, 62), Vector2(212, 150), Vector2(196, 256),
 	Vector2(124, 296), Vector2(56, 290), Vector2(28, 204)]
 const KEEP := ["kkk...kkk", "ksk...ksk", "kskkkkksk", "ksssssssk", "ksskdkssk", "ksskdkssk", "kkkkkkkkk"]
@@ -917,6 +926,7 @@ func _bake() -> void:
 				elif n < -0.35 or (n < -0.2 and (x + y) % 2 == 0):
 					c = Color(0.5, 0.67, 0.37)
 			img.set_pixel(x, y, c)
+	_paint_regions(img, land)
 	# The Sable river, two pixels wide with a bright middle.
 	for i in RIVER.size() - 1:
 		var a: Vector2 = RIVER[i] / PX
@@ -935,15 +945,24 @@ func _bake() -> void:
 		["mountain", Vector2(246, 214)], ["mountain", Vector2(356, 206)], ["hill", Vector2(300, 196)],
 		["mountain", Vector2(204, 140)], ["mountain", Vector2(140, 250)], ["hill", Vector2(380, 300)],
 		["hill", Vector2(200, 560)], ["hill", Vector2(150, 330)], ["hill", Vector2(420, 430)],
-		["shrine", Vector2(330, 488)], ["mine", Vector2(536, 466)], ["pagoda", Vector2(300, 212)]]
-	for i in 6:
-		stamps.append(["house", Vector2(468 + i * 18, 298 + (i % 2) * 14)])
-	for i in 4:
-		stamps.append(["spire", Vector2(500 + i * 16, 112 + (i % 2) * 10)])
+		["shrine", Vector2(330, 488)], ["mine", Vector2(536, 466)], ["pagoda", Vector2(352, 262)],
+		# What each region's battles are fought over and through:
+		["bridge", Vector2(250, 380)], ["bridge", Vector2(352, 382)],              # Sable Crossing's two bridges
+		["quarry", Vector2(380, 604)], ["forge", Vector2(476, 548)],              # Stonehollow's quarry and workshops
+		["hill", Vector2(196, 606)], ["hill", Vector2(300, 600)],                 # the ridge above Ashwatch
+		["mountain", Vector2(330, 196)], ["steps", Vector2(332, 198)], ["bells", Vector2(258, 262)],   # the Thousand Steps
+		["mountain", Vector2(70, 262)], ["mountain", Vector2(178, 256)],          # Frostmarch's pass
+		["boat", Vector2(616, 252)], ["boat", Vector2(624, 296)],                 # the Free Cities' harbour
+		["islet", Vector2(596, 40)], ["islet", Vector2(626, 92)],                 # the Spires' floating islands
+		["tent", Vector2(196, 128)], ["tent", Vector2(212, 138)], ["tent", Vector2(296, 130)], ["tent", Vector2(316, 122)]]   # his host below Dawnspire
+	for i in 10:
+		stamps.append(["house", Vector2(456 + (i % 6) * 18, 298 + (i % 2) * 14 + (i / 6) * 26)])
+	for i in 7:
+		stamps.append(["spire", Vector2(498 + i * 14, 108 + (i % 3) * 10)])
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 21
-	for i in 26:
-		stamps.append(["pine", Vector2(rng.randf_range(62, 190), rng.randf_range(400, 520))])
+	for i in 44:
+		stamps.append(["pine", Vector2(rng.randf_range(56, 200), rng.randf_range(392, 540))])
 	for i in 10:
 		stamps.append(["snowpine", Vector2(rng.randf_range(60, 190), rng.randf_range(110, 280))])
 	for i in 10:
@@ -958,7 +977,7 @@ func _bake() -> void:
 			if (CD.TERRITORIES[k]["pos"] as Vector2).distance_to(st[1]) < 34.0:
 				clear = false
 		var ci := clampi(origin.y + rows.size() - 1, 0, MH - 1) * MW + clampi(origin.x + rows[0].length() / 2, 0, MW - 1)
-		if not clear or land[ci] == 0:
+		if not clear or (land[ci] == 0) != SEA_STAMPS.has(st[0]):
 			continue
 		for ry in rows.size():
 			var row: String = rows[ry]
@@ -971,6 +990,98 @@ func _bake() -> void:
 				if x >= 0 and x < MW and y >= 0 and y < MH:
 					img.set_pixel(x, y, STAMP_PAL[ch])
 	land_tex = ImageTexture.create_from_image(img)
+
+
+## The look of each region's ground, under its stamps: Mercy Vale's hedged fields,
+## Ashwatch's farms, Greenwood's dark forest floor, Deepdelve's canyon and the rails to its
+## mine, Frostmarch's frozen lake, the Free Cities' canal, and Dawnspire scorched round its
+## three walls.
+func _paint_regions(img: Image, land: PackedByteArray) -> void:
+	var put := func(x: int, y: int, c: Color) -> void:
+		if x >= 0 and y >= 0 and x < MW and y < MH and land[y * MW + x] == 1:
+			img.set_pixel(x, y, c)
+	var near_keep := func(p: Vector2, r: float) -> bool:
+		for k in CD.TERRITORIES:
+			if (CD.TERRITORIES[k]["pos"] as Vector2).distance_to(p) < r:
+				return true
+		return false
+	# Greenwood: the forest floor, darker under the trees.
+	for y in range(96, 136):
+		for x in range(14, 52):
+			if Vector2(x, y).distance_to(Vector2(32, 116)) < 20.0 + 3.0 * sin(x * 0.7 + y * 0.3):
+				put.call(x, y, Color(0.27, 0.44, 0.22) if (x + y) % 3 else Color(0.31, 0.48, 0.24))
+	# Mercy Vale and Ashwatch: fields in strips, hedges between them.
+	var fields := [[Vector2(58, 110), 3, 2], [Vector2(84, 122), 3, 2], [Vector2(64, 126), 2, 2], [Vector2(86, 108), 2, 1],
+			[Vector2(44, 150), 3, 1], [Vector2(74, 150), 2, 2]]
+	for f in fields:
+		var o: Vector2 = f[0]
+		for cy in f[2]:
+			for cx in f[1]:
+				var w: int = 4 + (cx + cy) % 2   # (fields of a few sizes)
+				var cell := o + Vector2(cx * 6, cy * 5)
+				if near_keep.call(cell * PX + Vector2(8, 8), 28.0):
+					continue
+				var c: Color = [Color(0.52, 0.62, 0.32), Color(0.46, 0.6, 0.3), Color(0.6, 0.62, 0.36), Color(0.4, 0.56, 0.28)][(cx * 3 + cy * 2 + int(o.x)) % 4]
+				for yy in 4:
+					for xx in w:
+						var row_line: bool = c.r > 0.55 and yy % 2 == 1   # (furrows in the tilled ones)
+						put.call(int(cell.x) + xx, int(cell.y) + yy, c.darkened(0.08) if row_line else c)
+				for xx in w + 1:   # a hedge along its foot, and its right side
+					put.call(int(cell.x) + xx, int(cell.y) + 4, Color(0.22, 0.36, 0.17))
+				for yy in 5:
+					put.call(int(cell.x) + w, int(cell.y) + yy, Color(0.22, 0.36, 0.17))
+	# Deepdelve: a canyon winding out of the eastern peaks, the rails down from the mine.
+	var canyon := [Vector2(144, 132), Vector2(138, 124), Vector2(142, 116), Vector2(136, 108), Vector2(140, 100)]
+	for i in canyon.size() - 1:
+		var a: Vector2 = canyon[i]
+		var b: Vector2 = canyon[i + 1]
+		for s in 9:
+			var p := a.lerp(b, s / 8.0)
+			put.call(int(p.x), int(p.y), Color(0.3, 0.2, 0.14))
+			put.call(int(p.x) + 1, int(p.y), Color(0.42, 0.3, 0.2))
+			put.call(int(p.x) - 1, int(p.y), Color(0.52, 0.4, 0.28))
+	for i in 7:
+		put.call(134 - i * 2, 116 - (i % 2), Color(0.4, 0.28, 0.16))
+	# Frostmarch: the frozen lake, cracks in its ice.
+	for y in range(36, 52):
+		for x in range(26, 52):
+			var d := Vector2((x - 39) / 13.0, (y - 44) / 7.0).length()
+			if d < 1.0:
+				var c := Color(0.72, 0.86, 0.96) if d > 0.82 else Color(0.62, 0.8, 0.94)
+				if (x * 7 + y * 3) % 11 == 0:
+					c = Color(0.9, 0.96, 1.0)   # a crack
+				put.call(x, y, c)
+	# The Free Cities: a canal from the sea through the town.
+	for x in range(112, 156):
+		put.call(x, 78 + int(sin(x * 0.3) * 1.0), Color(0.3, 0.55, 0.78))
+		put.call(x, 79 + int(sin(x * 0.3) * 1.0), Color(0.22, 0.45, 0.7))
+	# Dawnspire: the ground scorched round it, and its three walls, gates on the south.
+	var ds: Vector2 = CD.TERRITORIES["dawnspire"]["pos"] / PX
+	var grain := FastNoiseLite.new()
+	grain.seed = 3
+	grain.frequency = 0.3
+	for y in range(int(ds.y) - 14, int(ds.y) + 20):
+		for x in range(int(ds.x) - 22, int(ds.x) + 23):
+			var d := Vector2((x - ds.x) / 22.0, (y - ds.y - 3) / 16.0).length() + grain.get_noise_2d(x, y) * 0.18
+			if d < 1.0:
+				put.call(x, y, Color(0.46, 0.4, 0.3) if d > 0.75 else (Color(0.38, 0.32, 0.25) if grain.get_noise_2d(y, x) > 0.0 else Color(0.33, 0.27, 0.21)))
+	# Its three walls, round the citadel: the outer gate, the bailey's, the Dawn Gate's.
+	for ring in [[10, 7], [14, 10], [18, 13]]:
+		var rx: int = ring[0]
+		var ry: int = ring[1]
+		var top := int(ds.y) - ry + 3
+		var foot := int(ds.y) + ry
+		for x in range(int(ds.x) - rx, int(ds.x) + rx + 1):
+			put.call(x, top, Color(0.72, 0.69, 0.62))
+			if absi(x - int(ds.x)) > 1:   # (the gate in it, on the road)
+				put.call(x, foot, Color(0.72, 0.69, 0.62))
+				put.call(x, foot + 1, Color(0.24, 0.2, 0.18))
+		for y in range(top, foot + 1):
+			put.call(int(ds.x) - rx, y, Color(0.72, 0.69, 0.62))
+			put.call(int(ds.x) + rx, y, Color(0.56, 0.53, 0.48))
+		for y in [top, foot]:   # towers at its corners
+			for x in [int(ds.x) - rx, int(ds.x) + rx]:
+				put.call(x, y - 1, Color(0.24, 0.2, 0.18))
 
 
 func _sea_next(land: PackedByteArray, x: int, y: int) -> bool:

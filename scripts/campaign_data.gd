@@ -165,14 +165,13 @@ const ROUTES := [["ashwatch", "stonehollow"], ["stonehollow", "greenwood"], ["st
 #                (default 25: time to finish it off, rest and reset)
 #   requires     what has to happen in the campaign before it can be played (see TERRITORIES)
 const MISSIONS := {
-	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 240,
+	"ashwatch": {"name": "The Ridge Fires", "territory": "ashwatch", "waves": 4, "level": 3, "gold": 280,
 		"count": [10, 4], "mood": "normal", "map": "ashwatch_ridge",
 		"pool": {1: ["goblin", "goblin"], 2: ["wolf"], 3: ["orc"]},
 		"extra": {3: ["orc", "orc", "skeleton_archer"], 4: ["orc", "orc", "orc", "wolf", "wolf", "troll", "troll", "skeleton_archer", "skeleton_archer"]},
 		"notes": {2: "Wolves! They run straight for the walls.", 4: "Their vanguard is coming in force!"},
-		"allies": [{"kind": "tower", "at": Vector2(320, 560), "built": true, "crew": "archer"},
-			{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
-		"lend": [], "reward": "", "track": {"watchtower_stood": "tower"},
+		"allies": [{"kind": "swordsman", "at": Vector2(250, 470)}, {"kind": "swordsman", "at": Vector2(390, 470)}],
+		"lend": [], "reward": "",
 		"intro": "ashwatch_intro", "outro": "ashwatch_outro"},
 	"stonehollow": {"name": "The Quarry Road", "territory": "stonehollow", "waves": 5, "level": 4, "gold": 340,
 		"count": [6, 2], "mood": "normal", "map": "stonehollow_quarry",
@@ -688,13 +687,11 @@ const PROLOGUE := [
 const STORY := {
 	"ashwatch_intro": [
 		{"who": "hale", "text": "Commander! Torches on the ridge. Goblins, and a lot more behind them."},
-		{"who": "hale", "text": "Half the garrison rode south a week ago. What's left is you, me, two knights and old Tamsin up in the watchtower."},
+		{"who": "hale", "text": "Half the garrison rode south a week ago. What's left is you, me, two knights and old Tamsin, who keeps the beacon on the ridge."},
 		{"who": "hale", "text": "We can hire more swords with what's in the strongbox. Post them on the trail and keep everything out of the keep."},
 	],
 	"ashwatch_outro": [
 		{"who": "hale", "text": "They're pulling back. But those weren't raiders, Commander. That was a vanguard."},
-		{"who": "hale", "text": "Tamsin's tower held the whole time. Stubborn as the stone it's built from.", "if": {"flag": "watchtower_stood"}},
-		{"who": "hale", "text": "We lost the watchtower. Tamsin got out, but she says the old stones went down hard.", "if": {"no_flag": "watchtower_stood"}},
 		{"who": "hale", "text": "Look at this. It was in the cellar behind the barrels: a map of beacons, from when the peoples of this land still answered each other."},
 		{"who": "hale", "text": "They called it the Line. Every keep and every hold, of every people, sworn to come when a beacon was lit. Ours hasn't burned in two hundred years."},
 		{"who": "ogre", "text": "One little fire on the frontier? Let it flicker. They will fall one by one, as they always have."},
@@ -724,8 +721,6 @@ const STORY := {
 		{"who": "vell", "text": "You're the ones from Ashwatch? Bad timing. They've come for the quarry road."},
 		{"who": "vell", "text": "My crews will raise walls wherever you point and patch the gate between waves. You keep the brutes off my masons."},
 		{"who": "vell", "text": "Mind the ones with the powder kegs. Sappers. They love a good wall almost as much as I do."},
-		{"who": "hale", "text": "Guildmaster, Tamsin's watchtower held at Ashwatch. Your stone is still doing its job.", "if": {"flag": "watchtower_stood"}},
-		{"who": "vell", "text": "Ha! Centuries, and the old work still stands. Let's give them some new work to break their teeth on.", "if": {"flag": "watchtower_stood"}},
 	],
 	"stonehollow_outro": [
 		{"who": "vell", "text": "The guild has voted. Stonehollow stands with the Line, the first to do it in two hundred years."},
