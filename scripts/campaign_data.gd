@@ -202,13 +202,13 @@ const MISSIONS := {
 		"convoy": {"name": "Armoury Wagon", "cargo": "arms", "speed": 20.0, "hp": 900, "patch": 0.15,
 			"zones": [
 				{"map": "convoy_pass", "name": "The Guild Pass", "ambushes": [
-					{"at": 0.3, "note": "Raiders on the slopes! They want those swords.", "group": [["orc", Vector2(230, 460)], ["goblin", Vector2(250, 400)], ["goblin", Vector2(400, 400)], ["skeleton_archer", Vector2(420, 330)], ["wolf", Vector2(80, 420)]]},
+					{"at": 0.3, "note": "Raiders on the slopes! They want those swords.", "group": [["orc", Vector2(230, 460)], ["goblin", Vector2(250, 400)], ["goblin", Vector2(400, 400)], ["skeleton_archer", Vector2(420, 330)], ["wolf", Vector2(206, 300)]]},
 					{"at": 0.7, "note": "They've blocked the top of the pass!", "group": [["orc", Vector2(260, 160)], ["orc", Vector2(380, 160)], ["goblin", Vector2(320, 130)], ["skeleton_archer", Vector2(330, 60)]]}]},
 				{"map": "convoy_meadow", "name": "The Lowland Road", "ambushes": [
 					{"at": 0.3, "note": "Raiders out of the copses!", "group": [["orc", Vector2(600, 590)], ["goblin", Vector2(580, 615)], ["goblin", Vector2(60, 520)], ["wolf", Vector2(40, 570)], ["wolf", Vector2(60, 600)]]},
 					{"at": 0.7, "note": "Sappers! They mean to blow the wagon apart.", "group": [["sapper", Vector2(500, 290)], ["sapper", Vector2(130, 330)], ["orc", Vector2(545, 280)], ["skeleton_archer", Vector2(520, 160)]]}]},
 				{"map": "convoy_ridge", "name": "The Climb to Ashwatch", "ambushes": [
-					{"at": 0.3, "note": "Down from the boulders!", "group": [["orc", Vector2(170, 520)], ["orc", Vector2(470, 500)], ["skeleton_archer", Vector2(260, 330)], ["goblin", Vector2(470, 350)], ["wolf", Vector2(560, 420)]]},
+					{"at": 0.3, "note": "Down from the boulders!", "group": [["orc", Vector2(170, 520)], ["orc", Vector2(470, 500)], ["skeleton_archer", Vector2(260, 330)], ["goblin", Vector2(470, 350)], ["wolf", Vector2(510, 470)]]},
 					{"at": 0.7, "note": "A Troll on the ridge road, in sight of the keep!", "group": [["troll", Vector2(320, 140)], ["orc", Vector2(260, 160)], ["orc", Vector2(400, 180)], ["skeleton_archer", Vector2(480, 260)]]}]}]},
 		"pace": {"auto": "forced", "deploy": 20},
 		"pool": {1: ["goblin", "goblin", "orc"], 2: ["wolf", "skeleton_archer"], 3: ["sapper"], 5: ["orc", "skeleton_archer"]},

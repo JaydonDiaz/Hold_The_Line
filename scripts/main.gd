@@ -780,6 +780,8 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 			at = lane   # a battlefield's own ways in
 		else:
 			at = Vector2(FIELD_W / 2.0 if d.get("boss", false) else randf_range(r + 10, FIELD_W - r - 10), -r)
+	elif not d.get("flying", false) and (at as Vector2).y > 0.0 and paths.has_terrain() and paths.blocked(at, r):
+		at = paths.open_spot(at)   # (a set spot that's in rock, a cliff, a wall: the nearest open ground to it)
 	var e := Enemy.new()
 	e.setup(kind, d, self, at,
 			Data.level_growth(level, Data.HP_GROWTH, Data.LATE_HP_GROWTH),

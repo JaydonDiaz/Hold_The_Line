@@ -75,6 +75,8 @@ func _run() -> void:
 		await _classic_maps()
 	if _wants("Z"):
 		await _zones()
+	if _wants("S"):
+		await _set_spots()
 	if _wants("W"):
 		await _water()
 	print("%d checks, %d failed" % [checks, fails])
@@ -1044,3 +1046,49 @@ func _classic_maps() -> void:
 	check(main.map_id == "" and not main.paths.has_terrain() and main.castle.pal == main.castle.STYLES["keep"] and main.stage_music == "calm",
 			"K  Classic picked without a battlefield is the open meadow, as before")
 	campaign.reset()
+
+
+## Every spot a mission sets an enemy at (its ambushes, garrisons and groups, in each of its
+## fields) is open ground on that field: none in a cliff, rock or wall, where troops
+## couldn't reach it (a wolf in the High Pass's cliff, once).
+func _set_spots() -> void:
+	await _fresh()
+	main._lock_portrait(true)
+	await _frames(2)
+	var paths = main.paths
+	var CDm = load("res://scripts/campaign_data.gd")
+	var Sc = load("res://scripts/mission/scenarios.gd")
+	var all := {}
+	for m in CDm.MISSIONS:
+		all[m] = CDm.MISSIONS[m]
+	for sid in Sc.SCENARIOS:
+		all["battle:" + sid] = Sc.SCENARIOS[sid]
+	var buried := []
+	var count := [0]
+	var walk := func(walk_ref: Callable, node, map: String, where: String) -> void:
+		if node is Dictionary:
+			var here: String = node.get("map", map) if node.get("map", "") is String and node.get("map", "") != "" else map
+			for k in node:
+				if str(k) in ["group", "garrison", "prepared_garrison"] and node[k] is Array:
+					for g in node[k]:
+						if g is Array and g.size() >= 2 and g[1] is Vector2 and Data.ENEMIES.has(g[0]) and not Data.ENEMIES[g[0]].get("flying", false):
+							count[0] += 1
+							paths.set_map(Maps.get_map(here))
+							if paths.has_terrain() and paths.blocked(g[1], float(Data.ENEMIES[g[0]]["radius"])):
+								buried.append("%s %s %s at %s" % [where, here, g[0], g[1]])
+				else:
+					walk_ref.call(walk_ref, node[k], here, where)
+		elif node is Array:
+			for x in node:
+				walk_ref.call(walk_ref, x, map, where)
+	for id in all:
+		walk.call(walk, all[id], String(all[id].get("map", "")), id)
+	# And whatever a battle asks for: one set in rock comes out on the nearest open ground.
+	main.rules.change_field("convoy_pass") if main.rules.has_method("change_field") else null
+	paths.set_map(Maps.get_map("convoy_pass"))
+	main._spawn_enemy("wolf", 3, Vector2(80, 420))
+	var wolf = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
+	check(wolf.kind == "wolf" and not paths.blocked(wolf.position, wolf.radius) and wolf.position.distance_to(Vector2(80, 420)) < 140.0,
+			"S  an enemy set in a cliff comes out on the nearest open ground (%s)" % wolf.position)
+	check(buried.is_empty() and count[0] > 50, "S  every spot a mission sets an enemy at is open ground (%d checked%s)" % [count[0], "" if buried.is_empty() else ": " + "; ".join(buried)])
+
