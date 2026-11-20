@@ -330,6 +330,7 @@ func layout(w: float, h := HEIGHT, phone := false) -> void:
 	for c in centered:
 		if is_instance_valid(c):
 			_place_centered(c)
+	_place_battlefields()
 	if freeplay_bar:
 		_layout_freeplay()
 
@@ -1731,11 +1732,19 @@ func show_battlefields(diff: String) -> void:
 		classic_map = v.maps[v.at] if v.open_maps.has(v.maps[v.at]) else classic_map
 		battlefields = null
 		v.queue_free())
-	# It covers the whole screen (not just the 640-wide middle), above the title screen.
-	var view := get_viewport().get_visible_rect().size
-	v.position = Vector2(-offset.x, -offset.y) / ui_scale
-	v.size = view / ui_scale
 	add_child(v)
+	_place_battlefields()
+
+
+## The battlefield viewer covers the whole screen (not just the 640-wide middle), above the
+## title screen: placed so when it opens, and again whenever the window changes (going full
+## screen, say).
+func _place_battlefields() -> void:
+	if battlefields == null or not is_instance_valid(battlefields):
+		return
+	var view := get_viewport().get_visible_rect().size
+	battlefields.position = Vector2(-offset.x, -offset.y) / ui_scale
+	battlefields.size = view / ui_scale
 
 
 func _battlefield_name(map: String) -> String:
