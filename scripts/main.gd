@@ -1797,7 +1797,7 @@ func _draw_into_tower(t) -> void:
 	overlay.draw_string(f, top + Vector2(-70, -18), "Into the tower", HORIZONTAL_ALIGNMENT_CENTER, 140, 13, c)
 
 
-## The selected broken Tower rebuilt (if there's the gold): an Engineer comes out to it.
+## The selected broken emplacement rebuilt (if there's the gold): an Engineer comes out to it.
 func rebuild_selected() -> void:
 	if not (selected is Warrior) or not selected.broken:
 		return

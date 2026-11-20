@@ -253,7 +253,7 @@ static func can_garrison(w) -> bool:
 const PERCH_BASE := 0.3      # how much further a crew reaches from a Tower (before its Lookout upgrades)
 const CLIMB_REACH := 30.0    # a troop ordered this near an empty Tower climbs into it
 var garrison = null          # the Tower this troop is posted in (null: on the ground)
-var broken := false          # a Tower brought down: rubble, out of the fight for good (no Healer brings it back); Engineers can rebuild it
+var broken := false          # an emplacement brought down: rubble, out of the fight (no Healer or Medic Bay brings it back, and it's never killed off like a troop); Engineers can rebuild it for gold
 const REBUILD_TIME := 8.0    # seconds an Engineer works at a broken Tower to put it up again
 var crew_in = null           # a Tower's crew
 var perch := 0.0             # a Tower: how much further its crew reaches (0.3: 30%)
@@ -1365,8 +1365,8 @@ func take_damage(amount: float) -> void:
 	if hp <= 0.0 and summoned:
 		_crumble()
 		return
-	if hp <= 0.0 and kind == "tower":
-		_break()
+	if hp <= 0.0 and data.get("emplacement", false):
+		_break()   # (any emplacement: broken, to be rebuilt; never downed like a troop)
 		return
 	if hp <= 0.0:
 		hp = 0.0
@@ -2342,25 +2342,35 @@ func instrument_sound() -> String:
 	return instrument[look] if look >= 0 else "note"
 
 
-## An Engineer has finished building this emplacement: it starts working.
-## A Tower brought down: broken, rubble where it stood, its crew down off it; no Healer or
-## Medic Bay can bring it back. The player can have an Engineer rebuild it (rebuild_cost).
-func _break() -> void:
+## An emplacement brought down (a Tower, a Cannon, a Ballista, a Gold Mine, a Medic Bay...):
+## broken, rubble where it stood, a Tower's crew down off it. No Healer or Medic Bay can bring
+## it back, and it's never killed off for good the way a fallen troop is; the player can have
+## an Engineer rebuild it, upgrades and all (rebuild_cost: the more spent on it, the more).
+## `quiet`: put back broken (from a record), without the crash and dust.
+func _break(quiet := false) -> void:
 	broken = true
 	hp = 0.0
 	down_timer = 0.0
 	target = null
+	rez_target = null
+	build_left = 0.0
 	if crew_in != null and is_instance_valid(crew_in) and crew_in.garrison == self:
 		crew_in.leave_tower()
-	main.spawn_burst(position + Vector2(0, -30), 40.0, Color(0.6, 0.58, 0.55))
-	main.spawn_text(position + Vector2(0, -50), "Broken!", Color(1, 0.4, 0.35))
-	main.sfx("crumble", 1.0)
+	# Healers on their way to it (a revive, or seeing to it) leave it be.
+	for w in main.get_warriors():
+		if w != self and w.rez_target == self:
+			w.rez_target = null
+			w.rez_progress = 0.0
+	if not quiet:
+		main.spawn_burst(position + Vector2(0, -30), 40.0, Color(0.6, 0.58, 0.55))
+		main.spawn_text(position + Vector2(0, -50), "Broken!", Color(1, 0.4, 0.35))
+		main.sfx("crumble", 1.0)
 	main.paths.invalidate()
 	main.warriors_changed()
 	queue_redraw()
 
 
-## What it costs to have a broken Tower rebuilt: half of all that's been spent on it (its
+## What it costs to have a broken emplacement rebuilt: half of all that's been spent on it (its
 ## upgrades included, so a well-upgraded tower costs more), never less than a third of a new one.
 func rebuild_cost() -> int:
 	return main.price(maxf(spent * 0.5, float(data["cost"]) / 3.0))

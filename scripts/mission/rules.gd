@@ -270,7 +270,7 @@ func _unit_record(w) -> Dictionary:
 	var k: float = main.FIELD_W / 640.0
 	return {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
 			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.temp_allies.has(w),
-			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode}
+			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode, "broken": w.broken}
 
 
 ## A unit back from its record (on the field as it's stretched now).
@@ -294,6 +294,8 @@ func _make_unit(rec: Dictionary):
 		main.temp_allies.append(w)
 	if rec.get("freed", false):
 		w.set_meta("freed", true)
+	if rec.get("broken", false):
+		w._break(true)   # (still rubble: rebuilding it costs gold, here as where it fell)
 	return w
 
 

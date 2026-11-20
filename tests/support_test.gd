@@ -9,6 +9,9 @@ extends SceneTree
 ##    time to die stands still
 ## D  A troop standing where something warned is about to land (falling stone) runs out of
 ##    it by itself; a stunned one can't
+## B  An emplacement brought down is broken, not downed: never killed off, no Healer or Medic
+##    Bay brings it back (and a Healer doesn't hang about it); an Engineer rebuilds it for
+##    gold, more the more it's been upgraded
 
 const Data = preload("res://scripts/data.gd")
 var main
@@ -32,6 +35,7 @@ func _run() -> void:
 	await _passing()
 	await _revives()
 	await _dodging()
+	await _broken()
 	if main != null:
 		main.free()
 	print("%d checks, %d failed" % [checks, fails])
@@ -140,3 +144,45 @@ func _dodging() -> void:
 	check(free_one.hp == hp_free and free_one.position.distance_to(Vector2(335, 500)) > ring,
 			"D  a troop standing under it runs out of the ring by itself and isn't hit")
 	check(stunned.hp < hp_stun, "D  ...a stunned one can't, and is")
+
+
+# --- B ---------------------------------------------------------------------------------------
+
+func _broken() -> void:
+	await _fresh()
+	main.permadeath = true
+	main.wave_active = true
+	var cannon = await _hire("cannon", Vector2(320, 560))
+	var bay = await _hire("medbay", Vector2(200, 640))
+	main.selected = bay
+	for i in 4:
+		main.upgrade_selected(2)   # (Field Hospital: it revives)
+	main.selected = null
+	var h = await _hire("healer", Vector2(380, 620))
+	var hurt = await _hire("swordsman", Vector2(460, 600))
+	hurt.hp = hurt.max_hp * 0.4
+	cannon.take_damage(1e6)
+	await _frames(2)
+	check(cannon.broken and cannon.down_timer <= 0.0 and not cannon.is_active(), "B  an emplacement brought down is broken, not downed like a troop")
+	await _frames(int(60 * (main.down_time + 3.0)))
+	check(is_instance_valid(cannon) and cannon.broken, "B  ...and never killed off for good: still there to rebuild after a fallen troop's time")
+	check(h.rez_target != cannon and bay.rez_target != cannon, "B  ...no Healer or Medic Bay tries to bring it back")
+	check(hurt.hp > hurt.max_hp * 0.6, "B  ...the Healer gets on with healing the rest instead of hanging about it")
+	# Rebuilding: more for one that's been upgraded.
+	var plain_cost: int = cannon.rebuild_cost()
+	var up = await _hire("cannon", Vector2(500, 480))
+	main.selected = up
+	for i in 3:
+		main.upgrade_selected(0)
+	main.selected = null
+	up.take_damage(1e6)
+	await _frames(2)
+	check(up.broken and up.rebuild_cost() > plain_cost, "B  rebuilding an upgraded one costs more (%dg, plain %dg)" % [up.rebuild_cost(), plain_cost])
+	main.gold = 5000
+	main.selected = cannon
+	var g0: int = main.gold
+	main.rebuild_selected()
+	check(main.gold == g0 - plain_cost and not cannon.broken and cannon.build_left > 0.0, "B  an Engineer comes out to rebuild it, for the gold")
+	await _frames(int(60 * (cannon.REBUILD_TIME + 4.0)))
+	check(cannon.is_active() and cannon.build_left <= 0.0 and cannon.hp >= cannon.max_hp * 0.99, "B  ...and it's back, whole and working")
+
