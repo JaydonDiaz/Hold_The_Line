@@ -2176,7 +2176,7 @@ func _draw() -> void:
 	if not pack.is_empty() and pack_n > 0 and not flying:
 		# Bold in a pack: a war-paint pip over its head for each of its own beside it.
 		for i in pack_n:
-			draw_rect(Rect2(Vector2(-pack_n * 3.0 + i * 6.0, feet - size.y - 9.0), Vector2(4, 4)), Color(0.95, 0.3, 0.2, 0.9))
+			draw_texture_rect(Sprites.white(), Rect2(Vector2(-pack_n * 3.0 + i * 6.0, feet - size.y - 9.0), Vector2(4, 4)), false, Color(0.95, 0.3, 0.2, 0.9))
 	elif not pack.is_empty() and float(pack["alone"]) > 0.0 and walking:
 		# On its own: a bead of sweat, looking about for the others.
 		var dp := Vector2(radius * 0.7, feet - size.y * 0.8 + fmod(life_t * 8.0, 4.0))
@@ -2187,8 +2187,8 @@ func _draw() -> void:
 			var k2 := fmod(life_t * 0.8 + i * 0.5, 1.0)
 			var p2 := Vector2((-0.4 + 0.8 * i) * radius, feet - size.y * (0.4 + 0.5 * k2))
 			var col := Color(0.4, 1.0, 0.45, 0.9 * (1.0 - k2))
-			draw_rect(Rect2(p2 - Vector2(3, 1), Vector2(6, 2)), col)
-			draw_rect(Rect2(p2 - Vector2(1, 3), Vector2(2, 6)), col)
+			draw_texture_rect(Sprites.white(), Rect2(p2 - Vector2(3, 1), Vector2(6, 2)), false, col)
+			draw_texture_rect(Sprites.white(), Rect2(p2 - Vector2(1, 3), Vector2(2, 6)), false, col)
 	if cast_state == "charge":
 		# Charging: its spell's colour gathering at the staff's head, a ring of it on the ground.
 		var col: Color = SPELL_COLORS[cast_spell]

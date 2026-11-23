@@ -917,7 +917,23 @@ const SKELETON := {
 # it fights as its kind does: hand to hand, or shooting (arrows, orbs, frost, flasks, notes;
 # volleys and splash kept), a Mage's Storm, Fire or Arcane path as that spell, a Healer
 # mending the horde, a Bard's songs driving the horde on.
+# SQUADS: the horde's own pairings, marching in together (one after another in a wave):
+#   each {name, from, every, kinds}: in Classic from wave `from`, on waves where
+#   (wave - from) % every == 0. A mission's "squads" {wave: [squad names]} sends them too.
 # tier ranks how dangerous an enemy type is; "Strongest" targeting goes for the highest.
+const SQUADS := {
+	"Hunting Pack": {"from": 8, "every": 3, "kinds": ["drummer", "wolf", "wolf", "wolf", "goblin"]},
+	"Breaching Party": {"from": 9, "every": 3, "kinds": ["shieldbearer", "sapper", "sapper"]},
+	"Iron Assault": {"from": 10, "every": 4, "kinds": ["ogre", "goblin", "goblin", "goblin"]},
+	"Piercing Volley": {"from": 11, "every": 4, "kinds": ["goblin", "goblin", "boltflinger", "boltflinger"]},
+	"Regenerating Wall": {"from": 12, "every": 4, "kinds": ["shieldbearer", "troll", "troll"]},
+	"Magical Onslaught": {"from": 15, "every": 5, "kinds": ["warlord", "warmage", "warmage"]},
+	"Death From Above": {"from": 14, "every": 6, "kinds": ["bat", "bat", "bat", "bat", "wyvern"]},
+	"Grave Procession": {"from": 16, "every": 6, "kinds": ["skeleton_archer", "skeleton_archer", "gravebinder", "skeleton_archer"]},
+	"Stolen Army": {"from": 22, "every": 6, "kinds": ["troll", "shieldbearer", "gravebinder", "shieldbearer"]},
+}
+
+
 const ENEMIES := {
 	# The horde's numbers: unsure of itself alone, bold with its own round it.
 	"goblin": {"tier": 1, "hp": 30, "speed": 45.0, "damage": 4.0, "cooldown": 1.0, "fights": true,

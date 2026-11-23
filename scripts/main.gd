@@ -803,7 +803,7 @@ func start_wave(force := false) -> void:
 	elif wyverns == 1:
 		hud.show_message("Wave %d: a Wyvern circles overhead!" % wave)
 	else:
-		hud.show_message("Wave %d" % wave)
+		hud.show_message("Wave %d" % wave if wave_squads.is_empty() else "Wave %d: %s!" % [wave, " and ".join(wave_squads.map(func(q): return "a " + q))])
 
 
 func _build_wave(n: int) -> Array:
@@ -822,9 +822,23 @@ func _build_wave(n: int) -> Array:
 		pool.append("slime")
 	if n >= 7:
 		pool.append("sapper")
+	# The rest of the horde, a kind at a time (each with its card the first time).
+	for k in NEW_FOES:
+		if n >= NEW_FOES[k]:
+			pool.append(k)
 	var list := []
-	for i in wave_size(n):
+	var squads := squads_for(n)
+	var size := wave_size(n)
+	for sq in squads:
+		size -= (Data.SQUADS[sq]["kinds"] as Array).size()   # (squads take the place of so many of the rest)
+	for i in maxi(size, wave_size(n) / 2):
 		list.append(pool.pick_random())
+	for sq in squads:
+		var at := randi_range(list.size() / 4, list.size())
+		var kinds: Array = Data.SQUADS[sq]["kinds"]
+		for j in kinds.size():
+			list.insert(at + j, kinds[j])   # (together: one after another)
+	wave_squads = squads
 	if n == 4 or n == 5:
 		list.insert(list.size() / 2, "troll")  # a single troll as an early taste
 	for i in _warlords(n):
@@ -832,6 +846,21 @@ func _build_wave(n: int) -> Array:
 	for i in _wyverns(n):
 		list.insert(list.size() * (i + 1) / (_wyverns(n) + 1), "wyvern")
 	return list
+
+
+## Classic: the wave each of the later kinds first joins the waves' mix.
+const NEW_FOES := {"drummer": 8, "shieldbearer": 9, "ogre": 10, "boltflinger": 11, "warmage": 13}
+var wave_squads: Array = []   # the squads in the wave being sent (for its announcement)
+
+
+## The horde's squads that march in Classic's wave `n` (see data.gd SQUADS), at most three.
+static func squads_for(n: int) -> Array:
+	var out := []
+	for sq in Data.SQUADS:
+		var d: Dictionary = Data.SQUADS[sq]
+		if n >= int(d["from"]) and (n - int(d["from"])) % int(d["every"]) == 0:
+			out.append(sq)
+	return out.slice(0, 3)
 
 
 ## How many make up Classic's wave `n` (before its Warlords and Wyverns): two more each
@@ -1593,6 +1622,7 @@ func _send_help() -> void:
 ## The mission's waves: wave n draws from every enemy kind its pool has added by then,
 ## plus that wave's extras.
 func _mission_wave(n: int) -> Array:
+	wave_squads = mission.get("squads", {}).get(n, [])
 	var pool := []
 	for w in mission["pool"]:
 		if n >= w:
@@ -1603,6 +1633,11 @@ func _mission_wave(n: int) -> Array:
 		list.append(pool.pick_random())
 	for k in mission.get("extra", {}).get(n, []):
 		list.insert(randi_range(list.size() / 2, list.size()), k)
+	for sq in mission.get("squads", {}).get(n, []):
+		var at := randi_range(list.size() / 3, list.size())
+		var kinds: Array = Data.SQUADS[sq]["kinds"]
+		for j in kinds.size():
+			list.insert(at + j, kinds[j])
 	if mission.get("endless", false):
 		# On and on: Warlords lead every fifth wave from the tenth, Wyverns swoop in on the
 		# even waves between from the twelfth (one more of each every ten waves).

@@ -29,6 +29,8 @@ extends SceneTree
 ##    Healer mending the horde); one body, one Gravebinder; two raised at most; a stun or its
 ##    death breaks the rite off and leaves the body; the raised, the bowmen and emplacements
 ##    leave nothing to raise; its bowmen capped
+## I  Where they're met: Classic brings the new kinds in a few at a time from wave 8, and the
+##    horde's squads marching together; the campaign keeps its first missions as they were
 ## K  The Ogre King's left as he was: none of the roster's new ways
 
 const Data = preload("res://scripts/data.gd")
@@ -85,6 +87,8 @@ func _run() -> void:
 		await _mages()
 	if _wants("N"):
 		await _necro()
+	if _wants("I"):
+		await _integration()
 	if _wants("K"):
 		_king()
 	if main != null:
@@ -705,3 +709,63 @@ func _necro() -> void:
 	var bows: int = main.get_enemies().filter(func(e): return e.kind == "skeleton_archer").size()
 	check(g.minions.size() > 0 and g.minions.size() <= int(g.necro["summon_max"]) and bows <= int(g.necro["summon_max"]),
 			"N  a Gravebinder calls up Skeleton Archers, never more than %d at once (%d)" % [g.necro["summon_max"], bows])
+
+
+# --- I ---
+
+func _integration() -> void:
+	var M = load("res://scripts/main.gd")
+	var CD = load("res://scripts/campaign_data.gd")
+	# Classic: the new kinds come in a few at a time, after the old ones have all been met.
+	var firsts := {}
+	for k in M.NEW_FOES:
+		firsts[k] = M.NEW_FOES[k]
+	check(firsts.values().min() >= 8 and firsts.values().max() <= 13, "I  Classic: the new kinds join the waves one at a time, from wave 8 to 13 (%s)" % str(firsts))
+	var by := {}
+	for n in range(1, 31):
+		for sq in M.squads_for(n):
+			if not by.has(sq):
+				by[sq] = n
+	check(by.size() == Data.SQUADS.size() and by.values().min() >= 8 and by.get("Grave Procession", 0) >= 15,
+			"I  ...the horde's squads march in from wave 8, the Gravebinders' from wave 16 (%s)" % str(by))
+	check(range(1, 60).all(func(n): return M.squads_for(n).size() <= 3), "I  ...never more than three squads a wave")
+	await _fresh()
+	main.wave = 1
+	var early: Array = main._build_wave(5)
+	var late: Array = main._build_wave(16)
+	var gp: Array = Data.SQUADS["Grave Procession"]["kinds"]
+	var at: int = late.find("gravebinder")
+	check(not early.any(func(k): return Data.SQUADS.values().any(func(q): return k in ["drummer", "shieldbearer", "ogre", "boltflinger", "warmage", "gravebinder"])),
+			"I  ...early waves just as before: none of the new kinds")
+	check(at > 0 and late[at - 2] == "skeleton_archer" and late[at - 1] == "skeleton_archer", "I  ...a squad marches together (its Gravebinder among its bowmen)")
+	check(late.size() <= M.wave_size(16) + Data.ENEMIES.size(), "I  ...and squads take the place of others: the wave's no bigger for them (%d)" % late.size())
+	# The campaign: no new kind before the Deepdelve and Stonehollow missions, none in the
+	# first missions, and every kind it uses is a real one.
+	var new_kinds := ["drummer", "shieldbearer", "ogre", "boltflinger", "warmage", "gravebinder"]
+	var untouched := ["ashwatch", "stonehollow", "gw_exodus", "gw_watchfires", "gw_trail", "mv_wounded", "mv_sanctuary", "fm_pass", "fm_vigil", "fm_whiteout", "fc_council"]
+	var bad := []
+	for m in untouched:
+		var txt := str(CD.MISSIONS[m])
+		for k in new_kinds:
+			if txt.contains('"%s"' % k):
+				bad.append(m + ":" + k)
+	check(bad.is_empty(), "I  the first missions, Greenwood, Mercy Vale, Frostmarch and the Council's Price meet none of the new kinds (%s)" % ", ".join(bad))
+	var unknown := []
+	for m in CD.MISSIONS:
+		for n in CD.MISSIONS[m].get("squads", {}):
+			for sq in CD.MISSIONS[m]["squads"][n]:
+				if not Data.SQUADS.has(sq):
+					unknown.append(m + ":" + sq)
+	check(unknown.is_empty(), "I  every squad a mission sends is a real one")
+	var where := {}
+	for k in new_kinds:
+		where[k] = []
+		for m in CD.MISSIONS:
+			var txt := str(CD.MISSIONS[m])
+			var sq_kinds := []
+			for n in CD.MISSIONS[m].get("squads", {}):
+				for sq in CD.MISSIONS[m]["squads"][n]:
+					sq_kinds.append_array(Data.SQUADS[sq]["kinds"])
+			if txt.contains('"%s"' % k) or sq_kinds.has(k):
+				where[k].append(m)
+	check(new_kinds.all(func(k): return not where[k].is_empty()), "I  every new kind is met somewhere in the campaign (%s)" % str(where))
