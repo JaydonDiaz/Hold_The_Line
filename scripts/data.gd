@@ -904,6 +904,19 @@ const SKELETON := {
 #          side, `range` long, for `time` seconds, burning in `tick`-second ticks.
 #        arcane {damage, cap}: a beam at the troop with the most health left in reach, for
 #          `damage`, never more than `cap` of that troop's health.
+# necro = (Gravebinder) {reach, keep_back, summon_every, summon_count, summon_max,
+#         raise_base, raise_per_gold, raise_max, max_raised, corrupt}: calls up
+#         `summon_count` Skeleton Archers every `summon_every` seconds (never more than
+#         `summon_max` of them at once); raises one of your fallen troops within `reach`
+#         (raise_base + raise_per_gold for every gold spent on it, at most raise_max seconds of
+#         channelling; never more than `max_raised` at once), corrupted: `corrupt` = {hp,
+#         damage, rate, heal} shares of what it had (rate: its attacks come that much slower).
+#         It keeps `keep_back` from your troops ahead of it.
+# A corrupted troop (main.raise_fallen) keeps its kind, its upgrades and its look; its
+# health, damage, reach and speed are what its upgrades had made them, cut by `corrupt`;
+# it fights as its kind does: hand to hand, or shooting (arrows, orbs, frost, flasks, notes;
+# volleys and splash kept), a Mage's Storm, Fire or Arcane path as that spell, a Healer
+# mending the horde, a Bard's songs driving the horde on.
 # tier ranks how dangerous an enemy type is; "Strongest" targeting goes for the highest.
 const ENEMIES := {
 	# The horde's numbers: unsure of itself alone, bold with its own round it.
@@ -945,6 +958,14 @@ const ENEMIES := {
 				"fire": {"dps": 24.0, "time": 1.8, "range": 125.0, "arc": 0.5, "tick": 0.25},
 				"arcane": {"damage": 60.0, "cap": 0.45}},
 			"bounty": 18, "radius": 12.0, "scale": 2.6, "color": Color(0.45, 0.25, 0.55)},
+	# The Master of the Fallen: a necromancer of the horde, Warlord-tier. Calls up Skeleton
+	# Archers, and raises your fallen troops against you, upgrades and all. Kill it first.
+	"gravebinder": {"tier": 5, "hp": 560, "speed": 22.0, "damage": 12.0, "wall_damage": 20.0, "cooldown": 1.4, "fights": true,
+			"cc": 0.5, "knock": 0.5,
+			"necro": {"reach": 240.0, "keep_back": 170.0, "summon_every": 12.0, "summon_count": 2, "summon_max": 4,
+				"raise_base": 2.5, "raise_per_gold": 0.012, "raise_max": 10.0, "max_raised": 2,
+				"corrupt": {"hp": 0.6, "damage": 0.6, "rate": 0.75, "heal": 0.5}},
+			"bounty": 120, "radius": 18.0, "scale": 3.4, "color": Color(0.3, 0.3, 0.35)},
 	# Hangs back out of reach and shoots: send something quick (or a ranged troop) at it.
 	"skeleton_archer": {"tier": 2, "hp": 24, "speed": 40.0, "damage": 5.0, "wall_damage": 4.0, "cooldown": 1.7, "fights": true,
 			"ranged": {"range": 150.0, "speed": 340.0},

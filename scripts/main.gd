@@ -364,6 +364,7 @@ func choose_mode(mode: String) -> void:
 	var classic := not campaign and battle_id == "" and Data.DIFFICULTIES.has(mode)
 	map_id = mission.get("map", "") if scripted() else (classic_map if classic and not Maps.get_map(classic_map).is_empty() else "")
 	map_extra = {}
+	fallen = []
 	# Battles fill the window: a map stretches across the field like the meadow does (the
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
 	_lock_portrait(false)
@@ -435,6 +436,7 @@ func _process(delta: float) -> void:
 	if selected != null and (not is_instance_valid(selected) or selected.is_queued_for_deletion()):
 		selected = null
 	if not game_over:
+		_tick_fallen(delta)
 		if started:
 			rules.process(delta)
 			_check_rout(delta)
@@ -604,6 +606,113 @@ func add_grave(w) -> void:
 	var g := Grave.new()
 	g.setup_from(w)
 	grave_layer.add_child(g)
+	if not w.is_emplacement() and not w.wall_guard:
+		fallen.append(_fallen_record(w))   # (a Gravebinder could raise it, for a while)
+
+
+## Your troops fallen for good this battle, that a Gravebinder could still raise: each a
+## record of what it was (its kind, upgrades, what they'd made it, its look) and where it
+## lies, for FALLEN_KEEP seconds. "claimed": the Gravebinder raising it (one at a time).
+var fallen: Array = []
+const FALLEN_KEEP := 25.0
+
+
+func _fallen_record(w) -> Dictionary:
+	var spells := []
+	if not w.chain.is_empty():
+		spells.append("lightning")
+	if not w.breath.is_empty():
+		spells.append("fire")
+	if not w.lance.is_empty():
+		spells.append("arcane")
+	return {"kind": w.kind, "name": w.data["name"], "tiers": w.tiers.duplicate(), "spent": w.spent,
+		"at": w.position, "left": FALLEN_KEEP, "claimed": null,
+		"frames": w._look()["frames"], "sprite": w.sprite_name(), "color": w.data.get("color", Color.WHITE),
+		"hp": w.max_hp, "speed": w.move_speed, "damage": w.damage, "cooldown": w.cooldown, "range": w.attack_range,
+		"splash": w.splash, "attack": String(w.data.get("attack", "melee")), "multishot": w.multishot,
+		"combo": maxi(1, w.combo_hits), "slow": w.slow, "slow_time": w.slow_time, "song_radius": w.song_radius,
+		"spells": spells, "chain": w.chain.duplicate(), "lance": w.lance.duplicate(), "breath": w.breath.duplicate()}
+
+
+## The fallen lie only so long: then they're past raising.
+func _tick_fallen(delta: float) -> void:
+	for rec in fallen.duplicate():
+		rec["left"] -= delta
+		if rec["left"] <= 0.0 and (rec["claimed"] == null or not is_instance_valid(rec["claimed"])):
+			fallen.erase(rec)
+
+
+## A fallen troop raised by a Gravebinder: it rises where it fell, its kind, its upgrades
+## and its look kept, its strength what they'd made it, cut by the corruption, and fights
+## for the horde as its kind did (see data.gd, necro). Returns the new enemy.
+func raise_fallen(rec: Dictionary, binder) -> Node:
+	var c: Dictionary = binder.necro["corrupt"]
+	var dmg: float = float(rec["damage"]) * float(c["damage"])
+	var d := {"tier": 3, "hp": float(rec["hp"]) * float(c["hp"]), "speed": clampf(float(rec["speed"]) * 0.4, 24.0, 48.0),
+		"damage": dmg, "wall_damage": dmg, "cooldown": float(rec["cooldown"]) / float(c["rate"]), "fights": true,
+		"bounty": 8 + int(float(rec["spent"]) * 0.04), "radius": 14.0, "scale": 3.0, "color": rec["color"], "knock": 0.8,
+		"look": rec["sprite"]}
+	var reach: float = clampf(float(rec["range"]), 90.0, 230.0)
+	match String(rec["attack"]):
+		"melee", "combo":
+			d["damage"] = dmg * int(rec["combo"])   # (a Martial Artist's flurry, one blow's worth)
+		"arrow":
+			d["ranged"] = {"range": reach, "speed": 380.0}
+			d["volley"] = int(rec["multishot"])
+		"orb":
+			d["ranged"] = {"range": reach, "speed": 320.0}
+			d["shot_style"] = "orb"
+			d["shot_splash"] = float(rec["splash"])
+			if not (rec["spells"] as Array).is_empty():
+				# Its path's own spell, as the horde's mages cast them (corrupted: weaker).
+				var cast: Dictionary = Data.ENEMIES["warmage"]["cast"].duplicate(true)
+				cast["spells"] = rec["spells"]
+				cast["range"] = reach
+				# Its spells as strong as its path had made them, cut by the corruption.
+				var ch: Dictionary = rec["chain"]
+				if not ch.is_empty():
+					cast["lightning"]["damage"] = float(ch["damage"]) * float(c["damage"])
+					cast["lightning"]["jumps"] = int(ch["jumps"])
+				var ln: Dictionary = rec["lance"]
+				if not ln.is_empty():
+					cast["arcane"]["damage"] = float(ln["damage"]) * float(c["damage"])
+				var br: Dictionary = rec["breath"]
+				if not br.is_empty():
+					cast["fire"]["dps"] = maxf(float(br.get("damage", 2.0)) / maxf(float(br.get("interval", 0.3)), 0.05), float(br.get("burn_dps", 0.0))) * float(c["damage"]) * 2.0
+				cast["cooldown"] = float(cast["cooldown"]) / float(c["rate"])
+				d["cast"] = cast
+		"frost":
+			d["ranged"] = {"range": reach, "speed": 340.0}
+			d["shot_style"] = "frost"
+			d["shot_goo"] = [maxf(0.3, float(rec["slow"])), maxf(1.5, float(rec["slow_time"]))]
+		"flask":
+			d["ranged"] = {"range": reach, "speed": 300.0}
+			d["shot_style"] = "flask"
+			d["shot_splash"] = maxf(float(rec["splash"]), 30.0)
+		"note":
+			d["ranged"] = {"range": reach, "speed": 400.0}
+			d["shot_style"] = "note"
+			d["drum"] = {"radius": maxf(float(rec["song_radius"]), 100.0), "every": 3.0, "speed": 0.2 * float(c["heal"]) * 2.0,
+				"rate": 0.25 * float(c["heal"]) * 2.0, "time": 3.4, "kinds": ["*"]}
+		"heal":
+			d["damage"] = 2.0
+			d["mend"] = {"amount": float(rec["damage"]) * float(c["heal"]), "every": float(rec["cooldown"]) / float(c["rate"]), "range": reach}
+	var e := Enemy.new()
+	e.setup("corrupted", d, self, rec["at"], 1.0, 1.0, 1.0)
+	e.level = binder.level
+	e.corrupted = true
+	e.fallen_kind = rec["kind"]
+	e.fallen_tiers = (rec["tiers"] as Array).duplicate()
+	e.frames_override = rec["frames"]
+	e.died.connect(_on_enemy_died)
+	e.reached_castle.connect(_on_enemy_at_castle)
+	e.goal = rules.enemy_goal(e)
+	enemy_layer.add_child(e)
+	enemies_changed()
+	spawn_burst(e.position, 36.0, Color(0.45, 1.0, 0.5))
+	spawn_text(e.position + Vector2(0, -50), "Corrupted %s!" % rec["name"], Color(0.55, 1.0, 0.55))
+	sfx("rise", 0.5)
+	return e
 
 
 func get_graves() -> Array:
@@ -764,6 +873,7 @@ const FOE_HINTS := {
 	"drummer": ["War Drummer", "Its drum drives on the goblins, wolves and other light troops round it. It's weak: kill it first."],
 	"boltflinger": ["Boltflinger", "Slow to wind its great crossbow, but the bolt goes straight through a line of troops. Don't stand your troops one behind another in front of it."],
 	"warmage": ["Horde Mage", "Stops and charges a spell; the colour at its staff tells you which. Blue: lightning that leaps between troops close together. Orange: a stream of fire in front of it. Violet: a beam at your healthiest troop. Stun it to break the spell, or kill it first."],
+	"gravebinder": ["Gravebinder", "A necromancer of the horde, as tough as a Warlord. Calls up Skeleton Archers, and raises your fallen troops against you, upgrades and all (the stronger they were, the longer it takes: a green tether shows it). Stun it or kill it to break the rite."],
 	"wyvern": ["Wyvern", "Flying elite that breathes fire, and swoops down a line it marks first, burning everyone under it. Needs ranged troops."],
 }
 var _foes_seen := {}

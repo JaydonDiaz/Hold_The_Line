@@ -692,6 +692,34 @@ const SPRITES := {
 			"...kgk...kgk....",
 		],
 	},
+	"gravebinder": {  # A tall orc necromancer: a black hood with a bone circlet, a bone necklace, a skull-topped staff with green fire
+		"palette": {
+			"R": Color(0.16, 0.15, 0.2), "r": Color(0.28, 0.26, 0.34), "b": Color(0.9, 0.87, 0.78), "g": Color(0.48, 0.55, 0.42),
+			"e": Color(0.5, 1.0, 0.5), "t": Color(0.95, 0.92, 0.8), "s": Color(0.35, 0.25, 0.15), "f": Color(0.45, 1.0, 0.5),
+		},
+		"rows": [
+			"..............f.",
+			".....kkkkk...kfk",
+			"....kRRRRRk.kbbk",
+			"...kRRbbbRRkkbek",
+			"...kRgegegRk.kbk",
+			"...kRgggggRk.ks.",
+			"...kkgtgtgkk.ks.",
+			"..kRRkkkkkRRkks.",
+			".kRRbRbRbRRRRks.",
+			".kRrRRRRRRrRkgs.",
+			".kRrRRRRRRrRk.s.",
+			".kRrRRbRRRrRk.s.",
+			"..kRRRbRRRRk..s.",
+			"..kRRRRRRRRk..s.",
+			"..kRrRRRRrRk..k.",
+			"..kkkkkkkkkk....",
+		],
+		"legs_b": [
+			"..kRRrRRRrRk..k.",
+			"..kkkkkkkkkk....",
+		],
+	},
 	"ogre_king": {  # The final boss: a crowned ogre with a spiked club
 		"poses": {
 			"raise": {   # the spiked club hauled up overhead

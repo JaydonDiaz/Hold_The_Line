@@ -7,6 +7,9 @@ var target = null          # the troop it's aimed at, or null for the castle
 var target_pos := Vector2.ZERO
 var speed := 360.0
 var damage := 0.0
+var style := "arrow"       # arrow, orb, frost, flask, note (a corrupted troop shoots as it did)
+var splash := 0.0          # (an orb's or flask's burst: every troop this close to where it lands)
+var goo := []              # [slow, seconds]: a frost shot slows the troop it hits
 
 
 func _process(delta: float) -> void:
@@ -28,14 +31,37 @@ func _process(delta: float) -> void:
 func _land() -> void:
 	if target == null:
 		main.damage_castle(damage)
+	elif splash > 0.0:
+		main.dmg_src = "arrows"
+		for w in main.warriors_near(position, splash + 20.0):
+			if w.is_active() and not w.sheltered() and w.position.distance_to(position) <= splash + w.RADIUS:
+				w.take_damage(damage)
+		main.dmg_src = ""
+		main.spawn_burst(position, splash, Color(0.6, 1.0, 0.5) if style == "flask" else Color(0.75, 0.5, 1.0))
 	elif is_instance_valid(target) and target.is_active() and target.position.distance_to(position) <= target.RADIUS + 14.0:
 		main.dmg_src = "arrows"
 		target.take_damage(damage)
 		main.dmg_src = ""
+		if not goo.is_empty() and target.is_active():
+			target.apply_goo(float(goo[0]), float(goo[1]))
 	queue_free()
 
 
 func _draw() -> void:
+	match style:
+		"orb", "note":
+			var c := Color(0.7, 0.45, 1.0) if style == "orb" else Color(0.85, 0.5, 0.95)
+			draw_circle(Vector2.ZERO, 5.0, Color(c, 0.4))
+			draw_circle(Vector2.ZERO, 3.0, c)
+			return
+		"frost":
+			draw_circle(Vector2.ZERO, 4.5, Color(0.7, 0.95, 1.0, 0.45))
+			draw_circle(Vector2.ZERO, 2.5, Color(0.9, 1.0, 1.0))
+			return
+		"flask":
+			draw_circle(Vector2.ZERO, 4.0, Color(0.45, 0.85, 0.35))
+			draw_rect(Rect2(-1.5, -7, 3, 4), Color(0.6, 0.5, 0.4))
+			return
 	# A bone-white shaft with a dark flint head and grey fletching.
 	draw_line(Vector2(-11, 0), Vector2(3, 0), Color(0.9, 0.87, 0.78), 2.0)
 	draw_colored_polygon(PackedVector2Array([Vector2(7, 0), Vector2(2, -3), Vector2(2, 3)]), Color(0.25, 0.22, 0.2))

@@ -211,6 +211,24 @@ var flame_left := 0.0
 var flame_tick := 0.0
 var last_chain := 0         # (for the tests) how many its last lightning struck
 var last_arcane = null      # ...and whom its last arcane beam went to
+var necro := {}             # Gravebinder
+var minions: Array = []     # ...its Skeleton Archers out
+var raised: Array = []      # ...and your fallen it's raised
+var rite = null             # ...the fallen troop it's raising (a record in main.fallen)
+var rite_left := 0.0
+var rite_total := 1.0
+var necro_t := 0.5
+var summon_t := 4.0
+var corrupted := false      # one of your fallen, raised by a Gravebinder to fight for the horde
+var fallen_kind := ""       # ...the kind it was (its upgrades in fallen_tiers)
+var fallen_tiers := []
+var frames_override: Array = []   # ...drawn as it looked when it fell
+var mend := {}              # a corrupted Healer: amount, every, range
+var mend_t := 1.0
+var volley := 1             # shots a loose (a corrupted Archer's Volley)
+var shot_style := "arrow"   # what its shots look like and do (arrow, orb, frost, flask, note)
+var shot_splash := 0.0
+var shot_goo := []          # [slow, seconds] a frost shot leaves on a troop
 var goal = null             # the objective it's been sent for (mission/objective.gd), or null for the castle / bottom line
 var aggro = null            # the unit attacking it that it has turned on
 var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
@@ -246,6 +264,12 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 		rush["damage"] *= dmg_mult
 	ranged = d.get("ranged", {})
 	pack = d.get("pack", {})
+	necro = (d.get("necro", {}) as Dictionary).duplicate(true)
+	mend = d.get("mend", {})
+	volley = int(d.get("volley", 1))
+	shot_style = str(d.get("shot_style", "arrow"))
+	shot_splash = float(d.get("shot_splash", 0.0))
+	shot_goo = d.get("shot_goo", [])
 	cast = d.get("cast", {})
 	shield = d.get("shield", {})
 	if not shield.is_empty():
@@ -278,6 +302,8 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 
 
 func _exit_tree() -> void:
+	if rite != null and main != null and is_instance_valid(main):
+		_end_rite(false)   # (killed mid-rite: the body's left)
 	if not shield.is_empty():
 		shields_out -= 1
 		shield = {}
@@ -364,6 +390,9 @@ func _process(delta: float) -> void:
 		return
 	if cast_state != "" and (knock_timer > 0.0 or freeze_timer > 0.0 or stun_timer > 0.0 or confuse_timer > 0.0):
 		_break_cast()
+	if rite != null and (knock_timer > 0.0 or freeze_timer > 0.0 or stun_timer > 0.0 or confuse_timer > 0.0):
+		main.spawn_text(position + Vector2(0, -50), "Rite broken!", Color(0.8, 0.9, 1.0))
+		_end_rite(false)
 	if knock_timer > 0.0:
 		# Being knocked back: slides away, can't act.
 		knock_timer -= delta
@@ -387,6 +416,13 @@ func _process(delta: float) -> void:
 			slam_wind = 0.0
 			_slam_lands()
 		_push_out()
+		queue_redraw()
+		return
+	if not mend.is_empty():
+		_mend_update(delta)
+	if not necro.is_empty() and not sieging and confuse_timer <= 0.0 and _necro_update(delta):
+		_push_out()
+		progress = position.y
 		queue_redraw()
 		return
 	cast_cd = maxf(cast_cd - delta, 0.0)
@@ -658,7 +694,7 @@ func _roster_upkeep(delta: float) -> void:
 			var kinds: Array = drum["kinds"]
 			drum_ahead = 0
 			for e in main.enemies_near(position, r):
-				if e == self or e.dead or not kinds.has(e.kind) or position.distance_to(e.position) > r:
+				if e == self or e.dead or not (kinds.has(e.kind) or kinds.has("*")) or position.distance_to(e.position) > r:
 					continue
 				e.driven = maxf(e.driven, float(drum["time"]))   # (driven on is driven on: drums don't add up)
 				e.driven_speed = float(drum["speed"])
@@ -720,7 +756,8 @@ func _cast_update(delta: float) -> bool:
 		flip = signf(lunge_dir.x)
 	if cast_cd > 0.0 or _cast_nearest(position, r, {}) == null:
 		return true   # (stands its ground, out of reach, while it gathers itself)
-	cast_spell = SPELLS[randi() % SPELLS.size()]   # (once, as the charge begins: no changing its mind)
+	var spells: Array = cast.get("spells", SPELLS)
+	cast_spell = spells[randi() % spells.size()]   # (once, as the charge begins: no changing its mind)
 	cast_state = "charge"
 	cast_left = float(cast["charge"])
 	main.sfx("spell", {"lightning": 1.3, "fire": 0.8, "arcane": 1.0}[cast_spell])
@@ -844,6 +881,139 @@ func _flame(delta: float) -> void:
 	if flame_left <= 0.0:
 		cast_state = ""
 
+
+
+## Gravebinder: hangs back from your troops; calls up Skeleton Archers now and then (never
+## more than its limit of them at once); and, its signature, raises one of your fallen
+## troops against you: it picks a fallen troop in reach (the most worth the time it takes),
+## and channels, a tether from its staff to the body and the troop's ghost rising, for longer
+## the more had been spent on that troop; if nothing breaks it off (a stun, freeze, knock or
+## confusion, or killing it), the troop rises corrupted, fighting for the horde. Returns true
+## while it's standing (to channel, or to keep its distance).
+func _necro_update(delta: float) -> bool:
+	minions = minions.filter(func(m): return is_instance_valid(m) and not m.dead)
+	raised = raised.filter(func(m): return is_instance_valid(m) and not m.dead)
+	if rite != null:
+		if not main.fallen.has(rite) or rite["claimed"] != self:
+			_end_rite(false)
+			return false
+		rite_left -= delta
+		fighting = true
+		lunge_dir = position.direction_to(rite["at"])
+		if absf(lunge_dir.x) > 0.2:
+			flip = signf(lunge_dir.x)
+		queue_redraw()
+		if rite_left <= 0.0:
+			var rec: Dictionary = rite
+			_end_rite(true)
+			var e = main.raise_fallen(rec, self)
+			if e != null:
+				raised.append(e)
+		return true
+	necro_t -= delta
+	summon_t -= delta
+	if necro_t > 0.0:
+		return _keep_back()
+	necro_t = 0.5
+	var reach: float = necro["reach"]
+	# Its signature first: one of your fallen to raise.
+	if raised.size() < int(necro["max_raised"]):
+		var best = null
+		var best_score := -1.0
+		for rec in main.fallen:
+			if rec["claimed"] != null or position.distance_to(rec["at"]) > reach:
+				continue
+			var t := rite_time(rec)
+			if rec["left"] < t + 1.0:
+				continue   # (it would be gone before the rite was done)
+			var score: float = (float(rec["spent"]) + 40.0) / t
+			if score > best_score:
+				best_score = score
+				best = rec
+		if best != null:
+			rite = best
+			best["claimed"] = self
+			rite_total = rite_time(best)
+			rite_left = rite_total
+			main.sfx("rise", 0.6)
+			main.spawn_text(best["at"] + Vector2(0, -40), "It stirs...", Color(0.6, 1.0, 0.6))
+			main.hud.show_message("A Gravebinder is raising your fallen %s! Stop it!" % best["name"])
+			return true
+	# Then the bowmen: when there's something to shoot.
+	if summon_t <= 0.0 and minions.size() < int(necro["summon_max"]) and not main.warriors_near(position, reach).is_empty():
+		summon_t = float(necro["summon_every"])
+		for i in mini(int(necro["summon_count"]), int(necro["summon_max"]) - minions.size()):
+			var spot := position + Vector2.from_angle(-PI * 0.75 + i * PI * 0.5) * (radius + 22.0)
+			main.spawn_minion("skeleton_archer", level, spot)
+			minions.append(main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1))
+		main.spawn_burst(position + Vector2(0, -10), 40.0, Color(0.5, 1.0, 0.55))
+		main.spawn_text(position + Vector2(0, -60), "Rise, bowmen!", Color(0.6, 1.0, 0.6))
+		main.sfx("rise", 0.8)
+	return _keep_back()
+
+
+## How long it takes to raise a fallen troop: longer the more was spent on it (its kind's
+## price and every upgrade), capped.
+func rite_time(rec: Dictionary) -> float:
+	return minf(float(necro["raise_base"]) + float(rec["spent"]) * float(necro["raise_per_gold"]), float(necro["raise_max"]))
+
+
+## A rite over: done (the body's taken), or broken off (the body's left for later).
+func _end_rite(done: bool) -> void:
+	if rite != null:
+		if done:
+			main.fallen.erase(rite)
+		elif rite["claimed"] == self:
+			rite["claimed"] = null
+	rite = null
+	rite_left = 0.0
+
+
+## Whether it stands off: with your troops close enough to be a threat but not yet on it,
+## it doesn't walk into them (one right up against it, it fights back as anything would).
+func _keep_back() -> bool:
+	var near: Array = main.warriors_near(position, float(necro["keep_back"]))
+	for w in near:
+		if w.is_active() and not w.sheltered() and position.distance_to(w.position) <= radius + w.RADIUS + 8.0:
+			return false   # (one's on it: it fights)
+	return near.any(func(w): return w.is_active() and not w.sheltered() and w.position.y > position.y)
+
+
+## A corrupted Healer's mending: now and then the most hurt of the horde in reach is healed.
+func _mend_update(delta: float) -> void:
+	mend_t -= delta
+	if mend_t > 0.0:
+		return
+	mend_t = float(mend["every"])
+	var best = null
+	var worst := 0.99
+	for e in main.enemies_near(position, float(mend["range"])):
+		if e.dead or e.boss or position.distance_to(e.position) > float(mend["range"]):
+			continue
+		var share: float = e.hp / e.max_hp
+		if share < worst:
+			worst = share
+			best = e
+	if best != null:
+		best.hp = minf(best.max_hp, best.hp + float(mend["amount"]))
+		main.spawn_beam(position + Vector2(0, -20), best.position + Vector2(0, -12), Color(0.55, 0.9, 0.45), 4.0)
+		main.spawn_text(best.position + Vector2(0, -30), "+%d" % roundi(float(mend["amount"])), Color(0.55, 1.0, 0.5))
+
+
+
+## One more shot at `mark` (a volley's extra arrows).
+func _loose(mark, aim: Vector2) -> void:
+	var shot := EnemyShot.new()
+	shot.style = shot_style
+	shot.splash = shot_splash
+	shot.goo = shot_goo
+	shot.main = main
+	shot.target = mark
+	shot.target_pos = aim
+	shot.position = position + Vector2(8.0 * flip, -radius * 1.2)
+	shot.speed = ranged["speed"]
+	shot.damage = damage * _hit_mult()
+	main.add_projectile(shot)
 
 
 ## Where its hauled-back blow will land, and how far round: [centre, radius].
@@ -1304,7 +1474,15 @@ func _shoot_from_range() -> bool:
 				idle_shots = 0
 				press_on = PRESS_TIME
 			return true
+		if volley > 1 and mark != null and mark != goal:
+			# A corrupted Archer's volley: more arrows, at others in reach.
+			var others: Array = troops.filter(func(w): return w != mark and w.is_active() and not w.sheltered() and position.distance_to(w.position) - w.RADIUS - radius <= r)
+			for k in mini(volley - 1, others.size()):
+				_loose(others[k], others[k].position)
 		var shot := EnemyShot.new()
+		shot.style = shot_style
+		shot.splash = shot_splash
+		shot.goo = shot_goo
 		shot.main = main
 		shot.target = mark
 		shot.target_pos = aim
@@ -1819,7 +1997,7 @@ func _gait() -> Array:
 		"skeleton", "skeleton_archer":
 			# A clattering shamble, bones rattling.
 			return [Vector2(sin(bob * 9.0) * 0.7, -2.0 * pace * k), side * 0.05 + sin(bob * 7.0) * 0.03, Vector2.ONE]
-		"goblin", "sapper", "shieldbearer", "drummer", "boltflinger", "warmage":
+		"goblin", "sapper", "shieldbearer", "drummer", "boltflinger", "warmage", "gravebinder":
 			# A scurry: quick, hunched, bouncing high.
 			return [Vector2(0, -3.2 * pace * k), side * 0.11, Vector2(1.0 + 0.04 * (1.0 - pace), 1.0 - 0.06 * (1.0 - pace))]
 	return [Vector2(0, -2.5 * pace * k), side * 0.06, Vector2.ONE]
@@ -1838,6 +2016,8 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, r, 0.0, TAU, 48, Color(1.0, 0.3, 0.2, 0.9), 3.0, true)
 		draw_set_transform(Vector2.ZERO)
 	var tint := Color.WHITE
+	if corrupted:
+		tint = Color(0.7, 1.05, 0.75)   # (a deathly green cast)
 	if slow_timer > 0.0 or freeze_timer > 0.0 or ice_crust > 0.0:
 		tint = Color(0.6, 0.85, 1.3)
 	if flash > 0.0:
@@ -1885,7 +2065,32 @@ func _draw() -> void:
 		var f := ThemeDB.fallback_font
 		draw_string_outline(f, Vector2(-60, -radius * 3.6 - 22), "EXPOSED!", HORIZONTAL_ALIGNMENT_CENTER, 120, 14, 4, Color(0, 0, 0, 0.9))
 		draw_string(f, Vector2(-60, -radius * 3.6 - 22), "EXPOSED!", HORIZONTAL_ALIGNMENT_CENTER, 120, 14, Color(1.0, 0.9, 0.4))
-	var frames: Array = Sprites.frames(look)
+	if corrupted:
+		# Corrupted: a sickly shadow of necromancy round its feet, wisps rising off it.
+		var t := life_t
+		draw_set_transform(Vector2(0, radius * 0.7), 0, Vector2(1.0, 0.45))
+		draw_circle(Vector2.ZERO, radius * 1.6, Color(0.35, 0.9, 0.45, 0.18 + 0.06 * sin(t * 4.0)))
+		draw_set_transform(Vector2.ZERO)
+	if rite != null:
+		# The rite: a wavering tether of green fire from its staff to the body, and the
+		# fallen troop's ghost rising there, plainer as the rite goes on.
+		var k := 1.0 - rite_left / rite_total
+		var a := Vector2(14.0 * flip, -radius * 2.6)
+		var b: Vector2 = rite["at"] - position + Vector2(0, -8)
+		var prev := a
+		for i in range(1, 13):
+			var f := float(i) / 12.0
+			var p := a.lerp(b, f) + Vector2(0, sin(f * 9.0 + life_t * 10.0) * 5.0 * sin(f * PI))
+			draw_line(prev, p, Color(0.45, 1.0, 0.5, 0.85), 2.5, true)
+			prev = p
+		var ghost: Texture2D = (rite["frames"] as Array)[0]
+		var gs := Vector2(Sprites.SIZE, Sprites.SIZE) * 3.0
+		var rise := b + Vector2(0, 8.0 - 10.0 * k)
+		draw_texture_rect(ghost, Rect2(rise - Vector2(gs.x / 2, gs.y), gs), false, Color(0.5, 1.0, 0.6, 0.15 + 0.6 * k))
+		draw_set_transform(b + Vector2(0, 10), 0, Vector2(1.0, 0.45))
+		draw_arc(Vector2.ZERO, 26.0, -PI / 2.0, -PI / 2.0 + TAU * k, 32, Color(0.5, 1.0, 0.55, 0.9), 3.0, true)
+		draw_set_transform(Vector2.ZERO)
+	var frames: Array = frames_override if not frames_override.is_empty() else Sprites.frames(look)
 	var size := Vector2(Sprites.SIZE, Sprites.SIZE) * sprite_scale
 	var feet := radius
 	# Shadow, sprite and health bar all come from the sprite atlas, so the renderer can
@@ -1906,7 +2111,7 @@ func _draw() -> void:
 		attack = "strike"
 	elif slam_wind > 0.0 or fighting and cd_timer < 0.3:
 		attack = "raise"
-	if attack != "":
+	if attack != "" and frames_override.is_empty():
 		var posed = Sprites.pose(look, attack)
 		if posed != null:
 			body_tex = posed

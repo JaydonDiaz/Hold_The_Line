@@ -131,7 +131,7 @@ func _update_ice(delta: float) -> void:
 								var spot := _shore(polys[n], w.position, w.RADIUS)
 								_flee["%d:%d" % [n, w.get_instance_id()]] = spot
 								w.set_post(spot)
-						main.hud.show_message("The ice is cracking under the %s!" % Data.ENEMIES[e.kind].get("name", e.kind.capitalize()))
+						main.hud.show_message("The ice is cracking under the %s!" % Data.ENEMIES.get(e.kind, {}).get("name", e.kind.capitalize()))
 						main.sfx("crumble")
 						break
 			"cracking":

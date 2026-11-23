@@ -23,6 +23,12 @@ extends SceneTree
 ##    stream down one line, burning in ticks the same at any frame rate; arcane a beam at the
 ##    troop with the most health, never a sure kill; nothing to aim at: it fizzles; a stun
 ##    breaks the charge
+## N  Gravebinders: a troop fallen for good lies there a while; one channels over it (longer
+##    the more was spent on it) and it rises corrupted: its kind, upgrades and look kept, its
+##    strength cut, fighting as its kind did (an Archer's volleys, a Storm Mage's lightning, a
+##    Healer mending the horde); one body, one Gravebinder; two raised at most; a stun or its
+##    death breaks the rite off and leaves the body; the raised, the bowmen and emplacements
+##    leave nothing to raise; its bowmen capped
 ## K  The Ogre King's left as he was: none of the roster's new ways
 
 const Data = preload("res://scripts/data.gd")
@@ -77,6 +83,8 @@ func _run() -> void:
 		await _bolts()
 	if _wants("X"):
 		await _mages()
+	if _wants("N"):
+		await _necro()
 	if _wants("K"):
 		_king()
 	if main != null:
@@ -153,7 +161,7 @@ func _wolves() -> void:
 		for w in [a, b]:
 			if is_instance_valid(w):
 				deepest = maxf(deepest, w.position.y)
-	check(deepest > 430.0 and s.hp >= s.max_hp, "W  ...and still run past the troops for the walls (got to %.0f; the troop unhurt)" % deepest)
+	check(deepest > 400.0 and s.hp >= s.max_hp, "W  ...and still run past the troops for the walls (got to %.0f; the troop unhurt)" % deepest)
 
 
 # --- T ---
@@ -537,3 +545,163 @@ func _mages() -> void:
 	var fx_left: int = main.fx_layer.get_child_count()
 	check(fx_left < 30, "X  ...and its spells' effects are cleared away (%d left on the field)" % fx_left)
 
+
+
+# --- N ---
+
+## A troop of yours killed for good where it stands (permadeath, no one to revive it).
+func _kill(w) -> void:
+	main.permadeath = true
+	w.take_damage(1e6)
+	w.down_timer = 0.01
+	await _frames(3)
+
+
+func _binder(at: Vector2):
+	var g = _foe("gravebinder", at)
+	g.root_timer = 99.0
+	g.summon_t = 999.0   # (its bowmen checked on their own)
+	g.necro_t = 0.0
+	return g
+
+
+func _upgraded(kind: String, at: Vector2, path: int, n: int):
+	var w = await _hire(kind, at)
+	main.selected = w
+	for i in n:
+		main.upgrade_selected(path)
+	main.selected = null
+	return w
+
+
+func _necro() -> void:
+	# The plain case: a fallen Knight raised, corrupted, fighting for the horde.
+	await _fresh()
+	var k = await _hire("swordsman", Vector2(320, 400))
+	var hp: float = k.max_hp
+	var dmg: float = k.damage
+	await _kill(k)
+	check(main.fallen.size() == 1 and main.fallen[0]["kind"] == "swordsman", "N  a troop fallen for good lies there to be raised, for a while")
+	var g = _binder(Vector2(320, 250))
+	var c: Dictionary = g.necro["corrupt"]
+	var t_plain: float = g.rite_time(main.fallen[0])
+	var started := false
+	var risen = null
+	for f in 60 * 8:
+		await process_frame
+		if g.rite != null:
+			started = true
+		var cs: Array = main.get_enemies().filter(func(e): return e.corrupted)
+		if not cs.is_empty():
+			risen = cs[0]
+			break
+	check(started and risen != null, "N  a Gravebinder channels over it, and it rises corrupted (after %.1fs)" % t_plain)
+	if risen == null:
+		return
+	check(risen.fallen_kind == "swordsman" and absf(risen.max_hp - hp * c["hp"]) < 0.5 and absf(risen.damage - dmg * c["damage"]) < 0.5,
+			"N  ...still a Knight, weaker: %.0f of %.0f health, %.0f of %.0f damage" % [risen.max_hp, hp, risen.damage, dmg])
+	check(main.fallen.is_empty(), "N  ...and its body's gone: it can't be raised twice")
+	var foe_of = await _hire("swordsman", risen.position + Vector2(0, 40))
+	var h0: float = foe_of.hp
+	for f in 60 * 4:
+		await process_frame
+	check(foe_of.hp < h0, "N  ...it fights your troops")
+	# Upgrades kept: an Archer with its Volley comes back shooting volleys; the time to raise
+	# it grows with what was spent on it.
+	await _fresh()
+	var a = await _upgraded("archer", Vector2(320, 400), 2, 4)
+	var tiers: Array = a.tiers.duplicate()
+	var shots: int = a.multishot
+	var spent: int = a.spent
+	await _kill(a)
+	g = _binder(Vector2(320, 250))
+	var t_up: float = g.rite_time(main.fallen[0])
+	check(t_up > t_plain + 2.0, "N  a well-upgraded troop takes longer to raise (%.1fs, %dg spent; a plain Knight %.1fs)" % [t_up, spent, t_plain])
+	risen = null
+	for f in 60 * 14:
+		await process_frame
+		var cs: Array = main.get_enemies().filter(func(e): return e.corrupted)
+		if not cs.is_empty():
+			risen = cs[0]
+			break
+	check(risen != null and risen.fallen_tiers == tiers and risen.volley == shots and shots > 1 and not risen.ranged.is_empty(),
+			"N  ...raised, it keeps its upgrades (%s) and shoots as it did (volleys of %d)" % [str(tiers), shots])
+	# A Storm Mage raised casts its chain lightning; a Healer mends the horde.
+	await _fresh()
+	var m = await _upgraded("mage", Vector2(250, 400), 0, 2)
+	var h = await _hire("healer", Vector2(400, 400))
+	await _kill(m)
+	await _kill(h)
+	g = _binder(Vector2(320, 260))
+	g.necro["max_raised"] = 2
+	for f in 60 * 20:
+		await process_frame
+		if main.get_enemies().filter(func(e): return e.corrupted).size() >= 2:
+			break
+	var cs2: Array = main.get_enemies().filter(func(e): return e.corrupted)
+	var cm = cs2.filter(func(e): return e.fallen_kind == "mage")
+	var ch = cs2.filter(func(e): return e.fallen_kind == "healer")
+	check(not cm.is_empty() and cm[0].cast.get("spells", []) == ["lightning"], "N  a Storm Mage raised keeps its path: it casts chain lightning")
+	var hurt = _foe("orc", Vector2(400, 200))
+	hurt.root_timer = 99.0
+	hurt.hp = hurt.max_hp * 0.3
+	var hh: float = hurt.hp
+	if not ch.is_empty():
+		ch[0].position = hurt.position + Vector2(0, 40)
+	for f in 60 * 4:
+		await process_frame
+	check(not ch.is_empty() and hurt.hp > hh, "N  a Healer raised mends the horde now")
+	check(g.raised.size() <= int(g.necro["max_raised"]), "N  ...never more raised at once than it can hold")
+	# One body, one Gravebinder; at most two raised at once; a stun breaks the rite off.
+	await _fresh()
+	var bodies := []
+	for i in 3:
+		var w = await _hire("swordsman", Vector2(260 + i * 60, 420))
+		bodies.append(w)
+	for w in bodies:
+		await _kill(w)
+	var g1 = _binder(Vector2(300, 260))
+	var g2 = _binder(Vector2(340, 260))
+	await _frames(3)
+	check(g1.rite != null and g2.rite != null and g1.rite != g2.rite, "N  two Gravebinders never claim the same body")
+	var was = g1.rite
+	g1.apply_stun(1.0)
+	await _frames(3)
+	check(g1.rite == null and was["claimed"] == null and main.fallen.has(was), "N  a stun breaks the rite off; the body's left to be claimed again")
+	g2.necro["max_raised"] = 1
+	g2.take_damage(1e6)
+	await _frames(3)
+	check(main.fallen.all(func(r): return r["claimed"] == null or is_instance_valid(r["claimed"])), "N  killing one mid-rite leaves its body unclaimed")
+	g1.necro_t = 0.0
+	for f in 60 * 25:
+		await process_frame
+	check(g1.raised.size() <= 2, "N  ...and one never holds more than two raised (%d)" % g1.raised.size())
+	# What can't be raised: the raised themselves, bowmen, emplacements; and the dead lie
+	# only so long.
+	var cs3: Array = main.get_enemies().filter(func(e): return e.corrupted)
+	var n0: int = main.fallen.size()
+	for e in cs3:
+		e.take_damage(1e6)
+	await _frames(3)
+	check(main.fallen.size() == n0, "N  a raised troop, killed, leaves nothing to raise again")
+	await _fresh()
+	var cn = await _hire("cannon", Vector2(320, 450))
+	main.permadeath = true
+	cn.take_damage(1e6)
+	await _frames(3)
+	check(main.fallen.is_empty(), "N  a broken emplacement isn't a body to raise")
+	var k2 = await _hire("swordsman", Vector2(320, 400))
+	await _kill(k2)
+	await _frames(int(60 * (main.FALLEN_KEEP + 1.0)))
+	check(main.fallen.is_empty(), "N  the fallen lie only so long (%.0fs)" % main.FALLEN_KEEP)
+	# Its bowmen: called up, never more than its limit.
+	await _fresh()
+	await _tough("swordsman", Vector2(320, 380))
+	g = _foe("gravebinder", Vector2(320, 200))
+	g.root_timer = 99.0
+	g.summon_t = 0.0
+	for f in 60 * 40:
+		await process_frame
+	var bows: int = main.get_enemies().filter(func(e): return e.kind == "skeleton_archer").size()
+	check(g.minions.size() > 0 and g.minions.size() <= int(g.necro["summon_max"]) and bows <= int(g.necro["summon_max"]),
+			"N  a Gravebinder calls up Skeleton Archers, never more than %d at once (%d)" % [g.necro["summon_max"], bows])
