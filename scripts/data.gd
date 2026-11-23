@@ -873,16 +873,59 @@ const SKELETON := {
 #         over; magic, ki and ice hurt it, ice twice over (see enemy.gd). It goes after troops
 #         before the castle. goo = {slow, time}: its blows slow a troop's moving (and its
 #         attacking by half as much).
+# pack = {radius, per, max, speed, alone}: bolder among its own kind. For each other one of
+#        its kind within `radius` (up to `max`) it hits `per` harder and swings `per` / 2
+#        faster, and moves `speed` faster; with none of them near, `alone` slower.
+# regen = {delay, rate}: (Troll) once it's gone `delay` seconds unhurt, it heals `rate` of
+#         its health a second; any hurt stops it, and while it burns it can't start.
+# slam = {windup, reach, arc, push, stun}: its blows are hauled back `windup` seconds (the
+#        arc they'll sweep shown on the ground) and land on everyone in that arc in front of
+#        it, throwing them back `push` and staggering them `stun` seconds.
+# strafe = {cooldown, warn, length, speed, width, damage}: (Wyvern) a strafing run: its line
+#        shown on the ground `warn` seconds, then it swoops down it breathing fire on every
+#        troop under it (once each).
+# shield = {front, arc, cover, cover_r}: (Shieldbearer) shots coming at it from in front
+#          (within `arc` either side of where it faces) do `front` less; shots at one of its own
+#          just behind it (within `cover_r`) do `cover` less. Blows, and shots from the side or
+#          behind, land in full. It walks in front of the horde's archers, sappers and casters.
+# drum = {radius, every, speed, rate, time, kinds}: (War Drummer) every `every` seconds a
+#        beat drives on the `kinds` round it for `time`: `speed` quicker, `rate` quicker blows.
+#        Drummers don't add up: driven on is driven on.
+# ranged.pierce, ranged.falloff: (Boltflinger) its bolt flies straight on through up to
+#        `pierce` troops in its line, each struck once, `falloff` less for each it's been through.
 # tier ranks how dangerous an enemy type is; "Strongest" targeting goes for the highest.
 const ENEMIES := {
+	# The horde's numbers: unsure of itself alone, bold with its own round it.
 	"goblin": {"tier": 1, "hp": 30, "speed": 45.0, "damage": 4.0, "cooldown": 1.0, "fights": true,
+			"pack": {"radius": 70.0, "per": 0.05, "max": 3, "speed": 0.0, "alone": 0.15},
 			"bounty": 4, "radius": 11.0, "scale": 2.25, "color": Color(0.45, 0.7, 0.25)},
 	"orc": {"tier": 3, "hp": 75, "speed": 35.0, "damage": 8.0, "cooldown": 1.2, "fights": true,
 			"bounty": 7, "radius": 14.0, "scale": 2.75, "color": Color(0.35, 0.5, 0.3)},
+	# Runs in packs: each wolf alongside makes the others quicker and their bites harder.
 	"wolf": {"tier": 2, "hp": 40, "speed": 80.0, "damage": 0.0, "cooldown": 1.0, "fights": false, "wall_damage": 3.0,
+			"pack": {"radius": 90.0, "per": 0.08, "max": 3, "speed": 0.03, "alone": 0.0},
 			"bounty": 6, "radius": 12.0, "scale": 2.5, "color": Color(0.6, 0.6, 0.65)},
 	"bat": {"tier": 2, "hp": 26, "speed": 62.0, "damage": 0.0, "cooldown": 1.0, "fights": false, "flying": true, "wall_damage": 3.0,
 			"bounty": 6, "radius": 11.0, "scale": 2.5, "color": Color(0.4, 0.3, 0.45)},
+	# The Wallbreaker: slow, huge, its club hauled back and brought down on whoever's in
+	# front of it, throwing them back out of the line.
+	"ogre": {"tier": 4, "hp": 240, "speed": 23.0, "damage": 24.0, "cooldown": 2.2, "fights": true, "knock": 0.4, "cc": 0.8,
+			"wall_damage": 40.0, "slam": {"windup": 0.7, "reach": 26.0, "arc": 2.0, "push": 50.0, "stun": 0.5},
+			"bounty": 22, "radius": 20.0, "scale": 3.75, "color": Color(0.6, 0.58, 0.38)},
+	# A goblin behind a great shield: shots from in front glance off it, and off whoever's
+	# sheltering behind it. Flank it, or hit it hand to hand, or with spells.
+	"shieldbearer": {"tier": 3, "hp": 90, "speed": 32.0, "damage": 5.0, "cooldown": 1.3, "fights": true, "knock": 0.5,
+			"shield": {"front": 0.75, "arc": 1.1, "cover": 0.4, "cover_r": 46.0},
+			"bounty": 10, "radius": 14.0, "scale": 2.6, "color": Color(0.5, 0.55, 0.4)},
+	# A goblin with a war drum: its beat drives on the light troops round it. Kill it first.
+	"drummer": {"tier": 2, "hp": 40, "speed": 30.0, "damage": 0.0, "cooldown": 1.0, "fights": false, "wall_damage": 2.0,
+			"drum": {"radius": 120.0, "every": 3.0, "speed": 0.25, "rate": 0.3, "time": 3.4,
+				"kinds": ["goblin", "wolf", "orc", "sapper", "shieldbearer", "boltflinger", "skeleton_archer"]},
+			"bounty": 12, "radius": 12.0, "scale": 2.5, "color": Color(0.6, 0.45, 0.3)},
+	# A goblin with a great crossbow: slow to wind, but its bolt goes through a line of troops.
+	"boltflinger": {"tier": 3, "hp": 45, "speed": 32.0, "damage": 22.0, "wall_damage": 10.0, "cooldown": 3.6, "fights": true,
+			"ranged": {"range": 200.0, "speed": 520.0, "pierce": 4, "falloff": 0.2},
+			"bounty": 11, "radius": 12.0, "scale": 2.5, "color": Color(0.5, 0.45, 0.3)},
 	# Hangs back out of reach and shoots: send something quick (or a ranged troop) at it.
 	"skeleton_archer": {"tier": 2, "hp": 24, "speed": 40.0, "damage": 5.0, "wall_damage": 4.0, "cooldown": 1.7, "fights": true,
 			"ranged": {"range": 150.0, "speed": 340.0},
@@ -894,14 +937,19 @@ const ENEMIES := {
 	"sapper": {"tier": 3, "hp": 45, "speed": 42.0, "damage": 0.0, "cooldown": 1.0, "fights": true,
 			"bomb": {"wall": 250.0, "units": 40.0, "radius": 60.0},
 			"bounty": 9, "radius": 12.0, "scale": 2.4, "color": Color(0.55, 0.6, 0.3)},
+	# Heals its wounds if it's left alone for a moment: keep hitting it (fire stops it).
 	"troll": {"tier": 4, "hp": 200, "speed": 25.0, "damage": 20.0, "cooldown": 1.6, "fights": true, "knock": 0.5,
+			"regen": {"delay": 3.0, "rate": 0.05},
 			"bounty": 20, "radius": 19.0, "scale": 3.5, "color": Color(0.45, 0.55, 0.6)},
+	# Its great blade swept round in front of it: deadly to troops packed in close.
 	"warlord": {"tier": 5, "hp": 600, "speed": 22.0, "damage": 35.0, "cooldown": 1.5, "fights": true, "cc": 0.5, "knock": 0.3,
+			"slam": {"windup": 0.55, "reach": 30.0, "arc": 2.4, "push": 30.0, "stun": 0.3},
 			"bounty": 120, "radius": 24.0, "scale": 4.0, "color": Color(0.65, 0.2, 0.2)},
 	# Flying elite: over walls and warriors, scorching whatever's below.
 	"wyvern": {"tier": 5, "hp": 420, "speed": 30.0, "damage": 0.0, "cooldown": 1.5, "fights": false, "flying": true,
 			"wall_damage": 30.0, "cc": 0.5, "knock": 0.3,
 			"breath": {"damage": 16.0, "radius": 34.0, "range": 120.0, "cooldown": 2.2},
+			"strafe": {"cooldown": 10.0, "warn": 1.1, "length": 240.0, "speed": 220.0, "width": 26.0, "damage": 30.0},
 			"bounty": 100, "radius": 20.0, "scale": 3.75, "color": Color(0.3, 0.55, 0.45)},
 	# The Ash Marshal, the Ogre King's herald (Sable Crossing): a war banner that drives on the
 	# enemies round him (until enough damage knocks it down for a while), a charge at a

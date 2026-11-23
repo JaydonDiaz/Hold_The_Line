@@ -29,6 +29,7 @@ const ENRAGE_RATE := 0.7
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
 const EnemyShot = preload("res://scripts/enemy_shot.gd")
+const EnemyBolt = preload("res://scripts/enemy_bolt.gd")
 const BarricadeScript = preload("res://scripts/barricade.gd")
 # Damage schools: what a hit is made of. Only Slimes care: they shrug off physical hits
 # unless iced over (or frozen); anything else, explosive or magical, hurts them as normal.
@@ -166,6 +167,40 @@ var sieging := false        # reached the castle and attacking it
 var walking := false        # moved this frame (for the waddle)
 var fighting := false       # swinging at a warrior or wall (for the wind-up)
 var drift := 0.0
+# The roster's own ways (data.gd: pack, regen, slam, strafe).
+var pack := {}              # Goblin, Wolf: bolder with its own kind round it
+var pack_n := 0             # ...how many of them are (counted every PACK_EVERY seconds)
+var pack_t := randf() * 0.5
+const PACK_EVERY := 0.5
+var flock_t := randf() * 0.4  # Bat: when it next looks round for the rest of its flock
+var flock_pull := Vector2.ZERO
+var regen := {}             # Troll: heals once it's been left unhurt a moment
+var unhurt := 0.0           # ...seconds since it was last hurt
+var mending := false        # ...healing this frame (for the drawing)
+var slam := {}              # Ogre, Warlord: blows hauled back (warned on the ground), then swept
+var slam_wind := 0.0        # > 0 while one's being hauled back
+var strafe := {}            # Wyvern: its strafing run
+var strafe_timer := 6.0
+var strafe_warn := 0.0      # > 0: its line on the ground, before it swoops
+var strafe_left := 0.0      # > 0: swooping down it
+var strafe_from := Vector2.ZERO
+var strafe_to := Vector2.ZERO
+var strafe_hit := {}
+var strafe_fx := 0.0
+var heading := Vector2.DOWN  # which way it last went (a Shieldbearer's shield faces it)
+var shield := {}            # Shieldbearer: front, arc, cover, cover_r
+static var shields_out := 0 # Shieldbearers on the field (only then does a shot look for one)
+var escort = null           # Shieldbearer: the archer, sapper or caster of its own it walks in front of
+var escort_t := 0.0
+const ESCORTED := ["sapper", "skeleton_archer", "boltflinger", "drummer", "mage", "gravebinder"]
+var block_note := 0.0
+var drum := {}              # War Drummer: its beat
+var drum_t := 1.0
+var drum_beat := 0.0        # > 0 just after a beat (the sticks come down, the ring goes out)
+var drum_ahead := 1         # of its own kinds ahead of it (with none, it hangs back)
+var driven := 0.0           # seconds left driven on by a drum
+var driven_speed := 0.0
+var driven_rate := 0.0
 var goal = null             # the objective it's been sent for (mission/objective.gd), or null for the castle / bottom line
 var aggro = null            # the unit attacking it that it has turned on
 var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
@@ -200,6 +235,17 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 		rush = d["charge"].duplicate()
 		rush["damage"] *= dmg_mult
 	ranged = d.get("ranged", {})
+	pack = d.get("pack", {})
+	shield = d.get("shield", {})
+	if not shield.is_empty():
+		shields_out += 1
+	drum = d.get("drum", {})
+	regen = d.get("regen", {})
+	slam = d.get("slam", {})
+	strafe = d.get("strafe", {})
+	if not strafe.is_empty():
+		strafe = strafe.duplicate()
+		strafe["damage"] *= dmg_mult
 	gooey = d.get("gooey", false)
 	if gooey:
 		slimes_out += 1
@@ -221,6 +267,9 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 
 
 func _exit_tree() -> void:
+	if not shield.is_empty():
+		shields_out -= 1
+		shield = {}
 	if gooey:
 		slimes_out -= 1
 		gooey = false   # counted once, whatever frees it
@@ -276,6 +325,7 @@ func _process(delta: float) -> void:
 		corrode_timer -= delta
 		if corrode_timer <= 0.0:
 			corrode = 0.0
+	_roster_upkeep(delta)
 	if not poisons.is_empty():
 		var worst := 0.0
 		poison_stacks = 0
@@ -314,6 +364,19 @@ func _process(delta: float) -> void:
 		freeze_timer = maxf(freeze_timer - delta, 0.0)
 		stun_timer = maxf(stun_timer - delta, 0.0)
 		_push_out()
+		queue_redraw()
+		return
+	if slam_wind > 0.0:
+		# Hauling its blow back: it stands, the arc it'll sweep marked on the ground.
+		slam_wind -= delta
+		fighting = true
+		if slam_wind <= 0.0:
+			slam_wind = 0.0
+			_slam_lands()
+		_push_out()
+		queue_redraw()
+		return
+	if not strafe.is_empty() and _strafe_update(delta):
 		queue_redraw()
 		return
 
@@ -385,6 +448,7 @@ func _process(delta: float) -> void:
 		# it plants the charge first, so there's a moment to stop it.
 		fuse = PLANT if at_sap and not (sap_target is BarricadeScript) and wall == null and not at_castle else FUSE
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
+		main.sfx("fire", 1.7)   # (the fuse hissing: get it before it goes)
 		queue_redraw()
 		return
 	fighting = blocker != null or wall != null
@@ -392,8 +456,11 @@ func _process(delta: float) -> void:
 		lunge_dir = position.direction_to(blocker.position)
 		if absf(lunge_dir.x) > 0.2:
 			flip = signf(lunge_dir.x)
-		if cd_timer <= 0.0:
-			cd_timer = attack_cd
+		if cd_timer <= 0.0 and not slam.is_empty():
+			cd_timer = _attack_cd()
+			slam_wind = float(slam["windup"])   # (hauled back first: the warning)
+		elif cd_timer <= 0.0:
+			cd_timer = _attack_cd()
 			lunge = 0.15
 			if cleave.is_empty():
 				blocker.take_damage(damage * _hit_mult())
@@ -406,7 +473,7 @@ func _process(delta: float) -> void:
 		if absf(lunge_dir.x) > 0.2:
 			flip = signf(lunge_dir.x)
 		if cd_timer <= 0.0:
-			cd_timer = attack_cd
+			cd_timer = _attack_cd()
 			lunge = 0.15
 			wall.struck(self, wall_damage * _hit_mult())
 	elif holding:
@@ -418,7 +485,7 @@ func _process(delta: float) -> void:
 		if absf(lunge_dir.x) > 0.2:
 			flip = signf(lunge_dir.x)
 		if cd_timer <= 0.0:
-			cd_timer = attack_cd
+			cd_timer = _attack_cd()
 			lunge = 0.15
 			main.dmg_src = kind
 			goal.take_damage(wall_damage * _hit_mult())
@@ -428,7 +495,7 @@ func _process(delta: float) -> void:
 		fighting = true
 		lunge_dir = Vector2.DOWN
 		if cd_timer <= 0.0:
-			cd_timer = attack_cd
+			cd_timer = _attack_cd()
 			lunge = 0.15
 			main.damage_castle(wall_damage * _hit_mult())
 	elif root_timer > 0.0:
@@ -452,14 +519,21 @@ func _process(delta: float) -> void:
 		elif aggro != null:
 			# Going after the unit that's attacking it (round any terrain in the way).
 			dir = _chase_dir(aggro.position, delta)
+		elif escort != null and is_instance_valid(escort) and not escort.dead:
+			# A Shieldbearer keeping in front of the archer, sapper or caster it's covering.
+			dir = _chase_dir(_escort_spot(), delta) if position.distance_to(_escort_spot()) > 10.0 else Vector2(0, 1)
 		elif sap_target != null:
 			# A Sapper making for one of your emplacements (or a wall) to blow up against.
 			dir = _chase_dir(_sap_point(sap_target), delta)
 		elif route != Vector2.ZERO:
 			# Barricades are up: follow the route around them, still weaving a little.
 			dir = (route + Vector2(sin(drift) * 0.15, 0.0)).normalized()
+		if dir != Vector2.ZERO:
+			heading = heading.lerp(dir, 0.2).normalized()
+		if flying and breath.is_empty() and flock_pull != Vector2.ZERO:
+			dir = (dir + flock_pull).normalized()   # (a bat keeps with its flock)
 		var was_at := position
-		_step_to(position + dir * speed * (main.hazards.speed_factor(kind) if main.gust > 0.0 else 1.0) * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
+		_step_to(position + dir * speed * _pace() * (main.hazards.speed_factor(kind) if main.gust > 0.0 else 1.0) * slow_factor * (1.0 - discord_slow) * (1.0 - CRUST_SLOW if ice_crust > 0.0 else 1.0) * (1.0 + rally_speed if rally > 0.0 else 1.0) * delta)
 		if absf(dir.x) > 0.1:
 			flip = signf(dir.x)
 		if flying:
@@ -476,7 +550,202 @@ func _process(delta: float) -> void:
 
 ## How hard its blows land: less weakened, more when the Marshal's banner drives it on.
 func _hit_mult() -> float:
-	return (1.0 - weaken) * (1.0 + rally_dmg if rally > 0.0 else 1.0)
+	return (1.0 - weaken) * (1.0 + rally_dmg if rally > 0.0 else 1.0) * (1.0 + float(pack["per"]) * pack_n if not pack.is_empty() else 1.0)
+
+
+## Its time between blows: quicker with its pack round it.
+func _attack_cd() -> float:
+	var cd := attack_cd / (1.0 + float(pack["per"]) * 0.5 * pack_n) if not pack.is_empty() else attack_cd
+	return cd / (1.0 + driven_rate) if driven > 0.0 else cd
+
+
+## How its pace is changed by its own kind about it: bolder in a pack, warier alone.
+func _pace() -> float:
+	var k := 1.0
+	if not pack.is_empty():
+		k = 1.0 + float(pack["speed"]) * pack_n if pack_n > 0 else 1.0 - float(pack["alone"])
+	if driven > 0.0:
+		k *= 1.0 + driven_speed
+	if not drum.is_empty() and drum_ahead == 0 and position.y > 60.0:
+		k *= 0.4   # (a drummer with no one ahead of it hangs back for the rest to come up)
+	if escort != null and is_instance_valid(escort) and not escort.dead:
+		# A Shieldbearer keeps pace with its charge, and hurries to get in front of it.
+		k = maxf(k, escort.speed * escort._pace() / speed) * (1.5 if position.distance_to(_escort_spot()) > 12.0 else 1.0)
+	return k
+
+
+## Where a Shieldbearer stands to cover its charge: just in front of it, toward the troops.
+func _escort_spot() -> Vector2:
+	if position.y < escort.position.y - 4.0:
+		# Still behind it: round its side first (not shoving into its back).
+		var side := 1.0 if position.x >= escort.position.x else -1.0
+		return escort.position + Vector2(side * (radius + escort.radius + 6.0), 18.0)
+	return escort.position + Vector2(0, 26.0)
+
+
+## How much of a shot is turned aside: by its own shield, if the shot comes at its front;
+## by a Shieldbearer's just in front of it, sheltering it. 0 for blows, and for shots from
+## the side or behind.
+func _shield_cut() -> float:
+	var from: Vector2 = main.hit_from
+	if from == Vector2.INF:
+		return 0.0
+	var to := from - position
+	if not shield.is_empty() and to.length() > 1.0 and absf(heading.angle_to(to)) <= float(shield["arc"]):
+		return float(shield["front"])
+	if shields_out <= 0:
+		return 0.0
+	for e in main.enemies_near(position, 60.0):
+		if e == self or e.dead or e.shield.is_empty():
+			continue
+		var gap: Vector2 = e.position - position
+		if gap.length() <= float(e.shield["cover_r"]) and gap.dot(to) > 0.0:
+			return float(e.shield["cover"])   # (it's between this one and whoever shot)
+	return 0.0
+
+
+## Every frame: counting its pack, keeping with its flock, a Troll's wounds closing.
+func _roster_upkeep(delta: float) -> void:
+	if not pack.is_empty():
+		pack_t -= delta
+		if pack_t <= 0.0:
+			pack_t = PACK_EVERY
+			var n := 0
+			var r: float = pack["radius"]
+			for e in main.enemies_near(position, r):
+				if e != self and e.kind == kind and not e.dead and position.distance_to(e.position) <= r:
+					n += 1
+			pack_n = mini(n, int(pack["max"]))
+	if flying and breath.is_empty():
+		flock_t -= delta
+		if flock_t <= 0.0:
+			flock_t = 0.4
+			var sum := Vector2.ZERO
+			var n := 0
+			for e in main.enemies_near(position, 90.0):
+				if e != self and e.kind == kind and not e.dead:
+					sum += e.position
+					n += 1
+			flock_pull = Vector2.ZERO if n == 0 else (sum / n - position).limit_length(60.0) / 60.0 * 0.45
+	driven = maxf(driven - delta, 0.0)
+	drum_beat = maxf(drum_beat - delta, 0.0)
+	block_note = maxf(block_note - delta, 0.0)
+	if not drum.is_empty() and position.y > 0.0:
+		drum_t -= delta
+		if drum_t <= 0.0:
+			drum_t = float(drum["every"])
+			drum_beat = 0.3
+			var r: float = drum["radius"]
+			var kinds: Array = drum["kinds"]
+			drum_ahead = 0
+			for e in main.enemies_near(position, r):
+				if e == self or e.dead or not kinds.has(e.kind) or position.distance_to(e.position) > r:
+					continue
+				e.driven = maxf(e.driven, float(drum["time"]))   # (driven on is driven on: drums don't add up)
+				e.driven_speed = float(drum["speed"])
+				e.driven_rate = float(drum["rate"])
+				if e.position.y > position.y + 10.0:
+					drum_ahead += 1
+			main.sfx("drum", 0.75)
+			queue_redraw()
+	if not shield.is_empty():
+		escort_t -= delta
+		if escort_t <= 0.0:
+			escort_t = 0.6
+			escort = null
+			var best := 150.0
+			for e in main.enemies_near(position, 150.0):
+				if e != self and not e.dead and ESCORTED.has(e.kind) and position.distance_to(e.position) < best:
+					best = position.distance_to(e.position)
+					escort = e
+	mending = false
+	if not regen.is_empty():
+		unhurt += delta
+		if unhurt >= float(regen["delay"]) and burn_timer <= 0.0 and hp < max_hp:
+			hp = minf(max_hp, hp + max_hp * float(regen["rate"]) * delta)
+			mending = true
+			queue_redraw()
+
+
+## Where its hauled-back blow will land, and how far round: [centre, radius].
+func _slam_zone() -> Array:
+	var reach: float = slam["reach"]
+	return [position + lunge_dir * (radius + reach * 0.5), reach * 0.5 + radius * 0.6 + 10.0]
+
+
+## Its blow lands: everyone in the arc in front of it is hit, thrown back and staggered.
+func _slam_lands() -> void:
+	lunge = 0.15
+	var reach: float = slam["reach"]
+	var half: float = float(slam["arc"]) / 2.0
+	for w in main.warriors_near(position, radius + reach + 30.0):
+		if not w.is_active() or w.sheltered():
+			continue
+		var off: Vector2 = w.position - position
+		if off.length() - radius - w.RADIUS > reach:
+			continue
+		if off.length() > 0.01 and absf(lunge_dir.angle_to(off)) > half:
+			continue
+		w.take_damage(damage * _hit_mult())
+		if w.is_active():
+			w.shove((off.normalized() if off.length() > 0.01 else lunge_dir) * float(slam["push"]), float(slam["stun"]))
+	var tip := position + lunge_dir * (radius + reach * 0.6)
+	main.spawn_burst(tip, reach + 8.0, Color(0.75, 0.6, 0.4))
+	main.sfx("stomp", 1.4 if radius < 22.0 else 1.15)
+
+
+## The Wyvern's strafing run: now and then it picks out troops below, shows the line it'll
+## swoop down, then dives along it breathing fire on everyone under it (once each). Returns
+## true while it's at it (it does nothing else then).
+func _strafe_update(delta: float) -> bool:
+	if strafe_warn > 0.0:
+		strafe_warn -= delta
+		if strafe_warn <= 0.0:
+			strafe_left = strafe_from.distance_to(strafe_to) / float(strafe["speed"])
+			strafe_hit = {}
+			main.sfx("flame", 0.8)
+		return true
+	if strafe_left > 0.0:
+		strafe_left -= delta
+		var dir := strafe_from.direction_to(strafe_to)
+		position += dir * float(strafe["speed"]) * delta
+		if absf(dir.x) > 0.1:
+			flip = signf(dir.x)
+		bob += delta * 30.0
+		var wd: float = strafe["width"]
+		for w in main.warriors_near(position, wd + 30.0):
+			if w.is_active() and not w.sheltered() and not strafe_hit.has(w) and position.distance_to(w.position) <= wd + w.RADIUS:
+				strafe_hit[w] = true
+				w.take_damage(float(strafe["damage"]) * _hit_mult())
+		strafe_fx -= delta
+		if strafe_fx <= 0.0:
+			strafe_fx = 0.07
+			main.spawn_burst(position + Vector2(0, 6), wd, Color(1.0, 0.5, 0.15))
+		return strafe_left > 0.0
+	strafe_timer -= delta
+	if strafe_timer > 0.0 or position.y < 30.0:
+		return false
+	var best = null
+	var best_d := 280.0
+	for w in main.warriors_near(position, 280.0):
+		if not w.is_active() or w.sheltered() or w.unmanned_tower():
+			continue
+		var d := position.distance_to(w.position)
+		if d < best_d:
+			best_d = d
+			best = w
+	if best == null:
+		strafe_timer = 1.5
+		return false
+	strafe_timer = float(strafe["cooldown"])
+	strafe_from = position
+	var dir2 := position.direction_to(best.position) if best.position != position else Vector2.DOWN
+	strafe_to = (position + dir2 * float(strafe["length"])).clamp(Vector2(radius, 0.0), Vector2(main.FIELD_W - radius, main.CASTLE_Y - 60.0))
+	strafe_warn = float(strafe["warn"])
+	lunge_dir = dir2
+	main.spawn_text(position + Vector2(0, -50), "!", Color(1, 0.45, 0.2))
+	return true
+
 
 
 ## The ground about to be hit by this one's warned attacks (a slam winding up, a charge's
@@ -485,6 +754,11 @@ func danger_zones() -> Array:
 	var out := []
 	if stomp_wind > 0.0:
 		out.append({"c": position, "r": float(stomp["radius"])})
+	if slam_wind > 0.0:
+		var z := _slam_zone()
+		out.append({"c": z[0], "r": z[1]})
+	if strafe_warn > 0.0 or strafe_left > 0.0:
+		out.append({"a": strafe_from, "b": strafe_to, "r": float(strafe["width"])})
 	if charge_warn > 0.0:   # (warned charges only: an unwarned rush, the Ash Marshal's, can't be seen coming)
 		out.append({"a": position, "b": position + charge_dir * charge_len, "r": radius})
 	return out
@@ -829,10 +1103,28 @@ func _shoot_from_range() -> bool:
 	if absf(lunge_dir.x) > 0.2:
 		flip = signf(lunge_dir.x)
 	if cd_timer <= 0.0:
-		cd_timer = attack_cd / (main.hazards.rate_factor(kind) if main.gust > 0.0 else 1.0)   # (slower in a blizzard)
+		cd_timer = _attack_cd() / (main.hazards.rate_factor(kind) if main.gust > 0.0 else 1.0)   # (slower in a blizzard)
 		lunge = 0.15
 		shots += 1
 		last_shot_from = position
+		if ranged.has("pierce") and mark != null and mark != goal:
+			# A Boltflinger's bolt: straight down the line, through whoever's in it.
+			var bolt := EnemyBolt.new()
+			bolt.main = main
+			bolt.position = position + Vector2(8.0 * flip, -radius * 1.0)
+			bolt.dir = bolt.position.direction_to(aim + Vector2(0, -6))
+			bolt.speed = ranged["speed"]
+			bolt.damage = damage * _hit_mult()
+			bolt.pierce = int(ranged["pierce"])
+			bolt.falloff = float(ranged.get("falloff", 0.0))
+			bolt.left = r + 90.0
+			main.add_projectile(bolt)
+			main.sfx("lance", 1.3)
+			idle_shots += 1
+			if idle_shots >= PRESS_AFTER:
+				idle_shots = 0
+				press_on = PRESS_TIME
+			return true
 		var shot := EnemyShot.new()
 		shot.main = main
 		shot.target = mark
@@ -1171,6 +1463,15 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 	if dead:
 		return
 	idle_shots = 0   # (being hit back: it isn't shooting at nothing)
+	if amount > 0.0:
+		unhurt = 0.0   # (a Troll's wounds stop closing)
+	var cut := _shield_cut() if main.hit_from != Vector2.INF else 0.0
+	if cut > 0.0:
+		amount *= 1.0 - cut
+		if show_hit and block_note <= 0.0:
+			block_note = 0.6
+			main.spawn_text(position + Vector2(0, -30), "Blocked", Color(0.8, 0.85, 0.95))
+			main.sfx("hit", 1.7)
 	if not banner.is_empty():
 		recent_hurt += amount   # (a hard enough beating knocks his banner down)
 	if gooey:
@@ -1333,13 +1634,13 @@ func _gait() -> Array:
 		"wolf":
 			# A gallop: rocking nose-down, tail-down, stretching out with each bound.
 			return [Vector2(0, -3.0 * up * k), cos(ph) * 0.13, Vector2(1.0 + 0.06 * up, 1.0 - 0.04 * up)]
-		"troll", "ogre_king", "warlord", "ash_marshal", "orc":
+		"troll", "ogre_king", "warlord", "ash_marshal", "orc", "ogre":
 			# A heavy tread: rolling from foot to foot, sinking into each footfall.
 			return [Vector2(0, -1.5 * pace * k), side * 0.09, Vector2(1.0 + 0.05 * (1.0 - pace), 1.0 - 0.05 * (1.0 - pace))]
 		"skeleton", "skeleton_archer":
 			# A clattering shamble, bones rattling.
 			return [Vector2(sin(bob * 9.0) * 0.7, -2.0 * pace * k), side * 0.05 + sin(bob * 7.0) * 0.03, Vector2.ONE]
-		"goblin", "sapper":
+		"goblin", "sapper", "shieldbearer", "drummer", "boltflinger":
 			# A scurry: quick, hunched, bouncing high.
 			return [Vector2(0, -3.2 * pace * k), side * 0.11, Vector2(1.0 + 0.04 * (1.0 - pace), 1.0 - 0.06 * (1.0 - pace))]
 	return [Vector2(0, -2.5 * pace * k), side * 0.06, Vector2.ONE]
@@ -1374,6 +1675,33 @@ func _draw() -> void:
 		var to := charge_dir * float(rush.get("range", 200.0))
 		draw_line(Vector2(0, radius * 0.5), to + Vector2(0, radius * 0.5), Color(1.0, 0.25, 0.15, 0.35), radius * 1.6)
 		draw_line(Vector2(0, radius * 0.5), to + Vector2(0, radius * 0.5), Color(1.0, 0.4, 0.25, 0.9), 2.0)
+	if slam_wind > 0.0:
+		# The blow coming: the arc it'll sweep, on the ground in front of it, filling.
+		var k: float = 1.0 - slam_wind / float(slam["windup"])
+		var reach: float = slam["reach"] + radius
+		var a0 := lunge_dir.angle() - float(slam["arc"]) / 2.0
+		var pts := PackedVector2Array([Vector2(0, radius * 0.5)])
+		for i in 13:
+			pts.append(Vector2(0, radius * 0.5) + Vector2.from_angle(a0 + float(slam["arc"]) * i / 12.0) * Vector2(reach, reach * 0.6))
+		draw_colored_polygon(pts, Color(1.0, 0.3, 0.15, 0.2 + 0.2 * k))
+		draw_polyline(pts + PackedVector2Array([pts[0]]), Color(1.0, 0.35, 0.2, 0.6 + 0.4 * k), 3.0, true)
+	if strafe_warn > 0.0:
+		# The Wyvern's run: the line it'll swoop down, fire glowing along it.
+		var a := strafe_from - position
+		var b := strafe_to - position
+		var k := 1.0 - strafe_warn / float(strafe["warn"])
+		draw_line(a, b, Color(1.0, 0.4, 0.1, 0.12 + 0.15 * k), float(strafe["width"]) * 2.0)
+		draw_line(a, a + (b - a) * k, Color(1.0, 0.6, 0.2, 0.8), 2.5)
+	if fuse >= 0.0 and not bomb.is_empty():
+		# The bomb lit: how far the blast will reach, closing in as the fuse burns down.
+		var whole: float = PLANT if fuse > FUSE else FUSE
+		var k := clampf(1.0 - fuse / whole, 0.0, 1.0)
+		var r: float = bomb["radius"]
+		draw_set_transform(Vector2(0, radius * 0.6), 0, Vector2(1.0, 0.55))
+		draw_circle(Vector2.ZERO, r, Color(1.0, 0.3, 0.1, 0.08 + 0.12 * k))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(1.0, 0.35, 0.15, 0.6 + 0.4 * k), 2.0, true)
+		draw_arc(Vector2.ZERO, r * (1.0 - k), 0.0, TAU, 40, Color(1.0, 0.8, 0.3, 0.8), 1.5, true)
+		draw_set_transform(Vector2.ZERO)
 	if exposed > 0.0:
 		var f := ThemeDB.fallback_font
 		draw_string_outline(f, Vector2(-60, -radius * 3.6 - 22), "EXPOSED!", HORIZONTAL_ALIGNMENT_CENTER, 120, 14, 4, Color(0, 0, 0, 0.9))
@@ -1397,7 +1725,7 @@ func _draw() -> void:
 	var attack := ""
 	if lunge > 0.0:
 		attack = "strike"
-	elif fighting and cd_timer < 0.3:
+	elif slam_wind > 0.0 or fighting and cd_timer < 0.3:
 		attack = "raise"
 	if attack != "":
 		var posed = Sprites.pose(look, attack)
@@ -1419,7 +1747,12 @@ func _draw() -> void:
 		rot = sin(bob * 0.15) * 0.08
 	else:
 		sc = Vector2(1.0 - 0.012 * sin(life_t * 3.0 + drift), 1.0 + 0.022 * sin(life_t * 3.0 + drift))   # breathing hard
-	if fighting and cd_timer < 0.3 and lunge <= 0.0:
+	if slam_wind > 0.0:
+		var k := 1.0 - slam_wind / float(slam["windup"])   # (rearing right back for it)
+		nudge -= lunge_dir * 7.0 * k
+		rot -= 0.2 * k * signf(lunge_dir.x)
+		sc = Vector2(1.0 - 0.05 * k, 1.0 + 0.08 * k)
+	elif fighting and cd_timer < 0.3 and lunge <= 0.0:
 		var k := 1.0 - cd_timer / 0.3
 		nudge -= lunge_dir * 4.0 * k
 		rot -= 0.12 * k * signf(lunge_dir.x)
@@ -1444,6 +1777,61 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 	if not banner.is_empty():
 		_draw_banner(feet, size)
+	if gooey and ice_crust <= 0.0 and freeze_timer <= 0.0:
+		# Its slick hide: a glint sliding over it (blades and arrows slide off; ice it first).
+		var t := fmod(life_t * 0.6 + drift, 1.0)
+		var gx := (-0.35 + 0.7 * t) * size.x
+		draw_line(Vector2(gx - 3, feet - size.y * 0.62), Vector2(gx + 3, feet - size.y * 0.7), Color(1, 1, 1, 0.75 * sin(t * PI)), 2.0, true)
+	elif gooey and ice_crust > 0.0:
+		# Crystallized: hard facets of ice over it (now anything bites).
+		var a := minf(ice_crust / 0.5, 1.0)
+		var c := Vector2(0, feet - size.y * 0.45)
+		for i in 5:
+			var ang := -PI * 0.9 + i * PI * 0.45
+			draw_line(c, c + Vector2.from_angle(ang) * Vector2(size.x * 0.32, size.y * 0.28), Color(0.95, 1.0, 1.0, 0.8 * a), 1.5, true)
+	if not pack.is_empty() and pack_n > 0 and not flying:
+		# Bold in a pack: a war-paint pip over its head for each of its own beside it.
+		for i in pack_n:
+			draw_rect(Rect2(Vector2(-pack_n * 3.0 + i * 6.0, feet - size.y - 9.0), Vector2(4, 4)), Color(0.95, 0.3, 0.2, 0.9))
+	elif not pack.is_empty() and float(pack["alone"]) > 0.0 and walking:
+		# On its own: a bead of sweat, looking about for the others.
+		var dp := Vector2(radius * 0.7, feet - size.y * 0.8 + fmod(life_t * 8.0, 4.0))
+		Sprites.disc(self, dp, 2.0, Color(0.6, 0.85, 1.0, 0.9))
+	if mending:
+		# Wounds closing: green crosses rising off it.
+		for i in 2:
+			var k2 := fmod(life_t * 0.8 + i * 0.5, 1.0)
+			var p2 := Vector2((-0.4 + 0.8 * i) * radius, feet - size.y * (0.4 + 0.5 * k2))
+			var col := Color(0.4, 1.0, 0.45, 0.9 * (1.0 - k2))
+			draw_rect(Rect2(p2 - Vector2(3, 1), Vector2(6, 2)), col)
+			draw_rect(Rect2(p2 - Vector2(1, 3), Vector2(2, 6)), col)
+	if driven > 0.0:
+		# Driven on by a drum: a yellow chevron over its head, bobbing to the beat.
+		var cy := feet - size.y - 6.0 + sin(life_t * 12.0) * 1.5
+		draw_polyline(PackedVector2Array([Vector2(-4, cy), Vector2(0, cy - 4), Vector2(4, cy)]), Color(1.0, 0.85, 0.3, 0.95), 2.0)
+	if not drum.is_empty():
+		# The drumsticks: raised, then brought down on the drum with each beat.
+		var down := drum_beat > 0.15
+		for sgn in [-1.0, 1.0]:
+			var hand := Vector2(sgn * size.x * 0.3, feet - size.y * 0.38)
+			var tip := hand + (Vector2(sgn * 2.0, 6.0) if down else Vector2(sgn * 5.0, -9.0 + sin(life_t * 6.0 + sgn) * 2.0))
+			draw_line(hand, tip, Color(0.4, 0.26, 0.12), 2.0, true)
+			Sprites.disc(self, tip, 1.8, Color(0.9, 0.84, 0.7))
+		if drum_beat > 0.0:
+			# The beat going out over the horde round it.
+			var k := 1.0 - drum_beat / 0.3
+			draw_set_transform(Vector2(0, radius * 0.6), 0, Vector2(1.0, 0.55))
+			draw_arc(Vector2.ZERO, float(drum["radius"]) * k, 0.0, TAU, 40, Color(1.0, 0.8, 0.3, 0.6 * (1.0 - k)), 3.0, true)
+			draw_set_transform(Vector2.ZERO)
+	if ranged.has("pierce") and fighting and cd_timer > 0.3:
+		# Winding the crossbow back: a crank turning at its side.
+		var c := Vector2(-size.x * 0.25 * flip, feet - size.y * 0.3)
+		var a := life_t * 9.0
+		draw_line(c, c + Vector2.from_angle(a) * 5.0, Color(0.75, 0.78, 0.85), 2.0, true)
+		draw_arc(c, 5.0, 0.0, TAU * (1.0 - cd_timer / _attack_cd()), 14, Color(1.0, 0.9, 0.5, 0.7), 1.0)
+	if not shield.is_empty() and escort != null and is_instance_valid(escort):
+		# Covering one of its own: a faint line of its shield's shelter behind it.
+		draw_line(Vector2.ZERO, escort.position - position, Color(0.7, 0.8, 0.95, 0.18), 6.0)
 	if rally > 0.0 and not boss:
 		# Driven on by the Marshal's banner: an ember over the head.
 		var e := Vector2(0, feet - size.y - 4.0 + sin(bob) * 1.5)

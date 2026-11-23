@@ -560,11 +560,12 @@ func dangers() -> Array:
 		if not z.is_empty():
 			_dangers.append(z)
 	for e in enemy_layer.get_children():
-		if not e.dead and (e.stomp_wind > 0.0 or e.charge_warn > 0.0):
+		if not e.dead and (e.stomp_wind > 0.0 or e.charge_warn > 0.0):   # (an Ogre's or Warlord's hauled-back blow, a Wyvern's run: marked for the player to read, not dodged by themselves)
 			_dangers.append_array(e.danger_zones())
 	return _dangers
 
 
+var hit_from := Vector2.INF   # while a shot's hitting: where it came from (Shieldbearers' shields); INF for blows
 var _dangers: Array = []
 var _dangers_frame := -1
 
@@ -751,14 +752,18 @@ func _wyverns(n: int) -> int:
 ## to deal with it (bosses announce themselves; goblins need no introduction).
 const FOE_HINTS := {
 	"orc": ["Orc", "Tough and hits hard. Hold it with a Knight."],
-	"wolf": ["Wolf", "Fast. Runs past your troops to bite at the walls."],
+	"wolf": ["Wolf", "Fast, and faster in a pack. Runs past your troops to bite at the walls."],
 	"bat": ["Bat", "Flies over troops and walls: only ranged troops and spells reach it."],
 	"skeleton_archer": ["Skeleton Archer", "Hangs back and shoots: rush it down, or outrange it."],
 	"slime": ["Slime", "Blades and arrows can't hurt it. Use magic, ki, alchemy, explosives or ice (ice lets anything bite)."],
 	"sapper": ["Sapper", "Carries a bomb for the nearest of your emplacements or walls (it's marked in red). Stop it on the way, or kill it while the fuse fizzes; a cheap Barricade in front draws it off."],
-	"troll": ["Troll", "Huge and slow, and knocks troops back. Gang up on it."],
-	"warlord": ["Warlord", "A champion. Shrugs off stuns and hits like a falling tree."],
-	"wyvern": ["Wyvern", "Flying elite that breathes fire on whatever's below."],
+	"troll": ["Troll", "Heals its wounds if it's left unhurt for a few seconds. Keep hitting it; fire stops the healing."],
+	"ogre": ["Ogre", "The Wallbreaker. Hauls its club back (its swing is marked on the ground), then throws troops out of the line. Spread out and hit it hard."],
+	"warlord": ["Warlord", "A champion. Shrugs off stuns, and its great sweeping blows (marked on the ground) cut through troops packed together."],
+	"shieldbearer": ["Shieldbearer", "Its great shield turns aside shots from the front, and shelters the archers, sappers and casters behind it. Flank it, or fight it hand to hand, or use spells."],
+	"drummer": ["War Drummer", "Its drum drives on the goblins, wolves and other light troops round it. It's weak: kill it first."],
+	"boltflinger": ["Boltflinger", "Slow to wind its great crossbow, but the bolt goes straight through a line of troops. Don't stand your troops one behind another in front of it."],
+	"wyvern": ["Wyvern", "Flying elite that breathes fire, and swoops down a line it marks first, burning everyone under it. Needs ranged troops."],
 }
 var _foes_seen := {}
 var boss_down := ""   # "<a boss> is defeated!" until the wave it fell in is over (its message leads the wave's)

@@ -69,7 +69,9 @@ func _process(delta: float) -> void:
 	var step := speed * delta
 	if to.length() <= step:
 		position = target_pos
+		main.hit_from = position - Vector2.from_angle(rotation) * 80.0   # (where it came from: for a Shieldbearer's shield)
 		_hit()
+		main.hit_from = Vector2.INF
 		return
 	position += to.normalized() * step
 	if main.paths.tall_at(position):
@@ -100,7 +102,9 @@ func _fly_on(delta: float) -> void:
 	for e in main.get_enemies():
 		if not hit_already.has(e) and e.position.distance_to(position) <= e.radius + 4.0:
 			target = e
+			main.hit_from = position - Vector2.from_angle(rotation) * 80.0   # (where it came from: for a Shieldbearer's shield)
 			_hit()
+			main.hit_from = Vector2.INF
 			return
 
 

@@ -33,7 +33,9 @@ func _process(delta: float) -> void:
 		if e.dead or hit_ids.has(e.get_instance_id()):
 			continue
 		if Geometry2D.get_closest_point_to_segment(e.position, a, b).distance_to(e.position) <= e.radius + 6.0:
+			main.hit_from = position - Vector2.from_angle(rotation) * 80.0
 			_hit(e)
+			main.hit_from = Vector2.INF
 	position = b
 	rotation = dir.angle()
 	dist_left -= step
