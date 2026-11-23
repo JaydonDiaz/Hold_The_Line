@@ -192,7 +192,7 @@ var shield := {}            # Shieldbearer: front, arc, cover, cover_r
 static var shields_out := 0 # Shieldbearers on the field (only then does a shot look for one)
 var escort = null           # Shieldbearer: the archer, sapper or caster of its own it walks in front of
 var escort_t := 0.0
-const ESCORTED := ["sapper", "skeleton_archer", "boltflinger", "drummer", "mage", "gravebinder"]
+const ESCORTED := ["sapper", "skeleton_archer", "boltflinger", "drummer", "warmage", "gravebinder"]
 var block_note := 0.0
 var drum := {}              # War Drummer: its beat
 var drum_t := 1.0
@@ -201,6 +201,16 @@ var drum_ahead := 1         # of its own kinds ahead of it (with none, it hangs 
 var driven := 0.0           # seconds left driven on by a drum
 var driven_speed := 0.0
 var driven_rate := 0.0
+var cast := {}              # Horde Mage: its spells
+var cast_state := ""        # "", "charge" (gathering a spell), "flame" (pouring out fire)
+var cast_spell := ""        # the spell it's charging ("lightning", "fire", "arcane")
+var cast_left := 0.0
+var cast_cd := 1.0
+var flame_dir := Vector2.DOWN
+var flame_left := 0.0
+var flame_tick := 0.0
+var last_chain := 0         # (for the tests) how many its last lightning struck
+var last_arcane = null      # ...and whom its last arcane beam went to
 var goal = null             # the objective it's been sent for (mission/objective.gd), or null for the castle / bottom line
 var aggro = null            # the unit attacking it that it has turned on
 var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
@@ -236,6 +246,7 @@ func setup(k: String, d: Dictionary, m, start: Vector2, hp_mult: float, dmg_mult
 		rush["damage"] *= dmg_mult
 	ranged = d.get("ranged", {})
 	pack = d.get("pack", {})
+	cast = d.get("cast", {})
 	shield = d.get("shield", {})
 	if not shield.is_empty():
 		shields_out += 1
@@ -351,6 +362,8 @@ func _process(delta: float) -> void:
 			return
 		queue_redraw()
 		return
+	if cast_state != "" and (knock_timer > 0.0 or freeze_timer > 0.0 or stun_timer > 0.0 or confuse_timer > 0.0):
+		_break_cast()
 	if knock_timer > 0.0:
 		# Being knocked back: slides away, can't act.
 		knock_timer -= delta
@@ -374,6 +387,12 @@ func _process(delta: float) -> void:
 			slam_wind = 0.0
 			_slam_lands()
 		_push_out()
+		queue_redraw()
+		return
+	cast_cd = maxf(cast_cd - delta, 0.0)
+	if not cast.is_empty() and not sieging and confuse_timer <= 0.0 and _cast_update(delta):
+		_push_out()
+		progress = position.y
 		queue_redraw()
 		return
 	if not strafe.is_empty() and _strafe_update(delta):
@@ -665,6 +684,166 @@ func _roster_upkeep(delta: float) -> void:
 			hp = minf(max_hp, hp + max_hp * float(regen["rate"]) * delta)
 			mending = true
 			queue_redraw()
+
+
+## A spell being charged (or poured out), broken off: stunned, frozen, knocked or confused.
+func _break_cast() -> void:
+	if cast_state == "charge":
+		main.spawn_text(position + Vector2(0, -40), "Interrupted!", Color(0.8, 0.9, 1.0))
+	cast_state = ""
+	cast_cd = maxf(cast_cd, 1.5)
+
+
+## Horde Mage: when a troop of yours comes within reach, it stands and charges a spell (one of
+## lightning, fire and arcane, chosen once as the charge starts, its colour showing at the
+## staff), then lets it go; then a cooldown. A stun, freeze or knock while it's charging
+## breaks the spell off. Returns true while it's standing to cast (it does nothing else then).
+func _cast_update(delta: float) -> bool:
+	if cast_state == "flame":
+		_flame(delta)
+		return true
+	if cast_state == "charge":
+		cast_left -= delta
+		lunge_dir = position.direction_to(_cast_aim()) if _cast_aim() != Vector2.INF else lunge_dir
+		if absf(lunge_dir.x) > 0.2:
+			flip = signf(lunge_dir.x)
+		if cast_left <= 0.0:
+			_cast_release()
+		return true
+	var r: float = cast["range"]
+	var near = _cast_nearest(position, r * 1.1, {})
+	if near == null:
+		return false   # nothing to cast at: on it goes
+	fighting = true
+	lunge_dir = position.direction_to(near.position)
+	if absf(lunge_dir.x) > 0.2:
+		flip = signf(lunge_dir.x)
+	if cast_cd > 0.0 or _cast_nearest(position, r, {}) == null:
+		return true   # (stands its ground, out of reach, while it gathers itself)
+	cast_spell = SPELLS[randi() % SPELLS.size()]   # (once, as the charge begins: no changing its mind)
+	cast_state = "charge"
+	cast_left = float(cast["charge"])
+	main.sfx("spell", {"lightning": 1.3, "fire": 0.8, "arcane": 1.0}[cast_spell])
+	return true
+
+
+const SPELLS := ["lightning", "fire", "arcane"]
+const SPELL_COLORS := {"lightning": Color(0.75, 0.9, 1.0), "fire": Color(1.0, 0.5, 0.15), "arcane": Color(0.8, 0.4, 1.0)}
+
+
+## Where its charging spell's pointed: the troop it would go for now (INF if none).
+func _cast_aim() -> Vector2:
+	var t = _arcane_mark() if cast_spell == "arcane" else _cast_nearest(position, float(cast["range"]), {})
+	return t.position if t != null else Vector2.INF
+
+
+## The nearest troop within `r` of `p` it could hit (not in `skip`), with no wall in the way.
+func _cast_nearest(p: Vector2, r: float, skip: Dictionary):
+	var best = null
+	var best_d := r
+	for w in main.warriors_near(p, r + 20.0):
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or skip.has(w):
+			continue
+		var d: float = p.distance_to(w.position)
+		if d <= best_d and not _wall_across(position, w.position):
+			best_d = d
+			best = w
+	return best
+
+
+## The arcane beam's mark: of the troops in reach, the one with the most health left (the
+## nearer of two alike, then the older: no coin-tossing).
+func _arcane_mark():
+	var best = null
+	var r: float = cast["range"]
+	for w in main.warriors_near(position, r + 20.0):
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or position.distance_to(w.position) > r or _wall_across(position, w.position):
+			continue
+		if best == null or w.hp > best.hp + 0.01 or (absf(w.hp - best.hp) <= 0.01 and (position.distance_to(w.position) < position.distance_to(best.position) - 0.01
+				or absf(position.distance_to(w.position) - position.distance_to(best.position)) <= 0.01 and w.get_instance_id() < best.get_instance_id())):
+			best = w
+	return best
+
+
+## The charge done: the spell goes. With nothing left to aim at, it fizzles (and it's soon
+## ready again).
+func _cast_release() -> void:
+	cast_state = ""
+	cast_cd = float(cast["cooldown"])
+	lunge = 0.15
+	match cast_spell:
+		"lightning":
+			var sp: Dictionary = cast["lightning"]
+			var cur = _cast_nearest(position, float(cast["range"]), {})
+			if cur == null:
+				_fizzle()
+				return
+			var struck := {}
+			var from := position + Vector2(10.0 * flip, -radius * 2.2)
+			var dmg: float = float(sp["damage"]) * _hit_mult()
+			while cur != null and struck.size() <= int(sp["jumps"]):
+				struck[cur] = true
+				cur.take_damage(dmg)
+				main.spawn_beam(from, cur.position + Vector2(0, -10), Color(0.75, 0.9, 1.0), 3.0)
+				main.spawn_burst(cur.position + Vector2(0, -10), 10.0, Color(0.85, 0.95, 1.0))
+				from = cur.position + Vector2(0, -10)
+				dmg *= 1.0 - float(sp["falloff"])
+				cur = _cast_nearest(cur.position, float(sp["chain_r"]), struck)
+			last_chain = struck.size()
+			main.sfx("zap", 1.1)
+		"fire":
+			var t = _cast_nearest(position, float(cast["fire"]["range"]), {})
+			if t == null:
+				t = _cast_nearest(position, float(cast["range"]), {})
+			if t == null:
+				_fizzle()
+				return
+			flame_dir = position.direction_to(t.position)
+			cast_state = "flame"
+			flame_left = float(cast["fire"]["time"])
+			flame_tick = 0.0
+			main.sfx("flame", 0.7)
+		"arcane":
+			var sp: Dictionary = cast["arcane"]
+			var t = _arcane_mark()
+			if t == null:
+				_fizzle()
+				return
+			var dmg := minf(float(sp["damage"]) * _hit_mult(), t.max_hp * float(sp["cap"]))   # (hard, but never a sure kill outright)
+			t.take_damage(dmg)
+			last_arcane = t
+			main.spawn_beam(position + Vector2(10.0 * flip, -radius * 2.2), t.position + Vector2(0, -10), Color(0.8, 0.4, 1.0), 9.0)
+			main.spawn_burst(t.position + Vector2(0, -10), 22.0, Color(0.85, 0.5, 1.0))
+			main.sfx("beam", 0.9)
+
+
+func _fizzle() -> void:
+	cast_cd = 1.2
+	main.spawn_text(position + Vector2(0, -40), "Fizzle", Color(0.7, 0.7, 0.75))
+
+
+## The flamethrower: it stands and pours fire down the line it chose, for its whole length;
+## everyone in the cone burns, a tick at a time (the same however fast the game runs).
+func _flame(delta: float) -> void:
+	fighting = true
+	lunge_dir = flame_dir
+	flame_left -= delta
+	flame_tick -= delta
+	var sp: Dictionary = cast["fire"]
+	var tick: float = sp["tick"]
+	while flame_tick <= 0.0 and flame_left > -tick * 0.5:
+		flame_tick += tick
+		var reach: float = sp["range"]
+		for w in main.warriors_near(position, reach + 20.0):
+			if not w.is_active() or w.sheltered():
+				continue
+			var off: Vector2 = w.position - position
+			if off.length() - w.RADIUS <= reach and absf(flame_dir.angle_to(off)) <= float(sp["arc"]):
+				w.take_damage(float(sp["dps"]) * tick * _hit_mult())
+	queue_redraw()
+	if flame_left <= 0.0:
+		cast_state = ""
+
 
 
 ## Where its hauled-back blow will land, and how far round: [centre, radius].
@@ -1640,7 +1819,7 @@ func _gait() -> Array:
 		"skeleton", "skeleton_archer":
 			# A clattering shamble, bones rattling.
 			return [Vector2(sin(bob * 9.0) * 0.7, -2.0 * pace * k), side * 0.05 + sin(bob * 7.0) * 0.03, Vector2.ONE]
-		"goblin", "sapper", "shieldbearer", "drummer", "boltflinger":
+		"goblin", "sapper", "shieldbearer", "drummer", "boltflinger", "warmage":
 			# A scurry: quick, hunched, bouncing high.
 			return [Vector2(0, -3.2 * pace * k), side * 0.11, Vector2(1.0 + 0.04 * (1.0 - pace), 1.0 - 0.06 * (1.0 - pace))]
 	return [Vector2(0, -2.5 * pace * k), side * 0.06, Vector2.ONE]
@@ -1805,6 +1984,36 @@ func _draw() -> void:
 			var col := Color(0.4, 1.0, 0.45, 0.9 * (1.0 - k2))
 			draw_rect(Rect2(p2 - Vector2(3, 1), Vector2(6, 2)), col)
 			draw_rect(Rect2(p2 - Vector2(1, 3), Vector2(2, 6)), col)
+	if cast_state == "charge":
+		# Charging: its spell's colour gathering at the staff's head, a ring of it on the ground.
+		var col: Color = SPELL_COLORS[cast_spell]
+		var k := 1.0 - cast_left / float(cast["charge"])
+		var orb := Vector2(size.x * 0.4 * flip, feet - size.y * 0.95)
+		var pulse := 0.8 + 0.2 * sin(life_t * 20.0)
+		Sprites.disc(self, orb, 3.0 + 6.0 * k * pulse, Color(col, 0.35))
+		Sprites.disc(self, orb, 2.0 + 3.5 * k, col)
+		for i in 3:
+			var a := life_t * 6.0 + i * TAU / 3.0
+			var p := orb + Vector2.from_angle(a) * (14.0 - 9.0 * k)
+			Sprites.disc(self, p, 1.5, Color(col, 0.8))
+		draw_set_transform(Vector2(0, radius * 0.6), 0, Vector2(1.0, 0.55))
+		draw_arc(Vector2.ZERO, radius * 1.6, -PI / 2.0, -PI / 2.0 + TAU * k, 32, Color(col, 0.85), 2.5, true)
+		draw_set_transform(Vector2.ZERO)
+	if cast_state == "flame":
+		# The stream of fire: a cone out from the staff, flames racing along it.
+		var sp: Dictionary = cast["fire"]
+		var reach: float = sp["range"]
+		var arc: float = sp["arc"]
+		var o := Vector2(8.0 * flip, -radius)
+		var pts := PackedVector2Array([o])
+		for i in 9:
+			pts.append(o + Vector2.from_angle(flame_dir.angle() - arc + arc * 2.0 * i / 8.0) * reach)
+		draw_colored_polygon(pts, Color(1.0, 0.45, 0.1, 0.22))
+		for i in 10:
+			var k2 := fmod(life_t * 2.5 + i * 0.1, 1.0)
+			var a2 := flame_dir.angle() + sin(i * 2.3 + life_t * 7.0) * arc * 0.8 * k2
+			var p2 := o + Vector2.from_angle(a2) * reach * k2
+			Sprites.disc(self, p2, 3.0 + 6.0 * k2, Color(1.0, 0.55 + 0.35 * (1.0 - k2), 0.15, 0.75 * (1.0 - k2 * 0.6)))
 	if driven > 0.0:
 		# Driven on by a drum: a yellow chevron over its head, bobbing to the beat.
 		var cy := feet - size.y - 6.0 + sin(life_t * 12.0) * 1.5

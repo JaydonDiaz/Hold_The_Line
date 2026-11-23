@@ -655,6 +655,43 @@ const SPRITES := {
 			"....kkk...kkk...",
 		],
 	},
+	"warmage": {  # A goblin shaman of the horde: a deep hood and robe, a bone-hung staff (its spell's colour drawn at the head)
+		"base": "goblin",
+		"poses": {
+			"strike": {   # the staff thrust out, the spell let go
+				2: "..............__",
+				3: "............._k_",
+				4: "..............kk",
+				5: "............kwwwk",
+				6: "..............kk",
+			},
+		},
+		"palette": {
+			"R": Color(0.33, 0.17, 0.38), "r": Color(0.85, 0.65, 0.25), "s": Color(0.48, 0.34, 0.18), "o": Color(0.9, 0.88, 0.8),
+		},
+		"rows": [
+			"................",
+			"......kkkk......",
+			".....kRRRRk...k.",
+			"....kRRRRRRk.kok",
+			"...kRRggggRRkkok",
+			".kkRRgeggegRRkk.",
+			".kGkRggggggRkksk",
+			"..kkkgwmmwgkk.sk",
+			"....kRRRRRRk.ksk",
+			"...kRRRrRRRRkgsk",
+			"..kRRRRrRRRRk.sk",
+			"..kRRRRrRRRRk.sk",
+			"..kRRRRrRRRRk.sk",
+			"...kRRRrRRRk..sk",
+			"...kkkkkkkkk..k.",
+			"....kgk.kgk.....",
+		],
+		"legs_b": [
+			"...kkkkkkkkk..k.",
+			"...kgk...kgk....",
+		],
+	},
 	"ogre_king": {  # The final boss: a crowned ogre with a spiked club
 		"poses": {
 			"raise": {   # the spiked club hauled up overhead

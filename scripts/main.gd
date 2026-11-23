@@ -763,6 +763,7 @@ const FOE_HINTS := {
 	"shieldbearer": ["Shieldbearer", "Its great shield turns aside shots from the front, and shelters the archers, sappers and casters behind it. Flank it, or fight it hand to hand, or use spells."],
 	"drummer": ["War Drummer", "Its drum drives on the goblins, wolves and other light troops round it. It's weak: kill it first."],
 	"boltflinger": ["Boltflinger", "Slow to wind its great crossbow, but the bolt goes straight through a line of troops. Don't stand your troops one behind another in front of it."],
+	"warmage": ["Horde Mage", "Stops and charges a spell; the colour at its staff tells you which. Blue: lightning that leaps between troops close together. Orange: a stream of fire in front of it. Violet: a beam at your healthiest troop. Stun it to break the spell, or kill it first."],
 	"wyvern": ["Wyvern", "Flying elite that breathes fire, and swoops down a line it marks first, burning everyone under it. Needs ranged troops."],
 }
 var _foes_seen := {}

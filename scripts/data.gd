@@ -893,6 +893,17 @@ const SKELETON := {
 #        Drummers don't add up: driven on is driven on.
 # ranged.pierce, ranged.falloff: (Boltflinger) its bolt flies straight on through up to
 #        `pierce` troops in its line, each struck once, `falloff` less for each it's been through.
+# cast = {range, charge, cooldown, lightning, fire, arcane}: (Horde Mage) a troop within
+#        `range`: it stands, charges one of its three spells (picked at random as the charge
+#        starts) for `charge` seconds, lets it go, then rests `cooldown`. A stun, freeze or
+#        knock while it's charging breaks the spell off.
+#        lightning {damage, jumps, chain_r, falloff}: strikes the nearest troop, then leaps on
+#          to the next nearest within `chain_r` (never one it's struck), up to `jumps` times,
+#          `falloff` weaker each leap.
+#        fire {dps, time, range, arc, tick}: a stream of fire at the nearest troop, `arc` either
+#          side, `range` long, for `time` seconds, burning in `tick`-second ticks.
+#        arcane {damage, cap}: a beam at the troop with the most health left in reach, for
+#          `damage`, never more than `cap` of that troop's health.
 # tier ranks how dangerous an enemy type is; "Strongest" targeting goes for the highest.
 const ENEMIES := {
 	# The horde's numbers: unsure of itself alone, bold with its own round it.
@@ -926,6 +937,14 @@ const ENEMIES := {
 	"boltflinger": {"tier": 3, "hp": 45, "speed": 32.0, "damage": 22.0, "wall_damage": 10.0, "cooldown": 3.6, "fights": true,
 			"ranged": {"range": 200.0, "speed": 520.0, "pierce": 4, "falloff": 0.2},
 			"bounty": 11, "radius": 12.0, "scale": 2.5, "color": Color(0.5, 0.45, 0.3)},
+	# A goblin shaman of the horde: charges a spell (its colour at the staff says which), then
+	# chain lightning, a stream of fire or an arcane beam. Spread out, or kill it first.
+	"warmage": {"tier": 4, "hp": 70, "speed": 30.0, "damage": 4.0, "wall_damage": 6.0, "cooldown": 1.2, "fights": true,
+			"cast": {"range": 210.0, "charge": 1.6, "cooldown": 4.5,
+				"lightning": {"damage": 16.0, "jumps": 4, "chain_r": 70.0, "falloff": 0.15},
+				"fire": {"dps": 24.0, "time": 1.8, "range": 125.0, "arc": 0.5, "tick": 0.25},
+				"arcane": {"damage": 60.0, "cap": 0.45}},
+			"bounty": 18, "radius": 12.0, "scale": 2.6, "color": Color(0.45, 0.25, 0.55)},
 	# Hangs back out of reach and shoots: send something quick (or a ranged troop) at it.
 	"skeleton_archer": {"tier": 2, "hp": 24, "speed": 40.0, "damage": 5.0, "wall_damage": 4.0, "cooldown": 1.7, "fights": true,
 			"ranged": {"range": 150.0, "speed": 340.0},

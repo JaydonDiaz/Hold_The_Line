@@ -18,6 +18,11 @@ extends SceneTree
 ## D  War Drummers: the beat drives on the light troops round it; two drummers don't add up
 ## F  Boltflingers: the bolt goes straight through a line of troops, each struck once, less
 ##    for each it's been through; long to wind again
+## X  Horde Mages: a spell picked once as it starts charging (each of the three comes up);
+##    lightning leaps between troops close together, each once, weaker each leap; fire a
+##    stream down one line, burning in ticks the same at any frame rate; arcane a beam at the
+##    troop with the most health, never a sure kill; nothing to aim at: it fizzles; a stun
+##    breaks the charge
 ## K  The Ogre King's left as he was: none of the roster's new ways
 
 const Data = preload("res://scripts/data.gd")
@@ -70,6 +75,8 @@ func _run() -> void:
 		await _drums()
 	if _wants("F"):
 		await _bolts()
+	if _wants("X"):
+		await _mages()
 	if _wants("K"):
 		_king()
 	if main != null:
@@ -404,4 +411,129 @@ func _bolts() -> void:
 	check(lost[0] > lost[1] and lost[1] > lost[2] and lost[0] <= b.damage * 2.0 + 1.0, "F  ...less for each it's been through, each struck once a bolt")
 	check(side.hp >= 5000.0, "F  ...a troop off the line isn't touched")
 	check(second - first >= int(60 * b.attack_cd * 0.9), "F  ...and it's slow to wind again (%.1fs)" % ((second - first) / 60.0))
+
+# --- X ---
+
+## A Horde Mage held where it stands, ready to cast `spell` at once (the spell forced: the
+## random pick is checked on its own).
+func _caster(at: Vector2):
+	var m = _foe("warmage", at)
+	m.root_timer = 99.0
+	m.cast_cd = 0.0
+	return m
+
+
+func _cast_now(m, spell: String) -> void:
+	m.cast_state = "charge"
+	m.cast_spell = spell
+	m.cast_left = 0.02
+	await _frames(4)
+
+
+func _tough(kind: String, at: Vector2, hp := 5000.0):
+	var t = await _hire(kind, at)
+	t.max_hp = hp
+	t.hp = hp
+	t.dazed = 99.0   # (held where it stands)
+	return t
+
+
+func _mages() -> void:
+	# The pick: each of the three comes up, and it's chosen once per charge.
+	await _fresh()
+	var t0 = await _tough("swordsman", Vector2(320, 300))
+	var m = _caster(Vector2(320, 150))
+	var seen := {}
+	var steady := true
+	for i in 60:
+		m.cast_state = ""
+		m.cast_cd = 0.0
+		m._cast_update(0.016)
+		var first: String = m.cast_spell
+		for k in 5:
+			m._cast_update(0.016)
+			steady = steady and m.cast_spell == first
+		seen[first] = true
+	check(seen.size() == 3 and steady, "X  a mage's spell: lightning, fire or arcane, each comes up (%s), and never changes mid-charge" % ", ".join(seen.keys()))
+	# Lightning: leaps between troops close together, each once; not to one far off.
+	await _fresh()
+	var close := []
+	for i in 4:
+		close.append(await _tough("swordsman", Vector2(300 + (i % 2) * 36, 300 + (i / 2) * 36)))
+	var far = await _tough("swordsman", Vector2(600, 330))
+	m = _caster(Vector2(320, 150))
+	await _cast_now(m, "lightning")
+	var lost: Array = close.map(func(t): return 5000.0 - t.hp)
+	check(lost.all(func(x): return x > 0.0) and far.hp >= 5000.0 and m.last_chain == 4, "X  lightning leaps between troops close together (%d struck), not to one far off" % m.last_chain)
+	var each_once: bool = lost.all(func(x): return x <= m.cast["lightning"]["damage"] * 1.001 + 0.01)
+	var fades: bool = lost.max() > lost.min()
+	check(each_once and fades, "X  ...each struck once, weaker with each leap (%s)" % str(lost.map(func(x): return snappedf(x, 0.1))))
+	# Spread out: it can't leap.
+	await _fresh()
+	var a = await _tough("swordsman", Vector2(200, 300))
+	var b = await _tough("swordsman", Vector2(440, 300))
+	m = _caster(Vector2(320, 150))
+	await _cast_now(m, "lightning")
+	check(m.last_chain == 1, "X  ...troops spread apart: it can't leap (%d struck)" % m.last_chain)
+	# Fire: a stream down one line, those in it burnt in ticks, the same at any frame rate.
+	var burnt := []
+	for fps in [60, 20]:
+		await _fresh()
+		Engine.physics_ticks_per_second = 60
+		var front = await _tough("swordsman", Vector2(320, 240))
+		var behind = await _tough("swordsman", Vector2(320, 270))
+		var aside = await _tough("swordsman", Vector2(520, 160))
+		m = _caster(Vector2(320, 150))
+		m.cast_state = "flame"
+		m.flame_dir = Vector2.DOWN
+		m.flame_left = m.cast["fire"]["time"]
+		m.flame_tick = 0.0
+		# Stepped by hand at this rate (as the game would run it).
+		var dt: float = 1.0 / float(fps)
+		while m.cast_state == "flame":
+			m._flame(dt)
+		burnt.append([5000.0 - front.hp, 5000.0 - behind.hp, 5000.0 - aside.hp])
+		m.root_timer = 0.0
+	var at60: Array = burnt[0]
+	var at20: Array = burnt[1]
+	check(at60[0] > 0.0 and at60[1] > 0.0 and at60[2] == 0.0, "X  fire: a stream burns the troops in front of it (%.0f, %.0f), not one off to the side" % [at60[0], at60[1]])
+	check(absf(at60[0] - at20[0]) < 0.01, "X  ...the same burn however fast the game runs (%.1f at 60 fps, %.1f at 20)" % [at60[0], at20[0]])
+	# Arcane: the troop with the most health left; heavy, but never a sure kill.
+	await _fresh()
+	var small = await _tough("swordsman", Vector2(280, 300), 300.0)
+	var big = await _tough("swordsman", Vector2(360, 300), 900.0)
+	big.hp = 900.0
+	small.hp = 300.0
+	var frail = await _tough("archer", Vector2(320, 260), 100.0)
+	m = _caster(Vector2(320, 150))
+	await _cast_now(m, "arcane")
+	check(m.last_arcane == big and big.hp < 900.0 and small.hp >= 300.0, "X  arcane: a beam at the troop with the most health left")
+	await _fresh()
+	var lone = await _tough("archer", Vector2(320, 300), 60.0)
+	m = _caster(Vector2(320, 150))
+	await _cast_now(m, "arcane")
+	check(lone.is_active() and lone.hp > 0.0, "X  ...never a sure kill outright (%.0f of 60 left)" % lone.hp)
+	# Nothing to aim at when it lets go: it fizzles, and is soon ready again.
+	await _fresh()
+	m = _caster(Vector2(320, 150))
+	await _cast_now(m, "lightning")
+	check(m.cast_state == "" and m.cast_cd <= 1.5, "X  with no one left in reach as it lets go, it fizzles, and isn't stuck")
+	# A stun breaks the charge off.
+	await _fresh()
+	await _tough("swordsman", Vector2(320, 300))
+	m = _caster(Vector2(320, 150))
+	m.cast_state = "charge"
+	m.cast_spell = "arcane"
+	m.cast_left = 1.0
+	m.apply_stun(1.0)
+	await _frames(3)
+	check(m.cast_state == "" and m.cast_cd > 0.0, "X  a stun while it's charging breaks the spell off")
+	# Its fire, beams and sparks leave nothing behind.
+	await _fresh()
+	var t1 = await _tough("swordsman", Vector2(320, 300))
+	m = _caster(Vector2(320, 150))
+	m.root_timer = 99.0
+	await _frames(60 * 12)
+	var fx_left: int = main.fx_layer.get_child_count()
+	check(fx_left < 30, "X  ...and its spells' effects are cleared away (%d left on the field)" % fx_left)
 
