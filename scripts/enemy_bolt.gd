@@ -4,6 +4,7 @@ extends Node2D
 ## a little weaker for each it's been through; it stops at the end of its flight, or a wall.
 
 var main
+var shooter = null   # the enemy that loosed it (a ward throws some back at it)
 var dir := Vector2.DOWN
 var speed := 520.0
 var damage := 20.0
@@ -30,7 +31,9 @@ func _process(delta: float) -> void:
 		if c.distance_to(w.position + Vector2(0, -6)) <= w.RADIUS + 5.0:
 			hit[w] = true
 			main.dmg_src = "bolts"
+			main.hurt_by = shooter if is_instance_valid(shooter) else null
 			w.take_damage(damage * pow(1.0 - falloff, hit.size() - 1))
+			main.hurt_by = null
 			main.dmg_src = ""
 			main.spawn_burst(w.position + Vector2(0, -8), 8.0, Color(0.85, 0.8, 0.7))
 			if hit.size() > pierce:

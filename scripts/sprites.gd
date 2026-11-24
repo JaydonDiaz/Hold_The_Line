@@ -3311,12 +3311,12 @@ const SPRITES := {
 			"...kkkk.kkkk....",
 		],
 	},
-	"mage_p3": {  # Necromancy: a black hooded robe, glowing green eyes and a skull-topped staff
+	"mage_p3": {  # Spellblade: a steel-blue battle hood and armoured robe, violet-lit eyes, a crystal-pommelled staff (the sword's drawn from it)
 		"base": "mage",
 		"palette": {
-			"P": Color(0.2, 0.22, 0.2), "Q": Color(0.13, 0.15, 0.13), "y": Color(0.45, 0.95, 0.4),
-			"e": Color(0.45, 1.0, 0.45), "W": Color(0.28, 0.3, 0.28), "r": Color(0.2, 0.22, 0.2),
-			"R": Color(0.12, 0.14, 0.12), "o": Color(0.9, 0.88, 0.8), "O": Color(0.55, 0.53, 0.47),
+			"P": Color(0.36, 0.42, 0.58), "Q": Color(0.24, 0.28, 0.4), "y": Color(0.85, 0.8, 1.0),
+			"e": Color(0.8, 0.7, 1.0), "W": Color(0.62, 0.66, 0.74), "r": Color(0.36, 0.42, 0.58),
+			"R": Color(0.22, 0.26, 0.36), "o": Color(0.88, 0.85, 1.0), "O": Color(0.6, 0.55, 0.85),
 		},
 		"rows": [
 			".......kk.....k.",
@@ -3337,7 +3337,7 @@ const SPRITES := {
 			"....kk..kk......",
 		],
 	},
-	"frost_p3": {  # Frost Aura: a snow queen in a pale gown and blue cape, a tall ice crown and drifting frost
+	"frost_p3": {  # Shattercraft: a snow queen in a pale gown and blue cape, a tall ice crown and drifting frost
 		"base": "frost",
 		"palette": {
 			"r": Color(0.9, 0.92, 1.0), "R": Color(0.72, 0.78, 0.95), "C": Color(0.6, 0.8, 1.0),
@@ -3362,7 +3362,7 @@ const SPRITES := {
 			"..i.........i...",
 		],
 	},
-	"healer_p3": {  # Halo: angelic white-and-gold robes, feathered wings and a halo
+	"healer_p3": {  # Divine Retribution: angelic white-and-gold robes, feathered wings and a halo
 		"base": "healer",
 		"palette": {
 			"u": Color(0.97, 0.97, 1.0), "G": Color(0.95, 0.82, 0.35),
@@ -3491,7 +3491,7 @@ const SPRITES := {
 			".kkkkk..kkk.kkkk",
 		],
 	},
-	"magetower_p3": {  # Necromancy: dark stone, a black-hatted necromancer, a skull banner and green-lit windows
+	"magetower_p3": {  # (old Mage Tower, Necromancy look: kept for old saves) dark stone, a black-hatted necromancer, a skull banner and green-lit windows
 		"base": "magetower",
 		"palette": {
 			"P": Color(0.18, 0.2, 0.18), "Q": Color(0.12, 0.14, 0.12), "y": Color(0.45, 0.95, 0.4),

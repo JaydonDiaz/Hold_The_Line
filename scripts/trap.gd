@@ -1,5 +1,5 @@
 extends Node2D
-## An Alchemist's charge (Trapcraft), dropped on the ground while walking. Arms after a
+## An Alchemist's charge (Trapcraft), set in the enemy's way (or left behind as it dodges). Arms after a
 ## moment, then blows up when an enemy on foot steps on it, hurting everything in the
 ## blast. It stays put until something sets it off, even between waves.
 
@@ -11,6 +11,7 @@ var main
 var damage := 25.0
 var radius := 40.0
 var stun := 0.0
+var slow := []      # [strength, seconds] (Crippling Charges): what the blast catches is slowed
 var poison := {}    # with Alchemical Mines: the flasks' poison and acid come along
 var corrode := {}
 var source := 0     # instance id of the Alchemist that laid it (its poison doesn't stack with others')
@@ -40,6 +41,8 @@ func _explode() -> void:
 			continue
 		if stun > 0.0:
 			e.apply_stun(stun)
+		if not slow.is_empty():
+			e.apply_slow(slow[0], slow[1])
 		if not poison.is_empty():
 			e.apply_poison(poison["dps"], poison["duration"], poison["stacks"], source)
 		if not corrode.is_empty():

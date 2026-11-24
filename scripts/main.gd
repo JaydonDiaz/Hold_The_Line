@@ -579,8 +579,32 @@ func threats() -> Array:
 	return _threats
 
 
+## Shattercraft: a Brittle foe killed shatters, hurting every enemy round it; a first
+## shatter (gen 0, not itself set off by a shatter) at Avalanche makes a few more Brittle.
+## Those, when they go, shatter too but spread nothing: no endless chain.
+func shatter(at: Vector2, fx: Dictionary, brittle: Dictionary, gen: int, by: String) -> void:
+	var r: float = fx["radius"]
+	var near := enemies_near(at, r + 40.0).filter(func(e): return not e.dead and e.position.distance_to(at) <= r + e.radius)
+	credit = by
+	shatter_depth += 1
+	for e in near:
+		if is_instance_valid(e) and not e.dead:
+			e.take_damage(float(fx["damage"]), true, "ice")
+	shatter_depth -= 1
+	if gen == 0 and int(fx.get("spread", 0)) > 0 and not brittle.is_empty():
+		var rest := enemies_near(at, r * 1.8 + 40.0).filter(func(e): return not e.dead and e.brittle_t <= 0.0)
+		rest.sort_custom(func(a, b): return a.position.distance_to(at) < b.position.distance_to(at))
+		for e in rest.slice(0, int(fx["spread"])):
+			e.apply_brittle(brittle, fx, 1, by)
+	spawn_burst(at, r, Color(0.7, 0.95, 1.0))
+	spawn_burst(at, r * 0.5, Color(0.95, 1.0, 1.0))
+	sfx("freeze", 1.3)
+
+
 var _threats: Array = []
 var _threats_frame := -1
+var hurt_by = null           # while an enemy's blow or shot lands on a troop: that enemy (a ward throws some back at it)
+var shatter_depth := 0        # > 0 while a shatter's going off (what it kills doesn't spread Brittle again)
 var heavy_key := 0            # while an enemy's warned blow is landing: its windup_key (see defense.gd)
 var hit_from := Vector2.INF   # while a shot's hitting: where it came from (Shieldbearers' shields); INF for blows
 var _dangers: Array = []

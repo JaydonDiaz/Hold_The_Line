@@ -2,7 +2,7 @@ extends SceneTree
 ## Towers and the new emplacements. Run from the project folder:
 ##   Godot --headless --path . --fixed-fps 60 -s tests/towers_test.gd
 ##   A  archer      Volley (third path): faster, then 2 and 3 arrows; Trick Shots (fourth):
-##                   pierce, seek, fire arrows and rain, all of it sharpened at Tier IV
+##                   Evasive Barrage, seek, fire arrows and rain, all of it sharpened at Tier IV
 ##   T  tower       a plain Tower doesn't fight by itself; a ranged troop ordered (or hired)
 ##                   onto it climbs in, keeps its upgrades, reaches 30% further (more with the
 ##                   Lookout path), and enemies go for the tower, not it; sent elsewhere (or
@@ -130,13 +130,16 @@ func _archer_paths() -> void:
 			and volley[2]["effect"].get("multishot", 1) == 2 and volley[3]["effect"].get("multishot", 1) == 4,
 			"A  the Archer's third path: faster, faster, then 2 arrows, then 4")
 	var tricks: Array = paths[3]["tiers"]
-	check(tricks[0]["effect"].get("pierce", 0) == 1 and tricks[1]["effect"].get("seek", false) and tricks[2]["effect"].has("burn") and tricks[2]["effect"].has("rain")
+	var dmg: Array = paths[0]["tiers"]
+	check(dmg[2]["effect"].get("pierce", 0) == 1 and not dmg[3]["effect"].has("pierce") and tricks.all(func(t): return not t["effect"].has("pierce")),
+			"A  piercing is the Damage path's (Piercing Tips: 2 hits), none in Trick Shots")
+	check(tricks[0]["effect"].has("barrage") and tricks[1]["effect"].get("seek", false) and tricks[2]["effect"].has("burn") and tricks[2]["effect"].has("rain")
 			and tricks.all(func(t): return not t["effect"].has("multishot")),
-			"A  the fourth: pierce, seek, then fire arrows with fire rain (no more extra arrows here)")
+			"A  the fourth: Evasive Barrage, seek, then fire arrows with fire rain (no more extra arrows here)")
 	var t4: Dictionary = tricks[3]["effect"]
-	check(t4.get("pierce", 0) > tricks[1]["effect"]["pierce"] and t4["burn"][0] > tricks[2]["effect"]["burn"][0]
+	check(t4["barrage"]["count"] > tricks[0]["effect"]["barrage"]["count"] and t4["burn"][0] > tricks[2]["effect"]["burn"][0]
 			and t4["rain"]["damage"] > tricks[2]["effect"]["rain"]["damage"] and t4["rain"]["cooldown"] < tricks[2]["effect"]["rain"]["cooldown"],
-			"A  ...and Tier IV sharpens every trick: more pierce, hotter burn, bigger and quicker rain")
+			"A  ...and Tier IV sharpens every trick: a bigger barrage, hotter burn, bigger and quicker rain")
 
 
 # --- C ---------------------------------------------------------------------------------------

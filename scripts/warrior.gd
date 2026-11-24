@@ -21,11 +21,32 @@ const KI_COLOR := Color(1.0, 0.88, 0.35)
 const OUTLINE_COLOR := Color(0.1, 0.07, 0.1)
 const BEAM_CHARGE := 0.5   # seconds spent gathering ki before the beam fires
 const BOMB_CHARGE := 0.7   # seconds a Spirit Bomb takes to gather: its bolts drawn together into one
-const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.0, 0.5, 0.15), Color(0.55, 0.95, 0.45)]
+const MAGE_ORB_COLORS := [Color(0.5, 0.75, 1.0), Color(1.0, 0.85, 0.5), Color(1.0, 0.5, 0.15), Color(0.8, 0.75, 1.0)]   # Storm, Arcane Lance, Fire, Spellblade
 const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.0, 0.45, 0.15), Color(0.95, 0.3, 0.25)]
 const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
 const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
 const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers his spear for it
+const BLADE_STAND := 0.15       # Spellblade: stands and fights a foe whose blow takes less than this share of her health; backs off from the rest
+const BLADE_SLACK := 12.0       # Spellblade: once out, the sword stays out this much further
+const BLADE_SWING := 0.22       # ...how long a sweep shows
+const BLADE_STORM_CD := 3.0     # ...Storm: a chain from the blow at most this often
+const BLADE_CHAIN_SHARE := 0.5  # ...for this share of the Storm's damage...
+const BLADE_CHAIN_JUMPS := 3    # ...over at most this many foes
+const BLADE_LANCE_CD := 3.0     # ...Arcane Lance: a focused bolt at most this often...
+const BLADE_LANCE_SHARE := 0.2  # ...for this share of the Lance
+const TRAP_AHEAD := 90.0       # Trapcraft: how far along a foe's route it sets a charge
+const TRAP_CANDIDATES := 6      # ...looking at the nearest this many foes
+const TRAP_CROWD := 80.0        # ...a spot with more foes this close to it is the better
+const TRAP_GAP := 36.0          # ...never this close to another of its charges
+const TRAP_CLEAR := 26.0        # ...nor this close to a foe's edge (it needs time to arm)
+const TRAP_LOOK := 0.5          # ...nowhere good: look again after this long
+const TRAP_LEFT_BEHIND := 260.0 # ...at its limit, the oldest is taken up only if it's this far behind
+const BARRAGE_GAP := 0.07   # seconds between Evasive Barrage arrows
+const FROZEN_SPEAR := 0.25  # Glacial Spear: this much harder on a foe frozen solid (times its cc_mult: a boss, less)
+const WARD_BURST := 55.0
+const ANGEL_COOLDOWN := 60.0  # Guardian Angel: once saved, a troop can't be again for this long    # Intercession: how far a broken ward's burst reaches
+const BACKSTEP := 34.0       # Spearhead: how far he steps back to charge the same foe again (px)...
+const BACKSTEP_TIME := 0.22  # ...and how long that takes
 const GOLD_HAIR := {"h": Color(1.0, 0.86, 0.25)}   # Golden Ascension
 const IDLE_AFTER := 0.8   # seconds with nothing to do before a troop starts its idle animation
 const WINDUP := 0.18      # melee troops rear back over the last moment before a blow
@@ -99,6 +120,45 @@ var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial 
 var clone_of = null   # Mirror Self: the real Martial Artist this copy is part of (null for the real one)
 var multiform := {}   # Mirror Self: copies, power, hp, cooldown
 var multiform_timer := 0.0
+# Knight Charge (Vanguard): see _momentum_step, _start_backstep.
+var momentum := {}           # Light Step: after, bonus, cooldown
+var moved := 0.0             # px run since his last blow
+var momentum_ready := false  # his next blow hits harder
+var momentum_t := 0.0
+var _last_pos := Vector2.INF
+var dash_cd := 0.0           # seconds till he can charge again from a run
+var again_t := 0.0           # seconds trading blows with this foe (Spearhead: charge it again)
+var backstep_left := 0.0     # stepping back to charge the same foe again
+var backstep_dir := Vector2.ZERO
+var spear_reach := 0.0
+# Archer Evasive Barrage.
+var barrage := {}            # count, damage, cooldown
+var barrage_t := 0.0
+var barrage_left := 0
+var barrage_timer := 0.0
+var barrage_targets: Array = []
+# Mage Spellblade.
+var blade := {}              # damage, every, targets, reach
+var blade_t := 0.0
+var blade_on := false        # a foe's close: the sword's out
+var blade_swing := 0.0       # > 0 while a sweep shows
+var blade_storm_t := 0.0
+var blade_lance_t := 0.0
+var haste := 1.0             # Haste: its spells' cooldowns, times this
+# Frost Witch Shattercraft.
+var brittle := {}            # time, bonus, every
+var shard := {}              # damage, cooldown, pierce, spear
+var shard_t := 1.5
+var shatter := {}            # damage, radius, window, spread
+# Healer Divine Retribution: wards it gives (ward), and one it carries (shield_*).
+var ward := {}
+var ward_t := 2.0
+var shield_hp := 0.0
+var shield_max := 0.0
+var shield_left := 0.0
+var shield_fx := {}          # reflect, cap, burst, angel
+var shield_reflected := 0.0
+var angel_cd := 0.0          # Guardian Angel: this troop can't be saved again till it runs out (any Healer's)
 var spent := 0
 var priority := "closest"
 var move_mode := "free"        # Orders: see MOVE_MODES
@@ -455,6 +515,15 @@ func _apply_upgrades() -> void:
 	confuse_vuln = 0.0
 	traps = {}
 	burn = []
+	momentum = {}
+	spear_reach = 0.0
+	barrage = {}
+	blade = {}
+	haste = 1.0
+	brittle = {}
+	shard = {}
+	shatter = {}
+	ward = {}
 	perch = PERCH_BASE if kind == "tower" else 0.0
 	crew_rate = 1.0
 	tower_repair = 0.0
@@ -524,10 +593,13 @@ func _apply_upgrades() -> void:
 				if fx.has("aura_" + key):
 					aura[key] = fx["aura_" + key]
 			for key in ["dash", "magnet", "echo", "fireball", "decay", "summon", "frost_aura", "rage", "crimson",
-					"golden", "heal_aura", "befuddle", "traps", "burn", "rain", "cluster", "napalm", "smite", "gems", "multiform"]:
+					"golden", "heal_aura", "befuddle", "traps", "burn", "rain", "cluster", "napalm", "smite", "gems", "multiform",
+					"momentum", "barrage", "blade", "brittle", "shard", "shatter", "ward"]:
 				if fx.has(key):
 					set(key, fx[key])
 			pierce = fx.get("pierce", pierce)
+			haste = fx.get("haste", haste)
+			spear_reach += fx.get("spear", 0.0)
 			lifesteal = fx.get("lifesteal", lifesteal)
 			mortar = fx.get("mortar", mortar)
 			seek = fx.get("seek", seek)
@@ -553,6 +625,8 @@ func _apply_upgrades() -> void:
 					set(key, fx[key])
 			wave_bonus = fx.get("wave_bonus", wave_bonus)
 			hauls += fx.get("hauls", 0)
+	if spear_reach > 0.0 and not _spear_on_back():
+		attack_range += spear_reach   # (a spear in hand reaches further than a sword)
 	# Golden Ascension is the crimson aura made golden: the one form, not both at once.
 	if not golden.is_empty():
 		crimson = {}
@@ -1291,10 +1365,32 @@ func _extra_stats() -> String:
 	if not multiform.is_empty():
 		var bodies := 1 + _clones().size()
 		s += "   Mirror Self: %d bod%s, %d%% power each" % [bodies, "y" if bodies == 1 else "ies", roundi(_body_share() * 100)]
+	if not momentum.is_empty():
+		s += "   After a run: next blow +%d%%%s" % [roundi(float(momentum["bonus"]) * 100), " (ready)" if momentum_ready else ""]
 	if not dash.is_empty():
-		s += "   Dash %.0fx%s" % [dash["damage"], " (bowls through)" if dash["through"] else ""]
+		s += "   Charge %sx every %.0fs%s%s" % [str(dash["damage"]), float(dash["cooldown"]), (", again on a foe every %.0fs" % float(dash["again"])) if float(dash.get("again", 0.0)) > 0.0 else "",
+				", chains" if dash.get("chain", false) else ""]
 	if pierce > 0:
 		s += "   Arrows hit up to %d%s" % [pierce + 1, ", seeking" if seek else ""]
+	elif seek:
+		s += "   Arrows seek"
+	if not barrage.is_empty():
+		s += "   Evasive Barrage: %d arrows at %d%% (every %.0fs)" % [int(barrage["count"]), roundi(float(barrage["damage"]) * 100), float(barrage["cooldown"])]
+	if not blade.is_empty():
+		s += "   Sword %.0f magic dmg, sweeps %d" % [float(blade["damage"]) * _power(), int(blade["targets"])]
+	if haste < 1.0:
+		s += "   Haste: spells %d%% faster" % roundi((1.0 / haste - 1.0) * 100)
+	if not brittle.is_empty():
+		s += "   Brittle: +%.0f ice dmg on the next hit" % float(brittle["bonus"])
+	if not shard.is_empty():
+		s += "   %s %.0f dmg / %.1fs" % ["Glacial Spear" if shard["spear"] else "Icicle", float(shard["damage"]) * _power(), float(shard["cooldown"])]
+	if not shatter.is_empty():
+		s += "   Shatter %.0f dmg%s" % [float(shatter["damage"]), (", spreads Brittle to %d" % int(shatter["spread"])) if int(shatter["spread"]) > 0 else ""]
+	if not ward.is_empty():
+		s += "   Ward %.0f / %.0fs%s%s%s" % [float(ward["absorb"]) * _power(), float(ward["every"]), (", %d at once" % int(ward["count"])) if int(ward["count"]) > 1 else "",
+				(", reflects %d%%" % roundi(float(ward["reflect"]) * 100)) if float(ward["reflect"]) > 0.0 else "", ", Guardian Angel" if ward["angel"] else ""]
+	if shield_hp > 0.0:
+		s += "   Warded: %.0f" % shield_hp
 	if not magnet.is_empty():
 		s += "   Blasts magnetize"
 	if not echo.is_empty():
@@ -1332,7 +1428,8 @@ func _extra_stats() -> String:
 	if confuse_vuln > 0.0:
 		s += "   Confused foes +%d%% dmg taken" % roundi(confuse_vuln * 100)
 	if not traps.is_empty():
-		s += "   Charges %d/%d: %.0f dmg%s" % [my_traps.size(), int(traps["max"]), traps["damage"], ", stun %.0fs" % traps["stun"] if traps["stun"] > 0.0 else ""]
+		s += "   Charges %d/%d: %.0f dmg%s%s" % [my_traps.size(), int(traps["max"]), traps["damage"], ", stun %.0fs" % traps["stun"] if traps["stun"] > 0.0 else "",
+				(", slow %d%%" % roundi(float(traps["slow"][0]) * 100)) if not traps.get("slow", []).is_empty() else ""]
 	if not burn.is_empty() and fireball.is_empty():
 		s += "   Burn %.0f/s" % burn[0]
 	if not rain.is_empty():
@@ -1367,7 +1464,22 @@ func take_damage(amount: float) -> void:
 		amount *= 1.0 - Defense.BRACE_DAMAGE   # (braced for it)
 	if kind == "tower":
 		main.earn_xp("tower", minf(hp, amount * (1.0 - armor)), "soak")   # standing up to it shields its crew: it trains like a wall
-	hp -= amount * (1.0 - armor) * (1.0 - buff["defense"])
+	var dmg: float = amount * (1.0 - armor) * (1.0 - buff["defense"])
+	if shield_hp > 0.0:
+		# A Healer's ward: soaks up what gets past armour, then throws some back.
+		var soak := minf(shield_hp, dmg)
+		shield_hp -= soak
+		dmg -= soak
+		_ward_reflect(soak)
+		if hp - dmg <= 0.0 and shield_fx.get("angel", false) and angel_cd <= 0.0:
+			dmg = maxf(hp - 1.0, 0.0)   # Guardian Angel: not this blow (the ward's spent on it)
+			angel_cd = ANGEL_COOLDOWN
+			main.spawn_text(position + Vector2(0, -48), "Saved!", Color(1.0, 0.92, 0.55))
+			main.spawn_burst(position, 30.0, Color(1.0, 0.92, 0.6))
+			_drop_ward(false)
+		elif shield_hp <= 0.0:
+			_drop_ward(true)
+	hp -= dmg
 	hurt = 0.1
 	danger_t = DANGER_HIT
 	if hp <= 0.0 and summoned:
@@ -1415,6 +1527,11 @@ func _process(delta: float) -> void:
 	pose_left = maxf(pose_left - delta, 0.0)
 	lance_left = maxf(lance_left - delta, 0.0)
 	block_flash = maxf(block_flash - delta, 0.0)
+	angel_cd = maxf(angel_cd - delta, 0.0)
+	if shield_left > 0.0:
+		shield_left -= delta
+		if shield_left <= 0.0:
+			_drop_ward(false)   # (run out: no burst)
 	queue_redraw()
 	_animate(delta)
 	if clone_of != null:
@@ -1451,6 +1568,9 @@ func _process(delta: float) -> void:
 	if dash_left > 0.0:
 		_dash_step(delta)
 		return
+	if backstep_left > 0.0:
+		_backstep_step(delta)
+		return
 	if not dash.is_empty() and dash.get("chain", false) and _chain_dash():
 		return
 	if regen_left > 0.0:
@@ -1469,6 +1589,13 @@ func _process(delta: float) -> void:
 	stun_timer = maxf(stun_timer - delta, 0.0)
 	surge_timer = maxf(surge_timer - delta, 0.0)
 	surge_left = maxf(surge_left - delta, 0.0)
+	dash_cd = maxf(dash_cd - delta, 0.0)
+	momentum_t = maxf(momentum_t - delta, 0.0)
+	barrage_t = maxf(barrage_t - delta, 0.0)
+	blade_t = maxf(blade_t - delta, 0.0)
+	blade_swing = maxf(blade_swing - delta, 0.0)
+	blade_storm_t = maxf(blade_storm_t - delta, 0.0)
+	blade_lance_t = maxf(blade_lance_t - delta, 0.0)
 	moving = false
 	buff_timer -= delta
 	if buff_timer <= 0.0:
@@ -1514,11 +1641,11 @@ func _process(delta: float) -> void:
 	if kind == "bard":
 		_bard_update(delta)
 	if not chain.is_empty() and chain_timer <= 0.0 and _cast_chain():
-		chain_timer = chain["cooldown"]
+		chain_timer = chain["cooldown"] * haste
 	if not lance.is_empty() and lance_timer <= 0.0 and _cast_lance():
-		lance_timer = lance["cooldown"]
+		lance_timer = lance["cooldown"] * haste
 	if not breath.is_empty() and breath_timer <= 0.0 and _breathe():
-		breath_timer = breath["interval"]
+		breath_timer = breath["interval"] * haste
 	# The beam is a separate special: it waits for any volley to finish, charges up,
 	# then fires; blasting pauses while it charges.
 	if beam_charge > 0.0:
@@ -1594,7 +1721,7 @@ func _process(delta: float) -> void:
 			elif gap > r:
 				_chase_move(target.position, gap - r + 1.0, delta)
 		elif is_melee():
-			if not dash.is_empty() and run_time >= RUN_BEFORE_DASH and gap > 6.0 and gap <= dash["reach"] and _can_dash(target):
+			if not dash.is_empty() and dash_cd <= 0.0 and run_time >= RUN_BEFORE_DASH and gap > 6.0 and gap <= dash["reach"] and _can_dash(target):
 				_start_dash(target)
 				return
 			if gap > 0.0:
@@ -1622,14 +1749,23 @@ func _process(delta: float) -> void:
 		flip = signf(facing.x)
 	if not dash.is_empty():
 		if target != null and _is_valid(target) and _gap_to(target) <= attack_range + 2.0:
+			if engaged_id != target.get_instance_id():
+				again_t = 0.0   # (a new foe: the count starts over)
 			engaged = target
 			engaged_id = target.get_instance_id()
+			# Spearhead: a foe that won't fall gets the spear again, from a short step back.
+			if float(dash.get("again", 0.0)) > 0.0:
+				again_t += delta
+				if again_t >= float(dash["again"]) and _start_backstep(target):
+					again_t = 0.0
 		elif engaged_id != 0 and is_instance_valid(engaged) and not engaged.dead \
 				and (engaged != target or _gap_to(engaged) > attack_range + 12.0):
 			engaged = null   # it walked off from that fight: no chain when that foe falls later
 			engaged_id = 0
 	# Running time toward a target (for a Swordsman's dash): any stop resets it.
 	run_time = run_time + delta if moving and target != null else 0.0
+	if not momentum.is_empty():
+		_momentum_step()
 	_separate()
 
 
@@ -2283,6 +2419,13 @@ func _attack(e) -> void:
 	if crit:
 		hit *= crit_mult
 	if is_melee():
+		if not momentum.is_empty():
+			if momentum_ready:
+				hit *= 1.0 + float(momentum["bonus"])   # (Light Step: the run carried into the blow)
+				momentum_ready = false
+				momentum_t = float(momentum["cooldown"])
+				main.spawn_burst(e.position, 14.0, Color(1.0, 0.85, 0.5))
+			moved = 0.0
 		e.take_damage(hit)
 		main.sfx("slash" if kind == "swordsman" or kind == "skeleton" else "hit", 0.85 if kind == "skeleton" else 1.0)
 		_hit_spark(e)
@@ -2421,6 +2564,7 @@ func under_construction() -> bool:
 func _kite(delta: float) -> bool:
 	if wall_guard or move_mode == "hold":
 		return false   # (on Hold it stands its ground)
+	var swordsmage := not blade.is_empty()   # (a Spellblade meets small fry with the sword; she still steps back from a brute)
 	var brawler := is_melee() or summoned or clone_of != null
 	if brawler and main.Enemy.slimes_out <= 0:
 		return false   # only Slimes make a brawler back off
@@ -2430,6 +2574,8 @@ func _kite(delta: float) -> bool:
 		if e.dead or not e.fights or not e.bomb.is_empty() or e.stun_timer > 0.0 or e.freeze_timer > 0.0:
 			continue
 		if brawler and not e.resists("physical"):
+			continue
+		if swordsmage and e.damage < max_hp * BLADE_STAND:
 			continue
 		var gap: float = _gap_to(e)
 		if gap < near:
@@ -2494,11 +2640,11 @@ func _muzzle() -> Vector2:
 	return position + facing * 18.0
 
 
-func _shoot(e, index: int) -> void:
+func _shoot(e, index: int, share := 1.0):
 	if data["attack"] == "bolt":
 		_shoot_bolt(e, index)
-		return
-	var hit := damage * _power()
+		return null
+	var hit := damage * _power() * share
 	var crit := randf() < crit_chance
 	if crit:
 		hit *= crit_mult
@@ -2558,7 +2704,11 @@ func _shoot(e, index: int) -> void:
 		p.color = p.color.lerp(MAGE_ORB_COLORS[3], 0.5)
 	elif kind == "alchemist" and look >= 0:
 		p.color = FLASK_COLORS[look]
+	if not brittle.is_empty():
+		p.brittle = brittle
+		p.shatter = shatter
 	main.add_projectile(p)
+	return p
 
 
 ## A quick flash where a melee blow lands.
@@ -3265,6 +3415,12 @@ func _special_update(delta: float) -> void:
 		_multiform_step(delta)
 	if not traps.is_empty():
 		_trap_step(delta)
+	if barrage_left > 0:
+		_barrage_step(delta)
+	if not shard.is_empty():
+		_shard_step(delta)
+	if not ward.is_empty():
+		_ward_step(delta)
 	if not rain.is_empty():
 		rain_timer = maxf(rain_timer - delta, 0.0)
 		if rain_timer <= 0.0:
@@ -3437,29 +3593,93 @@ func _crumble() -> void:
 	queue_free()
 
 
-## Trapcraft: drops a charge every so often while walking; holding its post with a foe in
-## reach, throws one into the foe's path instead (between it and the foe).
+## Trapcraft: every so often (standing still or not) sets a charge where the enemy's
+## heading: a little way along the route the nearest ones are walking (the enemies' own
+## flow field, so through the gaps and round the rock they really take), more so where
+## several are coming and in a tight spot (a gap, a cliff foot). Never right under a foe
+## (it must have time to arm), never on rock or out of its throw, never on another charge.
+## At its limit it waits, unless the oldest charge has been left far behind.
 func _trap_step(delta: float) -> void:
 	my_traps = my_traps.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
-	var at := position + Vector2(0, RADIUS * 0.6)
-	if not moving:
-		if target == null or not is_instance_valid(target) or target.dead or not _in_range(target):
-			return
-		at = position.lerp(target.position, 0.55)   # (in its path, short of where it is now)
 	trap_timer -= delta
 	if trap_timer > 0.0:
 		return
+	if my_traps.size() >= int(traps["max"]):
+		var oldest = my_traps[0]
+		if oldest.position.distance_to(position) < TRAP_LEFT_BEHIND:
+			trap_timer = TRAP_LOOK
+			return
+		my_traps.pop_front().queue_free()   # (one left far behind is taken up again)
+	var at := _trap_spot()
+	if at == Vector2.INF:
+		trap_timer = TRAP_LOOK   # (nowhere worth it yet: look again shortly)
+		return
+	_lay_trap(at)
+	swing = 0.12
+
+
+## Dodging a warned blow, it leaves a charge where it stood, if one's ready: an ordinary
+## charge (the same cooldown and limit), not an extra one.
+func _trap_behind() -> void:
+	my_traps = my_traps.filter(func(t): return is_instance_valid(t) and not t.is_queued_for_deletion())
+	if trap_timer > 0.0 or my_traps.size() >= int(traps["max"]) or not _trap_ok(position):
+		return
+	_lay_trap(position)
+
+
+func _trap_spot() -> Vector2:
+	var reach := attack_range
+	var foes: Array = main.enemies_near(position, reach + TRAP_AHEAD + 40.0).filter(func(e): return not e.dead and not e.flying)
+	if foes.is_empty():
+		return Vector2.INF
+	foes.sort_custom(func(a, b): return a.position.distance_to(position) < b.position.distance_to(position))
+	var best := Vector2.INF
+	var best_score := 0.0
+	for e in foes.slice(0, TRAP_CANDIDATES):
+		# Along its way: a few steps of the route it's on.
+		var p: Vector2 = e.position
+		for i in 3:
+			var dir: Vector2 = main.paths.direction(p, e.radius)
+			if dir == Vector2.ZERO:
+				dir = Vector2.DOWN if e.heading == Vector2.ZERO else e.heading
+			p += dir * (TRAP_AHEAD / 3.0)
+		if p.distance_to(position) > reach or not _trap_ok(p):
+			continue
+		var score := 1.0
+		for f in foes:
+			if f.position.distance_to(p) < TRAP_CROWD:
+				score += 1.0
+		if main.paths.has_terrain() and main.paths.tight(p, 14.0):
+			score += 1.5   # (a gap they must all come through)
+		score -= p.distance_to(position) / 400.0
+		if score > best_score:
+			best_score = score
+			best = p
+	return best
+
+
+func _trap_ok(p: Vector2) -> bool:
+	if p.y < main.DEPLOY_TOP or p.x < RADIUS or p.x > main.FIELD_W - RADIUS or p.y > main.CASTLE_Y - RADIUS:
+		return false
+	if main.paths.has_terrain() and main.paths.blocked(p, 8.0):
+		return false
 	for t in my_traps:
-		if t.position.distance_to(at) < 30.0:
-			return   # already one here
-	trap_timer = traps["every"] * (1.0 if moving else 2.0)   # (thrown from its post at half the pace it drops them walking)
-	while my_traps.size() >= int(traps["max"]):
-		my_traps.pop_front().queue_free()   # the oldest is taken up again
+		if is_instance_valid(t) and t.position.distance_to(p) < TRAP_GAP:
+			return false
+	for e in main.enemies_near(p, 60.0):
+		if not e.dead and not e.flying and e.position.distance_to(p) < e.radius + TRAP_CLEAR:
+			return false   # (not under a foe: it has to arm first)
+	return true
+
+
+func _lay_trap(at: Vector2) -> void:
+	trap_timer = float(traps["every"])
 	var t := Trap.new()
 	t.main = main
 	t.damage = traps["damage"] * _power()
 	t.radius = traps["radius"]
 	t.stun = traps["stun"]
+	t.slow = traps.get("slow", [])
 	t.source = get_instance_id()
 	t.credit = xp_kind()
 	if traps["brew"]:
@@ -3468,6 +3688,242 @@ func _trap_step(delta: float) -> void:
 	t.position = at
 	main.add_projectile(t)
 	my_traps.append(t)
+	if at.distance_to(position) > RADIUS * 2.0:
+		main.spawn_beam(position + Vector2(0, -16), at, Color(0.9, 0.6, 0.3, 0.6), 2.0)   # (thrown out)
+
+
+## Spellblade: a foe that comes close (it never goes looking for one; from a brute it
+## still backs off, see _kite) meets the sword: it
+## comes out once a foe's within `reach`, and stays out till none is a little further off
+## (no flicking between sword and staff). True while the sword's out.
+func _blade_step() -> bool:
+	var reach: float = float(blade["reach"]) + (BLADE_SLACK if blade_on else 0.0)
+	var near = null
+	var near_gap := INF
+	for e in main.enemies_near(position, reach + 60.0):
+		if e.dead or e.flying or not can_hurt(e):
+			continue
+		var g := _gap_to(e)
+		if g <= reach and g < near_gap:
+			near_gap = g
+			near = e
+	blade_on = near != null
+	if not blade_on:
+		return false
+	facing = position.direction_to(near.position)
+	if blade_t <= 0.0:
+		_blade_strike(near)
+	return true
+
+
+## A sweep of the sword: magic damage to the foe in front and the next nearest (2, or 3
+## with Archmage's Blade), carrying her other paths' magic: Fire sets them burning (its
+## breath's burn, which never stacks), Storm now and then sparks a short chain from the
+## blow, Arcane Lance now and then drives a focused bolt into the one in front.
+func _blade_strike(first) -> void:
+	blade_t = float(blade["every"]) * haste / _rate()
+	var hit: float = float(blade["damage"]) * _power()
+	var reach: float = float(blade["reach"]) + BLADE_SLACK
+	var victims := [first]
+	var others: Array = main.enemies_near(position, reach + 50.0).filter(func(e): return e != first and not e.dead and not e.flying and can_hurt(e) and _gap_to(e) <= reach)
+	others.sort_custom(func(a, b): return _gap_to(a) < _gap_to(b))
+	victims.append_array(others.slice(0, int(blade["targets"]) - 1))
+	for e in victims:
+		e.take_damage(hit, true, "magic")
+		if not e.dead and not breath.is_empty():
+			e.apply_burn(breath["burn_dps"], breath["burn_time"])
+		_hit_spark(e)
+	if not chain.is_empty() and blade_storm_t <= 0.0 and is_instance_valid(first):
+		blade_storm_t = BLADE_STORM_CD * haste
+		_blade_chain(first)
+	if not lance.is_empty() and blade_lance_t <= 0.0 and is_instance_valid(first) and not first.dead:
+		blade_lance_t = BLADE_LANCE_CD * haste
+		first.take_damage(float(lance["damage"]) * BLADE_LANCE_SHARE * _power(), true, "magic")
+		main.spawn_beam(position + Vector2(0, -20), first.position, Color(1.0, 0.5, 0.95), 6.0)
+	swing = 0.15
+	blade_swing = BLADE_SWING
+	main.sfx("slash", 1.25 if blade["targets"] < 3 else 1.05)
+
+
+## Storm through the sword: a short chain from the blow (half the Storm's damage, at
+## most BLADE_CHAIN_JUMPS foes).
+func _blade_chain(from) -> void:
+	var hit := [from]
+	var points := PackedVector2Array([position + facing * 14 + Vector2(0, -14), from.position])
+	var cur = from
+	while hit.size() < mini(BLADE_CHAIN_JUMPS, int(chain["jumps"])):
+		var nxt = null
+		var nearest := CHAIN_JUMP
+		for e in main.enemies_near(cur.position, CHAIN_JUMP + 30.0):
+			var d: float = e.position.distance_to(cur.position)
+			if not e.dead and d < nearest and not hit.has(e):
+				nearest = d
+				nxt = e
+		if nxt == null:
+			break
+		hit.append(nxt)
+		points.append(nxt.position)
+		cur = nxt
+	for e in hit:
+		if is_instance_valid(e) and not e.dead:
+			e.take_damage(float(chain["damage"]) * BLADE_CHAIN_SHARE * _power(), true, "magic")
+	main.spawn_bolt(points, Color(0.7, 0.85, 1.0))
+	main.sfx("zap", 1.3)
+
+
+## Evasive Barrage: dodging a warned blow, she looses a quick fan of weaker arrows at foes
+## round her, each at a different one while there are enough. Only from a real dodge (see
+## _defend), once each cooldown; nothing about the dodge itself changes.
+func _start_barrage() -> void:
+	var near: Array = main.enemies_near(position, attack_range + 30.0).filter(func(e): return not e.dead and _in_range(e) and can_hurt(e))
+	if near.is_empty():
+		return
+	near.sort_custom(func(a, b): return position.distance_to(a.position) < position.distance_to(b.position))
+	barrage_targets = near.slice(0, int(barrage["count"]))
+	barrage_left = int(barrage["count"])
+	barrage_timer = 0.0
+	barrage_t = float(barrage["cooldown"])
+	main.spawn_text(position + Vector2(0, -46), "Barrage!", Color(1.0, 0.85, 0.45))
+
+
+func _barrage_step(delta: float) -> void:
+	barrage_timer -= delta
+	if barrage_timer > 0.0:
+		return
+	barrage_timer = BARRAGE_GAP
+	var n: int = int(barrage["count"]) - barrage_left
+	var live: Array = barrage_targets.filter(func(e): return is_instance_valid(e) and not e.dead)
+	barrage_left -= 1
+	if live.is_empty():
+		barrage_left = 0
+		return
+	var e = live[n % live.size()]
+	var p = _shoot(e, 0, float(barrage["damage"]))   # (a snap shot: its share of an arrow, every other upgrade as it is)
+	if p != null:
+		p.rotation += (randf() - 0.5) * 0.3
+	swing = 0.1
+	main.sfx("bow", 1.25)
+
+
+## Razor Shards / Glacial Spear: now and then an icicle (later a spear of ice) at the
+## toughest Brittle foe in reach, else the toughest in reach. Frozen solid, a foe takes it
+## harder (a boss, that resists the freeze, less so).
+func _shard_step(delta: float) -> void:
+	shard_t -= delta
+	if shard_t > 0.0:
+		return
+	var best = null
+	var best_score := -1.0
+	for e in main.enemies_near(position, attack_range + 60.0):
+		if e.dead or not _in_range(e) or not can_hurt(e) or not _sees(e):
+			continue
+		var score: float = e.hp + (100000.0 if e.brittle_t > 0.0 else 0.0)
+		if score > best_score:
+			best_score = score
+			best = e
+	if best == null:
+		shard_t = 0.4
+		return
+	shard_t = float(shard["cooldown"])
+	var p := Projectile.new()
+	p.main = main
+	p.target = best
+	p.target_pos = best.position
+	p.position = _muzzle()
+	var hit: float = float(shard["damage"]) * _power()
+	if best.freeze_timer > 0.0:
+		hit *= 1.0 + FROZEN_SPEAR * best.cc_mult
+	p.damage = hit
+	p.speed = 560.0
+	p.style = "spear" if shard["spear"] else "icicle"
+	p.school = "ice"
+	p.color = Color(0.7, 0.95, 1.0)
+	p.pierce = int(shard["pierce"])
+	p.credit = xp_kind()
+	p.source = get_instance_id()
+	p.brittle = brittle
+	p.shatter = shatter
+	main.add_projectile(p)
+	facing = position.direction_to(best.position)
+	swing = 0.15
+	main.sfx("frost", 0.7 if shard["spear"] else 1.3)
+
+
+## Divine Ward: every so often a ward on whoever nearby is in real danger: under an
+## enemy's warned blow first (the heavier, the sooner), then those being hit while hurt.
+## Nobody at risk, nothing's cast (it looks again shortly). Intercession: two at once.
+func _ward_step(delta: float) -> void:
+	ward_t -= delta
+	if ward_t > 0.0 or not is_active():
+		return
+	var threats: Array = main.threats()
+	var picks := []
+	for w in main.warriors_near(position, attack_range + 40.0):
+		if not w.is_active() or w.is_emplacement() or w.kind == "barricade" or _ally_gap(w) > attack_range:
+			continue
+		if w.shield_hp > 0.0 and w.shield_left > 1.0:
+			continue   # (still warded: no stacking)
+		var risk := 0.0
+		for th in threats:
+			if Defense.hits(th, w.position, w.RADIUS, 6.0):
+				risk = maxf(risk, 2.0 + Defense.severity(w, th))
+		if risk <= 0.0 and w.danger_t > 0.0 and w.hp < w.max_hp * 0.85:
+			risk = 1.0 + (1.0 - w.hp / w.max_hp) + (0.3 if w.max_hp < 80.0 else 0.0)   # (the frail first)
+		if risk > 0.0:
+			picks.append([risk, w])
+	if picks.is_empty():
+		ward_t = 0.4
+		return
+	picks.sort_custom(func(a, b): return a[0] > b[0])
+	for i in mini(int(ward["count"]), picks.size()):
+		var w = picks[i][1]
+		w.give_ward(float(ward["absorb"]) * _power(), float(ward["time"]), ward)
+		main.spawn_beam(position + Vector2(0, -24), w.position + Vector2(0, -10), Color(1.0, 0.88, 0.45), 8.0)
+	ward_t = float(ward["every"])
+	swing = 0.15
+	main.sfx("revive", 1.4)
+
+
+## A ward on this troop (it doesn't stack: a fresher, stronger one replaces it).
+func give_ward(absorb: float, time: float, fx: Dictionary) -> void:
+	if shield_hp > absorb and shield_left > 1.0:
+		return
+	shield_hp = absorb
+	shield_max = absorb
+	shield_left = time
+	shield_fx = fx
+	shield_reflected = 0.0
+	queue_redraw()
+
+
+## Holy Rebuke: a share of what the ward soaked goes back at whoever struck (holy, so no
+## ward of theirs or armour turns it), up to the ward's cap in all.
+func _ward_reflect(soak: float) -> void:
+	var share: float = shield_fx.get("reflect", 0.0)
+	if share <= 0.0 or soak <= 0.0:
+		return
+	var back := minf(soak * share, float(shield_fx["cap"]) - shield_reflected)
+	var foe = main.hurt_by
+	if back <= 0.0 or foe == null or not is_instance_valid(foe) or foe.dead:
+		return
+	shield_reflected += back
+	main.hurt_by = null   # (nothing it does comes back round)
+	foe.take_damage(back, true, "magic")
+	main.spawn_beam(position + Vector2(0, -12), foe.position, Color(1.0, 0.9, 0.5), 4.0)
+
+
+## The ward's gone: broken by a blow (Intercession: it bursts on the foes round it) or
+## run out (quietly).
+func _drop_ward(broken_by_blow: bool) -> void:
+	if broken_by_blow and float(shield_fx.get("burst", 0.0)) > 0.0:
+		for e in main.enemies_near(position, WARD_BURST + 30.0):
+			if not e.dead and e.position.distance_to(position) <= WARD_BURST + e.radius:
+				e.take_damage(float(shield_fx["burst"]), true, "magic")
+		main.spawn_burst(position, WARD_BURST, Color(1.0, 0.9, 0.5))
+		main.sfx("revive", 0.8)
+	shield_hp = 0.0
+	shield_left = 0.0
+	shield_fx = {}
 
 
 ## Fire Rain: a volley of flaming arrows on a spot.
@@ -3509,13 +3965,20 @@ func _dash_step(delta: float) -> void:
 	walk += 0.5
 	moving = true
 	if dash["through"]:
-		for x in main.get_enemies():
-			if x == dash_target or dash_hit.has(x) or x.flying or position.distance_to(x.position) > RADIUS + x.radius + 4.0:
+		# Spearhead: anyone in the way is speared in passing (for less).
+		var side: float = dash.get("side", 1.0)
+		for x in main.enemies_near(position, RADIUS + 40.0):
+			if x == dash_target or dash_hit.has(x) or x.dead or x.flying or position.distance_to(x.position) > RADIUS + x.radius + 4.0:
 				continue
 			dash_hit.append(x)
-			x.take_damage(damage * dash["damage"] * _power())
+			x.take_damage(damage * dash["damage"] * side * _power())
 			if not x.dead and dash["stun"] > 0.0:
-				x.apply_stun(dash["stun"])
+				x.apply_stun(dash["stun"])   # (a boss shrugs most of it off: cc_mult)
+			if not x.dead and float(dash.get("knock", 0.0)) > 0.0:
+				var aside := position.direction_to(dash_to).orthogonal()
+				if aside.dot(x.position - position) < 0.0:
+					aside = -aside
+				x.apply_knockback(aside * float(dash["knock"]) * 0.6)   # (bowled aside, out of his way)
 			_hit_spark(x)
 	if dash_left > 0.0:
 		return
@@ -3528,14 +3991,63 @@ func _dash_step(delta: float) -> void:
 		lance_left = 0.2   # (the blow is the spear's)
 		e.take_damage(damage * dash["damage"] * _power())
 		if not e.dead and dash["stun"] > 0.0:
-			e.apply_stun(dash["stun"])
+			e.apply_stun(dash["stun"])   # (staggered; a boss shrugs most of it off)
+		if not e.dead and float(dash.get("knock", 0.0)) > 0.0:
+			e.apply_knockback(facing * float(dash["knock"]))   # (thrown back; nothing moves a boss that won't be moved)
 		_hit_spark(e)
+		dash_cd = float(dash.get("cooldown", 0.0))
+		again_t = 0.0
 		main.spawn_burst(e.position, 26.0, Color(1.0, 0.9, 0.6))
 		main.sfx("slash", 0.8)
 		cd_timer = cooldown / _rate()
 		engaged = e   # if that blow felled it, Unstoppable chains on next frame
 		engaged_id = e.get_instance_id()
 	_separate()
+
+
+## Spearhead: trading blows with a foe that won't fall, he steps back a pace and drives
+## the spear in again (no long retreat for a run-up). Never out of his area, never onto
+## rock or through a wall. True if he's stepping back.
+func _start_backstep(e) -> bool:
+	if not _is_valid(e) or e.flying or garrison != null:
+		return false
+	var away: Vector2 = e.position.direction_to(position) if e.position != position else Vector2.DOWN
+	var to := _zone_clamp(position + away * BACKSTEP)
+	if to.distance_to(position) < BACKSTEP * 0.5 or main.paths.path_blocked(position, to, RADIUS) \
+			or (main.paths.has_terrain() and main.paths.blocked(to, RADIUS)):
+		return false
+	backstep_dir = position.direction_to(to)
+	backstep_left = BACKSTEP_TIME
+	dash_target = e
+	_hold_pose("strike", 0.1)
+	return true
+
+
+func _backstep_step(delta: float) -> void:
+	backstep_left = maxf(backstep_left - delta, 0.0)
+	_step_to(position + backstep_dir * (BACKSTEP / BACKSTEP_TIME) * delta)
+	moving = true
+	var e = dash_target
+	if backstep_left > 0.0:
+		if _is_valid(e):
+			facing = position.direction_to(e.position)
+		return
+	if _is_valid(e) and _can_dash(e):
+		target = e
+		_start_dash(e)
+		main.spawn_text(position + Vector2(0, -44), "Again!", Color(1.0, 0.85, 0.4))
+	else:
+		dash_target = null
+
+
+## Light Step: a run of any length (`after` px) since his last blow makes the next one
+## hit harder (once each `cooldown` s).
+func _momentum_step() -> void:
+	if _last_pos != Vector2.INF and moving:
+		moved += minf(_last_pos.distance_to(position), 20.0)
+	_last_pos = position
+	if not momentum_ready and momentum_t <= 0.0 and moved >= float(momentum["after"]):
+		momentum_ready = true
 
 
 ## Unstoppable: the foe it was fighting has fallen, so it dashes straight on to the
@@ -3777,6 +4289,10 @@ func _defend(delta: float) -> bool:
 	if Defense.debug:
 		main.spawn_text(position + Vector2(0, -52), act + ("" if not c.has("why") else " (%s)" % c["why"]), Color(0.7, 0.9, 1.0))
 	if act == "evade":
+		if not barrage.is_empty() and barrage_t <= 0.0:
+			_start_barrage()
+		if not traps.is_empty():
+			_trap_behind()
 		evading = true
 		evade_key = key
 		evade_to = c["to"]
@@ -3973,6 +4489,8 @@ func _fall_back(delta: float) -> bool:
 ## else in reach (picked by priority), including while following a move order, or (a
 ## ranged troop) while falling back.
 func _strike_in_reach(delta: float) -> void:
+	if not blade.is_empty() and _blade_step():
+		return   # (a foe's close: the sword, not the staff)
 	if offhand_timer > 0.0:
 		offhand_timer -= delta
 		if offhand_timer <= 0.0:
@@ -4841,6 +5359,28 @@ func _draw() -> void:
 		# Shield glint on a blocked hit.
 		var k := block_flash / 0.2
 		draw_arc(facing * 10 + Vector2(0, -6), 20, facing.angle() - 1.1, facing.angle() + 1.1, 12, Color(0.8, 0.88, 1.0, k), 4.0, true)
+	if kind == "mage" and tiers.size() > 3 and tiers[3] >= 1:
+		# Mage Armor: a faint shimmer of force round her (brighter with Archmage's Blade).
+		var strong: bool = tiers[3] >= 4
+		draw_arc(Vector2(0, -8), 21.0, 0.0, TAU, 24, Color(0.75, 0.7, 1.0, (0.28 if strong else 0.16) + 0.06 * sin(anim_t * 3.0)), 2.0 if strong else 1.2, true)
+	if not blade.is_empty() and (blade_on or blade_swing > 0.0):
+		# The sword: her staff's magic drawn out into a blade, swept through the foes in front.
+		var big := int(blade["targets"]) >= 3
+		var length := 30.0 if big else 22.0
+		var k := blade_swing / BLADE_SWING
+		var aim := facing.rotated(lerpf(-0.9, 0.9, 1.0 - k) * flip if k > 0.0 else 0.0)
+		var hilt := Vector2(0, -12) + facing * 6.0
+		var col: Color = _staff_color() if _high_paths().size() >= 2 else MAGE_ORB_COLORS[maxi(_look_path(), 3) if _look_path() < 0 else _look_path()]
+		draw_line(hilt, hilt + aim * length, Color(col, 0.35), 7.0 if big else 5.0, true)
+		draw_line(hilt, hilt + aim * length, Color(0.95, 0.95, 1.0), 2.0, true)
+		draw_line(hilt - aim.orthogonal() * 4.0, hilt + aim.orthogonal() * 4.0, Color(0.85, 0.75, 0.4), 2.0, true)
+		if k > 0.0:
+			draw_arc(hilt, length, aim.angle() - 0.9 * flip, aim.angle(), 10, Color(col, 0.5 * k), 3.0, true)
+	if shield_hp > 0.0:
+		# A Healer's ward: a golden bubble, fading as it's worn down.
+		var left := clampf(shield_hp / maxf(shield_max, 1.0), 0.2, 1.0)
+		draw_arc(Vector2(0, -6), 25.0, 0.0, TAU, 28, Color(1.0, 0.88, 0.45, 0.55 * left + 0.1 * sin(anim_t * 6.0)), 2.5, true)
+		draw_arc(Vector2(0, -6), 22.0, -2.4, -0.7, 8, Color(1.0, 0.97, 0.8, 0.5 * left), 1.5, true)
 	if brace_key != 0:
 		# Braced for a warned blow: shield up toward it, feet set.
 		var pulse := 0.65 + 0.25 * sin(anim_t * 14.0)

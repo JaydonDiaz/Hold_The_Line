@@ -3,6 +3,7 @@ extends Node2D
 ## the castle wall; a troop that's gone down or got clear when it lands isn't hit.
 
 var main
+var shooter = null   # the enemy that loosed it (a ward throws some back at it)
 var target = null          # the troop it's aimed at, or null for the castle
 var target_pos := Vector2.ZERO
 var speed := 360.0
@@ -35,12 +36,16 @@ func _land() -> void:
 		main.dmg_src = "arrows"
 		for w in main.warriors_near(position, splash + 20.0):
 			if w.is_active() and not w.sheltered() and w.position.distance_to(position) <= splash + w.RADIUS:
+				main.hurt_by = shooter if is_instance_valid(shooter) else null
 				w.take_damage(damage)
+				main.hurt_by = null
 		main.dmg_src = ""
 		main.spawn_burst(position, splash, Color(0.6, 1.0, 0.5) if style == "flask" else Color(0.75, 0.5, 1.0))
 	elif is_instance_valid(target) and target.is_active() and target.position.distance_to(position) <= target.RADIUS + 14.0:
 		main.dmg_src = "arrows"
+		main.hurt_by = shooter if is_instance_valid(shooter) else null
 		target.take_damage(damage)
+		main.hurt_by = null
 		main.dmg_src = ""
 		if not goo.is_empty() and target.is_active():
 			target.apply_goo(float(goo[0]), float(goo[1]))

@@ -162,6 +162,16 @@ var wall_commit := 0.0      # seconds left hacking at a wall it got stuck on bef
 var flash := 0.0
 var lunge := 0.0
 var lunge_dir := Vector2.DOWN
+# Shattercraft (a Frost Witch's): Brittle, broken by the next hit for bonus ice damage; one
+# killed while Brittle (or just after it broke) shatters (main.shatter).
+var brittle_t := 0.0        # > 0: Brittle
+var brittle_cd := 0.0       # > 0: broken a moment ago; can't be made Brittle again yet
+var brittle_fx := {}        # time, bonus, every
+var shatter_fx := {}        # damage, radius, window, spread ({}: it doesn't shatter)
+var brittle_gen := 0        # 0: marked by a Witch; 1: by a shatter (its own shatter spreads nothing)
+var brittle_by := ""        # campaign XP: whose it is
+var broke_t := 0.0          # > 0: its Brittle just broke; killed now, it still shatters
+var _breaking := false
 var windup_key := 0         # a fresh number each time it starts a warned blow (troops decide about each once: see defense.gd)
 var bob := 0.0
 var sieging := false        # reached the castle and attacking it
@@ -334,6 +344,10 @@ func _process(delta: float) -> void:
 	cd_timer = maxf(cd_timer - delta, 0.0)
 	root_timer = maxf(root_timer - delta, 0.0)
 	confuse_timer = maxf(confuse_timer - delta, 0.0)
+	if brittle_t > 0.0 or brittle_cd > 0.0 or broke_t > 0.0:
+		brittle_t = maxf(brittle_t - delta, 0.0)
+		brittle_cd = maxf(brittle_cd - delta, 0.0)
+		broke_t = maxf(broke_t - delta, 0.0)
 	if discord_timer > 0.0:
 		discord_timer -= delta
 		if discord_timer <= 0.0:
@@ -521,7 +535,7 @@ func _process(delta: float) -> void:
 			cd_timer = _attack_cd()
 			lunge = 0.15
 			if cleave.is_empty():
-				blocker.take_damage(damage * _hit_mult())
+				_hurt(blocker, damage * _hit_mult())
 				if not goo.is_empty() and blocker.is_active():
 					blocker.apply_goo(goo["slow"], goo["time"])
 			else:
@@ -823,7 +837,7 @@ func _cast_release() -> void:
 			var dmg: float = float(sp["damage"]) * _hit_mult()
 			while cur != null and struck.size() <= int(sp["jumps"]):
 				struck[cur] = true
-				cur.take_damage(dmg)
+				_hurt(cur, dmg)
 				main.spawn_beam(from, cur.position + Vector2(0, -10), Color(0.75, 0.9, 1.0), 3.0)
 				main.spawn_burst(cur.position + Vector2(0, -10), 10.0, Color(0.85, 0.95, 1.0))
 				from = cur.position + Vector2(0, -10)
@@ -850,7 +864,7 @@ func _cast_release() -> void:
 				_fizzle()
 				return
 			var dmg := minf(float(sp["damage"]) * _hit_mult(), t.max_hp * float(sp["cap"]))   # (hard, but never a sure kill outright)
-			t.take_damage(dmg)
+			_hurt(t, dmg)
 			last_arcane = t
 			main.spawn_beam(position + Vector2(10.0 * flip, -radius * 2.2), t.position + Vector2(0, -10), Color(0.8, 0.4, 1.0), 9.0)
 			main.spawn_burst(t.position + Vector2(0, -10), 22.0, Color(0.85, 0.5, 1.0))
@@ -879,7 +893,7 @@ func _flame(delta: float) -> void:
 				continue
 			var off: Vector2 = w.position - position
 			if off.length() - w.RADIUS <= reach and absf(flame_dir.angle_to(off)) <= float(sp["arc"]):
-				w.take_damage(float(sp["dps"]) * tick * _hit_mult())
+				_hurt(w, float(sp["dps"]) * tick * _hit_mult())
 	queue_redraw()
 	if flame_left <= 0.0:
 		cast_state = ""
@@ -1007,6 +1021,7 @@ func _mend_update(delta: float) -> void:
 ## One more shot at `mark` (a volley's extra arrows).
 func _loose(mark, aim: Vector2) -> void:
 	var shot := EnemyShot.new()
+	shot.shooter = self
 	shot.style = shot_style
 	shot.splash = shot_splash
 	shot.goo = shot_goo
@@ -1039,7 +1054,7 @@ func _slam_lands() -> void:
 		if off.length() > 0.01 and absf(lunge_dir.angle_to(off)) > half:
 			continue
 		main.heavy_key = windup_key   # (a warned blow: see defense.gd)
-		w.take_damage(damage * _hit_mult())
+		_hurt(w, damage * _hit_mult())
 		if w.is_active():
 			w.shove((off.normalized() if off.length() > 0.01 else lunge_dir) * float(slam["push"]), float(slam["stun"]))
 		main.heavy_key = 0
@@ -1071,7 +1086,7 @@ func _strafe_update(delta: float) -> bool:
 			if w.is_active() and not w.sheltered() and not strafe_hit.has(w) and position.distance_to(w.position) <= wd + w.RADIUS:
 				strafe_hit[w] = true
 				main.heavy_key = windup_key
-				w.take_damage(float(strafe["damage"]) * _hit_mult())
+				_hurt(w, float(strafe["damage"]) * _hit_mult())
 				main.heavy_key = 0
 		strafe_fx -= delta
 		if strafe_fx <= 0.0:
@@ -1119,6 +1134,14 @@ func danger_zones() -> Array:
 	if charge_warn > 0.0:   # (warned charges only: an unwarned rush, the Ash Marshal's, can't be seen coming)
 		out.append({"a": position, "b": position + charge_dir * charge_len, "r": radius})
 	return out
+
+
+## A blow (or spell) of its own landing on a troop: who struck it is known while it lands
+## (a Healer's ward throws some back at it).
+func _hurt(w, amount: float) -> void:
+	main.hurt_by = self
+	w.take_damage(amount)
+	main.hurt_by = null
 
 
 func _new_windup() -> void:
@@ -1192,7 +1215,7 @@ func _stomp_lands() -> void:
 	lunge = 0.15
 	for w in main.get_warriors().filter(func(x): return x.is_active() and position.distance_to(x.position) <= r + x.RADIUS):
 		main.heavy_key = windup_key
-		w.take_damage(stomp["damage"])
+		_hurt(w, stomp["damage"])
 		var away: Vector2 = position.direction_to(w.position) if w.position != position else Vector2.DOWN
 		w.shove(away * stomp.get("push", 0.0), stomp.get("stun", 0.0))
 		main.heavy_key = 0
@@ -1339,7 +1362,7 @@ func _charge_update(delta: float) -> bool:
 			if w.is_active() and not w.sheltered() and not charge_hit.has(w) and position.distance_to(w.position) <= radius + w.RADIUS + 4.0:
 				charge_hit.append(w)
 				main.heavy_key = windup_key if float(rush.get("warn", 0.0)) > 0.0 else 0
-				w.take_damage(float(rush["damage"]))
+				_hurt(w, float(rush["damage"]))
 				var side := Vector2(-charge_dir.y, charge_dir.x)
 				w.shove((side if side.dot(w.position - position) >= 0.0 else -side) * float(rush["push"]), float(rush["stun"]))
 				main.heavy_key = 0
@@ -1407,7 +1430,7 @@ func _cleave() -> void:
 			continue
 		if off.length() > 0.01 and absf(lunge_dir.angle_to(off)) > half:
 			continue
-		w.take_damage(damage * _hit_mult())
+		_hurt(w, damage * _hit_mult())
 	var tip := position + lunge_dir * (radius + reach * 0.6)
 	main.spawn_burst(tip, reach + 10.0, Color(1.0, 0.85, 0.6))
 
@@ -1435,7 +1458,7 @@ func _breathe(delta: float) -> void:
 	var at: Vector2 = best.position
 	for w in main.get_warriors():
 		if w.is_active() and not w.sheltered() and w.position.distance_to(at) <= breath["radius"] + w.RADIUS:
-			w.take_damage(breath["damage"] * _hit_mult())
+			_hurt(w, breath["damage"] * _hit_mult())
 	lunge_dir = position.direction_to(at)
 	lunge = 0.15
 	main.spawn_flame(position + Vector2(0, -FLY_HEIGHT), at)
@@ -1504,6 +1527,7 @@ func _shoot_from_range() -> bool:
 		if ranged.has("pierce") and mark != null and mark != goal:
 			# A Boltflinger's bolt: straight down the line, through whoever's in it.
 			var bolt := EnemyBolt.new()
+			bolt.shooter = self
 			bolt.main = main
 			bolt.position = position + Vector2(8.0 * flip, -radius * 1.0)
 			bolt.dir = bolt.position.direction_to(aim + Vector2(0, -6))
@@ -1525,6 +1549,7 @@ func _shoot_from_range() -> bool:
 			for k in mini(volley - 1, others.size()):
 				_loose(others[k], others[k].position)
 		var shot := EnemyShot.new()
+		shot.shooter = self
 		shot.style = shot_style
 		shot.splash = shot_splash
 		shot.goo = shot_goo
@@ -1630,7 +1655,7 @@ func _explode() -> void:
 		if w.is_active() and not w.sheltered() and position.distance_to(w.position) <= r + w.RADIUS:
 			var was_up: bool = w.is_active()
 			main.heavy_key = windup_key
-			w.take_damage(bomb["wall"] if w.data.get("emplacement", false) else bomb["units"])   # (an emplacement takes it like a wall)
+			_hurt(w, bomb["wall"] if w.data.get("emplacement", false) else bomb["units"])   # (an emplacement takes it like a wall)
 			main.heavy_key = 0
 			if was_up and not w.is_active() and w.data.get("emplacement", false):
 				main.sap_wrecks.append([w.kind, w.spent])   # (for the balance bots: what Sappers cost the player)
@@ -1887,9 +1912,24 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 		if school == ICE:
 			amount *= ICE_BONUS
 			ice_over()
+	var breaks := brittle_t > 0.0 and amount > 0.0 and show_hit and not _breaking
+	if breaks:
+		brittle_t = 0.0   # (the next real hit, anyone's, breaks it: damage over time doesn't)
+		brittle_cd = float(brittle_fx.get("every", 2.0))
+		broke_t = float(shatter_fx.get("window", 1.0))
 	if main.campaign:
 		main.earn_xp(main.credit, minf(maxf(hp - hp_floor, 0.0), amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))))
 	hp -= amount * (1.0 + vuln + corrode + (confuse_vuln if confuse_timer > 0.0 else 0.0))
+	if breaks and hp > 0.0:
+		var by: String = main.credit
+		main.credit = brittle_by
+		_breaking = true
+		take_damage(float(brittle_fx.get("bonus", 0.0)), false, ICE)
+		_breaking = false
+		main.credit = by
+		main.spawn_burst(position + Vector2(0, -radius * 0.6), 12.0, Color(0.8, 0.97, 1.0))
+		if dead:
+			return
 	if show_hit:
 		flash = 0.08
 	if hp_floor > 0.0 and hp < hp_floor:
@@ -1908,8 +1948,24 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 		return
 	if hp <= 0.0:
 		dead = true
+		if not shatter_fx.is_empty() and (brittle_t > 0.0 or broke_t > 0.0 or _breaking):
+			main.shatter.call_deferred(position, shatter_fx, brittle_fx, brittle_gen if main.shatter_depth == 0 else 1, brittle_by)
 		died.emit(self)
 		queue_free()
+
+
+## Brittle (a Frost Witch's Shattercraft): till the next hit on it, or `fx.time` s. Not
+## again while it's just been broken (bonus once per `fx.every` s).
+func apply_brittle(fx: Dictionary, shat: Dictionary, gen: int, by: String) -> void:
+	if dead or brittle_cd > 0.0 or fx.is_empty():
+		return
+	if brittle_t > 0.0 and gen > brittle_gen:
+		return   # (a Witch's own mark isn't swapped for a shatter's)
+	brittle_t = float(fx["time"])
+	brittle_fx = fx
+	shatter_fx = shat
+	brittle_gen = gen
+	brittle_by = by
 
 
 ## Burning keeps the strongest burn and refreshes its duration.
@@ -2220,6 +2276,13 @@ func _draw() -> void:
 		for i in 5:
 			var ang := -PI * 0.9 + i * PI * 0.45
 			draw_line(c, c + Vector2.from_angle(ang) * Vector2(size.x * 0.32, size.y * 0.28), Color(0.95, 1.0, 1.0, 0.8 * a), 1.5, true)
+	if brittle_t > 0.0:
+		# Brittle: a few pale ice crystals clinging to it, glinting.
+		var glint := 0.7 + 0.3 * sin(brittle_t * 9.0)
+		for i in 3:
+			var at := Vector2((i - 1) * size.x * 0.28, feet - size.y * (0.35 + 0.22 * (i % 2)))
+			var col := Color(0.82, 0.97, 1.0, 0.85 * glint)
+			draw_colored_polygon(PackedVector2Array([at + Vector2(0, -5), at + Vector2(2.5, 0), at + Vector2(0, 4), at + Vector2(-2.5, 0)]), col)
 	if not pack.is_empty() and pack_n > 0 and not flying:
 		# Bold in a pack: a war-paint pip over its head for each of its own beside it.
 		for i in pack_n:

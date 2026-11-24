@@ -42,7 +42,9 @@ var seek := false    # arrows: finds a new target when its own falls, and after 
 var burn := []       # [dps, seconds]: sets what it hits burning
 var magnet := {}     # mage Storm: radius, pull. Pulls charged enemies in, then charges what it hits
 var echo := {}       # mage Arcane: damage share, radius. Everything hit bursts again
-var decay := {}      # mage Necromancy: dps, duration
+var decay := {}      # (rot: no longer given by any path)
+var brittle := {}    # Frost Witch Shattercraft: makes what it hits Brittle (time, bonus, every)...
+var shatter := {}    # ...and how a Brittle foe shatters if it's killed (damage, radius, window, spread)
 var cluster := {}    # shells: count, damage share, radius of the bomblets
 var napalm := {}     # shells: dps, duration of the burning ground left behind
 var befuddle := []   # bard notes: [chance, seconds] to confuse the target
@@ -222,6 +224,8 @@ func _after_hit(struck: Array) -> void:
 			e.charge(3.0)
 		if not befuddle.is_empty() and randf() < befuddle[0]:
 			e.apply_confuse(befuddle[1], confuse_vuln)
+		if not brittle.is_empty():
+			e.apply_brittle(brittle, shatter, 0, credit)
 	if not echo.is_empty():
 		# Arcane: each enemy struck bursts with arcane force, hurting everything around it.
 		var r: float = echo["radius"]
@@ -395,3 +399,10 @@ func _draw() -> void:
 		"frost":
 			Sprites.disc(self, Vector2.ZERO, 6, Color(color, 0.4))
 			Sprites.disc(self, Vector2.ZERO, 3, Color.WHITE)
+		"icicle":   # Razor Shards: a thin shard of ice
+			draw_colored_polygon(PackedVector2Array([Vector2(9, 0), Vector2(-6, -2.5), Vector2(-8, 0), Vector2(-6, 2.5)]), Color(0.75, 0.95, 1.0))
+			draw_line(Vector2(-6, 0), Vector2(8, 0), Color.WHITE, 1.0)
+		"spear":    # Glacial Spear: a long spear of blue ice, trailing frost
+			Sprites.disc(self, Vector2(-10, 0), 7, Color(0.6, 0.9, 1.0, 0.25))
+			draw_colored_polygon(PackedVector2Array([Vector2(16, 0), Vector2(4, -4), Vector2(-14, -2.5), Vector2(-14, 2.5), Vector2(4, 4)]), Color(0.55, 0.85, 1.0))
+			draw_colored_polygon(PackedVector2Array([Vector2(16, 0), Vector2(4, -1.5), Vector2(-12, 0), Vector2(4, 1.5)]), Color(0.92, 1.0, 1.0))
