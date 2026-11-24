@@ -355,8 +355,8 @@ const WARRIORS := {
 	},
 	"pikeman": {
 		"name": "Pikeman", "cost": 60, "color": Color(0.55, 0.7, 0.95),
-		"hp": 90.0, "speed": 82.0,
-		"damage": 11.0, "range": 27.0, "cooldown": 0.8, "attack": "melee", "pike": true,
+		"hp": 100.0, "speed": 82.0,
+		"damage": 14.0, "range": 27.0, "cooldown": 0.8, "attack": "melee", "pike": true,
 		"desc": "A long pike: holds a position and catches what charges at him (his first thrust at a foe coming on hits 25% harder). Weaker with a foe right inside his reach.",
 		"paths": [
 			{"name": "Spearwall", "note": "Braced: standing his ground, pike levelled. Interceptions only catch foes coming at him from in front.", "tiers": [
@@ -504,7 +504,7 @@ const WARRIORS := {
 	"assassin": {
 		"name": "Assassin", "cost": 105, "color": Color(0.4, 0.75, 0.45),
 		"hp": 60.0, "speed": 112.0,
-		"damage": 12.0, "range": 8.0, "cooldown": 0.7, "attack": "melee", "priority": "valuable",
+		"damage": 12.0, "range": 8.0, "cooldown": 0.7, "attack": "melee", "priority": "valuable", "danger_mode": "fall_back",
 		"desc": "An elf of the Woodland Watch with twin daggers: fast and fragile, he goes for the dangerous ones behind the line (Mages, Boltflingers, Drummers). His first cut on a foe busy with someone else hits 25% harder.",
 		"paths": [
 			{"name": "Ambush", "note": "An opening strike needs a moment out of the fight, and a foe that isn't facing him (busy with another, or struck from behind).", "tiers": [

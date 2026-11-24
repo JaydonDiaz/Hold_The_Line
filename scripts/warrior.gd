@@ -31,6 +31,7 @@ const ESCORT_LEAD := 0.5        # ...and makes for where it'll be this many seco
 # Pikeman.
 const STEADY_REACH := 60.0       # Unbroken Line: a Pikeman this near steadies the melee allies he backs
 const HEDGE_SLACK := 12.0        # Hedge of Points: the braced thrust's sweep catches the next foe this far past his reach
+const READY_AGAIN := 0.3        # Readied Pike: a held-back thrust at a fresh foe at most this often
 const COMING_ON := 0.15         # a foe whose way is at least this much toward him is coming on (past him counts)
 const PIKE_SET := 0.3            # stood still this long: braced, pike levelled
 const PIKE_READY := 1.25         # Readied Pike: its thrust at a foe charging in (Spearwall's brace replaces it)
@@ -43,7 +44,7 @@ const OPPORTUNIST := 1.25        # its first cut on a foe busy with another...
 const OPP_AGAIN := 5.0           # ...each foe once in this long
 const REST_UNSEEN := 1.0         # Leafstep: out of the fight this long, it's quicker and harder to notice
 const SMOKE_SEEN := 40.0         # in its smoke, only a foe this close still sees it
-const SMOKE_HURT := 0.4          # Smoke Pellet: below this share of health and still being hit...
+const SMOKE_HURT := 0.55          # Smoke Pellet: below this share of health and still being hit...
 const SMOKE_NEAR := 30.0         # ...or SMOKE_CROWD foes within this gap of it
 const SMOKE_CROWD := 3
 const SMOKE_RUN := 90.0          # ...it slips this far away
@@ -165,6 +166,7 @@ var haft := {}               # Hook & Shove
 var hook := {}
 var defend := {}
 var sweep := {}
+var ready_t := 0.0           # Readied Pike: not again so soon
 var still_t := 0.0           # seconds it's stood still (braced once PIKE_SET)
 var pike_range := 0.0        # its reach before Overlapping Spears
 var pike_seen := {}          # foe id -> seconds left before it can be intercepted again
@@ -563,6 +565,8 @@ func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
 	hp = max_hp
 	if d.has("priority"):
 		priority = d["priority"]   # (an Assassin goes for the dangerous ones by default)
+	if d.has("danger_mode"):
+		danger_mode = d["danger_mode"]   # (an Assassin badly hurt slips back to be mended, rather than fight on)
 	if d.get("pike", false):
 		move_mode = "guard"   # (a Pikeman holds ground by default: he catches what comes, he doesn't chase)
 	# Units re-pick targets every 0.3s; start each at a different point in that cycle
@@ -4199,6 +4203,20 @@ func _pike_step(delta: float) -> void:
 	if phal_check <= 0.0:
 		phal_check = 0.25
 		_phalanx_check()
+	ready_t = maxf(ready_t - delta, 0.0)
+	# Readied: braced, a fresh foe coming into reach gets the point at once (the thrust he
+	# was holding back for it), whatever his last thrust was; once a foe, not too often.
+	if still_t >= PIKE_SET and ready_t <= 0.0 and cd_timer > 0.0 and is_active() and dazed <= 0.0 and garrison == null:
+		for e in main.enemies_near(position, attack_range + 40.0):
+			if e.dead or e.flying or pike_seen.has(e.get_instance_id()) or _gap_to(e) > attack_range:
+				continue
+			if not _coming_on(e) or not _in_front(e, float(brace.get("arc", 0.75))):
+				continue
+			cd_timer = 0.0
+			ready_t = READY_AGAIN
+			_set_target(e)
+			facing = position.direction_to(e.position)
+			break
 	if haft.is_empty() and hook.is_empty() and defend.is_empty() and sweep.is_empty():
 		return
 	if not is_active() or dazed > 0.0 or garrison != null:
@@ -4665,6 +4683,12 @@ func _smoke_out() -> void:
 ## High-value targets are often behind a crowd: the way in goes round its side, while it's
 ## still a way off (worked out twice a second).
 func _flank_point(e) -> Vector2:
+	if e.cast_state == "flame" or (e.cast_state == "charge" and e.cast_spell == "fire"):
+		# A Horde Mage pouring fire (or about to): round its side, out of the stream, and in
+		# once it's done, rather than walking down the flames.
+		var aim: Vector2 = e.lunge_dir if e.lunge_dir != Vector2.ZERO else e.position.direction_to(position)
+		var side: Vector2 = aim.orthogonal() * (1.0 if aim.orthogonal().dot(position - e.position) >= 0.0 else -1.0)
+		return main._clamp_post(e.position + side * FLANK_WIDE * 1.4)
 	flank_check -= get_process_delta_time()
 	if flank_check > 0.0 and flank_at != Vector2.INF:
 		return flank_at if position.distance_to(e.position) > FLANK_NEAR else e.position

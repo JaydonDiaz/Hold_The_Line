@@ -127,8 +127,8 @@ func _first_blow(e, secs := 4.0) -> float:
 func _pikeman() -> void:
 	var d: Dictionary = Data.WARRIORS["pikeman"]
 	var kn: Dictionary = Data.WARRIORS["swordsman"]
-	check(d["cost"] == 60 and d["hp"] == 90.0 and d["damage"] == 11.0 and d["cooldown"] == 0.8 and d["range"] > kn["range"] * 2.0 and d["speed"] < kn["speed"],
-			"P  the Pikeman: 60 gold, 90 health, 11 damage every 0.8s, a long reach (%.1f ft), a little slower than a Knight" % (d["range"] / 10.0))
+	check(d["cost"] == 60 and d["hp"] == 100.0 and d["damage"] == 14.0 and d["cooldown"] == 0.8 and d["range"] > kn["range"] * 2.0 and d["speed"] < kn["speed"] and d["damage"] / d["cooldown"] < kn["damage"] / kn["cooldown"] and d["hp"] < kn["hp"],
+			"P  the Pikeman: 60 gold, 100 health, 14 damage every 0.8s (less than a Knight in a brawl), a long reach (%.1f ft), a little slower" % (d["range"] / 10.0))
 	check(d["paths"].size() == 4 and d["paths"].all(func(p): return p["tiers"].size() == 4)
 			and d["paths"].map(func(p): return p["tiers"].map(func(t): return t["cost"])) == [[25, 40, 75, 140], [30, 50, 85, 150], [30, 45, 80, 145], [25, 45, 80, 145]],
 			"P  four paths of four (Spearwall, Impaler, Phalanx, Hook & Shove) at their prices")
@@ -139,14 +139,14 @@ func _pikeman() -> void:
 	p.facing = Vector2.UP
 	var g = _foe("goblin", Vector2(320, 360), 9999.0)
 	var first: float = await _first_blow(g)
-	check(absf(first - 11.0 * 1.25) < 0.6, "P  Readied Pike: his first thrust at a goblin charging in hits 25%% harder (%.1f)" % first)
+	check(absf(first - 14.0 * 1.25) < 0.6, "P  Readied Pike: his first thrust at a goblin charging in hits 25%% harder (%.1f)" % first)
 	var second: float = await _first_blow(g)
 	check(second > 0.0 and second < first * 0.95, "P  ...not the next, at a foe already on him (%.1f)" % second)
 	g.position = p.position + Vector2(0, -(p.RADIUS + g.radius + 2.0))
 	g.speed = 0.0
 	p.cd_timer = 0.0
 	var close: float = await _first_blow(g)
-	check(close > 0.0 and close < 11.0 * 0.9, "P  ...and a foe right inside his point: weaker thrusts (%.1f)" % close)
+	check(close > 0.0 and close < 14.0 * 0.9, "P  ...and a foe right inside his point: weaker thrusts (%.1f)" % close)
 	# Set Spears, Hedge of Points: two goblins charging in side by side, both in reach.
 	await _fresh()
 	var sp = await _hire("pikeman", Vector2(320, 520), [2, 0, 0, 0])
@@ -210,7 +210,7 @@ func _pikeman() -> void:
 		if dummy.hp < prev - 0.01:
 			blows.append(prev - dummy.hp)
 		prev = dummy.hp
-	var base: float = 11.0 * 1.1
+	var base: float = 14.0 * 1.1
 	var fourth: float = blows[3] if blows.size() >= 4 else 0.0
 	var want4: float = base * 1.15 * 2.5 + 40.0   # (puncture at 3 deep by then: 15%; 2% of 99999 capped at 40)
 	check(blows.size() >= 5 and blows[1] > blows[0] and absf(fourth - want4) < 1.5,
