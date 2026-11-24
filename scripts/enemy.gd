@@ -251,6 +251,8 @@ var volley := 1             # shots a loose (a corrupted Archer's Volley)
 var shot_style := "arrow"   # what its shots look like and do (arrow, orb, frost, flask, note)
 var shot_splash := 0.0
 var shot_goo := []          # [slow, seconds] a frost shot leaves on a troop
+var band = null             # the warband it marches in (warband.gd), till the band charges
+var band_k := 1.0           # ...its pace in the band (a share of its own speed)
 var goal = null             # the objective it's been sent for (mission/objective.gd), or null for the castle / bottom line
 var aggro = null            # the unit attacking it that it has turned on
 var aggro_check := randf() * 0.3   # staggered, so a crowd doesn't all look around in the same frame
@@ -504,6 +506,8 @@ func _process(delta: float) -> void:
 	elif aggro_check <= 0.0:
 		aggro_check = 0.3
 		aggro = _attacker()
+		if band != null and aggro != null and position.distance_to(aggro.position) > band.ENGAGE:
+			aggro = null   # (in its band's ranks, it doesn't break off after whoever's shooting at it from afar)
 	elif aggro != null and (not is_instance_valid(aggro) or not aggro.is_active()):
 		aggro = null
 	if goal != null and (not is_instance_valid(goal) or not goal.is_target()):
@@ -610,6 +614,9 @@ func _process(delta: float) -> void:
 		elif aggro != null:
 			# Going after the unit that's attacking it (round any terrain in the way).
 			dir = _chase_dir(aggro.position, delta)
+		elif band != null:
+			# Marching in its warband: to its place in the ranks, and on with them.
+			dir = band.steer(self, route, delta)
 		elif escort != null and is_instance_valid(escort) and not escort.dead:
 			# A Shieldbearer keeping in front of the archer, sapper or caster it's covering.
 			dir = _chase_dir(_escort_spot(), delta) if position.distance_to(_escort_spot()) > 10.0 else Vector2(0, 1)
@@ -652,6 +659,8 @@ func _attack_cd() -> float:
 
 ## How its pace is changed by its own kind about it: bolder in a pack, warier alone.
 func _pace() -> float:
+	if band != null:
+		return band_k   # (a band keeps the pace of its slowest)
 	var k := 1.0
 	if not pack.is_empty():
 		k = 1.0 + float(pack["speed"]) * pack_n if pack_n > 0 else 1.0 - float(pack["alone"])
@@ -741,7 +750,9 @@ func _roster_upkeep(delta: float) -> void:
 			queue_redraw()
 	if not shield.is_empty():
 		escort_t -= delta
-		if escort_t <= 0.0:
+		if band != null:
+			escort = null   # (in a band, its place in the front rank covers the ranks behind)
+		elif escort_t <= 0.0:
 			escort_t = 0.6
 			escort = null
 			var best := 150.0

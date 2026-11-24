@@ -95,7 +95,7 @@ func _run() -> void:
 		await _frames(3)
 		main.deploying = false
 		main.start_wave(true)
-		await _frames(60 * 12)
+		await _frames(60 * 18)   # (the first warband forms up at the top before it marches)
 		var es: Array = main.get_enemies()
 		var down: bool = es.any(func(e): return e.position.y > 300.0)
 		check(main.map_id == map and main.rules.has_castle() and not es.is_empty() and down,

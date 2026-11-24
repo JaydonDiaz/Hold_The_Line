@@ -446,11 +446,12 @@ func _process(delta: float) -> void:
 		if started:
 			rules.process(delta)
 			_check_rout(delta)
+		_bands_step(delta)
 		if not spawn_queue.is_empty():
 			spawn_timer -= delta
 			if spawn_timer <= 0.0:
 				var next: Array = spawn_queue.pop_front()
-				_spawn_enemy(next[0], next[1])
+				_spawn_enemy(next[0], next[1], null, int(next[2]) if next.size() > 2 else -1)
 				spawn_timer = spawn_interval
 		if freeplay:
 			# No wave rounds in freeplay: "active" just means enemies are around.
@@ -831,7 +832,7 @@ func start_wave(force := false) -> void:
 	boss_spawned = false
 	gates_warned = false
 	var level := wave_level(wave)
-	spawn_queue = _build_wave(wave).map(func(k): return [k, level])
+	spawn_queue = _banded(_build_wave(wave), level)
 	spawn_interval = maxf(0.35, 0.9 - level * 0.03)
 	spawn_timer = 0.0
 	if scripted():
@@ -954,7 +955,56 @@ var _foes_seen := {}
 var boss_down := ""   # "<a boss> is defeated!" until the wave it fell in is over (its message leads the wave's)
 
 
-func _spawn_enemy(kind: String, level: int, at = null) -> void:
+## A wave's foes as spawn entries [kind, level, warband (-1: none)]: cut into warbands
+## (warband.gd) that come on and form up together, each squad a band of its own.
+func _banded(kinds: Array, level: int) -> Array:
+	var ids := Warband.cut(kinds, wave_squads.map(func(q): return Data.SQUADS[q]["kinds"]), next_band) if formations_on and not tutorial else []
+	var out := []
+	for i in kinds.size():
+		var b: int = ids[i] if not ids.is_empty() else -1
+		out.append([kinds[i], level, b])
+		if b >= 0:
+			band_due[b] = int(band_due.get(b, 0)) + 1
+			next_band = maxi(next_band, b + 1)
+	return out
+
+
+const Warband = preload("res://scripts/warband.gd")
+var formations_on := true   # the horde marches in warbands (off in the Tutorial)
+var bands := {}             # warband id -> the band (while it forms up and advances)
+var band_due := {}          # warband id -> how many of it are still to come on
+var next_band := 0
+
+
+## The warbands forming up and marching (each charges, and is done, once it meets you).
+func _bands_step(delta: float) -> void:
+	for id in bands.keys():
+		var b = bands[id]
+		b.update(delta)
+		if b.done():
+			bands.erase(id)
+
+
+## Where a new warband comes on: a few spots tried (along the map's lanes, or anywhere
+## along the top), the one furthest from the bands still forming up.
+func _band_entry(r: float) -> Vector2:
+	var best := Vector2.INF
+	var best_d := -1.0
+	for k in 4:
+		var p := paths.lane_spawn(r + 4.0)
+		if p == Vector2.INF:
+			p = Vector2(randf_range(80.0, FIELD_W - 80.0), -r)
+		var d := INF
+		for id in bands:
+			if bands[id].state == "muster":
+				d = minf(d, absf(bands[id].entry.x - p.x))
+		if d > best_d:
+			best_d = d
+			best = p
+	return best
+
+
+func _spawn_enemy(kind: String, level: int, at = null, band_id := -1) -> void:
 	if FOE_HINTS.has(kind) and not _foes_seen.has(kind) and not tutorial:
 		_foes_seen[kind] = true
 		hud.show_foe(kind, FOE_HINTS[kind][0], FOE_HINTS[kind][1])
@@ -964,6 +1014,20 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 		var sp: Vector2 = rules.spawn_point(r)   # (a battle's own sally parties, from the sides)
 		if sp != Vector2.INF:
 			at = sp
+	var band = null
+	if band_id >= 0:
+		band_due[band_id] = int(band_due.get(band_id, 1)) - 1
+		if at == null and not tutorial:
+			band = bands.get(band_id)
+			if band == null and band_due[band_id] >= 0:
+				band = Warband.new(self, band_id, band_due[band_id] + 1, _band_entry(r))
+				bands[band_id] = band
+			if band != null:
+				at = band.spawn_spot(r)
+		elif bands.has(band_id):
+			bands[band_id].skip()
+		if band_due[band_id] <= 0:
+			band_due.erase(band_id)
 	if at == null:
 		var lane := paths.lane_spawn(r + 4.0)
 		if lane != Vector2.INF and not d.get("boss", false):
@@ -982,6 +1046,11 @@ func _spawn_enemy(kind: String, level: int, at = null) -> void:
 	e.reached_castle.connect(_on_enemy_at_castle)
 	e.goal = rules.enemy_goal(e)   # an objective the rules send it for (null: the castle, as ever)
 	enemy_layer.add_child(e)
+	if band != null:
+		if e.goal == null:
+			band.join(e)
+		else:
+			band.skip()   # (sent after something of its own)
 	if e.boss:
 		hud.show_message("%s approaches!" % d.get("name", kind.capitalize()))
 
@@ -1812,7 +1881,7 @@ func spawn_freeplay_wave() -> void:
 		return
 	if dragging != null:
 		_end_drag()
-	spawn_queue.append_array(_build_wave(freeplay_level).map(func(k): return [k, freeplay_level]))
+	spawn_queue.append_array(_banded(_build_wave(freeplay_level), freeplay_level))
 	spawn_interval = maxf(0.35, 0.9 - freeplay_level * 0.03)
 	hud.show_message("Wave %d incoming" % freeplay_level)
 
@@ -1825,6 +1894,8 @@ func spawn_single(kind: String) -> void:
 
 func clear_enemies() -> void:
 	spawn_queue.clear()
+	bands.clear()
+	band_due.clear()
 	for e in get_enemies():
 		e.dead = true
 		e.queue_free()
