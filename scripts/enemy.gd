@@ -162,6 +162,7 @@ var wall_commit := 0.0      # seconds left hacking at a wall it got stuck on bef
 var flash := 0.0
 var lunge := 0.0
 var lunge_dir := Vector2.DOWN
+var windup_key := 0         # a fresh number each time it starts a warned blow (troops decide about each once: see defense.gd)
 var bob := 0.0
 var sieging := false        # reached the castle and attacking it
 var walking := false        # moved this frame (for the waddle)
@@ -502,6 +503,7 @@ func _process(delta: float) -> void:
 		# At the castle, or up against a wall in the way: light the bomb. At an emplacement
 		# it plants the charge first, so there's a moment to stop it.
 		fuse = PLANT if at_sap and not (sap_target is BarricadeScript) and wall == null and not at_castle else FUSE
+		_new_windup()
 		main.spawn_text(position + Vector2(0, -30), "Fsss!", Color(1, 0.6, 0.2))
 		main.sfx("fire", 1.7)   # (the fuse hissing: get it before it goes)
 		queue_redraw()
@@ -514,6 +516,7 @@ func _process(delta: float) -> void:
 		if cd_timer <= 0.0 and not slam.is_empty():
 			cd_timer = _attack_cd()
 			slam_wind = float(slam["windup"])   # (hauled back first: the warning)
+			_new_windup()
 		elif cd_timer <= 0.0:
 			cd_timer = _attack_cd()
 			lunge = 0.15
@@ -1035,9 +1038,11 @@ func _slam_lands() -> void:
 			continue
 		if off.length() > 0.01 and absf(lunge_dir.angle_to(off)) > half:
 			continue
+		main.heavy_key = windup_key   # (a warned blow: see defense.gd)
 		w.take_damage(damage * _hit_mult())
 		if w.is_active():
 			w.shove((off.normalized() if off.length() > 0.01 else lunge_dir) * float(slam["push"]), float(slam["stun"]))
+		main.heavy_key = 0
 	var tip := position + lunge_dir * (radius + reach * 0.6)
 	main.spawn_burst(tip, reach + 8.0, Color(0.75, 0.6, 0.4))
 	main.sfx("stomp", 1.4 if radius < 22.0 else 1.15)
@@ -1065,7 +1070,9 @@ func _strafe_update(delta: float) -> bool:
 		for w in main.warriors_near(position, wd + 30.0):
 			if w.is_active() and not w.sheltered() and not strafe_hit.has(w) and position.distance_to(w.position) <= wd + w.RADIUS:
 				strafe_hit[w] = true
+				main.heavy_key = windup_key
 				w.take_damage(float(strafe["damage"]) * _hit_mult())
+				main.heavy_key = 0
 		strafe_fx -= delta
 		if strafe_fx <= 0.0:
 			strafe_fx = 0.07
@@ -1091,6 +1098,7 @@ func _strafe_update(delta: float) -> bool:
 	var dir2 := position.direction_to(best.position) if best.position != position else Vector2.DOWN
 	strafe_to = (position + dir2 * float(strafe["length"])).clamp(Vector2(radius, 0.0), Vector2(main.FIELD_W - radius, main.CASTLE_Y - 60.0))
 	strafe_warn = float(strafe["warn"])
+	_new_windup()
 	lunge_dir = dir2
 	main.spawn_text(position + Vector2(0, -50), "!", Color(1, 0.45, 0.2))
 	return true
@@ -1110,6 +1118,37 @@ func danger_zones() -> Array:
 		out.append({"a": strafe_from, "b": strafe_to, "r": float(strafe["width"])})
 	if charge_warn > 0.0:   # (warned charges only: an unwarned rush, the Ash Marshal's, can't be seen coming)
 		out.append({"a": position, "b": position + charge_dir * charge_len, "r": radius})
+	return out
+
+
+func _new_windup() -> void:
+	windup_key = hash([get_instance_id(), Engine.get_process_frames(), randi()])
+
+
+## Its warned blows on their way, as defense.gd reads them (see Defense: "The blows"). A
+## blow held up while it's frozen or stunned lands that much later.
+func threats() -> Array:
+	var out := []
+	var held := maxf(freeze_timer, stun_timer)
+	if fuse >= 0.0 and not bomb.is_empty():
+		out.append({"key": windup_key, "kind": "fuse", "src": self, "t": fuse, "c": position, "r": float(bomb["radius"]),
+				"dmg": float(bomb["units"]), "push": 0.0, "stun": 0.0})
+	if stomp_wind > 0.0:
+		out.append({"key": windup_key, "kind": "stomp", "src": self, "t": stomp_wind + held, "c": position, "r": float(stomp["radius"]),
+				"dmg": float(stomp["damage"]), "push": float(stomp.get("push", 0.0)), "stun": float(stomp.get("stun", 0.0))})
+	if slam_wind > 0.0:
+		out.append({"key": windup_key, "kind": "slam", "src": self, "t": slam_wind + held, "o": position, "dir": lunge_dir,
+				"half": float(slam["arc"]) / 2.0, "reach": float(slam["reach"]), "body": radius,
+				"dmg": damage * _hit_mult(), "push": float(slam["push"]), "stun": float(slam["stun"])})
+	if strafe_warn > 0.0 or strafe_left > 0.0:
+		out.append({"key": windup_key, "kind": "strafe", "src": self, "t": strafe_warn + held, "a": strafe_from if strafe_warn > 0.0 else position,
+				"b": strafe_to, "r": float(strafe["width"]), "speed": float(strafe["speed"]),
+				"dmg": float(strafe["damage"]) * _hit_mult(), "push": 0.0, "stun": 0.0})
+	if charge_warn > 0.0 or (charging > 0.0 and float(rush.get("warn", 0.0)) > 0.0):   # (warned charges only: an unwarned rush can't be seen coming)
+		var a := position
+		var b := position + charge_dir * (charge_len if charge_warn > 0.0 else charging * float(rush["speed"]))
+		out.append({"key": windup_key, "kind": "charge", "src": self, "t": charge_warn + held, "a": a, "b": b, "r": radius + 4.0,
+				"speed": float(rush["speed"]), "dmg": float(rush["damage"]), "push": float(rush["push"]), "stun": float(rush["stun"])})
 	return out
 
 
@@ -1141,6 +1180,7 @@ func _boss_update(delta: float) -> void:
 		if not near0.is_empty() or not walls0.is_empty():
 			stomp_timer = stomp["cooldown"]
 			stomp_wind = STOMP_WARN   # (the warning first: quick troops can get clear)
+			_new_windup()
 			main.spawn_text(position + Vector2(0, -70), "!", Color(1, 0.4, 0.3))
 	_boss_rest(delta)
 
@@ -1151,9 +1191,11 @@ func _stomp_lands() -> void:
 	main.sfx("stomp")
 	lunge = 0.15
 	for w in main.get_warriors().filter(func(x): return x.is_active() and position.distance_to(x.position) <= r + x.RADIUS):
+		main.heavy_key = windup_key
 		w.take_damage(stomp["damage"])
 		var away: Vector2 = position.direction_to(w.position) if w.position != position else Vector2.DOWN
 		w.shove(away * stomp.get("push", 0.0), stomp.get("stun", 0.0))
+		main.heavy_key = 0
 	for b in main.get_barricades().filter(func(x): return x.is_active() and x.gap_from(position) <= r):
 		b.take_damage(stomp["damage"] * 3.0)
 	main.spawn_burst(position + Vector2(0, radius), r, Color(0.65, 0.5, 0.3))
@@ -1296,9 +1338,11 @@ func _charge_update(delta: float) -> bool:
 		for w in main.get_warriors():
 			if w.is_active() and not w.sheltered() and not charge_hit.has(w) and position.distance_to(w.position) <= radius + w.RADIUS + 4.0:
 				charge_hit.append(w)
+				main.heavy_key = windup_key if float(rush.get("warn", 0.0)) > 0.0 else 0
 				w.take_damage(float(rush["damage"]))
 				var side := Vector2(-charge_dir.y, charge_dir.x)
 				w.shove((side if side.dot(w.position - position) >= 0.0 else -side) * float(rush["push"]), float(rush["stun"]))
+				main.heavy_key = 0
 		return charging > 0.0
 	charge_timer -= delta
 	if charge_timer > 0.0 or position.y < 40.0 or stun_timer > 0.0 or freeze_timer > 0.0:
@@ -1324,6 +1368,7 @@ func _charge_update(delta: float) -> bool:
 	lunge_dir = charge_dir
 	if float(rush.get("warn", 0.0)) > 0.0:
 		charge_warn = float(rush["warn"])   # (its line on the ground first: time to get out of the way)
+		_new_windup()
 		main.spawn_text(position + Vector2(0, -70), "!", Color(1, 0.4, 0.3))
 		return true
 	_charge_go()
@@ -1584,7 +1629,9 @@ func _explode() -> void:
 	for w in main.get_warriors():
 		if w.is_active() and not w.sheltered() and position.distance_to(w.position) <= r + w.RADIUS:
 			var was_up: bool = w.is_active()
+			main.heavy_key = windup_key
 			w.take_damage(bomb["wall"] if w.data.get("emplacement", false) else bomb["units"])   # (an emplacement takes it like a wall)
+			main.heavy_key = 0
 			if was_up and not w.is_active() and w.data.get("emplacement", false):
 				main.sap_wrecks.append([w.kind, w.spent])   # (for the balance bots: what Sappers cost the player)
 	if position.y + r * 0.5 >= main.CASTLE_Y:

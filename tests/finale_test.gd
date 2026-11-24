@@ -170,7 +170,7 @@ func _slam() -> void:
 	var stay = _unit("swordsman", k.position + Vector2(-40, 60))
 	stay.move_mode = "hold"
 	stay.dazed = 99.0   # (stunned: it can't get out)
-	var dodge = _unit("swordsman", k.position + Vector2(40, 60))
+	var dodge = _unit("martial", k.position + Vector2(40, 60))   # (quick on his feet: a Knight would brace for it, see defense_test)
 	var hp_s: float = stay.hp
 	var hp_d: float = dodge.hp
 	var warned := false
@@ -180,9 +180,13 @@ func _slam() -> void:
 			warned = true
 			break
 	check(warned and stay.hp == hp_s, "S  his stomp shows its ring on the ground first (nobody's hit yet)")
-	await _frames(70)
+	var at_landing := INF
+	for i in 70:
+		await process_frame
+		if k.stomp_wind <= 0.0 and at_landing == INF:
+			at_landing = dodge.position.distance_to(k.position)   # (where it stood as the stomp landed: after, it's back at him)
 	check(stay.hp < hp_s and dodge.hp == hp_d, "S  ...then lands on whoever's still in it, not on the troop that got clear")
-	check(dodge.position.distance_to(k.position) > float(k.stomp["radius"]), "S  ...the troop that could move got out of the ring by itself")
+	check(at_landing > float(k.stomp["radius"]), "S  ...a quick troop free to move got out of the ring by itself (%.0fpx out as it landed)" % at_landing)
 
 
 func _unit(kind: String, at: Vector2):

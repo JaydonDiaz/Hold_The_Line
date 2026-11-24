@@ -8,6 +8,7 @@ const Projectile = preload("res://scripts/projectile.gd")
 const Trap = preload("res://scripts/trap.gd")
 const Sprites = preload("res://scripts/sprites.gd")
 const Zone = preload("res://scripts/zone.gd")
+const Defense = preload("res://scripts/defense.gd")
 const MAX_TIER := 4
 const MAX_UPGRADES := 6   # upgrades a unit can have in all, spread over its four paths however you like
 const PATH_COLORS := [Color(1.0, 0.6, 0.3), Color(0.45, 0.8, 1.0), Color(0.7, 1.0, 0.45), Color(0.9, 0.55, 1.0)]
@@ -1350,13 +1351,20 @@ func _extra_stats() -> String:
 func take_damage(amount: float) -> void:
 	if not is_active():
 		return
-	if evade > 0.0 and randf() < evade:
+	var heavy: int = main.heavy_key
+	if heavy != 0:
+		Defense.note(self, "hit_brace" if brace_key == heavy else "hit_" + String(def_seen.get(heavy, "unaware")))
+	# Iron Will / Afterimage: a chance at any blow, but not twice over (a warned blow it
+	# already tried to get clear of and was caught by anyway lands).
+	if evade > 0.0 and not (heavy != 0 and def_seen.get(heavy, "") == "evade") and randf() < evade:
 		main.spawn_text(position + Vector2(0, -40), "Dodge", Color(0.85, 0.95, 1.0))
 		return
 	if block > 0.0 and randf() < block:
 		main.spawn_text(position + Vector2(0, -40), "Block", Color(0.75, 0.82, 1.0))
 		block_flash = 0.2
 		return
+	if heavy != 0 and brace_key == heavy:
+		amount *= 1.0 - Defense.BRACE_DAMAGE   # (braced for it)
 	if kind == "tower":
 		main.earn_xp("tower", minf(hp, amount * (1.0 - armor)), "soak")   # standing up to it shields its crew: it trains like a wall
 	hp -= amount * (1.0 - armor) * (1.0 - buff["defense"])
@@ -1474,6 +1482,11 @@ func _process(delta: float) -> void:
 	if call_help and in_danger() and not summoned:
 		main.call_for_help(self)
 	if _off_the_ice(delta):
+		_separate()
+		return
+	if _defend(delta):
+		if absf(facing.x) > 0.2:
+			flip = signf(facing.x)
 		_separate()
 		return
 	if _dodge(delta):
@@ -1858,6 +1871,9 @@ func _teleport_home() -> void:
 func shove(push: Vector2, stun_time: float) -> void:
 	if not is_active():
 		return
+	if main.heavy_key != 0 and brace_key == main.heavy_key:
+		push *= Defense.BRACE_PUSH   # (braced: it gives less ground)
+		stun_time *= Defense.BRACE_STUN
 	dazed = maxf(dazed, stun_time)
 	if not is_emplacement() and push != Vector2.ZERO:
 		shove_left = 0.2
@@ -3690,6 +3706,121 @@ func in_danger() -> bool:
 ## is), till it's mended or no enemy has come near for a moment. On the way a Healer keeps
 ## mending whoever's in reach (itself too) and a ranged troop keeps shooting; a melee troop
 ## just runs. Returns whether it's falling back this frame (it does nothing else then).
+## An enemy's warned blow coming (main.threats()): noticed a moment after it's standing
+## under it, then got clear of, braced for, or taken (Defense.choose). True while it's
+## getting clear or bracing (it does nothing else then).
+func _defend(delta: float) -> bool:
+	def_cd = maxf(def_cd - delta, 0.0)
+	var all: Array = main.threats()
+	if all.is_empty():
+		if evading:
+			_end_evade()
+		react_key = 0
+		brace_key = 0
+		if not def_seen.is_empty():
+			def_seen.clear()
+		return false
+	if not reacts or is_emplacement() or sheltered() or wall_guard or lift > 0.0 or held:
+		return false
+	if def_seen.size() > 40:
+		for k in def_seen.keys():
+			if not all.any(func(th): return th["key"] == k or th["key"] == -k):
+				def_seen.erase(k)
+	var under := []
+	var soon := INF
+	var first = null   # (the soonest it hasn't decided about yet)
+	for th in all:
+		if Defense.hits(th, position, RADIUS, 4.0):
+			under.append(th)
+			var t := Defense.time_to(th, position)
+			if t < soon and not def_seen.has(th["key"]):
+				soon = t
+				first = th
+	if evading:
+		evade_t -= delta
+		var live: bool = all.any(func(th): return th["key"] == evade_key)
+		var d := position.distance_to(evade_to)
+		if (not live and under.is_empty()) or evade_t <= 0.0:
+			_end_evade()
+		elif d < 3.0:
+			return true   # (clear: it waits there for the blow to land, rather than walk back into it)
+		else:
+			facing = position.direction_to(evade_to)
+			_move_toward(evade_to, d, delta)
+			return true
+	if brace_key != 0:
+		brace_left -= delta
+		if brace_left <= 0.0 or not all.any(func(th): return th["key"] == brace_key):
+			brace_key = 0
+		else:
+			var src = def_seen.get(-brace_key)
+			if src != null and is_instance_valid(src):
+				facing = position.direction_to(src.position)
+			return true   # (shield up, feet set: no swinging till it lands)
+	if first == null:
+		react_key = 0
+		return false
+	var key: int = first["key"]
+	if react_key != key:
+		react_key = key
+		react_left = Defense.reaction_time(self, under.size())
+		Defense.note(self, "notice")
+	react_left -= delta
+	if react_left > 0.0:
+		return false
+	var c := Defense.choose(self, first, under, all)
+	var act: String = c["act"]
+	react_key = 0
+	Defense.note(self, act)
+	if act != "miss":
+		def_seen[key] = act   # (decided once; a blow it'll be clear of it keeps an eye on, in case it walks into it)
+	if Defense.debug:
+		main.spawn_text(position + Vector2(0, -52), act + ("" if not c.has("why") else " (%s)" % c["why"]), Color(0.7, 0.9, 1.0))
+	if act == "evade":
+		evading = true
+		evade_key = key
+		evade_to = c["to"]
+		evade_t = minf(Defense.time_to(first, position) + 0.3, 0.3 + 2.0 * position.distance_to(evade_to) / maxf(Defense.speed(self), 1.0) + 1.0)
+		_break_off()
+		facing = position.direction_to(evade_to)
+		_move_toward(evade_to, position.distance_to(evade_to), delta)
+		return true
+	if act == "brace":
+		brace_key = key
+		brace_left = Defense.time_to(first, position) + 0.2
+		def_seen[-key] = first["src"]
+		main.spawn_text(position + Vector2(0, -40), "Brace", Color(0.8, 0.85, 1.0))
+		return true
+	return false
+
+
+## Getting out of the way breaks off what it was doing: a combo, a volley, a beam or a
+## Spirit Bomb being gathered (the bomb's bolts are kept for later), the off-hand follow-up.
+## A revive's progress is kept (the Healer carries on once it's back in reach).
+func _break_off() -> void:
+	if combo_left > 0 or volley_left > 0 or beam_charge > 0.0 or bomb_charge > 0.0 or offhand_timer > 0.0:
+		Defense.note(self, "interrupt")
+	combo_left = 0
+	offhand_timer = 0.0
+	if beam_charge > 0.0:
+		beam_charge = 0.0
+		beam_timer = maxf(beam_timer, float(beam["cooldown"]) * 0.4)
+	if bomb_charge > 0.0 or volley_left > 0:
+		bomb_charge = 0.0
+		volley_left = 0
+		blast_timer = maxf(blast_timer, float(blast.get("cooldown", 1.0)) * 0.4 / _rate())
+
+
+## Clear (or as clear as it'll get): settling a moment before it fights on, and some
+## time before it can dodge again.
+func _end_evade() -> void:
+	evading = false
+	evade_key = 0
+	var p := Defense.profile(self)
+	cd_timer = maxf(cd_timer, float(p["recover"]))
+	def_cd = float(p["cooldown"])
+
+
 ## Out of the way of anything warned (main.dangers()): a troop standing where an Arrow
 ## Storm, a Fireball, falling stone or the Ogre King's slam is about to land, or on
 ## burning ground, or in the line of a charge, runs for the nearest open ground clear of
@@ -3723,6 +3854,18 @@ func _dodge(delta: float) -> bool:
 
 var dodging := false
 var dodge_to := Vector2.ZERO
+# Enemies' warned blows (defense.gd): what it's doing about them.
+var reacts := true          # (tests can switch it off, to see a blow land)
+var def_cd := 0.0           # > 0: it got out of the way a moment ago, and can't again yet
+var react_key := 0          # the blow it's noticed and is about to decide on...
+var react_left := 0.0       # ...in this long
+var def_seen := {}          # blow -> what it decided (decided once each)
+var evading := false        # getting clear of a blow
+var evade_to := Vector2.ZERO
+var evade_key := 0
+var evade_t := 0.0          # (gives up after this long: something's in the way)
+var brace_key := 0          # bracing for this blow...
+var brace_left := 0.0       # ...for this long more
 
 
 static func _in_danger_zone(z: Dictionary, p: Vector2, pad: float) -> bool:
@@ -4698,6 +4841,11 @@ func _draw() -> void:
 		# Shield glint on a blocked hit.
 		var k := block_flash / 0.2
 		draw_arc(facing * 10 + Vector2(0, -6), 20, facing.angle() - 1.1, facing.angle() + 1.1, 12, Color(0.8, 0.88, 1.0, k), 4.0, true)
+	if brace_key != 0:
+		# Braced for a warned blow: shield up toward it, feet set.
+		var pulse := 0.65 + 0.25 * sin(anim_t * 14.0)
+		draw_arc(facing * 12 + Vector2(0, -6), 18, facing.angle() - 0.9, facing.angle() + 0.9, 10, Color(0.75, 0.85, 1.0, pulse), 3.0, true)
+		draw_line(Vector2(-12, feet + 1), Vector2(12, feet + 1), Color(0.75, 0.85, 1.0, 0.5), 2.0)
 	# Upgrade pips, one row per path in that path's color.
 	var row := 0
 	for p in (tiers.size() if clone_of == null else 0):   # copies carry no pips

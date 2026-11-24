@@ -549,8 +549,8 @@ func enemies_near(p: Vector2, r: float) -> Array:
 ## Your units (active or not) whose centres may be within r of p, from a grid built
 ## once a frame like enemies_near's.
 ## The ground about to be hit by something warned (an Arrow Storm's or a Fireball's ring,
-## falling stone, burning ground, a boss's slam or charge): {"c", "r"} circles and
-## {"a", "b", "r"} lines. Troops get out of them (warrior._dodge). Worked out once a frame.
+## falling stone, burning ground): {"c", "r"} circles and {"a", "b", "r"} lines. Troops
+## get out of them (warrior._dodge). Worked out once a frame.
 func dangers() -> Array:
 	var f := Engine.get_process_frames()
 	if f == _dangers_frame:
@@ -561,12 +561,27 @@ func dangers() -> Array:
 		var z: Dictionary = n.danger_zone()
 		if not z.is_empty():
 			_dangers.append(z)
-	for e in enemy_layer.get_children():
-		if not e.dead and (e.stomp_wind > 0.0 or e.charge_warn > 0.0):   # (an Ogre's or Warlord's hauled-back blow, a Wyvern's run: marked for the player to read, not dodged by themselves)
-			_dangers.append_array(e.danger_zones())
-	return _dangers
+	return _dangers   # (enemies' warned blows aren't here: troops weigh those up for themselves, see threats())
 
 
+## Every warned blow an enemy has on its way (a slam hauled back, a stomp, a strafing run,
+## a charge, a lit fuse): what troops weigh up (defense.gd). Worked out once a frame.
+func threats() -> Array:
+	var f := Engine.get_process_frames()
+	if f == _threats_frame:
+		return _threats
+	_threats_frame = f
+	_threats = []
+	for e in get_enemies():
+		if e.windup_key != 0 and (e.fuse >= 0.0 or e.stomp_wind > 0.0 or e.slam_wind > 0.0 or e.strafe_warn > 0.0 or e.strafe_left > 0.0
+				or e.charge_warn > 0.0 or e.charging > 0.0):
+			_threats.append_array(e.threats())
+	return _threats
+
+
+var _threats: Array = []
+var _threats_frame := -1
+var heavy_key := 0            # while an enemy's warned blow is landing: its windup_key (see defense.gd)
 var hit_from := Vector2.INF   # while a shot's hitting: where it came from (Shieldbearers' shields); INF for blows
 var _dangers: Array = []
 var _dangers_frame := -1

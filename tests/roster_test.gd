@@ -252,6 +252,7 @@ func _wyverns() -> void:
 		var t = await _hire("archer", Vector2(320, 300 + i * 40))
 		t.max_hp = 5000.0
 		t.hp = 5000.0
+		t.reacts = false   # (the run itself: getting out of its way is defense_test's)
 		troops.append(t)
 	var y = _foe("wyvern", Vector2(320, 120))
 	y.strafe_timer = 0.0
