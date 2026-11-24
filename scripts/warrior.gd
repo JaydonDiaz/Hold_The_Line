@@ -26,6 +26,8 @@ const FLASK_COLORS := [Color(0.65, 0.35, 0.95), Color(0.88, 0.95, 0.2), Color(1.
 const DASH_TIME := 0.18      # seconds a Swordsman's dash takes
 const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
 const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers his spear for it
+const ESCORT_LANE := 10.0       # an escort keeps this far out of a wagon's or ram's road (beyond the two of them touching)
+const ESCORT_LEAD := 0.5        # ...and makes for where it'll be this many seconds on
 const BLADE_STAND := 0.15       # Spellblade: stands and fights a foe whose blow takes less than this share of her health; backs off from the rest
 const BLADE_SLACK := 12.0       # Spellblade: once out, the sword stays out this much further
 const BLADE_SWING := 0.22       # ...how long a sweep shows
@@ -424,8 +426,30 @@ var route_timer := 0.0
 var dazed := 0.0          # stunned by the Ogre King's stomp: can't move or act
 var shove_velocity := Vector2.ZERO
 var shove_left := 0.0
-var lost_time := 0.0      # seconds spent trying to get back to its post; teleports there after STUCK_LIMIT
-const STUCK_LIMIT := 10.0
+var lost_time := 0.0      # seconds spent trying to get back to its post; a last resort after STUCK_LIMIT (see _teleport_home)
+const STUCK_LIMIT := 30.0
+# Getting about among its own (Phase 1 of the formations work): see _home_spot, _stuck_watch.
+const SLOT_TOL := 12.0        # at its post, it stays settled while it's this close (no shuffling when nudged)
+const SLOT_TAKEN := 1.4       # its post counts as taken by an idle ally standing within this many radii of it
+const STUCK_SAMPLE := 0.4     # how often it checks whether it's getting anywhere (s)...
+const STUCK_MOVE := 4.0       # ...covering less than this (px) while trying to walk is "stuck" for that long
+const STUCK_SIDESTEP := 0.6   # stuck this long: it steps to one side as it goes (the same side, no dithering)
+const STUCK_REROUTE := 1.4    # ...then it works out its way afresh
+const STUCK_WAIT := 2.6       # ...then waits a moment for the way to clear
+const STUCK_ALT := 3.4        # ...then makes for the nearest open spot by its post instead
+var settled := false          # standing at (or close enough to) its post
+var home_alt := Vector2.INF   # somewhere close by its post to stand instead (the post's taken, or can't be got to)
+var home_alt_for := Vector2.INF
+var home_alt_t := 0.0
+var stuck_t := 0.0
+var stuck_check := 0.0
+var stuck_from := Vector2.INF
+var want_move := false        # tried to walk somewhere since the last check
+var side_sign := 0.0          # the side it's stepping to while stuck (0: not)
+var rerouted := false
+var waited := false
+var yield_left := 0.0         # > 0: waiting for the way to clear
+var home_check := 0.0
 
 
 func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
@@ -1732,14 +1756,19 @@ func _process(delta: float) -> void:
 			_chase_move(target.position, gap - attack_range + 1.0, delta)
 		_watch_chase(gap, delta)
 	else:
-		var d := position.distance_to(post)
-		if d > 2.0:
-			facing = position.direction_to(post)
-			_move_toward(post, d, delta)
+		var home := _home_spot(delta)
+		var d := position.distance_to(home)
+		if settled and d <= SLOT_TOL:
+			lost_time = 0.0   # (close enough: no shuffling back and forth on the spot)
+		elif d > 2.0:
+			settled = false
+			facing = position.direction_to(home)
+			_move_toward(home, d, delta)
 			lost_time += delta
 			if lost_time >= STUCK_LIMIT:
 				_teleport_home()
 		else:
+			settled = true
 			lost_time = 0.0
 		if not ordered:
 			_mend(max_hp * REGEN * delta)
@@ -1766,6 +1795,9 @@ func _process(delta: float) -> void:
 	run_time = run_time + delta if moving and target != null else 0.0
 	if not momentum.is_empty():
 		_momentum_step()
+	if target != null or ordered:
+		settled = false
+	_stuck_watch(delta)
 	_separate()
 
 
@@ -1967,7 +1999,21 @@ func _follow_anchor(delta: float) -> void:
 		var keep: float = anchor.RADIUS + RADIUS + 4.0   # (never under what it follows)
 		if anchor_off.length() < keep:
 			anchor_off = (anchor_off.normalized() if anchor_off.length() > 0.01 else Vector2.DOWN) * keep
-	var p: Vector2 = main._clamp_post(anchor.position + anchor_off)
+	var lead := Vector2.ZERO
+	if anchor.has_method("is_mover") and anchor.is_mover() and "RADIUS" in anchor:
+		# A wagon or ram on the move: never in the road ahead of it (out to the side of it
+		# instead), and a little ahead of where it is, so it isn't for ever falling behind.
+		var head: Vector2 = main._mover_heading(anchor, Vector2.ZERO)
+		if head != Vector2.ZERO:
+			var side := head.orthogonal()
+			var ahead := anchor_off.dot(head)
+			var across := anchor_off.dot(side)
+			var clear: float = anchor.RADIUS + RADIUS + ESCORT_LANE
+			if ahead > -anchor.RADIUS * 0.3 and absf(across) < clear:
+				across = clear * (signf(across) if absf(across) > 1.0 else 1.0)
+				anchor_off = head * ahead + side * across
+			lead = head * float(anchor.speed) * ESCORT_LEAD
+	var p: Vector2 = main._clamp_post(anchor.position + lead + anchor_off)
 	p = main.paths.open_spot(_clear_of_works(p))
 	if p.distance_to(post) > 6.0:
 		if guard_area.has_area():
@@ -2288,6 +2334,11 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * weather * delta, max_dist)
 	if wall_guard:
 		return   # wall guards hold their posts
+	if max_dist > SLOT_TOL:
+		want_move = true
+	if yield_left > 0.0:
+		yield_left -= delta
+		return   # (waiting a moment for the way ahead to clear)
 	var aim := p
 	# Only go the long way round if a wall or an emplacement is in the way of where it
 	# means to stop.
@@ -2295,7 +2346,18 @@ func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	if not is_emplacement() and (main.paths.has_troop_walls() or main.paths.has_emplacements() or main.paths.has_terrain()) \
 			and _way_blocked(stop, delta):
 		aim = _route_step(p, delta)
+	if stuck_t >= STUCK_REROUTE and not rerouted:
+		rerouted = true
+		route.clear()
+		route_timer = 0.0
+		way_check = 0.0
+		if main.paths.has_terrain() or main.paths.has_troop_walls() or main.paths.has_emplacements():
+			aim = _route_step(p, delta)   # (its way afresh)
 	heading = position.direction_to(aim)
+	if stuck_t >= STUCK_SIDESTEP:
+		if side_sign == 0.0:
+			side_sign = _free_side(heading)
+		heading = (heading + heading.orthogonal() * side_sign * 0.9).normalized()   # (round whoever's in the way, always the same side)
 	var next := position + heading * step
 	if not main.hazards.ice.is_empty() and main.hazards.cracking_at(next, RADIUS) and not main.hazards.cracking_at(position, RADIUS):
 		return   # ice cracking ahead: it won't step out onto it (it waits at the edge)
@@ -2348,6 +2410,103 @@ func _route_step(p: Vector2, delta: float) -> Vector2:
 	return route[0]
 
 
+## Where it goes back to: its post, unless an idle ally's standing on it (then the nearest
+## open spot beside it, so nobody shoves at a taken post for ever), or it's been stuck
+## getting there a while (then the nearest open spot it can get to). The post itself
+## stays its post: the spot beside it is let go of once the post's free again.
+func _home_spot(delta: float) -> Vector2:
+	home_alt_t = maxf(home_alt_t - delta, 0.0)
+	if home_alt_for != post:
+		home_alt = Vector2.INF   # (a new post: the old stand-in means nothing)
+	home_check -= delta
+	if home_check <= 0.0:
+		home_check = 0.5
+		var near_post := position.distance_to(post) < 90.0
+		var taken := near_post and _post_taken(post, true)
+		if taken or (stuck_t >= STUCK_ALT and position.distance_to(post) > SLOT_TOL):
+			if home_alt == Vector2.INF or home_alt_t <= 0.0 or _post_taken(home_alt):
+				home_alt = _open_beside(post)
+				home_alt_for = post
+				home_alt_t = 4.0
+		elif home_alt_t <= 0.0:
+			home_alt = Vector2.INF
+	return home_alt if home_alt != Vector2.INF else post
+
+
+## Whether an ally that's standing still (not passing through) is on `p`.
+## Taken: an ally standing still on `p`; or one making for that very spot that's nearer it
+## (a crowd sent to one place: the nearest has it, the rest stand round); or the spot an
+## ally's already taken up beside its own post.
+func _post_taken(p: Vector2, own := false) -> bool:
+	var mine := position.distance_to(p)
+	for w in main.warriors_near(p, RADIUS * 3.0 + 30.0):
+		if w == self or not w.is_active() or w.is_emplacement():
+			continue
+		if own and w.home_alt != Vector2.INF and w.post.distance_to(p) > 4.0:
+			continue   # (its own post outranks an ally only standing in there: that one moves on)
+		var d: float = w.position.distance_to(p)
+		if d < RADIUS * SLOT_TAKEN and (not w.moving or (w.post.distance_to(p) < 4.0 and d < mine)):
+			return true
+		if not own and w.home_alt != Vector2.INF and w.home_alt.distance_to(p) < RADIUS * 1.8:
+			return true
+		if not own and w.post.distance_to(p) < RADIUS * 1.6:
+			return true   # (a stand-in never on another's own post)
+	return false
+
+
+## The nearest spot round `p` it could stand on and walk to (INF-safe: p itself if none).
+func _open_beside(p: Vector2) -> Vector2:
+	var best := p
+	var best_d := INF
+	for r in [RADIUS * 2.2, RADIUS * 3.4, RADIUS * 4.6]:
+		for i in 8:
+			var q: Vector2 = main._clamp_post(p + Vector2.from_angle((i + 0.5 * float(r > RADIUS * 3.0)) * TAU / 8.0) * r)
+			if _post_taken(q) or (main.paths.has_terrain() and not main.paths.troop_can_stand(q)):
+				continue
+			if main.paths.wall_between(p, q):
+				continue   # (not the far side of a wall from its post)
+			var d := position.distance_to(q)
+			if d < best_d:
+				best_d = d
+				best = q
+		if best_d < INF:
+			return best
+	return best
+
+
+## Every STUCK_SAMPLE s: if it's been trying to walk and has got nowhere, it's stuck that
+## much longer (see _move_toward and _home_spot for what it does about it); moving again,
+## or not trying to, and it isn't.
+func _stuck_watch(delta: float) -> void:
+	stuck_check -= delta
+	if stuck_check > 0.0:
+		return
+	stuck_check = STUCK_SAMPLE
+	var gone := position.distance_to(stuck_from) if stuck_from != Vector2.INF else INF
+	stuck_from = position
+	if want_move and gone < STUCK_MOVE and yield_left <= 0.0:
+		stuck_t += STUCK_SAMPLE
+		if stuck_t >= STUCK_WAIT and not waited:
+			waited = true
+			yield_left = 0.6   # (let the way clear: whoever's in it may be on the move)
+	elif not want_move or gone >= STUCK_MOVE * 2.0:
+		stuck_t = 0.0
+		side_sign = 0.0
+		rerouted = false
+		waited = false
+	want_move = false
+
+
+## Which side to step round to (+1/-1 of `dir`'s left): the one with fewer allies.
+func _free_side(dir: Vector2) -> float:
+	var left := dir.orthogonal()
+	var score := 0.0
+	for w in main.warriors_near(position, RADIUS * 4.0):
+		if w != self and w.is_active():
+			score += signf(left.dot(w.position - position))
+	return -1.0 if score > 0.0 else 1.0
+
+
 func _separate() -> void:
 	if is_emplacement():
 		return   # rooted in place; everyone else steps around it
@@ -2367,13 +2526,22 @@ func _separate() -> void:
 	if wall_guard:
 		position = post   # standing at its post on the wall
 		return
-	for w in main.get_warriors():
+	for w in main.warriors_near(position, RADIUS * 2.0 + 4.0):
 		if w == self or not w.is_active():
 			continue
 		var off: Vector2 = position - w.position
 		var d := off.length()
 		if d < RADIUS * 2.0 and d > 0.01:
-			position += off / d * (RADIUS * 2.0 - d) * (1.0 if w.is_emplacement() else 0.5)
+			# The one on the move has the way: one standing about steps aside for it (most of
+			# the overlap is the stander's to make up), rather than the two shoving evenly.
+			var share := 0.5
+			if w.is_emplacement():
+				share = 1.0
+			elif w.moving and not moving and target == null:
+				share = 0.8
+			elif moving and not w.moving and w.target == null:
+				share = 0.2
+			position += off / d * (RADIUS * 2.0 - d) * share
 			# Someone in the way of where it's walking (two Healers meeting head on in a
 			# doorway): it steps to its right to get past, as the other does to its own right,
 			# instead of the two pushing each other back where they came from for ever.

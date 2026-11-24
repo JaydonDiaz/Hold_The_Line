@@ -269,9 +269,16 @@ const NONE: Array = []   # (asked every frame by every troop: no new array each 
 ## What a unit is, to put it back later: its kind, training, health, post and orders.
 func _unit_record(w) -> Dictionary:
 	var k: float = main.FIELD_W / 640.0
-	return {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
+	var rec := {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
 			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.temp_allies.has(w),
 			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode, "broken": w.broken}
+	var f = main.formation_of(w)
+	if f != null:
+		# Its formation (which, its layout and facing, its own slot): back in it on the next
+		# field, or after a load. (Records from before formations have none: no formation.)
+		var off: Vector2 = f.slots.get(w, Vector2.ZERO)
+		rec["formation"] = {"id": f.id, "layout": f.layout, "slot": [off.x, off.y], "facing": [f.facing.x, f.facing.y]}
+	return rec
 
 
 ## A unit back from its record (on the field as it's stretched now).
@@ -297,6 +304,8 @@ func _make_unit(rec: Dictionary):
 		w.set_meta("freed", true)
 	if rec.get("broken", false):
 		w._break(true)   # (still rubble: rebuilding it costs gold, here as where it fell)
+	if rec.get("formation", {}) is Dictionary and not rec.get("formation", {}).is_empty():
+		main.join_formation(w, rec["formation"])
 	return w
 
 

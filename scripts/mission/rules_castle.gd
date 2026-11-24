@@ -40,6 +40,11 @@ const Maps = preload("res://scripts/maps.gd")
 const CP_BASE := 100          # a room's checkpoint is kept at this plus its place in the rooms
 const LINGER := 20.0          # seconds after its last enemy came in that the army may go on anyway
 const WAKE := 200.0           # a room's garrison stays at its posts until a troop's this near
+const DOOR_ABREAST := 2       # troops let through the door at once (the rest queue behind, two abreast)
+const DOOR_GAP := 44.0        # where the queue starts, back from the door
+const QUEUE_ROW := 36.0       # ...a row of it every this far back
+const QUEUE_ACROSS := 18.0    # ...each side of its middle
+var march_queue_t := 0.0
 const AT_DOOR := 30.0         # a troop this near the door's middle is through it
 const FIRST_LIMIT := 8.0      # the first troop not there by now: the view goes on anyway
 const LATE_LIMIT := 8.0       # nobody comes in later than this after the first (a lost troop catches up)
@@ -346,6 +351,14 @@ func _arrive(rec: Dictionary, post: Vector2, at_post := false) -> void:
 	else:
 		w.position = main.paths.open_spot(at + Vector2(randf_range(-10, 10), randf_range(-10, 10)))
 		w.order_to(post)
+	var f = main.formation_of(w)
+	if f != null and not w.data.get("emplacement", false) and not at_post:
+		# In a formation: it takes its shape again in this hall, faced the way the army came
+		# in, round where the castle has them stand (each arrival puts those in so far back
+		# in their places).
+		f.facing = _inward(door["side"])
+		main._refit_anchor(f)
+		main._place_formation(f, true)
 	main.warriors_changed()
 
 
@@ -806,9 +819,13 @@ func _march_to(door: Dictionary, to: int) -> void:
 		if w.garrison != null:
 			w.leave_tower()
 		orders[w.get_instance_id()] = _unit_record(w)   # (where it stood, and its orders, for the next room)
-		w.order_to(main._clamp_post(at + Vector2(randf_range(-14, 14), randf_range(-14, 14))))
 		w.move_mode = "free"
 		march_units.append(w)
+	# Through the door in order, two abreast, nearest first (a column in the doorway's
+	# mouth, the rest waiting their turn behind: nobody all at the one spot at once).
+	march_units.sort_custom(func(a, b): return a.position.distance_to(at) < b.position.distance_to(at))
+	march_queue_t = 0.0
+	_queue_march()
 	main.hud.show_message("On through the door!")
 
 
@@ -822,8 +839,34 @@ func _record(w) -> Dictionary:
 ## Each step of the march: troops that get to the door are through (gone from this room).
 ## Once the first is through, the view goes after it; the rest come in when they would
 ## have got there (by the way they have to go and how fast they walk).
+## Each troop's place in the line for the door: the first DOOR_ABREAST go through, the rest
+## wait in a column behind them, moving up as places come free.
+func _queue_march() -> void:
+	var at: Vector2 = march_door["point"]
+	var inward := _inward(march_door["side"])
+	var across := Vector2(-inward.y, inward.x)
+	var i := 0
+	for w in march_units:
+		if not is_instance_valid(w) or w.is_queued_for_deletion():
+			continue
+		var spot: Vector2
+		if i < DOOR_ABREAST:
+			spot = at + across * (i - (DOOR_ABREAST - 1) / 2.0) * 10.0
+		else:
+			var k := i - DOOR_ABREAST
+			spot = at + inward * (DOOR_GAP + QUEUE_ROW * (k / 2)) + across * (-1.0 if k % 2 == 0 else 1.0) * QUEUE_ACROSS
+			spot = main.paths.open_spot(main._clamp_post(spot))
+		if w.post.distance_to(spot) > 6.0 or not w.ordered:
+			w.order_to(main._clamp_post(spot))
+		i += 1
+
+
 func _march_step(delta: float) -> void:
 	march_t += delta
+	march_queue_t -= delta
+	if march_queue_t <= 0.0:
+		march_queue_t = 0.3
+		_queue_march()
 	var at: Vector2 = march_door["point"]
 	for w in march_units.duplicate():
 		if not is_instance_valid(w) or w.is_queued_for_deletion():

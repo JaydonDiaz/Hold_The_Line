@@ -2718,6 +2718,26 @@ func _open_orders(main, units: Array) -> void:
 			fbtns.append(b)
 		orders_ui["follow"] = fbtns
 		y += ORDER_ROW
+	# A group: lay it out in a formation, turn it, save it, put a saved one back on.
+	var formers := movers.filter(func(w): return not w.summoned and w.clone_of == null)
+	if formers.size() >= 2:
+		var layouts: Array = main.Formation.LAYOUTS.duplicate()
+		if not main.rules.followable().any(func(o): return o.is_mover()):
+			layouts.erase("escort")
+		var fnames := {}
+		for k in layouts:
+			fnames[k] = main.Formation.NAMES[k]
+		_order_row(box, y, "Formation", "formation", layouts, fnames, main.Formation.TIPS)
+		y += ORDER_ROW
+		var shape := ["left", "right", "save", "load", "none"]
+		var snames := {"left": "Turn left", "right": "Turn right", "save": "Save", "load": "Saved", "none": "Break up"}
+		var stips := {"left": "Turn the formation 45° to the left (its slots go round with it)", "right": "Turn the formation 45° to the right",
+				"save": "Remember this formation's shape (drag single troops to make it your own first)", "load": "Put your saved formation on these troops",
+				"none": "No formation: each keeps the post it has"}
+		_order_row(box, y, "Shape", "shape", shape, snames, stips)
+		for k in orders_ui["shape"]:
+			orders_ui["shape"][k].toggle_mode = false
+		y += ORDER_ROW
 	# What the orders mean, in whatever room is left under the rows (all of it in a tooltip).
 	var meaning := _label(box, Vector2(10, y + 2), Vector2(box.size.x - 20, maxf(box.size.y - y - 4.0, 0.0)), Color(0.9, 0.9, 0.85), 11)
 	meaning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2743,9 +2763,30 @@ func _order_from_box(field: String, value) -> void:
 				orders_main.start_area_pick(units)
 			else:
 				orders_main.give_order("area", orders_main.area_preset(value), units)
+		"formation":
+			orders_main.make_formation(units, value)
+		"shape":
+			match value:
+				"left":
+					orders_main.turn_formation(units, -PI / 4.0)
+				"right":
+					orders_main.turn_formation(units, PI / 4.0)
+				"save":
+					if not orders_main.save_formation(units):
+						show_message("Lay them out in a formation first")
+				"load":
+					if orders_main.load_formation(units) == null:
+						show_message("No saved formation yet")
+				"none":
+					orders_main.leave_formation(units)
 		_:
 			orders_main.give_order(field, value, units)
 	_refresh_orders(orders_main, null)
+
+
+func _layout_of(main, w) -> String:
+	var f = main.formation_of(w)
+	return f.layout if f != null else ""
 
 
 ## The one value `field` has across `units`, or null if they differ (no button lit then).
@@ -2778,6 +2819,7 @@ func _refresh_orders(main, _w) -> void:
 		return
 	var answering := fighters.filter(func(w): return not w.is_emplacement() and not w.wall_guard)
 	var current := {
+		"formation": _common(movers, func(w): return _layout_of(main, w)),
 		"priority": _common(fighters.filter(func(w): return not w.is_mobile_healer()), func(w): return w.priority),
 		"care": _common(healers, func(w): return w.care()),
 		"commit": _common(fighters, func(w): return w.commit),

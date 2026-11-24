@@ -125,6 +125,11 @@ var area_pick := []       # troops waiting for a Guard Area to be drawn on the f
 var area_start = null     # where the area being drawn was started (Vector2), while the button's held
 var selected: Warrior = null
 var group := []             # several troops selected together (box or Shift+click); `selected` is null then
+const Formation = preload("res://scripts/formation.gd")
+var formations: Array = []  # the formations on the field (see formation.gd)
+var formations_path := "user://formations.cfg"   # the player's saved formations ("" in tests: none)
+var _formation_id := 0
+var _formation_t := 0.0
 var ward_pick := []         # Healers waiting for a click on the troop they're to stay with
 var box_start = null        # where a left-drag on open field started (Vector2), while the button's held
 var box_active := false     # it's been dragged far enough to be a selection box
@@ -423,6 +428,7 @@ func _process(delta: float) -> void:
 	hovered = _warrior_at(mouse) if started and not fighting() and dragging == null and not group_drag \
 			and placing_type == "" and mouse.y <= FIELD_H else null
 	_update_calls(delta)
+	_formations_step(delta)
 	if dragging != null:
 		_update_drag()
 	if group_drag:
@@ -2279,6 +2285,10 @@ func filter_group(kind: String, drop: bool) -> void:
 func order_group(p: Vector2) -> void:
 	if group.is_empty():
 		return
+	var f = formation_of(group[0])
+	if f != null and group.all(func(w): return formation_of(w) == f) and f.members().size() == group.size():
+		move_formation(f, p)   # (a whole formation: its anchor goes there, its shape with it)
+		return
 	for w in group:
 		w.anchor = null   # a move order sets fixed posts again
 	var mid := Vector2.ZERO
@@ -2365,6 +2375,8 @@ func _end_group_drag() -> void:
 		w.position = p
 		if not ok:
 			w.hop_back(let_go)
+	for f in _formations_of(group_from.keys()):
+		_refit_anchor(f)   # (a whole formation carried somewhere else: it's there now, the same shape)
 	group_from.clear()
 
 
@@ -2380,6 +2392,7 @@ func order_move(p: Vector2) -> void:
 		return
 	var tower := tower_for(p, selected)
 	selected.order_to(tower.position if tower != null else _clamp_post(p))   # (onto a Tower: it climbs in; a Tower's crew sent elsewhere climbs down)
+	_slot_moved(selected)
 
 
 func upgrade_selected(path: int) -> void:
@@ -2443,6 +2456,8 @@ func _end_drag() -> void:
 	var let_go := w.position
 	w.set_post(p)
 	w.position = p
+	if ok and not w is Barricade:
+		_slot_moved(w)
 	if not ok and not w is Barricade:
 		w.hop_back(let_go)
 	if w is Barricade:
@@ -2656,6 +2671,239 @@ func cycle_move_mode() -> void:
 
 ## Tells `units` to follow objective `o` (a wagon, civilians), each keeping its place
 ## around it (spread round it if they were all bunched up); null: back to a fixed post.
+# --- Formations (formation.gd) -----------------------------------------------------------
+
+func formation_of(w):
+	for f in formations:
+		if f.slots.has(w):
+			return f
+	return null
+
+
+func _formations_of(units: Array) -> Array:
+	var out := []
+	for w in units:
+		var f = formation_of(w)
+		if f != null and not out.has(f):
+			out.append(f)
+	return out
+
+
+## Makes `units` a formation laid out as `layout` (a preset), round where they are now (an
+## escort: round the wagon or ram nearest them). They walk to their places.
+func make_formation(units: Array, layout: String) -> Object:
+	units = units.filter(func(w): return is_instance_valid(w) and not w.is_emplacement() and not w.wall_guard and not w.summoned and w.clone_of == null)
+	if units.is_empty():
+		return null
+	leave_formation(units)
+	var f = Formation.new()
+	_formation_id += 1
+	f.id = _formation_id
+	var mid := Vector2.ZERO
+	for w in units:
+		mid += w.post
+	mid /= units.size()
+	f.anchor = mid
+	var r := 30.0
+	if layout == "escort":
+		var best = null
+		for o in rules.followable():
+			if o.is_mover() and (best == null or o.position.distance_to(mid) < best.position.distance_to(mid)):
+				best = o
+		if best == null:
+			hud.show_message("Nothing here to escort")
+			return null
+		f.follow = best
+		f.anchor = best.position
+		r = float(best.RADIUS)
+		f.facing = _mover_heading(best, Vector2.UP)
+	f.lay_out(layout, units, r)
+	formations.append(f)
+	_place_formation(f, true)
+	spawn_text(mid + Vector2(0, -50), Formation.NAMES[layout], Color(0.7, 0.95, 1.0))
+	sfx("place", 1.3)
+	return f
+
+
+func leave_formation(units: Array) -> void:
+	for f in formations:
+		for w in units:
+			f.slots.erase(w)
+			f.travel_slots.erase(w)
+	formations = formations.filter(func(f): return not f.members().is_empty())
+
+
+## Each member's post from its slot (an escort's: its place round what it follows). `walk`:
+## they're ordered there (straight away, nothing on the way); else posts just move.
+func _place_formation(f, walk: bool) -> void:
+	var taken := []
+	for w in f.members():
+		var off: Vector2 = f.slot_of(w)
+		if f.follow != null:
+			w.anchor = f.follow
+			w.anchor_off = f.world(off) - f.anchor
+			w.anchor_check = 0.0
+			continue
+		w.anchor = null
+		var want: Vector2 = _clamp_post(f.world(off))
+		var spot := _free_spot_for(want, taken, f)
+		if spot == Vector2.INF:
+			spot = paths.open_spot(want)
+		taken.append(spot)
+		if walk:
+			var was: Vector2 = w.post
+			w.order_to(spot)
+			if w.guard_area.has_area():
+				w.guard_area.position += spot - was
+		elif w.post.distance_to(spot) > Formation.POST_MOVE and not w.ordered:
+			if w.guard_area.has_area():
+				w.guard_area.position += spot - w.post
+			w.post = spot
+
+
+## Like _free_spot, but the formation's own members' posts don't count as taken.
+func _free_spot_for(p: Vector2, taken: Array, f) -> Vector2:
+	var keep := group
+	group = f.members()
+	var q := _free_spot(p, taken)
+	group = keep
+	return q
+
+
+func move_formation(f, p: Vector2) -> void:
+	f.follow = null
+	for w in f.members():
+		w.anchor = null
+	f.anchor = _clamp_post(p)
+	_place_formation(f, true)
+	sfx("place", 1.3)
+
+
+## Turns the formation `units` are in (all of them that are) by `angle`.
+func turn_formation(units: Array, angle: float) -> void:
+	for f in _formations_of(units):
+		f.turn(angle)
+		_place_formation(f, f.follow == null)
+
+
+## The player set one member's post by hand: that's its slot now (the formation's custom).
+func _slot_moved(w) -> void:
+	var f = formation_of(w)
+	if f == null or f.follow != null:
+		return
+	f.slots[w] = f.local(w.post)
+	f.layout = "custom"
+
+
+## After the posts were moved as a whole (a group dragged): the anchor goes with them.
+func _refit_anchor(f) -> void:
+	var ms: Array = f.members()
+	if ms.is_empty() or f.follow != null:
+		return
+	var off := Vector2.ZERO
+	for w in ms:
+		off += w.post - f.world(f.slot_of(w))
+	f.anchor += off / ms.size()
+
+
+## Which way a wagon or ram is rolling (`fallback` if it's standing).
+func _mover_heading(o, fallback: Vector2) -> Vector2:
+	if "route" in o and "leg" in o and o.leg < o.route.size():
+		var d: Vector2 = o.route[o.leg] - o.position
+		if d.length() > 1.0:
+			return d.normalized()
+	return fallback
+
+
+## A few times a second: formations that go with something follow it (faced the way it
+## rolls, a little ahead of it), members gone are let go, and posts follow slots.
+func _formations_step(delta: float) -> void:
+	_formation_t -= delta
+	if _formation_t > 0.0 or formations.is_empty():
+		return
+	_formation_t = 0.25
+	for f in formations.duplicate():
+		for w in f.slots.keys():
+			if not is_instance_valid(w) or w.is_queued_for_deletion():
+				f.slots.erase(w)
+				f.travel_slots.erase(w)
+		if f.members().is_empty():
+			formations.erase(f)
+			continue
+		if f.follow != null:
+			if not is_instance_valid(f.follow) or f.follow.is_queued_for_deletion():
+				f.follow = null
+				continue
+			var head: Vector2 = _mover_heading(f.follow, f.facing)
+			f.facing = f.facing.slerp(head, 0.35).normalized()   # (turned smoothly as it turns)
+			f.anchor = f.follow.position
+			for w in f.members():
+				if w.anchor != f.follow:
+					continue   # (given its own orders since)
+				var off: Vector2 = f.world(f.slot_of(w)) - f.anchor
+				if off.distance_to(w.anchor_off) > Formation.POST_MOVE:
+					w.anchor_off = off
+
+
+## A troop back from a record (a new room, a loaded save) takes up its slot in its
+## formation again (the formation made afresh, round it, if it's the first back).
+func join_formation(w, d: Dictionary) -> void:
+	var id := int(d.get("id", 0))
+	var f = null
+	for g in formations:
+		if g.id == id:
+			f = g
+	var off := Vector2(d.get("slot", [0.0, 0.0])[0], d.get("slot", [0.0, 0.0])[1])
+	if f == null:
+		f = Formation.new()
+		f.id = id
+		_formation_id = maxi(_formation_id, id)
+		f.layout = str(d.get("layout", "custom"))
+		var fc: Array = d.get("facing", [0.0, -1.0])
+		f.facing = Vector2(fc[0], fc[1]).normalized() if Vector2(fc[0], fc[1]).length() > 0.1 else Vector2.UP
+		f.anchor = w.post
+		f.anchor = w.post - (f.world(off) - f.anchor)   # (where its anchor must be for this troop's slot to be its post)
+		formations.append(f)
+	f.slots[w] = off
+
+
+## Saves the formation `units` are in under `name` (as a custom layout).
+func save_formation(units: Array, name := "1") -> bool:
+	var fs := _formations_of(units)
+	if fs.is_empty() or formations_path == "":
+		return false
+	var cf := ConfigFile.new()
+	cf.load(formations_path)
+	cf.set_value("formations", name, fs[0].to_save())
+	cf.save(formations_path)
+	spawn_text(units[0].position + Vector2(0, -50), "Formation saved", Color(0.7, 0.95, 1.0))
+	return true
+
+
+## Puts the saved formation `name` on `units`, round where they stand.
+func load_formation(units: Array, name := "1") -> Object:
+	if formations_path == "" or not FileAccess.file_exists(formations_path):
+		return null
+	var cf := ConfigFile.new()
+	cf.load(formations_path)
+	var d = cf.get_value("formations", name, null)
+	if d == null:
+		return null
+	units = units.filter(func(w): return is_instance_valid(w) and not w.is_emplacement() and not w.wall_guard and not w.summoned and w.clone_of == null)
+	leave_formation(units)
+	var f = Formation.new()
+	_formation_id += 1
+	f.id = _formation_id
+	var mid := Vector2.ZERO
+	for w in units:
+		mid += w.post
+	f.anchor = mid / maxf(units.size(), 1)
+	f.from_save(d, units)
+	formations.append(f)
+	_place_formation(f, true)
+	return f
+
+
 func set_follow(o, units: Array = []) -> void:
 	if units.is_empty():
 		units = order_units().filter(func(w): return not w.is_emplacement() and not w.wall_guard)
@@ -3195,6 +3443,8 @@ func _draw_overlay() -> void:
 		if w.ordered:
 			overlay.draw_line(w.position, w.post, Color(0.7, 0.95, 1.0, 0.3), 1.5, true)
 		_draw_zone(w, 0.6, zones_drawn)
+	for f in _formations_of(group if not group.is_empty() else ([selected] if selected != null and is_instance_valid(selected) else [])):
+		_draw_formation(f)
 	if castle_selected or _castle_hovered():
 		# The castle outlined in gold: solid while selected, faint while hovered.
 		var col := Color(1.0, 0.85, 0.35, 0.95 if castle_selected else 0.45)
@@ -3256,6 +3506,30 @@ func _draw_overlay() -> void:
 			overlay.draw_line(selected.position, post, Color(col, 0.4), 1.5, true)
 		overlay.draw_line(post + Vector2(-7, -7), post + Vector2(7, 7), col, 2.5, true)
 		overlay.draw_line(post + Vector2(-7, 7), post + Vector2(7, -7), col, 2.5, true)
+
+
+## A selected formation: its footprint, its anchor and the way it faces, and a ring where
+## each member belongs (a dashed column while it's going through a gap).
+func _draw_formation(f) -> void:
+	var col := Color(0.75, 0.95, 1.0)
+	var pts := []
+	for w in f.members():
+		var at: Vector2 = f.world(f.slot_of(w))
+		pts.append(at)
+		overlay.draw_arc(at, 7.0, 0, TAU, 14, Color(col, 0.75), 1.5, true)
+		if w.position.distance_to(at) > Formation.IN_PLACE:
+			overlay.draw_line(w.position, at, Color(col, 0.25), 1.0, true)
+	if pts.size() >= 3:
+		var hull := Geometry2D.convex_hull(PackedVector2Array(pts))
+		for i in hull.size() - 1:
+			overlay.draw_line(hull[i], hull[i + 1], Color(col, 0.3), 1.5 if not f.travel else 1.0, true)
+	var a: Vector2 = f.anchor
+	overlay.draw_colored_polygon(PackedVector2Array([a + Vector2(0, -6), a + Vector2(6, 0), a + Vector2(0, 6), a + Vector2(-6, 0)]), Color(col, 0.8))
+	var tip: Vector2 = a + f.facing * 34.0
+	overlay.draw_line(a, tip, Color(col, 0.85), 2.0, true)
+	overlay.draw_line(tip, tip - f.facing.rotated(0.5) * 9.0, Color(col, 0.85), 2.0, true)
+	overlay.draw_line(tip, tip - f.facing.rotated(-0.5) * 9.0, Color(col, 0.85), 2.0, true)
+	_overlay_text(a + Vector2(10, 8), "%s  %d%%" % [Formation.NAMES.get(f.layout, "Custom"), roundi(f.cohesion() * 100)], Color(col, 0.9))
 
 
 ## A unit's movement zone: the ground around its post it may fight from (a ring at the
