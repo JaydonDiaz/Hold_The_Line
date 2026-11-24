@@ -40,11 +40,16 @@ const PIKE_CLOSE := 6.0          # a foe this far inside its reach (gap, px) is 
 const PIKE_CLOSE_HIT := 0.85     # ...and its thrusts at it land for this share (a modest weakness: Haft Check makes room)
 const SEQ_TIME := 3.0            # Impaling Strike: a run of thrusts on one foe breaks after this long without one
 # Assassin.
-const OPPORTUNIST := 1.25        # its first cut on a foe busy with another...
+const SNEAK_OPENER := 2.0       # its opening strike on an unwary foe, stalked up to (Ambush: harder)
+const OPENER_REST := 2.0         # ...after this long without striking
+const SNEAK_SEEN := 70.0         # ...and never further than this, however far it could shoot
+const SNEAK_DETECT := 0.5        # stalking, foes notice it only this much as far off (Leafstep: less again)
+const OPPORTUNIST := 1.5        # its first cut on a foe busy with another...
 const OPP_AGAIN := 5.0           # ...each foe once in this long
 const REST_UNSEEN := 1.0         # Leafstep: out of the fight this long, it's quicker and harder to notice
 const SMOKE_SEEN := 40.0         # in its smoke, only a foe this close still sees it
-const SMOKE_HURT := 0.55          # Smoke Pellet: below this share of health and still being hit...
+const SMOKE_HURT := 0.4          # Smoke Pellet: below this share of health and still being hit...
+const FINISH_CUTS := 3.0        # ...unless its mark's in reach and this many cuts from dead
 const SMOKE_NEAR := 30.0         # ...or SMOKE_CROWD foes within this gap of it
 const SMOKE_CROWD := 3
 const SMOKE_RUN := 90.0          # ...it slips this far away
@@ -197,6 +202,7 @@ var smoke := {}
 var scent := {}
 var relentless := {}
 var deathblow := {}
+var since_strike := 9.0      # seconds since it last struck (its opening strike needs a moment of stalking)
 var rest_t := 9.0            # seconds since it last struck or was struck (out of the fight)
 var opp_seen := {}           # Opportunist: foe id -> seconds before its bonus is had again
 var chain_t := 0.0           # Chain Assassination: cooldown
@@ -1970,7 +1976,11 @@ func _process(delta: float) -> void:
 
 
 func _victim():
-	return target if target != null and _can_strike(target) else _pick(main.get_enemies().filter(_can_strike))
+	if target != null and _can_strike(target):
+		return target
+	if kind == "assassin" and sneaking() and target != null and _is_valid(target):
+		return null   # (stalking its mark: no cut at whatever it passes, that would give it away)
+	return _pick(main.get_enemies().filter(_can_strike))
 
 
 ## In reach for this unit's main attack: melee blows can't reach a flyer (a Martial
@@ -4360,9 +4370,22 @@ func unseen_by(e, r := INF) -> bool:
 	var d: float = e.position.distance_to(position)
 	if smoke_hide > 0.0 and d > SMOKE_SEEN:
 		return true
-	if not leafstep.is_empty() and r < INF and (rest_t >= REST_UNSEEN or stealth_t > 0.0) and d > r * float(leafstep["detect"]):
-		return true
+	if r < INF and sneaking():
+		var detect: float = SNEAK_DETECT * (float(leafstep["detect"]) if not leafstep.is_empty() else 1.0)
+		if d > minf(r * detect, SNEAK_SEEN * (float(leafstep["detect"]) if not leafstep.is_empty() else 1.0)):
+			return true   # (a long bow or a spell reaches far, but nothing spots a stalker far off)
 	return false
+
+
+## Out of the fight a moment (or just out of its smoke), stalking: foes notice it late, and
+## the ones it slips past don't stop to fight it unless it's after them.
+func sneaking() -> bool:
+	return kind == "assassin" and is_active() and (rest_t >= REST_UNSEEN or stealth_t > 0.0)
+
+
+## Whether foe `e` lets it slip by: it's stalking something else.
+func slips_past(e) -> bool:
+	return sneaking() and target != e and target != null
 
 
 ## How much faster it moves just now (Leafstep out of the fight, Ghost Trail out of smoke).
@@ -4380,12 +4403,16 @@ func speed_mult() -> float:
 func _assassin_hit(e, hit: float) -> float:
 	var id: int = e.get_instance_id()
 	var special := 1.0
-	var unwary: bool = e.busy_with_other(self) or (position - e.position).dot(e.facing_dir()) < 0.0
-	if not ambush.is_empty() and (rest_t >= float(ambush["rest"]) or smoke_ambush) and unwary:
-		special = float(ambush["mult"])   # (the Ambush opener: in place of the Opportunist's, never on top)
+	var facing_me: bool = e.aggro == self or (e.last_foe == self and e.last_foe_t > 0.0)
+	var unwary: bool = e.busy_with_other(self) or (position - e.position).dot(e.facing_dir()) < 0.0 or not facing_me
+	var rest: float = float(ambush["rest"]) if not ambush.is_empty() else OPENER_REST
+	if (since_strike >= rest or smoke_ambush) and unwary:
+		# The opening strike: stalked up to, unseen or busy (Ambush: harder, and it can chain).
+		special = float(ambush["mult"]) if not ambush.is_empty() else SNEAK_OPENER
 		opening = true
 		smoke_ambush = false
-		main.spawn_text(position + Vector2(0, -46), "Backstab!" if int(ambush["chain"]) <= 1 else "Ambush!", Color(0.6, 1.0, 0.6))
+		main.spawn_text(position + Vector2(0, -46), "Backstab!" if ambush.is_empty() or int(ambush["chain"]) <= 1 else "Ambush!", Color(0.6, 1.0, 0.6))
+		main.spawn_burst(e.position + Vector2(0, -e.radius), 16.0, Color(0.75, 1.0, 0.75))
 	elif e.busy_with_other(self) and not opp_seen.has(id):
 		special = OPPORTUNIST
 		opp_seen[id] = OPP_AGAIN
@@ -4415,6 +4442,7 @@ func _assassin_hit(e, hit: float) -> float:
 	if exposed_id == id and exposed_t > 0.0:
 		bonus += float(ambush.get("expose", 0.0))   # (Vital Strike: its guard down against this one)
 	opening_hp = e.hp / maxf(e.max_hp, 1.0)
+	since_strike = 0.0
 	return hit * special * (1.0 + bonus)
 
 
@@ -4545,6 +4573,7 @@ func _lunge_step(delta: float) -> void:
 ## Every frame (from _special_update): its timers, the kunai, the smoke.
 func _assassin_step(delta: float) -> void:
 	rest_t += delta
+	since_strike += delta
 	for id in opp_seen.keys():
 		opp_seen[id] -= delta
 		if opp_seen[id] <= 0.0:
@@ -4616,6 +4645,8 @@ func kunai_struck(e, delay: float) -> void:
 
 ## Surrounded (SMOKE_CROWD foes on it), or hurt and still being hit.
 func _hard_pressed() -> bool:
+	if target != null and _is_valid(target) and _gap_to(target) <= attack_range + 6.0 and target.hp <= damage * _power() * FINISH_CUTS:
+		return false   # (its mark's in reach and all but dead: finish it first)
 	if hp < max_hp * SMOKE_HURT and danger_t > 0.0:
 		return true
 	var n := 0

@@ -504,18 +504,18 @@ const WARRIORS := {
 	"assassin": {
 		"name": "Assassin", "cost": 105, "color": Color(0.4, 0.75, 0.45),
 		"hp": 60.0, "speed": 112.0,
-		"damage": 12.0, "range": 8.0, "cooldown": 0.7, "attack": "melee", "priority": "valuable", "danger_mode": "fall_back",
-		"desc": "An elf of the Woodland Watch with twin daggers: fast and fragile, he goes for the dangerous ones behind the line (Mages, Boltflingers, Drummers). His first cut on a foe busy with someone else hits 25% harder.",
+		"damage": 24.0, "range": 8.0, "cooldown": 0.5, "attack": "melee", "priority": "valuable",
+		"desc": "An elf of the Woodland Watch with twin daggers: fast and fragile, he goes for the dangerous ones behind the line (Mages, Boltflingers, Drummers). A glass cannon: out of the fight he stalks (foes notice him late and let him slip past), and his opening strike on an unwary foe hits 2x.",
 		"paths": [
 			{"name": "Ambush", "note": "An opening strike needs a moment out of the fight, and a foe that isn't facing him (busy with another, or struck from behind).", "tiers": [
-				{"name": "Backstab", "cost": 45, "desc": "After 2.5s out of the fight, his opening strike on an unwary foe: 1.7x",
-					"effect": {"ambush": {"mult": 1.7, "rest": 2.5, "expose": 0.0, "chain": 1, "next": [], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
-				{"name": "Vital Strike", "cost": 70, "desc": "Opening strike 2.1x; the foe's shield is 15% weaker against him for 3s",
-					"effect": {"ambush": {"mult": 2.1, "rest": 2.5, "expose": 0.15, "chain": 1, "next": [], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
-				{"name": "Chain Assassination", "cost": 115, "desc": "Opening 2.5x. If it kills, he lunges to a foe within 4\u00a0ft for 2x (every 12s)",
-					"effect": {"ambush": {"mult": 2.5, "rest": 2.5, "expose": 0.15, "chain": 2, "next": [2.0], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
-				{"name": "Silent Reaper", "cost": 190, "desc": "Opening 3x; chains to 3 foes (2x, then 1.6x). Two killed: the weak round them falter 0.8s",
-					"effect": {"ambush": {"mult": 3.0, "rest": 2.5, "expose": 0.15, "chain": 3, "next": [2.0, 1.6], "reach": 40.0, "every": 12.0, "fear": 0.8}}},
+				{"name": "Backstab", "cost": 45, "desc": "His opening strike on an unwary foe: 2.5x (ready again after 2s without striking)",
+					"effect": {"ambush": {"mult": 2.5, "rest": 2.0, "expose": 0.0, "chain": 1, "next": [], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
+				{"name": "Vital Strike", "cost": 70, "desc": "Opening strike 3x; his cuts on that foe +15% for 3s",
+					"effect": {"ambush": {"mult": 3.0, "rest": 2.0, "expose": 0.15, "chain": 1, "next": [], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
+				{"name": "Chain Assassination", "cost": 115, "desc": "Opening 3.5x. If it kills, he lunges to a foe within 4\u00a0ft for 2x (every 12s)",
+					"effect": {"ambush": {"mult": 3.5, "rest": 2.0, "expose": 0.15, "chain": 2, "next": [2.0], "reach": 40.0, "every": 12.0, "fear": 0.0}}},
+				{"name": "Silent Reaper", "cost": 190, "desc": "Opening 4x; chains to 3 foes (2x, then 1.6x). Two killed: the weak round them falter 0.8s",
+					"effect": {"ambush": {"mult": 4.0, "rest": 2.0, "expose": 0.15, "chain": 3, "next": [2.0, 1.6], "reach": 40.0, "every": 12.0, "fear": 0.8}}},
 			]},
 			{"name": "Sabotage", "note": "Only foes getting ready for something (a slam, a spell, a strafing run, a crossbow, a fuse) can be sabotaged.", "tiers": [
 				{"name": "Disruptive Cut", "cost": 40, "desc": "A cut on a foe winding up a special attack sets it back 0.4s (each foe once per 7s)",

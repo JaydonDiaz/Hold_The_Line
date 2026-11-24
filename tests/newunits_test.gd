@@ -265,8 +265,9 @@ func _pikeman() -> void:
 
 func _assassin() -> void:
 	var d: Dictionary = Data.WARRIORS["assassin"]
-	check(d["cost"] == 105 and d["hp"] == 60.0 and d["damage"] == 12.0 and d["cooldown"] == 0.7 and absf(d["speed"] / Data.WARRIORS["swordsman"]["speed"] - 1.25) < 0.02,
-			"A  the Assassin: 105 gold, 60 health, 12 damage every 0.7s, 25% quicker than a Knight")
+	var kd: Dictionary = Data.WARRIORS["swordsman"]
+	check(d["cost"] == 105 and d["hp"] == 60.0 and d["hp"] < kd["hp"] and d["damage"] / d["cooldown"] > kd["damage"] / kd["cooldown"] * 1.5 and absf(d["speed"] / kd["speed"] - 1.25) < 0.02,
+			"A  the Assassin: a glass cannon (105 gold, 60 health, %.0f damage every %.2fs), 25%% quicker than a Knight" % [d["damage"], d["cooldown"]])
 	check(d["paths"].map(func(p): return p["tiers"].map(func(t): return t["cost"])) == [[45, 70, 115, 190], [40, 65, 110, 190], [40, 65, 115, 195], [40, 70, 115, 200]],
 			"A  four paths of four (Ambush, Sabotage, Stealth, Execution) at their prices")
 	# Goes for the Horde Mage behind the goblins.
@@ -286,8 +287,10 @@ func _assassin() -> void:
 	busy.last_foe = k
 	busy.last_foe_t = 1.5
 	aa.target = busy
+	var h0: float = aa._assassin_hit(busy, 12.0)
+	check(absf(h0 - 24.0) < 0.01, "A  his opening strike, stalked up to a foe busy with another: 2x (%.1f)" % h0)
 	var h: float = aa._assassin_hit(busy, 12.0)
-	check(absf(h - 15.0) < 0.01, "A  Opportunist: his first cut on a foe busy with another, 25%% harder (%.1f)" % h)
+	check(absf(h - 18.0) < 0.01, "A  ...then the Opportunist's cut while it's still busy: 1.5x (%.1f)" % h)
 	var h2: float = aa._assassin_hit(busy, 12.0)
 	check(absf(h2 - 12.0) < 0.01, "A  ...not again on that foe for a while (%.1f)" % h2)
 	var am = await _hire("assassin", Vector2(440, 560), [1, 0, 0, 0])
@@ -296,17 +299,17 @@ func _assassin() -> void:
 	facing_him.last_foe_t = 1.5
 	facing_him.lunge_dir = Vector2.DOWN
 	facing_him.fighting = true
-	am.rest_t = 5.0
+	am.since_strike = 5.0
 	var hf: float = am._assassin_hit(facing_him, 12.0)
 	busy.last_foe_t = 1.5
-	am.rest_t = 5.0
+	am.since_strike = 5.0
 	var hb: float = am._assassin_hit(busy, 12.0)
 	am.opening = false
-	check(absf(hf - 12.0) < 0.01 and absf(hb - 12.0 * 1.7) < 0.01, "A  Backstab: 1.7x on a foe busy with another (%.1f), not on one facing and fighting him (%.1f)" % [hb, hf])
-	am.rest_t = 0.0
+	check(absf(hf - 12.0) < 0.01 and absf(hb - 12.0 * 2.5) < 0.01, "A  Backstab: 2.5x on a foe busy with another (%.1f), not on one facing and fighting him (%.1f)" % [hb, hf])
+	am.since_strike = 0.0
 	busy.last_foe_t = 1.5
 	var hr: float = am._assassin_hit(busy, 12.0)
-	check(hr < 12.0 * 1.5, "A  ...and only after a moment out of the fight (%.1f)" % hr)
+	check(hr < 12.0 * 2.0, "A  ...and only after a moment without striking (%.1f)" % hr)
 	# Chain Assassination.
 	await _fresh()
 	var c = await _hire("assassin", Vector2(320, 560), [3, 0, 0, 0])
@@ -397,7 +400,8 @@ func _assassin() -> void:
 	var st = await _hire("assassin", Vector2(320, 560), [0, 0, 4, 0])
 	var sk = _foe("skeleton_archer", Vector2(320, 440), 9999.0)
 	st.rest_t = 5.0
-	check(st.unseen_by(sk, 150.0) and not st.unseen_by(sk, 200.0), "A  Leafstep: an archer that would see him at 15 ft doesn't till he's nearer (12 ft)")
+	var sk2 = _foe("skeleton_archer", st.position + Vector2(30, -30), 9999.0)
+	check(st.unseen_by(sk, 150.0) and not st.unseen_by(sk2, 150.0), "A  stalking (Leafstep): an archer 12 ft off with a 15 ft bow doesn't see him; one 4 ft off does")
 	st.rest_t = 0.0
 	check(not st.unseen_by(sk, 150.0), "A  ...in the fight, he's seen as anyone")
 	var mobbers := []
@@ -424,7 +428,10 @@ func _assassin() -> void:
 	var ex = await _hire("assassin", Vector2(320, 560), [0, 0, 0, 4])
 	var hurt = _foe("orc", Vector2(320, 520), 100.0)
 	hurt.hp = 45.0
-	var h_full: float = ex._assassin_hit(_foe("orc", Vector2(100, 300), 100.0), 12.0)
+	ex.since_strike = 0.0   # (no opening strike in these: he's been at it)
+	var healthy = _foe("orc", Vector2(100, 300), 100.0)
+	healthy.aggro = ex
+	var h_full: float = ex._assassin_hit(healthy, 12.0)
 	var hs := []
 	for i in 3:
 		hs.append(ex._assassin_hit(hurt, 12.0))

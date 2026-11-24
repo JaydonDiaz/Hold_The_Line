@@ -1850,8 +1850,8 @@ func _find_blocker():
 	var best = null
 	var best_d := INF
 	for w in main.warriors_near(position, radius + REACH + 24.0):
-		if not w.is_active() or w.sheltered() or w.unmanned_tower():
-			continue
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or w.slips_past(self):
+			continue   # (an Assassin stalking another slips by: it isn't stopped to fight)
 		var d: float = position.distance_to(w.position) - radius - w.RADIUS
 		if d <= REACH and d < best_d:
 			best_d = d
