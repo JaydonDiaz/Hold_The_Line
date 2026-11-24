@@ -1525,9 +1525,9 @@ func _draw_ashwatch() -> void:
 	_b(74, 110, 12, 4, Color(1.0, 0.7, 0.3, 0.6 + 0.3 * sin(t * 5.0)))
 	_flame(66, 104, 0.8, 1.0)
 	_flame(94, 104, 0.8, 2.0)
-	# Two swordsmen on the wall, watching the ridge.
+	# A Knight and a Pikeman on the wall, watching the ridge.
 	_figure("swordsman", 56, 92, 0.0, false, 3.0, false)
-	_figure("swordsman", 104, 92, 0.7, true, 3.0, false)
+	_figure("pikeman", 104, 92, 0.7, true, 3.0, false)
 	_b(0, 130, GW, 20, Color(0.18, 0.22, 0.16))
 	# The road up to the gate, across the foreground.
 	for row in range(130, 150):
@@ -1753,12 +1753,12 @@ func _draw_oath() -> void:
 		var half := 5.0 + (row - 112) * 0.35
 		_b(80 - half, row, half * 2.0, 1, Color(0.62, 0.55, 0.42))
 	# The delegates in a half circle, each under their people's banner.
-	var who := [["swordsman", Color(0.95, 0.55, 0.25)], ["engineer", Color(0.85, 0.62, 0.32)], ["archer", Color(0.45, 0.85, 0.4)],
-		["healer", Color(0.95, 0.95, 0.7)], ["miner", Color(1.0, 0.8, 0.3)], ["frost", Color(0.6, 0.88, 1.0)],
-		["martial", Color(1.0, 0.5, 0.35)], ["bard", Color(1.0, 0.6, 0.85)], ["mage", Color(0.75, 0.55, 1.0)]]
+	var who := [["pikeman", Color(0.95, 0.55, 0.25)], ["swordsman", Color(0.95, 0.55, 0.25)], ["engineer", Color(0.85, 0.62, 0.32)],
+		["archer", Color(0.45, 0.85, 0.4)], ["assassin", Color(0.45, 0.85, 0.4)], ["healer", Color(0.95, 0.95, 0.7)], ["miner", Color(1.0, 0.8, 0.3)],
+		["frost", Color(0.6, 0.88, 1.0)], ["martial", Color(1.0, 0.5, 0.35)], ["bard", Color(1.0, 0.6, 0.85)], ["mage", Color(0.75, 0.55, 1.0)]]
 	for i in who.size():
-		var x := 11.0 + i * 17.0
-		var y := 142.0 - absf(i - 4.0) * 2.5
+		var x := 6.0 + i * 14.0
+		var y := 142.0 - absf(i - 5.0) * 2.0
 		if absf(x - 80.0) < 8.0:
 			y += 4.0   # (the one before the road stands a step down)
 		_banner(x + 5, y - 10, who[i][1])
@@ -1809,7 +1809,7 @@ func _draw_wars() -> void:
 	# Two lines facing each other under their banners.
 	for i in 4:
 		_banner(18 + i * 12, 128 - (i % 2) * 6, Color(0.95, 0.55, 0.25))
-		_figure_at("swordsman" if i % 2 == 0 else "archer", 14 + i * 12, 134 - (i % 2) * 6, 3.0)
+		_figure_at(["swordsman", "archer", "pikeman", "archer"][i], 14 + i * 12, 134 - (i % 2) * 6, 3.0)
 	for i in 4:
 		_banner(146 - i * 12, 128 - (i % 2) * 6, Color(1.0, 0.8, 0.3))
 		_figure_at("miner" if i % 2 == 0 else "cannoneer", 150 - i * 12, 134 - (i % 2) * 6, 3.0)

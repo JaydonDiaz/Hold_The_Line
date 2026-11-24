@@ -26,6 +26,8 @@ const FUSE := 0.6          # seconds a Sapper's bomb fizzes before it goes off
 const PLANT := 1.6         # ...against one of your emplacements: it has to plant the charge (time to stop it)
 const ENRAGE_SPEED := 1.35
 const ENRAGE_RATE := 0.7
+const PIN_AGAIN := 4.0       # a foe pinned (No Passage) can't be pinned again for this long
+const BUSY_TIME := 1.5       # it's busy with a troop this long after it last struck it (an Assassin's chance)
 const AGGRO_LEASH := 260.0   # furthest a fighter turns aside to go after a unit attacking it
 const CASTLE_COMMIT := 90.0  # this close to the castle wall, an enemy is set on the castle and won't turn aside
 const EnemyShot = preload("res://scripts/enemy_shot.gd")
@@ -164,6 +166,15 @@ var lunge := 0.0
 var lunge_dir := Vector2.DOWN
 # Shattercraft (a Frost Witch's): Brittle, broken by the next hit for bonus ice damage; one
 # killed while Brittle (or just after it broke) shatters (main.shatter).
+# Pikemen and Assassins (see warrior.gd): who it's fighting, and what's been done to it.
+var last_foe = null         # the troop it last struck...
+var last_foe_t := 0.0       # ...this long ago counting down (> 0: it's busy with that one)
+var delay_cd := 0.0         # Disruptive Cut / Hidden Kunai: not set back again till this runs out
+var sever_cd := 0.0         # Spell Sever: not broken off again till this runs out
+var blackout_t := 0.0       # Blackout: > 0, it can't start a special attack
+var blackout_immune := 0.0  # ...and not blacked out again till this runs out
+var fear_immune := 0.0      # Silent Reaper: not made to falter again till this runs out
+var pin_cd := 0.0           # No Passage: not pinned again till this runs out (however many Pikemen)
 var brittle_t := 0.0        # > 0: Brittle
 var brittle_cd := 0.0       # > 0: broken a moment ago; can't be made Brittle again yet
 var brittle_fx := {}        # time, bonus, every
@@ -344,6 +355,14 @@ func _process(delta: float) -> void:
 	cd_timer = maxf(cd_timer - delta, 0.0)
 	root_timer = maxf(root_timer - delta, 0.0)
 	confuse_timer = maxf(confuse_timer - delta, 0.0)
+	if last_foe_t > 0.0 or delay_cd > 0.0 or sever_cd > 0.0 or blackout_t > 0.0 or blackout_immune > 0.0 or fear_immune > 0.0 or pin_cd > 0.0:
+		last_foe_t = maxf(last_foe_t - delta, 0.0)
+		delay_cd = maxf(delay_cd - delta, 0.0)
+		sever_cd = maxf(sever_cd - delta, 0.0)
+		blackout_t = maxf(blackout_t - delta, 0.0)
+		blackout_immune = maxf(blackout_immune - delta, 0.0)
+		fear_immune = maxf(fear_immune - delta, 0.0)
+		pin_cd = maxf(pin_cd - delta, 0.0)
 	if brittle_t > 0.0 or brittle_cd > 0.0 or broke_t > 0.0:
 		brittle_t = maxf(brittle_t - delta, 0.0)
 		brittle_cd = maxf(brittle_cd - delta, 0.0)
@@ -527,7 +546,7 @@ func _process(delta: float) -> void:
 		lunge_dir = position.direction_to(blocker.position)
 		if absf(lunge_dir.x) > 0.2:
 			flip = signf(lunge_dir.x)
-		if cd_timer <= 0.0 and not slam.is_empty():
+		if cd_timer <= 0.0 and not slam.is_empty() and blackout_t <= 0.0:
 			cd_timer = _attack_cd()
 			slam_wind = float(slam["windup"])   # (hauled back first: the warning)
 			_new_windup()
@@ -771,8 +790,8 @@ func _cast_update(delta: float) -> bool:
 	lunge_dir = position.direction_to(near.position)
 	if absf(lunge_dir.x) > 0.2:
 		flip = signf(lunge_dir.x)
-	if cast_cd > 0.0 or _cast_nearest(position, r, {}) == null:
-		return true   # (stands its ground, out of reach, while it gathers itself)
+	if cast_cd > 0.0 or blackout_t > 0.0 or _cast_nearest(position, r, {}) == null:
+		return true   # (stands its ground, out of reach, while it gathers itself; or blacked out)
 	var spells: Array = cast.get("spells", SPELLS)
 	cast_spell = spells[randi() % spells.size()]   # (once, as the charge begins: no changing its mind)
 	cast_state = "charge"
@@ -796,7 +815,7 @@ func _cast_nearest(p: Vector2, r: float, skip: Dictionary):
 	var best = null
 	var best_d := r
 	for w in main.warriors_near(p, r + 20.0):
-		if not w.is_active() or w.sheltered() or w.unmanned_tower() or skip.has(w):
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or skip.has(w) or w.unseen_by(self, r):
 			continue
 		var d: float = p.distance_to(w.position)
 		if d <= best_d and not _wall_across(position, w.position):
@@ -811,7 +830,7 @@ func _arcane_mark():
 	var best = null
 	var r: float = cast["range"]
 	for w in main.warriors_near(position, r + 20.0):
-		if not w.is_active() or w.sheltered() or w.unmanned_tower() or position.distance_to(w.position) > r or _wall_across(position, w.position):
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or position.distance_to(w.position) > r or _wall_across(position, w.position) or w.unseen_by(self, r):
 			continue
 		if best == null or w.hp > best.hp + 0.01 or (absf(w.hp - best.hp) <= 0.01 and (position.distance_to(w.position) < position.distance_to(best.position) - 0.01
 				or absf(position.distance_to(w.position) - position.distance_to(best.position)) <= 0.01 and w.get_instance_id() < best.get_instance_id())):
@@ -937,7 +956,7 @@ func _necro_update(delta: float) -> bool:
 	if raised.size() < int(necro["max_raised"]):
 		var best = null
 		var best_score := -1.0
-		for rec in main.fallen:
+		for rec in (main.fallen if blackout_t <= 0.0 else []):
 			if rec["claimed"] != null or position.distance_to(rec["at"]) > reach:
 				continue
 			var t := rite_time(rec)
@@ -957,7 +976,7 @@ func _necro_update(delta: float) -> bool:
 			main.hud.show_message("A Gravebinder is raising your fallen %s! Stop it!" % best["name"])
 			return true
 	# Then the bowmen: when there's something to shoot.
-	if summon_t <= 0.0 and minions.size() < int(necro["summon_max"]) and not main.warriors_near(position, reach).is_empty():
+	if summon_t <= 0.0 and blackout_t <= 0.0 and minions.size() < int(necro["summon_max"]) and not main.warriors_near(position, reach).is_empty():
 		summon_t = float(necro["summon_every"])
 		for i in mini(int(necro["summon_count"]), int(necro["summon_max"]) - minions.size()):
 			var spot := position + Vector2.from_angle(-PI * 0.75 + i * PI * 0.5) * (radius + 22.0)
@@ -1094,12 +1113,12 @@ func _strafe_update(delta: float) -> bool:
 			main.spawn_burst(position + Vector2(0, 6), wd, Color(1.0, 0.5, 0.15))
 		return strafe_left > 0.0
 	strafe_timer -= delta
-	if strafe_timer > 0.0 or position.y < 30.0:
+	if strafe_timer > 0.0 or position.y < 30.0 or blackout_t > 0.0:
 		return false
 	var best = null
 	var best_d := 280.0
 	for w in main.warriors_near(position, 280.0):
-		if not w.is_active() or w.sheltered() or w.unmanned_tower():
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or w.unseen_by(self, 280.0):
 			continue
 		var d := position.distance_to(w.position)
 		if d < best_d:
@@ -1139,6 +1158,8 @@ func danger_zones() -> Array:
 ## A blow (or spell) of its own landing on a troop: who struck it is known while it lands
 ## (a Healer's ward throws some back at it).
 func _hurt(w, amount: float) -> void:
+	last_foe = w
+	last_foe_t = BUSY_TIME
 	main.hurt_by = self
 	w.take_damage(amount)
 	main.hurt_by = null
@@ -1196,7 +1217,7 @@ func _boss_update(delta: float) -> void:
 			return
 		stomp_wind = 0.0
 		_stomp_lands()
-	elif not stomp.is_empty() and stomp_timer <= 0.0:
+	elif not stomp.is_empty() and stomp_timer <= 0.0 and blackout_t <= 0.0:
 		var r0: float = stomp["radius"]
 		var near0: Array = main.get_warriors().filter(func(w): return w.is_active() and position.distance_to(w.position) <= r0 + w.RADIUS)
 		var walls0: Array = main.get_barricades().filter(func(b): return b.is_active() and b.gap_from(position) <= r0)
@@ -1368,7 +1389,7 @@ func _charge_update(delta: float) -> bool:
 				main.heavy_key = 0
 		return charging > 0.0
 	charge_timer -= delta
-	if charge_timer > 0.0 or position.y < 40.0 or stun_timer > 0.0 or freeze_timer > 0.0:
+	if charge_timer > 0.0 or position.y < 40.0 or stun_timer > 0.0 or freeze_timer > 0.0 or blackout_t > 0.0:
 		return false
 	var best = null
 	var best_d := INF
@@ -1446,7 +1467,7 @@ func _breathe(delta: float) -> void:
 		best = aggro   # whoever's attacking it gets the fire first
 	else:
 		for w in main.get_warriors():
-			if not w.is_active() or w.sheltered() or w.unmanned_tower():
+			if not w.is_active() or w.sheltered() or w.unmanned_tower() or w.unseen_by(self, best_d):
 				continue
 			var d: float = position.distance_to(w.position) - w.RADIUS
 			if d < best_d:
@@ -1475,7 +1496,7 @@ func _attacker():
 	var best = null
 	var best_d := AGGRO_LEASH
 	for w in main.get_warriors():
-		if not w.is_active() or w.target != self or w.is_emplacement() and w.attack_range <= 0.0:
+		if not w.is_active() or w.target != self or w.is_emplacement() and w.attack_range <= 0.0 or w.unseen_by(self, AGGRO_LEASH):
 			continue
 		var d: float = position.distance_to(w.position)
 		if d > best_d or d - radius - w.RADIUS > w.attack_range + 12.0:
@@ -1502,7 +1523,7 @@ func _shoot_from_range() -> bool:
 	# arrows that don't bring anyone to it, it leaves the troops be and pushes on.
 	var troops: Array = [] if press_on > 0.0 else main.warriors_near(position, r + 40.0)
 	for w in troops:
-		if not w.is_active() or w.sheltered() or w.unmanned_tower():
+		if not w.is_active() or w.sheltered() or w.unmanned_tower() or w.unseen_by(self, r):
 			continue
 		var d: float = position.distance_to(w.position) - w.RADIUS - radius
 		if d <= r and d < best and not _wall_across(position, w.position):
@@ -1952,6 +1973,111 @@ func take_damage(amount: float, show_hit := true, school := PHYSICAL) -> void:
 			main.shatter.call_deferred(position, shatter_fx, brittle_fx, brittle_gen if main.shatter_depth == 0 else 1, brittle_by)
 		died.emit(self)
 		queue_free()
+
+
+## Busy with a troop other than `w` (an Assassin's chance): striking at another a moment
+## ago, or gathering a spell, a slam, a rite, a fuse.
+func busy_with_other(w) -> bool:
+	if cast_state != "" or slam_wind > 0.0 or rite != null or fuse >= 0.0 or strafe_warn > 0.0 or charge_warn > 0.0:
+		return true
+	return last_foe_t > 0.0 and last_foe != w and is_instance_valid(last_foe)
+
+
+## The way it faces: where it's striking, else where it's going.
+func facing_dir() -> Vector2:
+	return lunge_dir if fighting or last_foe_t > 0.0 else heading
+
+
+## Getting ready for something an Assassin can sabotage: a warned blow or a spell, a rite,
+## a fuse, or (an archer, a Boltflinger) a shot at a troop in reach.
+func readying() -> bool:
+	if slam_wind > 0.0 or strafe_warn > 0.0 or charge_warn > 0.0 or cast_state == "charge" or rite != null or fuse >= 0.0 or stomp_wind > 0.0:
+		return true
+	return not ranged.is_empty() and fighting and cd_timer > 0.0
+
+
+## Disruptive Cut, Hidden Kunai: what it's getting ready for comes `t` later (each once per
+## its cooldown, set by the one doing it). Returns whether there was anything to set back.
+func delay_windup(t: float) -> bool:
+	if not readying():
+		return false
+	t *= maxf(cc_mult, 0.4)   # (a Warlord or a boss, less)
+	if slam_wind > 0.0:
+		slam_wind += t
+	if strafe_warn > 0.0:
+		strafe_warn += t
+	if charge_warn > 0.0:
+		charge_warn += t
+	if stomp_wind > 0.0:
+		stomp_wind += t * 0.5
+	if cast_state == "charge":
+		cast_left += t
+	if rite != null:
+		rite_left += t
+	if fuse >= 0.0:
+		fuse += t * 0.5
+	if not ranged.is_empty():
+		cd_timer += t
+	main.spawn_text(position + Vector2(0, -radius * 2.0 - 8.0), "Delayed!", Color(0.8, 0.85, 1.0))
+	return true
+
+
+## Spell Sever: what it's readying is broken off outright (a spell, a slam, a strafing run, a
+## charge, a rite). A boss, a Warlord, or a lit fuse is only set back. True if it broke.
+func sever() -> bool:
+	if not readying():
+		return false
+	if boss or cc_mult < 0.75 or (fuse >= 0.0 and cast_state == "" and slam_wind <= 0.0):
+		delay_windup(0.6)
+		return false
+	if cast_state != "":
+		_break_cast()
+	if slam_wind > 0.0:
+		slam_wind = 0.0
+		cd_timer = maxf(cd_timer, _attack_cd())   # (that blow's lost)
+	if strafe_warn > 0.0:
+		strafe_warn = 0.0
+		strafe_timer = float(strafe["cooldown"]) * 0.5
+	if charge_warn > 0.0:
+		charge_warn = 0.0
+		charge_timer = float(rush["cooldown"]) * 0.5
+	if rite != null:
+		_end_rite(false)
+	if not ranged.is_empty():
+		cd_timer += 0.8
+	main.spawn_text(position + Vector2(0, -radius * 2.0 - 8.0), "Severed!", Color(0.9, 0.7, 1.0))
+	return true
+
+
+## Blackout: no special attack started for `t` (a Warlord or a boss, much less), then a
+## while it can't be blacked out again (however many Assassins).
+func apply_blackout(t: float, immune: float) -> void:
+	if blackout_immune > 0.0:
+		return
+	var d := t * (cc_mult if cc_mult < 1.0 else 1.0) * (0.5 if boss else 1.0)
+	blackout_t = maxf(blackout_t, d)
+	blackout_immune = d + immune
+	main.spawn_text(position + Vector2(0, -radius * 2.0 - 16.0), "Blackout", Color(0.6, 0.6, 0.75))
+
+
+## Silent Reaper: it falters a moment (weak foes only; then not again for a while).
+func falter(t: float) -> void:
+	if boss or tier >= 4 or fear_immune > 0.0:
+		return
+	stun_timer = maxf(stun_timer, t * cc_mult)
+	fear_immune = 5.0
+
+
+## No Passage: pinned where it stands (a big one, or a boss, only slowed; and none of it
+## again for a while, whoever's pike it is).
+func pin(t: float) -> void:
+	if pin_cd > 0.0:
+		return
+	pin_cd = PIN_AGAIN
+	if boss or tier >= 4 or radius >= 20.0 or knock_mult < 0.5:
+		apply_slow(0.4, t)
+		return
+	apply_root(t)
 
 
 ## Brittle (a Frost Witch's Shattercraft): till the next hit on it, or `fx.time` s. Not

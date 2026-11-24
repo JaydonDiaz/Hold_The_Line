@@ -363,8 +363,8 @@ func _unlocks() -> void:
 	main._on_hire_pressed("archer")
 	check(main.placing_type == "", "U  the Archer button does nothing (locked)")
 	main.hud.hire_tab = "troops"
-	_key(KEY_2)   # the Archer's hotkey
-	check(main.placing_type == "", "U  ...nor does its hotkey, 2")
+	_key(KEY_3)   # the Archer's hotkey (the Pikeman's is 2: he's there from the start)
+	check(main.placing_type == "", "U  ...nor does its hotkey, 3")
 	main.placing_type = "archer"   # even if something sets it directly
 	var n: int = main.get_warriors().size()
 	main.hire_at(Vector2(300, 480))
@@ -699,7 +699,7 @@ func _training() -> void:
 	campaign.new_campaign("normal")
 	check(campaign.level_of("swordsman") == 0 and campaign.points("swordsman") == 0 and campaign.path_tier("swordsman", 0) == 1,
 			"T  a new campaign: level 0, no points, tier I only")
-	check(campaign.trainable() == ["swordsman"], "T  only the Swordsmen can be trained at the start")
+	check(campaign.trainable() == ["swordsman", "pikeman"], "T  only the Knights and Pikemen can be trained at the start")
 	check(not campaign.can_unlock("swordsman", 0) and not campaign.unlock("swordsman", 0), "T  no points, no training")
 	await _play("ashwatch")
 	main.gold = 99999
@@ -1150,7 +1150,7 @@ func _south_save(joined: Array) -> void:
 
 func _south() -> void:
 	var expect := {
-		"gw_exodus": ["greenwood_roads", "rules_evac.gd", ["archer", "archer"]],
+		"gw_exodus": ["greenwood_roads", "rules_evac.gd", ["archer", "archer", "assassin"]],
 		"gw_watchfires": ["greenwood_roads", "rules_positions.gd", []],
 		"gw_trail": ["greenwood_roads", "rules.gd", []],
 		"mv_wounded": ["mercy_fields", "rules_evac.gd", ["healer"]],

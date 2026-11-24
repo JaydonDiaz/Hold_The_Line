@@ -29,26 +29,26 @@ const OUTLINE := Color(0.1, 0.07, 0.1)
 const LOOKS := {
 	"": {"top": Color(0.36, 0.6, 0.93), "low": Color(0.78, 0.9, 1.0), "clouds": 6, "cloud": Color(1, 1, 1),
 		"sun": 1.0, "moon": 0.0, "stars": 0.0, "light": Color(1, 1, 1), "windows": 0.0, "storm": 0.0,
-		"guards": ["swordsman", "archer", "bard", "swordsman"], "foes": [], "scene": "idle"},
+		"guards": ["swordsman", "archer", "bard", "pikeman"], "foes": [], "scene": "idle"},
 	"tutorial": {"top": Color(0.4, 0.66, 0.98), "low": Color(0.85, 0.95, 1.0), "clouds": 4, "cloud": Color(1, 1, 1),
 		"sun": 1.0, "moon": 0.0, "stars": 0.0, "light": Color(1.04, 1.02, 0.96), "windows": 0.0, "storm": 0.0,
 		"guards": [], "foes": [], "scene": "training"},
 	"easy": {"top": Color(0.28, 0.6, 1.0), "low": Color(0.75, 0.92, 1.0), "clouds": 2, "cloud": Color(1, 1, 1),
 		"sun": 1.0, "moon": 0.0, "stars": 0.0, "light": Color(1.05, 1.04, 0.98), "windows": 0.0, "storm": 0.0,
-		"guards": ["swordsman", "archer", "healer"], "foes": ["goblin", "goblin", "bat"], "scene": "battle"},
+		"guards": ["swordsman", "pikeman", "archer", "healer"], "foes": ["goblin", "goblin", "bat"], "scene": "battle"},
 	"normal": {"top": Color(0.46, 0.56, 0.68), "low": Color(0.74, 0.79, 0.84), "clouds": 13, "cloud": Color(0.86, 0.88, 0.91),
 		"sun": 0.35, "moon": 0.0, "stars": 0.0, "light": Color(0.86, 0.88, 0.92), "windows": 0.0, "storm": 0.0,
 		"guards": ["swordsman", "archer", "mage", "swordsman"], "foes": ["orc", "wolf", "goblin", "sapper"], "scene": "battle"},
 	"hard": {"top": Color(0.1, 0.11, 0.22), "low": Color(0.3, 0.27, 0.4), "clouds": 10, "cloud": Color(0.3, 0.3, 0.4),
 		"sun": 0.0, "moon": 1.0, "stars": 0.4, "light": Color(0.5, 0.52, 0.66), "windows": 1.0, "storm": 0.0,
-		"guards": ["swordsman", "martial", "archer", "mage"], "foes": ["troll", "orc", "orc", "sapper"], "scene": "battle",
+		"guards": ["swordsman", "martial", "assassin", "archer", "mage"], "foes": ["troll", "orc", "orc", "sapper"], "scene": "battle",
 		"downed": ["swordsman", "archer"], "graves": 4},
 	"freeplay": {"top": Color(0.1, 0.06, 0.28), "low": Color(0.6, 0.32, 0.58), "clouds": 4, "cloud": Color(0.56, 0.44, 0.7),
 		"sun": 0.0, "moon": 0.7, "stars": 1.0, "light": Color(0.72, 0.64, 0.86), "windows": 1.0, "storm": 0.0,
 		"guards": ["mage", "frost", "mage"], "foes": ["goblin", "orc", "wolf", "troll", "bat", "sapper", "warlord"], "scene": "conjure"},
 	"campaign": {"top": Color(0.32, 0.36, 0.62), "low": Color(1.0, 0.72, 0.5), "clouds": 7, "cloud": Color(1.0, 0.86, 0.78),
 		"sun": 0.6, "moon": 0.0, "stars": 0.0, "light": Color(1.0, 0.9, 0.82), "windows": 1.0, "storm": 0.0,
-		"guards": ["swordsman", "swordsman"], "foes": ["goblin", "goblin", "orc"], "scene": "battle"},
+		"guards": ["swordsman", "pikeman"], "foes": ["goblin", "goblin", "orc"], "scene": "battle"},
 	"settings": {"top": Color(0.36, 0.6, 0.93), "low": Color(0.82, 0.9, 0.98), "clouds": 5, "cloud": Color(1, 1, 1),
 		"sun": 0.9, "moon": 0.0, "stars": 0.0, "light": Color(1.02, 1.0, 0.96), "windows": 0.0, "storm": 0.0,
 		"guards": [], "foes": [], "scene": "workshop"},
@@ -226,11 +226,11 @@ func _cast() -> void:
 			_add_actor("archer", Vector2(120, ROWS[1]), "guard", "fight")
 			_add_actor("archer", Vector2(300, ROWS[1]), "guard", "fight")
 		"pass":
-			# Crags either side, and Swordsmen holding the gap: the enemy bounces off them.
+			# Crags either side, and a Knight and a Pikeman holding the gap: the enemy bounces off them.
 			for c in [[Vector2(16, 534), 1.2], [Vector2(612, 532), 1.3], [Vector2(560, 610), 0.9], [Vector2(70, 612), 0.8]]:
 				_add_actor("crag", c[0], "prop", str(c[1]))
 			_add_actor("swordsman", Vector2(330, ROWS[0]), "guard", "fight")
-			_add_actor("swordsman", Vector2(346, ROWS[1]), "guard", "fight")
+			_add_actor("pikeman", Vector2(346, ROWS[1]), "guard", "fight")
 			_add_actor("archer", Vector2(230, ROWS[0]), "guard", "fight")
 			_add_actor("archer", Vector2(250, ROWS[1]), "guard", "fight")
 		"protect":
@@ -253,12 +253,12 @@ func _cast() -> void:
 			# Artists hold the ground in front.
 			_add_actor("fort", Vector2(410, ROWS[0] - 6), "prop")
 			_add_actor("martial", Vector2(500, ROWS[0]), "guard", "fight")
-			_add_actor("martial", Vector2(520, ROWS[1]), "guard", "fight")
+			_add_actor("assassin", Vector2(520, ROWS[1]), "guard", "fight")
 			_add_actor("archer", Vector2(330, ROWS[1]), "guard", "fight")
 		"escort":
 			# The convoy: a wagon rolling along the road, a Bard out in front and guards around it.
 			_add_actor("wagon", Vector2(-40, ROWS[1] + 4), "prop")
-			for e in [["bard", Vector2(96, 0)], ["swordsman", Vector2(64, -34)], ["archer", Vector2(-58, -34)]]:
+			for e in [["bard", Vector2(96, 0)], ["swordsman", Vector2(64, -34)], ["archer", Vector2(-58, -34)], ["pikeman", Vector2(-58, 30)]]:
 				_add_actor(e[0], Vector2(-40, ROWS[1] + 4) + e[1], "guard", "escort")
 				actors[-1]["off"] = e[1]
 		"retreat":

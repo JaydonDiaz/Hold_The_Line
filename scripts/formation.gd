@@ -22,6 +22,7 @@ const TIPS := {
 }
 const ACROSS := 40.0        # spacing along a line (a troop's width and a little)
 const ROW := 48.0           # spacing between rows
+const PIKE_ROW := 30.0      # Pikemen behind the front line: this close, so their pikes reach past it
 const LANE := 14.0          # escort: kept clear either side of the objective's road ahead, beyond its own width
 const POST_MOVE := 8.0      # a member's post is moved only when its slot's moved this far (no jitter)
 const IN_PLACE := 34.0      # a member this near its slot (or fighting) counts as in place for cohesion
@@ -82,12 +83,18 @@ func lay_out(kind: String, troops: Array, follow_r := 30.0) -> void:
 	by_role["front"].sort_custom(func(a, b): return a.max_hp * a.damage > b.max_hp * b.damage)
 	match kind:
 		"shield_wall":
+			# Pikemen behind the other fighters, in reach past them (a second rank), unless
+			# they're all the front there is.
+			var pikes: Array = by_role["front"].filter(func(w): return w.data.get("pike", false))
+			var blades: Array = by_role["front"].filter(func(w): return not w.data.get("pike", false))
+			var rows := [blades, pikes, by_role["ranged"], by_role["support"]] if not blades.is_empty() else [pikes, [], by_role["ranged"], by_role["support"]]
 			var y := 0.0
-			for r in ["front", "ranged", "support"]:
-				if by_role[r].is_empty():
+			for i in rows.size():
+				var r: Array = rows[i]
+				if r.is_empty():
 					continue
-				_line(by_role[r], y, ACROSS if r == "front" else ACROSS * 1.15)
-				y += ROW if r == "front" else ROW * 0.95
+				_line(r, y, ACROSS if i < 2 else ACROSS * 1.15)
+				y += PIKE_ROW if (i == 0 and not blades.is_empty() and not pikes.is_empty()) else (ROW if i < 2 else ROW * 0.95)
 		"wedge":
 			var front: Array = by_role["front"]
 			var spots := []

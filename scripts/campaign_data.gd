@@ -12,7 +12,7 @@ extends RefCounted
 ##   "path:<index into Data.CASTLE_PATHS>"   ("path:0" is Fortify)
 ##   "repair"   the Repair tab (the Engineers mending the castle)
 
-const START_UNLOCKS := ["swordsman"]   # what Ashwatch's garrison has from the start
+const START_UNLOCKS := ["swordsman", "pikeman"]   # what Ashwatch's garrison has from the start
 const BUILDERS := "stonehollow"        # emplacements (not barricades) need the Engineers too...
 const LEND_BUILDERS := "engineers"     # ...or a mission that lends them (see MISSIONS "lend")
 const ENDING_ALLIES := 8               # every regional alliance: the fully united ending
@@ -44,9 +44,9 @@ const FACTIONS := {
 		"leader": "vell", "folk": ["engineer", "engineer", "engineer"],
 		"people": "Stonehollow's masons and engineers, dwarves for the most part, carve their town out of the mountain. Stubborn, proud and practical, they built the beacon towers of the old Line, and they still keep the plans."},
 	"greenwood": {"name": "The Woodland Watch", "home": "Greenwood", "color": Color(0.45, 0.85, 0.4),
-		"unlocks": ["archer", "path:1", "ability:arrows"],
-		"gives": "Archers, Wall Archers and Arrow Storm",
-		"leader": "thorne", "folk": ["archer", "archer", "archer"],
+		"unlocks": ["archer", "assassin", "path:1", "ability:arrows"],
+		"gives": "Archers, Elven Assassins, Wall Archers and Arrow Storm",
+		"leader": "thorne", "folk": ["archer", "assassin", "archer"],
 		"people": "The elves of the Woodland Watch, green-haired archers all, guard a forest older than any kingdom, beside the Fae who keep its oldest groves. Patient and wary, they trust no road they did not cut themselves, and no promise they have not seen kept."},
 	"deepdelve": {"name": "The Mining Guild", "home": "Deepdelve", "color": Color(1.0, 0.8, 0.3),
 		"unlocks": ["mine", "cannon"],
@@ -226,8 +226,9 @@ const MISSIONS := {
 		"pace": {"auto": "forced", "deploy": 22},
 		"count": [9, 3], "mood": "normal", "map": "greenwood_roads",
 		"pool": {1: ["goblin", "wolf", "wolf"], 2: ["skeleton_archer", "wolf"], 3: ["bat"], 4: ["wolf"], 5: ["orc"]},
-		"notes": {1: "The Watch's families are coming down the forest roads. Save at least 28.", 3: "Bats! The Watch's archers can bring them down."},
-		"allies": [{"kind": "archer", "at": Vector2(240, 560)}, {"kind": "archer", "at": Vector2(400, 560)}],
+		"notes": {1: "The Watch's families are coming down the forest roads. Save at least 28. An elven Assassin of the Watch fights with you: he goes for the archers behind their line.",
+			3: "Bats! The Watch's archers can bring them down."},
+		"allies": [{"kind": "archer", "at": Vector2(240, 560)}, {"kind": "archer", "at": Vector2(400, 560)}, {"kind": "assassin", "at": Vector2(320, 520)}],
 		"lend": [], "reward": "greenwood", "track": {},
 		"intro": "gw_exodus_intro", "outro": "gw_exodus_outro"},
 	"gw_watchfires": {"name": "The Watchfires", "territory": "greenwood", "type": "positions", "waves": 6, "level": 5, "gold": 360,

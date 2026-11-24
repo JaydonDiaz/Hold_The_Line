@@ -448,14 +448,15 @@ func _layout_hire() -> void:
 			var price := _price_text(d)
 			var font_size := 15 if with_icon else (13 if w >= 80.0 else 12)
 			var label: String = d["name"]
-			var text := "%s  %s [%d]" % [label, price, i + 1]
+			var key := str((i + 1) % 10)   # (the tenth's key is 0)
+			var text := "%s  %s [%s]" % [label, price, key]
 			if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > room:
 				# Names too wide for the button go on two lines (e.g. "Martial / Artist").
 				label = label.replace(" ", "\n")
-			text = "%s\n%s  [%d]" % [label, price, i + 1] if not compact else "%s\n%s" % [label, price]
+			text = "%s\n%s  [%s]" % [label, price, key] if not compact else "%s\n%s" % [label, price]
 			# Then anything still too wide gets a smaller font until it fits.
 			var widest := 0.0
-			for line in (label + "\n%s  [%d]" % [price, i + 1]).split("\n"):
+			for line in (label + "\n%s  [%s]" % [price, key]).split("\n"):
 				widest = maxf(widest, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x)
 			while widest > room and font_size > 9:
 				widest *= (font_size - 1.0) / font_size
@@ -476,7 +477,7 @@ func _layout_hire() -> void:
 			b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS if mounted else CanvasItem.TEXTURE_FILTER_PARENT_NODE
 			b.expand_icon = with_icon
 			b.add_theme_constant_override("icon_max_width", int(icon_w))
-			hire_meta[kind] = [label, i + 1, 1]
+			hire_meta[kind] = [label, key, 1]
 	# The castle's tabs share the same space: four path cards, a button per ability,
 	# a button per repair size.
 	for p in castle_cards.size():
@@ -558,7 +559,7 @@ func set_prices(mult: float, step := 1) -> void:
 	for kind in hire_meta:
 		var m: Array = hire_meta[kind]
 		var price := _price_text(Data.WARRIORS[kind])
-		hire_buttons[kind].text = ("%s\n%s" % [m[0], price]) if compact else (("%s\n%s  [%d]" if m[2] == 1 else "%s  %s [%d]") % [m[0], price, m[1]])
+		hire_buttons[kind].text = ("%s\n%s" % [m[0], price]) if compact else (("%s\n%s  [%s]" if m[2] == 1 else "%s  %s [%s]") % [m[0], price, m[1]])
 
 
 func _setup_hire_button(b: Button, kind: String, d: Dictionary) -> void:

@@ -13,7 +13,7 @@ const TYPES := {
 	"castle": {"name": "Castle Defense", "blurb": "The classic\nbattle: hold\nthe castle", "color": Color(0.95, 0.85, 0.45), "look": "archer"},
 	"positions": {"name": "Multiple Positions", "blurb": "Defend several\npositions at once\nLose too many\nand it's over",
 		"color": Color(0.95, 0.75, 0.45), "look": "engineer"},
-	"pass": {"name": "Hold the Pass", "blurb": "No castle: stop\nthem getting past\nyour lines", "color": Color(0.7, 0.85, 1.0), "look": "swordsman"},
+	"pass": {"name": "Hold the Pass", "blurb": "No castle: stop\nthem getting past\nyour lines", "color": Color(0.7, 0.85, 1.0), "look": "pikeman"},
 	"protect": {"name": "Protect the Objective", "blurb": "Keep it standing\nwhile it works,\nagain and again", "color": Color(1.0, 0.8, 0.35), "look": "mage"},
 	"evac": {"name": "Evacuation", "blurb": "Get the villagers\nto safety\nNo pauses", "color": Color(0.75, 1.0, 0.55), "look": "healer"},
 	"capture": {"name": "Capture and Hold", "blurb": "Take the ground,\nthen hold it\nNo pauses", "color": Color(1.0, 0.6, 0.45), "look": "martial"},

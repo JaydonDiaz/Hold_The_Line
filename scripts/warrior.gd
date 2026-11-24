@@ -28,6 +28,37 @@ const RUN_BEFORE_DASH := 1.0 # seconds of running before a dash
 const LANCE_AFTER := 0.25    # seconds of running before a Charge Knight lowers his spear for it
 const ESCORT_LANE := 10.0       # an escort keeps this far out of a wagon's or ram's road (beyond the two of them touching)
 const ESCORT_LEAD := 0.5        # ...and makes for where it'll be this many seconds on
+# Pikeman.
+const STEADY_REACH := 60.0       # Unbroken Line: a Pikeman this near steadies the melee allies he backs
+const HEDGE_SLACK := 12.0        # Hedge of Points: the braced thrust's sweep catches the next foe this far past his reach
+const COMING_ON := 0.15         # a foe whose way is at least this much toward him is coming on (past him counts)
+const PIKE_SET := 0.3            # stood still this long: braced, pike levelled
+const PIKE_READY := 1.25         # Readied Pike: its thrust at a foe charging in (Spearwall's brace replaces it)
+const PIKE_AGAIN := 4.0          # ...not again on the same foe for this long
+const PIKE_CLOSE := 6.0          # a foe this far inside its reach (gap, px) is past its point...
+const PIKE_CLOSE_HIT := 0.85     # ...and its thrusts at it land for this share (a modest weakness: Haft Check makes room)
+const SEQ_TIME := 3.0            # Impaling Strike: a run of thrusts on one foe breaks after this long without one
+# Assassin.
+const OPPORTUNIST := 1.25        # its first cut on a foe busy with another...
+const OPP_AGAIN := 5.0           # ...each foe once in this long
+const REST_UNSEEN := 1.0         # Leafstep: out of the fight this long, it's quicker and harder to notice
+const SMOKE_SEEN := 40.0         # in its smoke, only a foe this close still sees it
+const SMOKE_HURT := 0.4          # Smoke Pellet: below this share of health and still being hit...
+const SMOKE_NEAR := 30.0         # ...or SMOKE_CROWD foes within this gap of it
+const SMOKE_CROWD := 3
+const SMOKE_RUN := 90.0          # ...it slips this far away
+const AGGRO_SMOKE := 260.0       # ...losing every foe this near that had turned on it
+const DECOY_LURES := 2           # Ghost Trail: foes a decoy draws off
+const GHOST_SPEED := 0.2         # ...and its speed after, for GHOST_SPEED_TIME
+const GHOST_SPEED_TIME := 2.0
+const REFUND_AGAIN := 8.0        # Ghost of Greenwood: smoke back sooner at most this often
+const VITAL_TIME := 3.0          # Vital Strike: its foe's guard down this long
+const LUNGE_TIME := 0.12         # Chain Assassination: a lunge takes this long
+const FEAR_REACH := 90.0         # Silent Reaper: the weak this near falter
+const MOMENTUM_TIME := 3.0       # Final Judgment: Killing Momentum lasts...
+const MOMENTUM_AGAIN := 6.0      # ...and comes at most this often
+const FLANK_NEAR := 70.0         # flanking: once this near its target, straight in
+const FLANK_WIDE := 50.0         # ...before that, round the side this far
 const BLADE_STAND := 0.15       # Spellblade: stands and fights a foe whose blow takes less than this share of her health; backs off from the rest
 const BLADE_SLACK := 12.0       # Spellblade: once out, the sword stays out this much further
 const BLADE_SWING := 0.22       # ...how long a sweep shows
@@ -55,9 +86,10 @@ const WINDUP := 0.18      # melee troops rear back over the last moment before a
 const ARCHER_DRAW := 0.9  # Archer idle: draw an arrow out of the quiver (seconds)...
 const ARCHER_LOOP := 3.3  # ...then twirl it, flip it, one lazy turn, over and over while she stands idle...
 const ARCHER_STOW := 0.7  # ...and put it back only once she moves off (seconds)
-const PRIORITIES := ["closest", "first", "strongest"]   # (on offer; "weakest" still works for anything set to it)
+const PRIORITIES := ["closest", "first", "strongest", "valuable"]
+const VALUE := {"warmage": 5.0, "boltflinger": 5.0, "drummer": 4.0, "gravebinder": 4.0, "skeleton_archer": 3.0, "sapper": 2.0, "shieldbearer": 1.0, "wolf": 0.5}   # (on offer; "weakest" still works for anything set to it)
 const PRIORITY_NAMES := {
-	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective",
+	"closest": "Closest", "first": "First", "strongest": "Strongest", "weakest": "Weakest", "objective": "Objective", "valuable": "High-value",
 	"side": "Side Objectives",
 	"revive": "Heal", "heal": "Heal the hurt", "stay": "Stay with", "danger": "In danger",
 }
@@ -122,6 +154,75 @@ var summoner = null   # the Mage (or Mage Tower) that raised it, or the Martial 
 var clone_of = null   # Mirror Self: the real Martial Artist this copy is part of (null for the real one)
 var multiform := {}   # Mirror Self: copies, power, hp, cooldown
 var multiform_timer := 0.0
+# Pikeman (see _pike_step, _pike_hit). Path effects:
+var brace := {}              # Spearwall
+var hold := {}               # Hold Fast: dr, knock (braced only)
+var hardened := {}           # Impaler: pierce, bonus
+var puncture := {}
+var impaling := {}
+var phalanx := {}
+var haft := {}               # Hook & Shove
+var hook := {}
+var defend := {}
+var sweep := {}
+var still_t := 0.0           # seconds it's stood still (braced once PIKE_SET)
+var pike_range := 0.0        # its reach before Overlapping Spears
+var pike_seen := {}          # foe id -> seconds left before it can be intercepted again
+var punct_id := 0            # Deep Thrust: the foe it's puncturing, how deep, how long left
+var punct_n := 0
+var punct_t := 0.0
+var seq_id := 0              # Impaling Strike: thrusts in a row on one foe
+var seq_n := 0
+var seq_t := 0.0
+var shoulder := false        # Phalanx: a melee ally at its shoulder
+var backed := false          # ...one in front of it (it fights from the second rank)
+var phal_check := 0.0
+var support_t := 0.0
+var haft_t := 0.0
+var hook_t := 0.0
+var defend_t := 0.0
+var sweep_t := 0.0
+var guarded: Array = []      # Hook & Shove: where the troops and objectives it covers stand
+var guard_check := 0.0
+# Assassin (see _assassin_step, _assassin_hit, _chain_next).
+var ambush := {}
+var disrupt := {}
+var kunai := {}
+var sever := {}
+var blackout := {}
+var leafstep := {}
+var smoke := {}
+var scent := {}
+var relentless := {}
+var deathblow := {}
+var rest_t := 9.0            # seconds since it last struck or was struck (out of the fight)
+var opp_seen := {}           # Opportunist: foe id -> seconds before its bonus is had again
+var chain_t := 0.0           # Chain Assassination: cooldown
+var chain_mults: Array = []  # ...the strikes still to come in the chain, and how many fell
+var chain_kills := 0
+var lunge_left := 0.0
+var lunge_to := Vector2.ZERO
+var lunge_target = null
+var lunge_mult := 1.0
+var cd_timer_scale := 1.0    # a Pikeman's braced catch: its next thrust comes this much sooner (No Passage)
+var kunai_t := 0.0
+var smoke_t := 0.0           # Smoke Pellet: cooldown
+var smoke_hide := 0.0        # > 0: foes have lost it (save right beside it)
+var stealth_t := 0.0         # Ghost of Greenwood: unseen a while after the smoke
+var smoke_ambush := false    # Ambush + smoke: one more opening strike
+var haste_t := 0.0           # Ghost Trail: quicker for a moment out of the smoke
+var escape_left := 0.0       # slipping away under the smoke
+var escape_to := Vector2.ZERO
+var refund_cd := 0.0
+var rel_id := 0              # Relentless Cuts
+var rel_n := 0
+var rel_t := 0.0
+var death_t := 0.0           # Deathblow cooldown
+var mom_left := 0.0          # Final Judgment: Killing Momentum, and the foe it came from
+var mom_from := 0
+var mom_cd := 0.0
+var flank_at := Vector2.INF
+var flank_check := 0.0
 # Knight Charge (Vanguard): see _momentum_step, _start_backstep.
 var momentum := {}           # Light Step: after, bonus, cooldown
 var moved := 0.0             # px run since his last blow
@@ -460,6 +561,10 @@ func setup(k: String, d: Dictionary, m, post_pos: Vector2) -> void:
 	spent = d["cost"]
 	_apply_upgrades()
 	hp = max_hp
+	if d.has("priority"):
+		priority = d["priority"]   # (an Assassin goes for the dangerous ones by default)
+	if d.get("pike", false):
+		move_mode = "guard"   # (a Pikeman holds ground by default: he catches what comes, he doesn't chase)
 	# Units re-pick targets every 0.3s; start each at a different point in that cycle
 	# so an army hired together doesn't all re-pick in the same frame.
 	retarget_timer = randf() * 0.3
@@ -541,6 +646,9 @@ func _apply_upgrades() -> void:
 	burn = []
 	momentum = {}
 	spear_reach = 0.0
+	for key in ["brace", "hold", "hardened", "puncture", "impaling", "phalanx", "haft", "hook", "defend", "sweep",
+			"ambush", "disrupt", "kunai", "sever", "blackout", "leafstep", "smoke", "scent", "relentless", "deathblow"]:
+		set(key, {})
 	barrage = {}
 	blade = {}
 	haste = 1.0
@@ -618,7 +726,9 @@ func _apply_upgrades() -> void:
 					aura[key] = fx["aura_" + key]
 			for key in ["dash", "magnet", "echo", "fireball", "decay", "summon", "frost_aura", "rage", "crimson",
 					"golden", "heal_aura", "befuddle", "traps", "burn", "rain", "cluster", "napalm", "smite", "gems", "multiform",
-					"momentum", "barrage", "blade", "brittle", "shard", "shatter", "ward"]:
+					"momentum", "barrage", "blade", "brittle", "shard", "shatter", "ward",
+					"brace", "hold", "hardened", "puncture", "impaling", "phalanx", "haft", "hook", "defend", "sweep",
+					"ambush", "disrupt", "kunai", "sever", "blackout", "leafstep", "smoke", "scent", "relentless", "deathblow"]:
 				if fx.has(key):
 					set(key, fx[key])
 			pierce = fx.get("pierce", pierce)
@@ -651,6 +761,7 @@ func _apply_upgrades() -> void:
 			hauls += fx.get("hauls", 0)
 	if spear_reach > 0.0 and not _spear_on_back():
 		attack_range += spear_reach   # (a spear in hand reaches further than a sword)
+	pike_range = attack_range
 	# Golden Ascension is the crimson aura made golden: the one form, not both at once.
 	if not golden.is_empty():
 		crimson = {}
@@ -1389,6 +1500,33 @@ func _extra_stats() -> String:
 	if not multiform.is_empty():
 		var bodies := 1 + _clones().size()
 		s += "   Mirror Self: %d bod%s, %d%% power each" % [bodies, "y" if bodies == 1 else "ies", roundi(_body_share() * 100)]
+	if data.get("pike", false):
+		s += "   Readied: %.2gx on a foe charging in%s" % [float(brace["mult"]) if not brace.is_empty() else PIKE_READY, (", catches %d" % int(brace["targets"])) if not brace.is_empty() and int(brace["targets"]) > 1 else ""]
+		if not brace.is_empty() and float(brace["pin"]) > 0.0:
+			s += ", pins %.1fs" % float(brace["pin"])
+		if pike_braced():
+			s += " (BRACED)"
+		if not puncture.is_empty():
+			s += "   Puncture %d/%d" % [punct_n, int(puncture["max"])]
+		if not impaling.is_empty():
+			s += "   Every %dth thrust %.1fx" % [int(impaling["every"]), float(impaling["mult"])]
+		if not phalanx.is_empty():
+			s += "   Phalanx%s%s" % [": at a shoulder" if shoulder else "", ", second rank" if backed else ""]
+		for k in ["haft", "hook", "defend", "sweep"]:
+			if not get(k).is_empty():
+				s += "   %s /%.0fs" % [{"haft": "Haft Check", "hook": "Hook", "defend": "Defender's Reach", "sweep": "Sweep"}[k], float(get(k)["every"])]
+	if kind == "assassin":
+		if not ambush.is_empty():
+			s += "   Opener %.1fx%s" % [float(ambush["mult"]), (", chains %d (%s)" % [int(ambush["chain"]), "ready" if chain_t <= 0.0 else "%ds" % ceili(chain_t)]) if int(ambush["chain"]) > 1 else ""]
+		for k in ["disrupt", "kunai", "sever", "blackout"]:
+			if not get(k).is_empty():
+				s += "   " + {"disrupt": "Disrupts", "kunai": "Kunai", "sever": "Severs spells", "blackout": "Blackout"}[k]
+		if not smoke.is_empty():
+			s += "   Smoke %s" % ("ready" if smoke_t <= 0.0 else "%ds" % ceili(smoke_t))
+		if not scent.is_empty():
+			s += "   +%d%% on the wounded" % roundi(float(scent["bonus"]) * 100)
+		if not deathblow.is_empty():
+			s += "   Deathblow under %d%%" % roundi(float(deathblow["below"]) * 100)
 	if not momentum.is_empty():
 		s += "   After a run: next blow +%d%%%s" % [roundi(float(momentum["bonus"]) * 100), " (ready)" if momentum_ready else ""]
 	if not dash.is_empty():
@@ -1486,6 +1624,10 @@ func take_damage(amount: float) -> void:
 		return
 	if heavy != 0 and brace_key == heavy:
 		amount *= 1.0 - Defense.BRACE_DAMAGE   # (braced for it)
+	if data.get("pike", false) and (not hold.is_empty() or not phalanx.is_empty()):
+		amount = _pike_guard(amount)
+	if kind == "assassin":
+		rest_t = 0.0
 	if kind == "tower":
 		main.earn_xp("tower", minf(hp, amount * (1.0 - armor)), "soak")   # standing up to it shields its crew: it trains like a wall
 	var dmg: float = amount * (1.0 - armor) * (1.0 - buff["defense"])
@@ -1595,6 +1737,10 @@ func _process(delta: float) -> void:
 	if backstep_left > 0.0:
 		_backstep_step(delta)
 		return
+	if lunge_left > 0.0:
+		_lunge_step(delta)
+		_separate()
+		return
 	if not dash.is_empty() and dash.get("chain", false) and _chain_dash():
 		return
 	if regen_left > 0.0:
@@ -1636,6 +1782,17 @@ func _process(delta: float) -> void:
 		_separate()
 		return
 	if _defend(delta):
+		if absf(facing.x) > 0.2:
+			flip = signf(facing.x)
+		_separate()
+		return
+	if escape_left > 0.0:
+		# Slipping away under its smoke: it doesn't fight on the way.
+		escape_left -= delta
+		var d := position.distance_to(escape_to)
+		if d > 3.0:
+			facing = position.direction_to(escape_to)
+			_move_toward(escape_to, d, delta)
 		if absf(facing.x) > 0.2:
 			flip = signf(facing.x)
 		_separate()
@@ -1748,8 +1905,15 @@ func _process(delta: float) -> void:
 			if not dash.is_empty() and dash_cd <= 0.0 and run_time >= RUN_BEFORE_DASH and gap > 6.0 and gap <= dash["reach"] and _can_dash(target):
 				_start_dash(target)
 				return
-			if gap > 0.0:
-				_chase_move(target.position, gap, delta)
+			var stop := 0.0
+			if data.get("pike", false):
+				stop = maxf(attack_range - 6.0, 0.0)   # (a pike reaches: it doesn't walk right up, nor into the ally it backs)
+			if gap > stop:
+				if kind == "assassin":
+					var aim := _flank_point(target)
+					_chase_move(aim, gap if aim == target.position else position.distance_to(aim), delta)
+				else:
+					_chase_move(target.position, gap - stop, delta)
 		elif not _sees(target):
 			_chase_move(target.position, gap, delta)
 		elif gap > attack_range:
@@ -2056,6 +2220,16 @@ func shove(push: Vector2, stun_time: float) -> void:
 	if main.heavy_key != 0 and brace_key == main.heavy_key:
 		push *= Defense.BRACE_PUSH   # (braced: it gives less ground)
 		stun_time *= Defense.BRACE_STUN
+	if not hold.is_empty() and pike_braced():
+		push *= 1.0 - float(hold["knock"])   # (Hold Fast: feet set behind the pike)
+	elif is_melee() and not data.get("pike", false):
+		for w in main.warriors_near(position, STEADY_REACH):
+			if w != self and not w.phalanx.is_empty() and float(w.phalanx["steady"]) > 0.0 and w.is_active():
+				push *= 1.0 - float(w.phalanx["steady"])   # (Unbroken Line: a Pikeman at its back; one is enough)
+				break
+	lunge_left = 0.0   # (knocked out of a lunge: the chain's over)
+	chain_mults.clear()
+	escape_left = 0.0
 	dazed = maxf(dazed, stun_time)
 	if not is_emplacement() and push != Vector2.ZERO:
 		shove_left = 0.2
@@ -2274,7 +2448,26 @@ func _priority_score_ground(e) -> float:
 		"weakest":
 			# Lowest enemy tier first (a goblin over a wolf), with the same stickiness.
 			return -e.tier * 10000.0 - _gap_to(e) + (1000.0 if e == target else 0.0)
+		"valuable":
+			return _value_score(e)
 	return -_gap_to(e)
+
+
+## High-value (an Assassin's own): the dangerous ones behind the line first (Horde Mages,
+## Boltflingers, Drummers, a Gravebinder, archers, a Sapper near what it's after), the
+## wounded next (with Scent of Blood), the nearest of those; but not one deep in a crowd of
+## its friends (he'd never come out), and he sticks with the one he picked.
+func _value_score(e) -> float:
+	var v: float = VALUE.get(e.kind, 0.0)
+	if e.kind == "sapper" and threat(e) > 1.2:
+		v += 3.0
+	if not scent.is_empty() and e.hp < e.max_hp * float(scent["below"]):
+		v += 1.5
+	var crowd := 0
+	for o in main.enemies_near(e.position, 70.0):
+		if o != e and not o.dead and o.fights and not o.flying:
+			crowd += 1
+	return v * 1000.0 - crowd * 450.0 - _gap_to(e) + (1500.0 if e == target else 0.0)
 
 
 ## How urgently enemy `e` needs stopping for the objectives (the castle, where there is one,
@@ -2331,7 +2524,7 @@ func cycle_priority() -> void:
 
 func _move_toward(p: Vector2, max_dist: float, delta: float) -> void:
 	var weather: float = 1.0 if main.gust <= 0.0 else main.hazards.speed_factor(kind)   # wading through a blizzard
-	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * weather * delta, max_dist)
+	var step := minf(move_speed * (1.0 + buff["speed"]) * _form("speed") * _goo_factor() * weather * speed_mult() * delta, max_dist)
 	if wall_guard:
 		return   # wall guards hold their posts
 	if max_dist > SLOT_TOL:
@@ -2587,6 +2780,10 @@ func _attack(e) -> void:
 	if crit:
 		hit *= crit_mult
 	if is_melee():
+		if data.get("pike", false):
+			hit = _pike_hit(e, hit)
+		elif kind == "assassin":
+			hit = _assassin_hit(e, hit)
 		if not momentum.is_empty():
 			if momentum_ready:
 				hit *= 1.0 + float(momentum["bonus"])   # (Light Step: the run carried into the blow)
@@ -2595,8 +2792,19 @@ func _attack(e) -> void:
 				main.spawn_burst(e.position, 14.0, Color(1.0, 0.85, 0.5))
 			moved = 0.0
 		e.take_damage(hit)
-		main.sfx("slash" if kind == "swordsman" or kind == "skeleton" else "hit", 0.85 if kind == "skeleton" else 1.0)
+		main.sfx("slash" if kind == "swordsman" or kind == "skeleton" or kind == "assassin" else "hit", 0.85 if kind == "skeleton" else (1.3 if kind == "assassin" else 1.0))
 		_hit_spark(e)
+		if kind == "assassin":
+			rest_t = 0.0
+			_after_assassin_hit(e)
+		if cd_timer_scale != 1.0:
+			cd_timer *= cd_timer_scale   # (No Passage: ready again sooner after a catch)
+			cd_timer_scale = 1.0
+		# Phalanx: a Pikeman behind it in Second Rank thrusts too.
+		if is_instance_valid(e) and not e.dead:
+			for w in main.warriors_near(position, 70.0):
+				if w != self and not w.phalanx.is_empty() and (position - w.position).dot(w.facing) > 8.0:
+					w.support_thrust(self, e)
 		if not cleave.is_empty():
 			_sweep(e, hit * cleave["damage"])
 		if dual > 0.0:
@@ -3589,6 +3797,10 @@ func _special_update(delta: float) -> void:
 		_shard_step(delta)
 	if not ward.is_empty():
 		_ward_step(delta)
+	if data.get("pike", false):
+		_pike_step(delta)
+	elif kind == "assassin":
+		_assassin_step(delta)
 	if not rain.is_empty():
 		rain_timer = maxf(rain_timer - delta, 0.0)
 		if rain_timer <= 0.0:
@@ -3858,6 +4070,625 @@ func _lay_trap(at: Vector2) -> void:
 	my_traps.append(t)
 	if at.distance_to(position) > RADIUS * 2.0:
 		main.spawn_beam(position + Vector2(0, -16), at, Color(0.9, 0.6, 0.3, 0.6), 2.0)   # (thrown out)
+
+
+# --- Pikeman ------------------------------------------------------------------------------
+
+## Whether `e` is in front of it, within `arc` (radians) of the way it faces.
+func _in_front(e, arc: float) -> bool:
+	var to: Vector2 = e.position - position
+	return to.length() < 1.0 or absf(facing.angle_to(to)) <= arc
+
+
+## Coming on: walking, and closing on it (straight at it, or running past through its
+## reach: a wolf slipping by is caught as surely as one charging it).
+func _coming_on(e) -> bool:
+	if not e.walking:
+		return false
+	var to: Vector2 = position - e.position
+	return to.length() > 1.0 and e.heading.dot(to.normalized()) > COMING_ON
+
+
+func pike_braced() -> bool:
+	return data.get("pike", false) and still_t >= PIKE_SET and dazed <= 0.0 and is_active()
+
+
+## Its blows (and its own taken): a melee blow from `foe` in front of it, while braced with
+## Hold Fast or at an ally's shoulder (Phalanx), lands for less (the better one: no stacking).
+func _pike_guard(amount: float) -> float:
+	var foe = main.hurt_by
+	if foe == null or not is_instance_valid(foe) or not _in_front(foe, 1.2):
+		return amount
+	var cut := 0.0
+	if not hold.is_empty() and pike_braced():
+		cut = float(hold["dr"])
+	if not phalanx.is_empty() and shoulder:
+		cut = maxf(cut, float(phalanx["dr"]))
+	return amount * (1.0 - cut)
+
+
+## A thrust: Readied Pike (or Spearwall's braced one) on a foe charging in; too close
+## inside its reach, weaker; Impaler's point, puncture and fourth thrust. Returns the blow.
+func _pike_hit(e, hit: float) -> float:
+	var id: int = e.get_instance_id()
+	var base := hit
+	if _gap_to(e) < PIKE_CLOSE:
+		hit *= PIKE_CLOSE_HIT   # (a foe inside its point: the haft's all it has)
+	if not hardened.is_empty():
+		hit *= 1.0 + float(hardened["bonus"])   # (enemies wear no armour: the harder point bites deeper)
+	# Readied: braced, a foe coming on from in front, not one it's caught a moment ago.
+	if still_t >= PIKE_SET and not pike_seen.has(id) and _coming_on(e) and _in_front(e, float(brace.get("arc", 0.75))):
+		var mult: float = float(brace["mult"]) if not brace.is_empty() else PIKE_READY
+		hit *= mult
+		pike_seen[id] = PIKE_AGAIN
+		_intercepted(e)
+		main.spawn_burst(e.position, 16.0, Color(0.85, 0.9, 1.0))
+		if not brace.is_empty():
+			main.spawn_text(position + Vector2(0, -44), "Braced!", Color(0.8, 0.88, 1.0))
+			cd_timer_scale = float(brace["recover"])
+			# Hedge of Points: the next ones coming on, in reach, for less.
+			var more := int(brace["targets"]) - 1
+			if more > 0:
+				for o in main.enemies_near(position, attack_range + 40.0):
+					if more <= 0:
+						break
+					if o == e or o.dead or o.flying or pike_seen.has(o.get_instance_id()) or _gap_to(o) > attack_range + HEDGE_SLACK:
+						continue
+					if not _coming_on(o) or not _in_front(o, float(brace["arc"])):
+						continue
+					pike_seen[o.get_instance_id()] = PIKE_AGAIN
+					o.take_damage(base * mult * float(brace["side"]))
+					_intercepted(o)
+					_hit_spark(o)
+					more -= 1
+	# Deep Thrust: deeper each thrust on the same foe.
+	if not puncture.is_empty():
+		if punct_id != id or punct_t <= 0.0:
+			punct_id = id
+			punct_n = 0
+		hit *= 1.0 + float(puncture["per"]) * punct_n
+		punct_n = mini(punct_n + 1, int(puncture["max"]))
+		punct_t = float(puncture["time"])
+	# Impaling Strike: every fourth thrust in a row on one foe.
+	if not impaling.is_empty():
+		if seq_id != id or seq_t <= 0.0:
+			seq_id = id
+			seq_n = 0
+		seq_n += 1
+		seq_t = SEQ_TIME
+		if seq_n % int(impaling["every"]) == 0:
+			hit *= float(impaling["mult"])
+			if float(impaling["pct"]) > 0.0:
+				hit += minf(e.max_hp * float(impaling["pct"]), float(impaling["cap"])) * (0.5 if e.boss else 1.0)
+			if not e.boss:
+				e.apply_stun(0.15)   # (whatever it was doing, broken off: a stun breaks a spell; a Warlord barely feels it)
+			_hold_pose("strike", 0.25)
+			main.spawn_text(position + Vector2(0, -44), "Impaled!", Color(1.0, 0.75, 0.5))
+			main.spawn_burst(e.position, 22.0, Color(1.0, 0.8, 0.6))
+	return hit
+
+
+## A foe caught charging in: slowed (Set Spears), staggered (Hold Fast), pinned (No Passage).
+func _intercepted(e) -> void:
+	if brace.is_empty() or e.dead:
+		return
+	var sl: Array = brace["slow"]
+	e.apply_slow(sl[0], sl[1])
+	if float(brace["stagger"]) > 0.0:
+		e.apply_stun(float(brace["stagger"]))   # (cc_mult: a boss barely staggers)
+	if float(brace["pin"]) > 0.0:
+		e.pin(float(brace["pin"]))
+
+
+## Every frame (from _special_update): how long it's stood braced, its Phalanx place, and the
+## Hook & Shove moves, each on its own cooldown.
+func _pike_step(delta: float) -> void:
+	still_t = 0.0 if moving or dash_left > 0.0 else still_t + delta
+	for id in pike_seen.keys():
+		pike_seen[id] -= delta
+		if pike_seen[id] <= 0.0:
+			pike_seen.erase(id)
+	punct_t = maxf(punct_t - delta, 0.0)
+	seq_t = maxf(seq_t - delta, 0.0)
+	support_t = maxf(support_t - delta, 0.0)
+	haft_t = maxf(haft_t - delta, 0.0)
+	hook_t = maxf(hook_t - delta, 0.0)
+	defend_t = maxf(defend_t - delta, 0.0)
+	sweep_t = maxf(sweep_t - delta, 0.0)
+	phal_check -= delta
+	if phal_check <= 0.0:
+		phal_check = 0.25
+		_phalanx_check()
+	if haft.is_empty() and hook.is_empty() and defend.is_empty() and sweep.is_empty():
+		return
+	if not is_active() or dazed > 0.0 or garrison != null:
+		return
+	guard_check -= delta
+	if guard_check <= 0.0:
+		guard_check = 0.5
+		guarded = _guarded_spots()
+	var near: Array = main.enemies_near(position, attack_range + RADIUS + 50.0).filter(func(x): return not x.dead and not x.flying)
+	if near.is_empty():
+		return
+	# Haft Check: a foe right inside its point gets the butt of the haft.
+	if not haft.is_empty() and haft_t <= 0.0:
+		for e in near:
+			if _gap_to(e) < PIKE_CLOSE + 2.0:
+				haft_t = float(haft["every"])
+				e.take_damage(damage * 0.5 * _power())
+				if not e.dead:
+					e.apply_knockback(position.direction_to(e.position) * float(haft["push"]))
+					e.apply_slow(haft["slow"][0], haft["slow"][1])
+				_hold_pose("strike", 0.15)
+				swing = 0.12
+				break
+	# Hooked Spear: a foe at one of its charges is hooked and dragged off them.
+	if not hook.is_empty() and hook_t <= 0.0 and not guarded.is_empty():
+		for e in near:
+			if _gap_to(e) > attack_range + 4.0:
+				continue
+			var at = _guarded_near(e.position, 70.0)
+			if at == null:
+				continue
+			hook_t = float(hook["every"])
+			var away: Vector2 = (e.position - at).normalized() if e.position.distance_to(at) > 1.0 else Vector2.UP
+			e.apply_knockback(away * float(hook["move"]))
+			if e.knock_mult < 0.5 or e.boss:
+				e.apply_slow(0.3, 1.0)   # (too big to drag: it's held up a moment instead)
+			main.spawn_beam(position + Vector2(0, -14), e.position, Color(0.7, 0.6, 0.45), 3.0)
+			swing = 0.12
+			break
+	# Defender's Reach: a foe going past it for one of its charges.
+	if not defend.is_empty() and defend_t <= 0.0 and not guarded.is_empty():
+		for e in near:
+			if _gap_to(e) > attack_range + 18.0 or e.aggro == self:
+				continue
+			var at = _guarded_near(e.position, 160.0)
+			if at == null or e.heading.dot(e.position.direction_to(at)) < 0.6:
+				continue
+			defend_t = float(defend["every"])
+			facing = position.direction_to(e.position)
+			e.take_damage(damage * float(defend["mult"]) * _power())
+			if not e.dead:
+				var away: Vector2 = (e.position - at).normalized() if e.position.distance_to(at) > 1.0 else Vector2.UP
+				e.apply_knockback(away * float(defend["push"]))
+			_hold_pose("strike", 0.2)
+			swing = 0.15
+			main.spawn_text(position + Vector2(0, -44), "Denied!", Color(0.8, 0.9, 1.0))
+			break
+	# Breakthrough Denied: several at it (or its charges): one sweep throws them back.
+	if not sweep.is_empty() and sweep_t <= 0.0:
+		var front: Array = near.filter(func(x): return _gap_to(x) <= attack_range + 12.0 and _in_front(x, 1.3))
+		if front.size() >= 2:
+			sweep_t = float(sweep["every"])
+			front.sort_custom(func(a, b): return _gap_to(a) < _gap_to(b))
+			for e in front.slice(0, int(sweep["targets"])):
+				e.take_damage(damage * float(sweep["damage"]) * _power())
+				if not e.dead:
+					e.apply_knockback(position.direction_to(e.position) * float(sweep["push"]))
+					e.apply_slow(sweep["slow"][0], sweep["slow"][1])
+			main.spawn_burst(position + facing * 24.0, attack_range + 10.0, Color(0.85, 0.88, 0.95))
+			main.sfx("slash", 0.7)
+			_hold_pose("strike", 0.25)
+			swing = 0.2
+
+
+## Phalanx: a melee ally at its shoulder (beside it, about level, a little way off), and
+## one in front of it (it fights from the second rank: Overlapping Spears' reach).
+func _phalanx_check() -> void:
+	shoulder = false
+	backed = false
+	if phalanx.is_empty():
+		attack_range = pike_range
+		return
+	for w in main.warriors_near(position, 60.0):
+		if w == self or not w.is_active() or w.is_emplacement() or not (w.is_melee() or w.data.get("attack", "") == "combo"):
+			continue
+		var off: Vector2 = w.position - position
+		var ahead := off.dot(facing)
+		var across := absf(off.dot(facing.orthogonal()))
+		if off.length() <= 44.0 and absf(ahead) < 18.0 and across > 20.0:
+			shoulder = true
+		if ahead > 12.0 and across < 30.0 and off.length() <= 56.0:
+			backed = true
+	attack_range = pike_range + (float(phalanx["reach"]) if backed else 0.0)
+
+
+## Second Rank: an ally in front of it struck `e`; it thrusts too if `e`'s in its reach
+## (with a clear thrust past them: no wall in the way), once each cooldown.
+func support_thrust(ally, e) -> void:
+	if phalanx.is_empty() or float(phalanx["support"]) <= 0.0 or support_t > 0.0 or not is_active() or dazed > 0.0:
+		return
+	if not is_instance_valid(e) or e.dead or e.flying or _gap_to(e) > attack_range + 2.0 or main.paths.any_wall_between(position, e.position):
+		return
+	support_t = float(phalanx["every"])
+	facing = position.direction_to(e.position)
+	e.take_damage(damage * float(phalanx["support"]) * _power())
+	_hold_pose("strike", 0.15)
+	_hit_spark(e)
+
+
+## Hook & Shove: where the troops and objectives it covers stand (its ranged and support
+## allies near it, and the objectives the enemy's after).
+func _guarded_spots() -> Array:
+	var out := []
+	for w in main.warriors_near(position, 150.0):
+		if w != self and w.is_active() and not w.is_melee() and w.data.get("attack", "") != "combo" and not w.is_emplacement():
+			out.append(w.position)
+	for o in main.rules.objectives():
+		if is_instance_valid(o) and o.is_target() and o.position.distance_to(position) < 220.0:
+			out.append(o.position)
+	return out
+
+
+func _guarded_near(p: Vector2, r: float):
+	var best = null
+	var best_d := r
+	for g in guarded:
+		var d: float = g.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best = g
+	return best
+
+
+# --- Assassin -------------------------------------------------------------------------------
+
+## Whether this troop can be seen by enemy `e` looking `r` out: lost in its smoke (save
+## right beside it), or with Leafstep, out of the fight, only nearer.
+func unseen_by(e, r := INF) -> bool:
+	if kind != "assassin":
+		return false
+	var d: float = e.position.distance_to(position)
+	if smoke_hide > 0.0 and d > SMOKE_SEEN:
+		return true
+	if not leafstep.is_empty() and r < INF and (rest_t >= REST_UNSEEN or stealth_t > 0.0) and d > r * float(leafstep["detect"]):
+		return true
+	return false
+
+
+## How much faster it moves just now (Leafstep out of the fight, Ghost Trail out of smoke).
+func speed_mult() -> float:
+	var m := 1.0
+	if not leafstep.is_empty() and rest_t >= REST_UNSEEN:
+		m += float(leafstep["speed"])
+	if haste_t > 0.0:
+		m += GHOST_SPEED
+	return m
+
+
+## A cut: the opening strike (Ambush, or the Opportunist's), a Deathblow, the Execution
+## bonuses; and Sabotage on what it hits. Returns the blow.
+func _assassin_hit(e, hit: float) -> float:
+	var id: int = e.get_instance_id()
+	var special := 1.0
+	var unwary: bool = e.busy_with_other(self) or (position - e.position).dot(e.facing_dir()) < 0.0
+	if not ambush.is_empty() and (rest_t >= float(ambush["rest"]) or smoke_ambush) and unwary:
+		special = float(ambush["mult"])   # (the Ambush opener: in place of the Opportunist's, never on top)
+		opening = true
+		smoke_ambush = false
+		main.spawn_text(position + Vector2(0, -46), "Backstab!" if int(ambush["chain"]) <= 1 else "Ambush!", Color(0.6, 1.0, 0.6))
+	elif e.busy_with_other(self) and not opp_seen.has(id):
+		special = OPPORTUNIST
+		opp_seen[id] = OPP_AGAIN
+	if not deathblow.is_empty() and death_t <= 0.0 and e.hp <= e.max_hp * float(deathblow["below"]):
+		var m: float = float(deathblow["boss"]) if e.boss else float(deathblow["mult"])
+		if m > special:
+			special = m
+			opening = false
+		death_t = float(deathblow["every"])
+		_hold_pose("strike", 0.25)
+		main.spawn_text(position + Vector2(0, -46), "Deathblow!", Color(1.0, 0.45, 0.4))
+	var bonus := 0.0
+	var wounded: bool = e.hp < e.max_hp * 0.5
+	if not scent.is_empty() and e.hp < e.max_hp * float(scent["below"]):
+		bonus += float(scent["bonus"])
+	if not relentless.is_empty():
+		if rel_id != id or rel_t <= 0.0 or not wounded:
+			rel_id = id
+			rel_n = 0
+		if wounded:
+			bonus += float(relentless["per"]) * rel_n
+			rel_n = mini(rel_n + 1, int(relentless["max"]))
+			rel_t = float(relentless["time"])
+	if mom_left > 0.0 and id != mom_from:
+		bonus += float(deathblow["momentum"])
+		mom_left = 0.0
+	if exposed_id == id and exposed_t > 0.0:
+		bonus += float(ambush.get("expose", 0.0))   # (Vital Strike: its guard down against this one)
+	opening_hp = e.hp / maxf(e.max_hp, 1.0)
+	return hit * special * (1.0 + bonus)
+
+
+var opening := false         # this blow was an Ambush opener (a kill can chain)
+var opening_hp := 1.0        # the foe's health share before the blow
+var exposed_id := 0          # Vital Strike: the foe whose guard is down against it...
+var exposed_t := 0.0         # ...for this long
+
+
+## After a cut landed: Sabotage (set back, break off, black out what it's readying), Vital
+## Strike, and on a kill: the chain, the smoke back sooner, Killing Momentum.
+func _after_assassin_hit(e) -> void:
+	if opening and not ambush.is_empty() and float(ambush["expose"]) > 0.0 and is_instance_valid(e) and not e.dead:
+		exposed_id = e.get_instance_id()
+		exposed_t = VITAL_TIME
+	if is_instance_valid(e) and not e.dead:
+		_sabotage(e)
+	var killed: bool = not is_instance_valid(e) or e.dead
+	if killed:
+		_on_kill(e)
+		if opening and int(ambush.get("chain", 1)) > 1 and chain_t <= 0.0:
+			chain_t = float(ambush["every"])
+			chain_mults = (ambush["next"] as Array).duplicate()
+			chain_kills = 1
+			_chain_next(e.position if is_instance_valid(e) else position)
+	opening = false
+
+
+## Sabotage on a foe getting ready for something: Spell Sever breaks it off (each foe once per
+## its cooldown), else Disruptive Cut sets it back; either way, Blackout after.
+func _sabotage(e) -> bool:
+	if not e.readying():
+		return false
+	var done := false
+	if not sever.is_empty() and e.sever_cd <= 0.0:
+		e.sever_cd = float(sever["every"])
+		e.sever()
+		done = true
+	elif not disrupt.is_empty() and e.delay_cd <= 0.0:
+		e.delay_cd = float(disrupt["every"])
+		done = e.delay_windup(float(disrupt["delay"]))
+	if done and not blackout.is_empty():
+		e.apply_blackout(float(blackout["time"]), float(blackout["immune"]))
+	return done
+
+
+func _on_kill(e) -> void:
+	var valuable: bool = VALUE.get(e.kind, 0.0) >= 3.0 or e.tier >= 4
+	if not smoke.is_empty() and float(smoke["refund"]) > 0.0 and valuable and refund_cd <= 0.0:
+		smoke_t = maxf(smoke_t - float(smoke["refund"]), 0.0)
+		refund_cd = REFUND_AGAIN
+	if not deathblow.is_empty() and float(deathblow["momentum"]) > 0.0 and opening_hp <= float(deathblow["below"]) and mom_cd <= 0.0:
+		mom_left = MOMENTUM_TIME
+		mom_from = e.get_instance_id() if is_instance_valid(e) else 0
+		mom_cd = MOMENTUM_AGAIN
+
+
+## Chain Assassination: after a kill, the next foe within reach of the fallen one (one it
+## can get at: no wall, no rock between; the likeliest to fall to the next strike first),
+## lunged at. None, or no strikes left: the chain's over (Silent Reaper: two or more killed,
+## the weak round it falter).
+func _chain_next(at: Vector2) -> void:
+	var best = null
+	var best_score := -INF
+	if not chain_mults.is_empty():
+		var reach: float = ambush["reach"]
+		var mult: float = chain_mults[0]
+		var strike: float = damage * _power() * mult
+		for o in main.enemies_near(at, reach + 40.0):
+			if o.dead or o.flying or o.position.distance_to(at) - o.radius > reach:
+				continue
+			if main.paths.path_blocked(position, o.position, RADIUS) or main.paths.any_wall_between(position, o.position):
+				continue
+			var score: float = (100.0 if o.hp <= strike else 0.0) + VALUE.get(o.kind, 0.0) * 10.0 - o.position.distance_to(at) * 0.1
+			if score > best_score:
+				best_score = score
+				best = o
+	if best == null:
+		if chain_kills >= 2 and float(ambush.get("fear", 0.0)) > 0.0:
+			for o in main.enemies_near(at, FEAR_REACH):
+				if not o.dead and o.position.distance_to(at) <= FEAR_REACH:
+					o.falter(float(ambush["fear"]))
+			main.spawn_burst(at, FEAR_REACH * 0.6, Color(0.3, 0.45, 0.3))
+		chain_mults.clear()
+		return
+	lunge_mult = chain_mults.pop_front()
+	lunge_target = best
+	var dir := position.direction_to(best.position)
+	lunge_to = best.position - dir * (RADIUS + best.radius)
+	lunge_left = LUNGE_TIME
+	facing = dir
+	main.spawn_burst(position + Vector2(0, RADIUS), 12.0, Color(0.35, 0.5, 0.35))
+
+
+## Mid-lunge: a few quick steps in, then the strike. It's no less in harm's way for it.
+func _lunge_step(delta: float) -> void:
+	var left := lunge_left
+	lunge_left = maxf(lunge_left - delta, 0.0)
+	_step_to(position.lerp(lunge_to, minf(delta / left, 1.0)))
+	moving = true
+	walk += 0.5
+	if lunge_left > 0.0:
+		return
+	var e = lunge_target
+	lunge_target = null
+	if not _is_valid(e):
+		chain_mults.clear()
+		return
+	facing = position.direction_to(e.position)
+	swing = 0.12
+	_hold_pose("strike", 0.15)
+	var hit := damage * _power() * lunge_mult
+	if not scent.is_empty() and e.hp < e.max_hp * float(scent["below"]):
+		hit *= 1.0 + float(scent["bonus"])
+	e.take_damage(hit)
+	_hit_spark(e)
+	main.sfx("slash", 1.35)
+	main.spawn_text(position + Vector2(0, -46), "Chain!", Color(0.6, 1.0, 0.6))
+	if not is_instance_valid(e) or e.dead:
+		chain_kills += 1
+		_on_kill(e)
+		_chain_next(e.position if is_instance_valid(e) else lunge_to)
+	else:
+		chain_mults.clear()   # (it lived: the chain's over...)
+		_chain_next(e.position)   # (...and if two fell already, the weak round them falter)
+
+
+## Every frame (from _special_update): its timers, the kunai, the smoke.
+func _assassin_step(delta: float) -> void:
+	rest_t += delta
+	for id in opp_seen.keys():
+		opp_seen[id] -= delta
+		if opp_seen[id] <= 0.0:
+			opp_seen.erase(id)
+	chain_t = maxf(chain_t - delta, 0.0)
+	kunai_t = maxf(kunai_t - delta, 0.0)
+	smoke_t = maxf(smoke_t - delta, 0.0)
+	smoke_hide = maxf(smoke_hide - delta, 0.0)
+	stealth_t = maxf(stealth_t - delta, 0.0)
+	haste_t = maxf(haste_t - delta, 0.0)
+	refund_cd = maxf(refund_cd - delta, 0.0)
+	rel_t = maxf(rel_t - delta, 0.0)
+	death_t = maxf(death_t - delta, 0.0)
+	mom_left = maxf(mom_left - delta, 0.0)
+	mom_cd = maxf(mom_cd - delta, 0.0)
+	exposed_t = maxf(exposed_t - delta, 0.0)
+	if not is_active() or dazed > 0.0 or garrison != null:
+		return
+	if not kunai.is_empty() and kunai_t <= 0.0:
+		_throw_kunai()
+	if not smoke.is_empty() and smoke_t <= 0.0 and _hard_pressed():
+		_smoke_out()
+
+
+## Hidden Kunai: at the nearest foe in reach that's readying a shot, a spell or a special.
+func _throw_kunai() -> void:
+	var r: float = kunai["range"]
+	var best = null
+	var best_d := INF
+	for e in main.enemies_near(position, r + 30.0):
+		if e.dead or not e.readying() or e.delay_cd > 0.0:
+			continue
+		var d := position.distance_to(e.position)
+		if d <= r and d < best_d and main.paths.sight_clear(position, e.position):
+			best_d = d
+			best = e
+	if best == null:
+		kunai_t = 0.3
+		return
+	kunai_t = float(kunai["every"])
+	var p := Projectile.new()
+	p.main = main
+	p.target = best
+	p.target_pos = best.position
+	p.position = position + Vector2(0, -14)
+	p.damage = damage * _power() * float(kunai["share"])
+	p.speed = 620.0
+	p.style = "kunai"
+	p.color = Color(0.85, 0.88, 0.95)
+	p.credit = xp_kind()
+	p.source = get_instance_id()
+	p.sabotage = float(kunai["delay"])
+	p.saboteur = self
+	main.add_projectile(p)
+	facing = position.direction_to(best.position)
+	swing = 0.12
+	_hold_pose("strike", 0.12)
+	main.sfx("bow", 1.6)
+
+
+## The kunai's struck: set back what it was readying (once per its cooldown), Blackout too.
+func kunai_struck(e, delay: float) -> void:
+	if not is_instance_valid(e) or e.dead or e.delay_cd > 0.0:
+		return
+	e.delay_cd = float(kunai.get("every", 8.0))
+	if e.delay_windup(delay) and not blackout.is_empty():
+		e.apply_blackout(float(blackout["time"]), float(blackout["immune"]))
+
+
+## Surrounded (SMOKE_CROWD foes on it), or hurt and still being hit.
+func _hard_pressed() -> bool:
+	if hp < max_hp * SMOKE_HURT and danger_t > 0.0:
+		return true
+	var n := 0
+	for e in main.enemies_near(position, SMOKE_NEAR + 30.0):
+		if not e.dead and not e.flying and _gap_to(e) < SMOKE_NEAR:
+			n += 1
+	return n >= SMOKE_CROWD
+
+
+## Smoke Pellet: a cloud where it stands; the foes on it lose it (Ghost Trail: two of them
+## go after a decoy left in the smoke instead); it slips away to open ground; and with
+## Ambush, the next strike can be an opener again.
+func _smoke_out() -> void:
+	smoke_t = float(smoke["every"])
+	smoke_hide = float(smoke["lose"])
+	stealth_t = float(smoke["linger"]) + float(smoke["lose"])
+	if not ambush.is_empty():
+		smoke_ambush = true
+	var cloud = preload("res://scripts/smoke.gd").new()
+	cloud.main = main
+	cloud.position = position
+	cloud.life = float(smoke["time"])
+	cloud.total = cloud.life
+	main.add_projectile(cloud)
+	var decoy = null
+	if smoke["decoy"]:
+		decoy = preload("res://scripts/smoke.gd").new()
+		decoy.main = main
+		decoy.decoy = true
+		decoy.position = position
+		decoy.life = float(smoke["time"])
+		decoy.total = decoy.life
+		decoy.flip = flip
+		decoy.look = Sprites.frames(sprite_name())[0]
+		main.add_projectile(decoy)
+		haste_t = GHOST_SPEED_TIME + float(smoke["lose"])
+	var lured := 0
+	var mid := Vector2.ZERO
+	var n := 0
+	for e in main.enemies_near(position, AGGRO_SMOKE):
+		if e.dead:
+			continue
+		mid += e.position
+		n += 1
+		if e.aggro == self:
+			if decoy != null and lured < DECOY_LURES:
+				e.aggro = decoy
+				e.aggro_check = float(smoke["time"])
+				lured += 1
+			else:
+				e.aggro = null
+				e.aggro_check = float(smoke["lose"])
+	# Away from them, to open ground it can stand on, in its area.
+	var away: Vector2 = (position - mid / n).normalized() if n > 0 and position.distance_to(mid / n) > 1.0 else Vector2.DOWN
+	var to: Vector2 = _zone_clamp(main._clamp_post(position + away * SMOKE_RUN))
+	if not main.paths.has_terrain() or main.paths.troop_can_stand(to):
+		escape_to = to
+		escape_left = float(smoke["lose"])
+	_set_target(null)
+	combo_left = 0
+	main.sfx("frost", 0.6)
+	main.spawn_text(position + Vector2(0, -46), "Smoke!", Color(0.75, 0.78, 0.78))
+
+
+## High-value targets are often behind a crowd: the way in goes round its side, while it's
+## still a way off (worked out twice a second).
+func _flank_point(e) -> Vector2:
+	flank_check -= get_process_delta_time()
+	if flank_check > 0.0 and flank_at != Vector2.INF:
+		return flank_at if position.distance_to(e.position) > FLANK_NEAR else e.position
+	flank_check = 0.5
+	flank_at = e.position
+	if position.distance_to(e.position) <= FLANK_NEAR:
+		return e.position
+	var mid: Vector2 = position.lerp(e.position, 0.5)
+	var side: Vector2 = position.direction_to(e.position).orthogonal()
+	var left := 0
+	var right := 0
+	for o in main.enemies_near(mid, 80.0):
+		if o == e or o.dead or o.flying:
+			continue
+		if side.dot(o.position - mid) > 0.0:
+			left += 1
+		else:
+			right += 1
+	if left + right >= 2:
+		var go: Vector2 = side * (-1.0 if left > right else 1.0)
+		var p: Vector2 = main._clamp_post(e.position + go * FLANK_WIDE)
+		if not main.paths.has_terrain() or main.paths.troop_can_stand(p):
+			flank_at = p
+	return flank_at
 
 
 ## Spellblade: a foe that comes close (it never goes looking for one; from a brute it
@@ -4894,6 +5725,8 @@ func _carried_motion(off: Vector2, rot: float, sc: Vector2) -> Array:
 
 
 func _pose_name() -> String:
+	if data.get("pike", false):
+		return "level" if _pike_levelled() else ""   # (his sprite's pike taken away: drawn levelled on its own)
 	if pose_left > 0.0:
 		return pose
 	if swing <= 0.0 and _idling():
@@ -4971,6 +5804,38 @@ func back_weapon() -> String:
 	if not _lance_out():
 		return "spear"
 	return "axe" if tiers[0] >= 3 else "swords"
+
+
+## The Pikeman's pike, levelled at the foe once he's braced on one (or thrusting, a little
+## further out as it goes), as long as it really reaches. (Upright at rest it's in his sprite.)
+## Hardened Point: a heavier head; Hooked Spear: a hook behind the point.
+func _pike_levelled() -> bool:
+	return lift <= 0.0 and is_active() and (swing > 0.0 or pose_left > 0.0 or (target != null and still_t >= PIKE_SET))
+
+
+func _draw_pike() -> void:
+	if not _pike_levelled():
+		return   # (upright, it's in his sprite)
+	var hand := Vector2(5.0 * flip, -6.0)
+	var levelled := true
+	var dir: Vector2 = facing
+	var length: float = RADIUS + pike_range - 4.0 + (5.0 if swing > 0.0 else 0.0)
+	var butt := hand - dir * 12.0
+	var tip := hand + dir * (length - 8.0)
+	draw_line(butt, tip, OUTLINE_COLOR, 4.0, true)
+	draw_line(butt, tip, Color(0.58, 0.4, 0.22), 2.0, true)
+	var side := dir.orthogonal()
+	var big: bool = not hardened.is_empty()
+	var head := 9.0 if big else 7.0
+	var steel := Color(0.62, 0.64, 0.7) if big else Color(0.85, 0.88, 0.95)
+	var pts := PackedVector2Array([tip + dir * head, tip + side * (3.0 if big else 2.5), tip - dir * 2.0, tip - side * (3.0 if big else 2.5)])
+	draw_colored_polygon(pts, steel)
+	draw_polyline(pts + PackedVector2Array([pts[0]]), OUTLINE_COLOR, 1.0, true)
+	if not hook.is_empty():
+		draw_line(tip, tip + side * 5.0 - dir * 3.0, OUTLINE_COLOR, 3.0, true)
+		draw_line(tip, tip + side * 5.0 - dir * 3.0, steel, 1.5, true)
+	if still_t >= PIKE_SET and not brace.is_empty() and levelled:
+		draw_arc(tip, 4.0, 0, TAU, 10, Color(0.85, 0.9, 1.0, 0.5), 1.5, true)   # (set: the point held steady)
 
 
 ## The slung weapon, drawn before the body so only what sticks out past it shows.
@@ -5527,6 +6392,15 @@ func _draw() -> void:
 		# Shield glint on a blocked hit.
 		var k := block_flash / 0.2
 		draw_arc(facing * 10 + Vector2(0, -6), 20, facing.angle() - 1.1, facing.angle() + 1.1, 12, Color(0.8, 0.88, 1.0, k), 4.0, true)
+	if data.get("pike", false) and is_active():
+		_draw_pike()
+	if kind == "assassin" and is_active():
+		if lunge_left > 0.0:
+			draw_line(Vector2(0, -8), Vector2(0, -8) - facing * 30.0, Color(0.45, 0.75, 0.45, 0.55), 6.0, true)   # (a streak: the lunge)
+		if smoke_hide > 0.0 or stealth_t > 0.0 or (not leafstep.is_empty() and rest_t >= REST_UNSEEN):
+			draw_set_transform(Vector2(0, RADIUS), 0, Vector2(1, 0.4))
+			draw_arc(Vector2.ZERO, RADIUS + 3.0, 0, TAU, 20, Color(0.3, 0.45, 0.3, 0.35), 2.0, true)   # (unseen: a faint shadow ring)
+			draw_set_transform(Vector2.ZERO)
 	if kind == "mage" and tiers.size() > 3 and tiers[3] >= 1:
 		# Mage Armor: a faint shimmer of force round her (brighter with Archmage's Blade).
 		var strong: bool = tiers[3] >= 4

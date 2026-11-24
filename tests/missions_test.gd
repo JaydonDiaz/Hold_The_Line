@@ -1065,8 +1065,8 @@ func _armoury() -> void:
 	campaign.new_campaign("normal")
 	campaign.completed = ["ashwatch", "stonehollow"]
 	campaign.allies = ["stonehollow"]
-	check(campaign.playable_mission("ashwatch") == "ashwatch_road" and campaign.tier4_kinds("ashwatch") == ["swordsman"],
-			"Ashwatch's second mission is open once Stonehollow joins, and its beacon opens Swordsman Tier IV")
+	check(campaign.playable_mission("ashwatch") == "ashwatch_road" and campaign.tier4_kinds("ashwatch") == ["swordsman", "pikeman"],
+			"Ashwatch's second mission is open once Stonehollow joins, and its beacon opens Knight and Pikeman Tier IV")
 	await _play("ashwatch_road")
 	var r = main.rules
 	var wagon = r.wagon

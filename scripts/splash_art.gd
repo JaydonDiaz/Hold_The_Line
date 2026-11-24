@@ -14,9 +14,9 @@ const H := 1040.0
 const OUTLINE := Color(0.06, 0.04, 0.07)
 const SCALE := 6.0
 # The troops: [kind, centre x, foot y, facing left].
-const TROOPS := [["bard", 250.0, 724.0, true], ["alchemist", 392.0, 724.0, false],
+const TROOPS := [["bard", 250.0, 724.0, true], ["alchemist", 392.0, 724.0, false], ["assassin", 528.0, 740.0, true],
 	["mage", 172.0, 852.0, true], ["healer", 320.0, 856.0, false], ["frost", 468.0, 852.0, false],
-	["archer", 188.0, 986.0, true], ["swordsman", 312.0, 984.0, false], ["martial", 452.0, 986.0, true]]
+	["archer", 140.0, 986.0, true], ["swordsman", 256.0, 984.0, false], ["pikeman", 372.0, 984.0, false], ["martial", 476.0, 986.0, true]]
 const EXT := 1600.0   # how far the sky, hills and grass reach either side (a wide window: no bars)
 const PIX := 4.0   # the Ogre King is drawn at a quarter size and shown 4x: chunky pixels, like the rest of the game
 

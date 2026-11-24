@@ -2157,7 +2157,7 @@ func hire_at(p: Vector2) -> void:
 	var w := Warrior.new()
 	w.setup(placing_type, data, self, _clamp_post(p))
 	w.spent = cost
-	w.priority = last_priority.get(placing_type, Warrior.OBJECTIVE_PRIORITY if rules.guards() else "closest")
+	w.priority = last_priority.get(placing_type, data.get("priority", Warrior.OBJECTIVE_PRIORITY if rules.guards() else "closest"))   # (an Assassin: High-value)
 	if w.is_mobile_healer():
 		w.priority = last_priority.get(placing_type, "revive")
 	if last_orders.has(placing_type):
@@ -3140,9 +3140,9 @@ func _order_at(p: Vector2) -> void:
 
 func _key(event: InputEventKey) -> void:
 	match event.keycode:
-		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
-			# Number keys pick from whichever hire tab is showing.
-			var i: int = event.keycode - KEY_1
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0:
+			# Number keys pick from whichever hire tab is showing (0: the tenth).
+			var i: int = 9 if event.keycode == KEY_0 else event.keycode - KEY_1
 			if castle_selected and selected == null:
 				if i < Data.CASTLE_PATHS.size():
 					castle_upgrade(i)

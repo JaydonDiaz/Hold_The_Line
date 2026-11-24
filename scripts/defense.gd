@@ -54,6 +54,10 @@ const PROFILES := {
 			"recover": 0.35, "cooldown": 1.5, "reach": 70.0, "hold_reach": 44.0, "toward": 1.4, "back": 0.4, "keep": 1.0},
 	"alchemist": {"react": 0.22, "jitter": 0.08, "busy": 1.1, "brace": false, "prefer": "evade", "heavy": 0.3,
 			"recover": 0.4, "cooldown": 1.5, "reach": 60.0, "hold_reach": 40.0, "toward": 1.5, "back": 0.4, "keep": 0.6},
+	"pikeman": {"react": 0.28, "jitter": 0.10, "busy": 1.2, "brace": true, "prefer": "brace", "heavy": 0.4,
+			"recover": 0.45, "cooldown": 2.2, "reach": 60.0, "hold_reach": 34.0, "toward": 0.6, "back": 1.3, "keep": 0.4},
+	"assassin": {"react": 0.14, "jitter": 0.06, "busy": 0.9, "brace": false, "prefer": "evade", "heavy": 0.3,
+			"recover": 0.3, "cooldown": 1.1, "reach": 80.0, "hold_reach": 44.0, "toward": 0.5, "back": 0.4, "keep": 0.6},
 	"skeleton": {"react": 0.34, "jitter": 0.12, "busy": 1.2, "brace": false, "prefer": "evade", "heavy": 0.5,
 			"recover": 0.4, "cooldown": 2.0, "reach": 50.0, "hold_reach": 30.0, "toward": 0.6, "back": 0.8, "keep": 0.3},
 	"default": {"react": 0.25, "jitter": 0.10, "busy": 1.0, "brace": false, "prefer": "evade", "heavy": 0.3,
@@ -163,7 +167,7 @@ static func reaction_time(w, under: int) -> float:
 ## How fast it can really move just now (its upgrades, buffs, auras, slows, weather).
 static func speed(w) -> float:
 	var weather: float = 1.0 if w.main.gust <= 0.0 else w.main.hazards.speed_factor(w.kind)
-	return w.move_speed * (1.0 + w.buff["speed"]) * w._form("speed") * w._goo_factor() * weather
+	return w.move_speed * (1.0 + w.buff["speed"]) * w._form("speed") * w._goo_factor() * weather * w.speed_mult()
 
 
 ## Its share of health that a blow would take (armour, defence buffs; a block's a chance,
