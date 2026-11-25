@@ -51,10 +51,10 @@ func _initialize() -> void:
 		var row := (i / PER_ROW) * tallest
 		var texes: Array = cells[i]
 		for f in texes.size():
-			var img: Image = (texes[f] as ImageTexture).get_image()
+			var img: Image = Sprites._image_of(texes[f])   # (sprites are regions of the shared atlas)
 			sheet.blend_rect(img, Rect2i(0, 0, img.get_width(), Sprites.SIZE), Vector2i(col * cw + 1, (row + f) * ch + 1))
 	for v in 5:
-		var img: Image = Sprites.ground_tile(v).get_image()
+		var img: Image = Sprites._image_of(Sprites.ground_tile(v))
 		sheet.blit_rect(img, Rect2i(0, 0, Sprites.SIZE, Sprites.SIZE), Vector2i(v * cw + 1, groups * tallest * ch + 1))
 	sheet.resize(sheet.get_width() * ZOOM, sheet.get_height() * ZOOM, Image.INTERPOLATE_NEAREST)
 	sheet.save_png(out)
