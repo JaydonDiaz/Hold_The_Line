@@ -14,6 +14,10 @@ extends SceneTree
 ##    cards sit above the panel, on the screen, the panel's text is never cut off, and no
 ##    button's text runs past its edges or makes it grow over its neighbour (hires,
 ##    abilities, repairs, tabs).
+## S  A phone held upright (1.3 times as tall as wide or more: an iPhone in Safari, its
+##    bars showing, an iPhone SE) gets the phone layout, its battle drawn at least 1260
+##    tall (the field wider on a short screen); on its side, or a desktop, it doesn't.
+##    The fit checks (F) run on those wider, shorter shapes too.
 ## D  With a mouse nothing changes: the keys and clicks are still there.
 
 var main
@@ -38,8 +42,12 @@ func _initialize() -> void:
 func _run() -> void:
 	await _words(true)
 	await _words(false)
-	for h in [1152, 1200, 1260, 1385, 1500]:
-		await _fit(h)
+	_shapes()
+	# Tall phones (640 wide), and short ones held upright, drawn PHONE_H tall with the field
+	# wider: an iPhone in Safari (393x659: 752 wide), an iPhone SE in Safari (375x548: 864),
+	# the shortest that counts as upright (1.3: 969).
+	for size in [[640, 1152], [640, 1200], [640, 1260], [640, 1385], [640, 1500], [752, 1260], [864, 1260], [969, 1260]]:
+		await _fit(size[0], size[1])
 	await _desktop()
 	if main != null:
 		main.free()
@@ -65,7 +73,7 @@ func _mouse(t: String) -> Array:
 	return found
 
 
-func _fresh(phone: bool, h := 1385) -> void:
+func _fresh(phone: bool, h := 1385, w := 640) -> void:
 	if main != null:
 		main.free()
 	main = load("res://main.tscn").instantiate()
@@ -78,7 +86,7 @@ func _fresh(phone: bool, h := 1385) -> void:
 	main.gold = 99999
 	await _frames(2)
 	if phone:
-		main.hud.layout(640, h, h > 1040)
+		main.hud.layout(w, h, h > 1040)
 	await _frames(3)
 
 
@@ -189,8 +197,8 @@ func _spills(b: Button) -> Array:
 	return out
 
 
-func _fit(h: int) -> void:
-	await _fresh(true, h)
+func _fit(w: int, h: int) -> void:
+	await _fresh(true, h, w)
 	var hud = main.hud
 	var off := []
 	for kind in hud.hire_buttons:
@@ -211,7 +219,7 @@ func _fit(h: int) -> void:
 		if r.position.y < 0.0 or r.end.x > hud.ui_w + 0.5 or r.end.y > hud.panel_top + 0.5:
 			off.append(key)
 		hud.hide_hover()
-	check(off.is_empty(), "F  640x%d: every card above the panel, on the screen %s" % [h, off])
+	check(off.is_empty(), "F  %dx%d: every card above the panel, on the screen %s" % [w, h, off])
 	var cut := []
 	var il: Label = hud.info_label
 	for tab in ["troops", "emplacements", "abilities", "repair"]:
@@ -233,7 +241,7 @@ func _fit(h: int) -> void:
 		cut.append("a unit selected")
 	var small: int = il.get_theme_font_size("font_size")
 	main.selected = null
-	check(cut.is_empty(), "F  640x%d: the panel's text is never cut off %s" % [h, cut])
+	check(cut.is_empty(), "F  %dx%d: the panel's text is never cut off %s" % [w, h, cut])
 	var spill := []
 	for tab in ["troops", "emplacements", "abilities", "repair"]:
 		hud.show_tab(tab)
@@ -249,8 +257,25 @@ func _fit(h: int) -> void:
 			for o in shown:
 				if o != b and o.get_instance_id() > b.get_instance_id() and r.intersects(o.get_global_rect().grow(-0.5)):
 					spill.append("%s: %s over %s" % [tab, b.text.get_slice("\n", 0), o.text.get_slice("\n", 0)])
-	check(spill.is_empty(), "F  640x%d: no button's text runs past its edges %s" % [h, spill])
-	check(small >= 10, "F  640x%d: a selected unit's text is at least 10 (%d)" % [h, small])
+	check(spill.is_empty(), "F  %dx%d: no button's text runs past its edges %s" % [w, h, spill])
+	check(small >= 10, "F  %dx%d: a selected unit's text is at least 10 (%d)" % [w, h, small])
+
+
+## Which screens count as a phone held upright, and the size the battle is drawn at.
+func _shapes() -> void:
+	var Setup = load("res://scripts/game/setup.gd")
+	var cases := [
+		["an iPhone in Safari, bars showing (393x659)", Vector2(393, 659), true, true],
+		["an iPhone SE in Safari (375x548)", Vector2(375, 548), true, true],
+		["a tall Android in Chrome (412x839)", Vector2(412, 839), true, true],
+		["a phone on its side (844x390)", Vector2(844, 390), true, false],
+		["a square-ish screen (600x700)", Vector2(600, 700), true, false],
+		["a tall desktop window (500x1000)", Vector2(500, 1000), false, false],
+	]
+	for c in cases:
+		check(Setup.upright_phone(c[1], c[2]) == c[3], "S  %s: %s" % [c[0], "held upright" if c[3] else "not a phone held upright"])
+	check(Setup.base_size(true) == Vector2i(640, 1260) and Setup.base_size(false) == Vector2i(640, 1040),
+			"S  the battle is drawn at least 640x1260 on a phone held upright, 640x1040 elsewhere")
 
 
 func _desktop() -> void:

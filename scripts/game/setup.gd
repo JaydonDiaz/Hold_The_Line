@@ -129,6 +129,33 @@ func _size_window() -> void:
 	DisplayServer.window_set_position(usable.position + (usable.size - Vector2i(w, h)) / 2)
 
 
+## How much taller than wide a phone's screen must be for the phone layout: an iPhone
+## SE in Safari, its bars showing, is 1.46; a phone on its side, or a tablet, isn't.
+const UPRIGHT := 1.3
+## On a phone held upright the game is drawn at least this tall: the field's 768 and a
+## panel of 410 at 1.2x (Hud.layout). A shorter screen (most iPhones in Safari) gets a
+## wider battlefield rather than a cramped panel, or the desktop one; tall phones (2:1
+## and over) are drawn taller than this anyway, and are as before.
+const PHONE_H := 1260
+
+
+## Once a battle is chosen (choose_mode): from then on a phone held upright is drawn
+## at least PHONE_H tall. The start and title screens before it keep the shape they're
+## laid out for (on a short phone, the desktop one: theirs for phones wants a tall one).
+var battle := false
+
+
+## A phone held upright, by its screen's size in pixels.
+static func upright_phone(screen: Vector2, on_phone: bool) -> bool:
+	return on_phone and screen.y >= screen.x * UPRIGHT
+
+
+## The size the game is drawn at before the screen's shape widens or lengthens it
+## ("expand"): 640x1040, or on a phone held upright 640xPHONE_H.
+static func base_size(upright: bool) -> Vector2i:
+	return Vector2i(int(Hud.WIDTH), PHONE_H if upright else int(Hud.HEIGHT))
+
+
 ## Fills the window (the project stretches with "expand"): on a wide screen the
 ## battlefield itself gets wider, with the panel's controls centred along the
 ## bottom; on a tall one the game is centred. When the width changes, everything
@@ -140,11 +167,17 @@ func _size_window() -> void:
 ## placed from where the player put it, never from the last resize, so going small
 ## and back to full screen puts everything back where it was.
 func _fit_screen() -> void:
+	var root := main.get_tree().root
+	var keep := root.content_scale_aspect == Window.CONTENT_SCALE_ASPECT_KEEP   # (the world map and the prologue: their own shape)
+	var upright := upright_phone(Vector2(root.size), main.missions.on_phone()) and not keep and battle
+	var base := base_size(upright)
+	if root.content_scale_size != base:
+		root.content_scale_size = base
 	var view := main.get_viewport().get_visible_rect().size
 	var new_w := maxi(int(Hud.WIDTH), int(view.x))
-	# A phone held upright (a tall, narrow screen): the field at the top and the panel,
-	# drawn larger, filling everything under it. Elsewhere a tall screen centres the game.
-	var phone := view.y / maxf(view.x, 1.0) >= 1.8
+	# A phone held upright (or any tall, narrow screen): the field at the top and the
+	# panel, drawn larger, filling everything under it. Elsewhere a tall screen centres the game.
+	var phone := upright or view.y / maxf(view.x, 1.0) >= 1.8
 	main.missions._turn_upright(view)
 	main.margin = Vector2.ZERO if phone else Vector2(0, maxf(0.0, floorf((view.y - Hud.HEIGHT) / 2.0)))
 	main.position = main.margin
@@ -223,6 +256,8 @@ func choose_mode(mode: String) -> void:
 	# Battles fill the window: a map stretches across the field like the meadow does (the
 	# campaign map and the cutscenes, drawn as one picture, keep their frame).
 	main.missions._lock_portrait(false)
+	battle = true
+	_fit_screen()   # (a short phone held upright: the phone layout, the field a little wider; before the map is fitted to it)
 	main.paths.set_map(Maps.get_map(main.map_id))
 	main.hazards.setup(main, Maps.get_map(main.map_id), main.mission)
 	main.bells.setup(main, main.mission, Maps.get_map(main.map_id))
