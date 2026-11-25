@@ -149,6 +149,7 @@ func _fit_screen() -> void:
 	main.margin = Vector2.ZERO if phone else Vector2(0, maxf(0.0, floorf((view.y - Hud.HEIGHT) / 2.0)))
 	main.position = main.margin
 	main.hud.offset = main.margin
+	main.hud.touch = main.missions.on_phone()   # (a phone held so it gets the desktop layout still has no mouse or keys)
 	main.hud.layout(new_w, view.y if phone else Hud.HEIGHT, phone)
 	if new_w != main.FIELD_W:
 		var old_w := main.FIELD_W

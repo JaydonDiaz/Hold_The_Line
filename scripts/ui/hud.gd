@@ -111,6 +111,7 @@ var boss_bar: Control       # the Ogre King's health, across the top of the fiel
 var boss_fill: ColorRect
 var boss_name: Label
 var compact := false       # a phone (a tall, narrow screen): the HUD drawn larger (ui_scale), laid out narrower
+var touch := false         # a touchscreen (a phone, even one laid out as a desktop): no mouse or keys, so the help speaks of taps (see touch_text)
 var ui_scale := 1.0
 var ui_h := HEIGHT          # the screen's height in HUD units
 var panel_top := TOP        # where the bottom panel starts, in HUD units
@@ -317,7 +318,9 @@ func layout(w: float, h := HEIGHT, phone := false) -> void:
 	compact = phone
 	# On a phone the HUD is drawn half as large again, in a narrower space: the field keeps
 	# the top of the screen (TOP game pixels), and the panel all the rest of it.
-	ui_scale = clampf((h - TOP) / 410.0, 1.2, 1.6) if phone else 1.0
+	# (Never so large that the panel gets less than its 410: on a phone only just tall enough
+	# for this, many an Android in its browser, the text under the buttons was cut off.)
+	ui_scale = clampf((h - TOP) / 410.0, 0.9, 1.6) if phone else 1.0
 	scale = Vector2(ui_scale, ui_scale)
 	ui_w = w / ui_scale if phone else maxf(w, WIDTH)
 	ui_h = h / ui_scale if phone else HEIGHT
@@ -367,10 +370,10 @@ func _layout_bar() -> void:
 		var tabs := TABS.map(func(t): return t[0])
 		for i in tabs.size():
 			var tb: Button = tab_buttons[tabs[i]]
+			tb.text = (TABS[i][1] as String).replace("Emplacements", "Emplace")   # (before its size: see _row)
+			_fit_text(tb, 15, TAB_W - 14.0)
 			tb.position = Vector2(12 + i * (TAB_W + 6), 92)
 			tb.size = Vector2(TAB_W, 34)
-			tb.text = (TABS[i][1] as String).replace("Emplacements", "Emplace")
-			_fit_text(tb, 15, TAB_W - 14.0)
 		count_btn.position = Vector2(12 + tabs.size() * (TAB_W + 6), 92)
 		count_btn.size = Vector2(count_w, 34)
 		_font_size(count_btn, "font_size", 15)
@@ -403,10 +406,10 @@ func _layout_bar() -> void:
 		var tabs := TABS.map(func(t): return t[0])
 		for i in tabs.size():
 			var tb: Button = tab_buttons[tabs[i]]
+			tb.text = _keys("%s  [%s]" % [TABS[i][1], TABS[i][2]])
+			_fit_text(tb, 14, TAB_W - 16.0)
 			tb.position = Vector2(12, 50 + i * 42.0)
 			tb.size = Vector2(TAB_W, 38)
-			tb.text = "%s  [%s]" % [TABS[i][1], TABS[i][2]]
-			_fit_text(tb, 14, TAB_W - 16.0)
 		count_btn.position = Vector2(12, 50 + tabs.size() * 42.0)
 		count_btn.size = Vector2(TAB_W, 34)
 		_font_size(count_btn, "font_size", 14)
@@ -428,6 +431,12 @@ func _layout_bar() -> void:
 
 
 ## Shrinks a button's font from `size` until its text fits `room`.
+## A button's margins either side of its text (its box's, and a little to spare).
+func _inner_margin(b: Button) -> float:
+	var style: StyleBox = b.get_theme_stylebox("normal")
+	return style.get_margin(SIDE_LEFT) + style.get_margin(SIDE_RIGHT) + 4.0
+
+
 func _fit_text(b: Button, size: int, room: float) -> void:
 	while size > 9 and Forge.font.get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > room:
 		size -= 1
@@ -469,7 +478,7 @@ func _layout_hire() -> void:
 			if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x > room:
 				# Names too wide for the button go on two lines (e.g. "Martial / Artist").
 				label = label.replace(" ", "\n")
-			text = "%s\n%s  [%s]" % [label, price, key] if not compact else "%s\n%s" % [label, price]
+			text = "%s\n%s  [%s]" % [label, price, key] if not (compact or touch) else "%s\n%s" % [label, price]
 			# Then anything still too wide gets a smaller font until it fits.
 			var widest := 0.0
 			for line in (label + "\n%s  [%s]" % [price, key]).split("\n"):
@@ -498,26 +507,53 @@ func _layout_hire() -> void:
 	# a button per repair size.
 	for p in castle_cards.size():
 		_layout_card(castle_cards[p], p)   # laid out like a unit's upgrade cards
-	_row(ability_buttons.values(), avail, 1000.0)
-	for ab in ability_buttons.values():
-		_font_size(ab, "font_size", 13 if ab.size.x >= 96.0 else 12)
-		# Tall buttons (one row) show the icon over the name; short ones (two rows) beside it.
-		var tall: bool = ab.size.y >= 100.0
+	var slot := _row(ability_buttons.values(), avail, 1000.0)
+	# Tall buttons (one row) show the icon over the name; short ones (two rows) beside it,
+	# smaller on a phone so the names fit beside it. All the names one size: the largest
+	# at which every one fits across (Thunderstrike the longest).
+	var tall: bool = slot.y >= 100.0
+	var size := 13 if slot.x >= 96.0 else 12
+	for key in ability_buttons:
+		var ab: Button = ability_buttons[key]
+		ab.icon = _power_icon(key, 2 if compact and not tall else 3)
 		ab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if tall else HORIZONTAL_ALIGNMENT_LEFT
 		ab.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP if tall else VERTICAL_ALIGNMENT_CENTER
-	_row(repair_buttons, avail, 1000.0)
+		var room := slot.x - _inner_margin(ab)
+		if not tall:
+			room -= ab.icon.get_width() + ab.get_theme_constant("h_separation")
+		while size > 9 and Forge.font.get_string_size(Data.ABILITIES[key]["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > room:
+			size -= 1
+	for ab in ability_buttons.values():
+		_font_size(ab, "font_size", size)
+	# (Laid out again now they show what they will: a button can't be made smaller than its
+	# text and icon need, so sized while it still had its icon over its name, or a longer
+	# text, it stayed that big, over its neighbour.)
+	_row(ability_buttons.values(), avail, 1000.0)
+	# The repairs: two by two on a phone (four across left their words too small), and their
+	# words a size smaller where the longest wouldn't fit across a button.
+	var repair_min := 150.0 if compact else 92.0
+	slot = _row(repair_buttons, avail, 1000.0, repair_min)
+	var rsize := 15
+	var room := slot.x - _inner_margin(repair_buttons[0])
+	while rsize > 10 and REPAIR_WORDS.any(func(t): return Forge.font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, rsize).x > room):
+		rsize -= 1
 	for rb in repair_buttons:
-		_font_size(rb, "font_size", 15)
+		_font_size(rb, "font_size", rsize)
+	_row(repair_buttons, avail, 1000.0, repair_min)
 	for i in power_buttons.size():
 		var pb: Button = power_buttons.values()[i]
 		pb.position.y = 6.0
 
 
+## The longest lines a repair button shows (see _refresh_castle), to size its words by.
+const REPAIR_WORDS := ["Not enough gold", "Castle at full", "after the wave", "Use all gold", "Repairing...", "+9999 HP", "9999g  [4]"]
+
+
 ## Lays buttons out in the tab area: one row of up to `max_w` wide buttons when they
-## fit at 92 or more each, otherwise two rows.
-func _row(buttons: Array, avail: float, max_w: float) -> void:
+## fit at `min_w` (92) or more each, otherwise two rows. Returns the size each was given.
+func _row(buttons: Array, avail: float, max_w: float, min_w := 92.0) -> Vector2:
 	var n := buttons.size()
-	var rows := 1 if avail >= n * 92.0 else 2
+	var rows := 1 if avail >= n * min_w else 2
 	var per := ceili(n / float(rows))
 	var w := minf((avail - 6.0 * (per - 1)) / per, max_w)
 	var h := CONTENT_H if rows == 1 else (CONTENT_H - 6.0) / 2.0
@@ -525,6 +561,7 @@ func _row(buttons: Array, avail: float, max_w: float) -> void:
 		var b: Button = buttons[i]
 		b.position = Vector2(CONTENT_X + (i % per) * (w + 6.0), CONTENT_Y + (i / per) * (h + 6.0))
 		b.size = Vector2(w, h)
+	return Vector2(w, h)
 
 
 ## Upgrade cards sit in a row across the top of the panel, sharing its width
@@ -575,7 +612,7 @@ func set_prices(mult: float, step := 1) -> void:
 	for kind in hire_meta:
 		var m: Array = hire_meta[kind]
 		var price := _price_text(Data.WARRIORS[kind])
-		hire_buttons[kind].text = ("%s\n%s" % [m[0], price]) if compact else (("%s\n%s  [%s]" if m[2] == 1 else "%s  %s [%s]") % [m[0], price, m[1]])
+		hire_buttons[kind].text = ("%s\n%s" % [m[0], price]) if compact or touch else (("%s\n%s  [%s]" if m[2] == 1 else "%s  %s [%s]") % [m[0], price, m[1]])
 
 
 func _setup_hire_button(b: Button, kind: String, d: Dictionary) -> void:
@@ -619,9 +656,9 @@ func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
 		return
 	hover_title.text = title
 	_font_color(hover_title, "font_color", color)
-	hover_sub.text = sub
+	hover_sub.text = touch_text(sub)
 	hover_sub.visible = sub != ""
-	hover_body.text = body
+	hover_body.text = touch_text(body)
 	hover_card.size = Vector2.ZERO   # shrink to the new text
 	hover_card.visible = true
 	hover_card.reset_size()
@@ -642,7 +679,7 @@ func _show_hire_card(kind: String, b: Button) -> void:
 	var note: String = get_parent().missions.lock_note(kind) if get_parent().get("missions") != null else ""
 	_fill_card(d["name"], d["color"], note if note != "" else "%s  -  %s" % [sort, price], body)
 	# Just above the panel, lined up with the button.
-	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), TOP - hover_card.size.y - 6.0)
+	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), maxf(4.0, panel_top - hover_card.size.y - 6.0))
 
 
 ## Hovering a unit on the field (main calls this every frame with the unit under the
@@ -664,7 +701,7 @@ func show_unit_card(w, at: Vector2) -> void:
 	var pos := at + Vector2(22, -hover_card.size.y / 2.0)
 	if pos.x + hover_card.size.x > ui_w - 4.0:
 		pos.x = at.x - 22.0 - hover_card.size.x   # flip to the left of the mouse near the right edge
-	pos.y = clampf(pos.y, 4.0, TOP - hover_card.size.y - 4.0)
+	pos.y = clampf(pos.y, 4.0, maxf(4.0, panel_top - hover_card.size.y - 4.0))
 	hover_card.position = pos
 
 
@@ -735,26 +772,45 @@ static func _base_stats(d: Dictionary) -> String:
 	return "   ".join(parts)
 
 
-## On a phone the panel's help speaks of taps: no right-click, Shift or keys there.
+## On a touchscreen the help speaks of taps: no right-click, Shift or keys there.
 const TOUCH_WORDS := [
 	["right-click to send it somewhere", "tap the ground to send it somewhere"],
 	["Right-click to move them together", "Tap the ground to move them together"],
 	[" Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them.", " Tap a type above to keep only those."],
 	[" (Q/W/E/R or 1-4)", ""], [" Right-click or Esc to close.", " Tap a troop or the field to close."],
-	[" Hold Shift to hire several.", ""], [" Right-click cancels.", ""], [" (1-6)", ""],
+	[" Hold Shift to hire several.", ""], [" Hold Shift to keep hiring.", ""], [" Right-click cancels.", ""], [" (1-6)", ""],
 	["Click", "Tap"], ["click", "tap"],
 ]
 
 
-## The panel's help in a phone's words (see TOUCH_WORDS).
+## The panel's help in a touchscreen's words (see touch_text).
 func touch_words() -> void:
-	if not compact or info_label.get_meta("touched", "") == info_label.text:
+	if not touch or info_label.get_meta("touched", "") == info_label.text:
 		return
-	var t := info_label.text
-	for pair in TOUCH_WORDS:
-		t = t.replace(pair[0], pair[1])
+	var t := touch_text(info_label.text)
 	info_label.text = t
 	info_label.set_meta("touched", t)
+
+
+## Text in a touchscreen's words: taps for clicks (TOUCH_WORDS), and no keys (_keys).
+func touch_text(t: String) -> String:
+	if not touch:
+		return t
+	for pair in TOUCH_WORDS:
+		t = t.replace(pair[0], pair[1])
+	return _keys(t)
+
+
+static var _key_re: RegEx = null
+
+## A label without its keyboard shortcuts ("Sell [S]", "Use  [3]", "(1-6)") on a
+## touchscreen, where there are no keys to press.
+func _keys(t: String) -> String:
+	if not touch:
+		return t
+	if _key_re == null:
+		_key_re = RegEx.create_from_string("[ \\t]*\\n?[ \\t]*\\[[A-Z0-9][^\\]\\n]{0,3}\\]|[ \\t]*\\((?:Q/W/E/R or )?[0-9]-[0-9]\\)")
+	return _key_re.sub(t, "", true)
 
 
 func refresh(main) -> void:
@@ -931,7 +987,7 @@ func _refresh(main) -> void:
 		tab_buttons[t].visible = w == null and grave == null and not castle_sel and not in_group and (t != "repair" or main.rules.has_castle())
 		tab_buttons[t].set_pressed_no_signal(t == hire_tab)
 	count_btn.visible = w == null and grave == null and not castle_sel and not in_group and hire_tab in ["troops", "emplacements"]
-	count_btn.text = ("x%d" if compact else "x%d  [N]") % main.hiring.hire_count
+	count_btn.text = ("x%d" if compact or touch else "x%d  [N]") % main.hiring.hire_count
 	_refresh_group(main, in_group)
 	for card in path_cards:
 		card["button"].visible = w != null or grave != null
@@ -941,7 +997,7 @@ func _refresh(main) -> void:
 	song_btn.visible = w != null and w.kind == "bard" and main.effects.all_bards_present()
 	climb_btn.visible = w != null and ((w.garrison != null and is_instance_valid(w.garrison)) or w.broken)
 	if climb_btn.visible:
-		climb_btn.text = ("Rebuild\n%dg [L]" % w.rebuild_cost()) if w.broken else "Climb\ndown [L]"
+		climb_btn.text = _keys(("Rebuild\n%dg [L]" % w.rebuild_cost()) if w.broken else "Climb\ndown [L]")
 		climb_btn.tooltip_text = "Have an Engineer rebuild it, upgrades and all [L]" if w.broken else "Come down out of the tower, to its foot [L]"
 		climb_btn.disabled = w.broken and main.gold < w.rebuild_cost()
 	if not compact:
@@ -967,7 +1023,7 @@ func _refresh(main) -> void:
 		_font_size(info_label, "font_size", 13 if ui_w < 900.0 else 14)
 		info_label.text = "%d troops selected. Right-click to move them together (they keep their formation)%s. Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them." % [
 				main.group.size(), "" if main.hiring.fighting() else "; or drag one of them to move the group"]
-		target_btn.text = "Orders [O]\n%d troops" % main.group.filter(_takes_orders).size()
+		target_btn.text = _keys("Orders [O]\n%d troops" % main.group.filter(_takes_orders).size())
 		var selling: Array = main.formation_ctl.sellable(main.group)
 		sell_btn.text = "Sell all\n+%dg" % main.formation_ctl.sell_total(selling)
 		sell_btn.disabled = selling.is_empty()
@@ -1027,9 +1083,9 @@ func _refresh(main) -> void:
 	sell_btn.text = "Downed" if w.down_timer > 0.0 else "Sell +%dg" % w.sell_value()
 	sell_btn.disabled = w.down_timer > 0.0   # (no selling a downed troop)
 	sell_btn.tooltip_text = "Sell for 60% of everything spent on this unit [S]"
-	target_btn.text = "Orders [O]\n%s" % _orders_short(w)
+	target_btn.text = _keys("Orders [O]\n%s" % _orders_short(w))
 	info_label.text += "\nOrders: " + orders_summary(w)
-	song_btn.text = "Song [G]\n%s" % ("On" if main.song_on else "Off")
+	song_btn.text = _keys("Song [G]\n%s" % ("On" if main.song_on else "Off"))
 	for p in path_cards.size():
 		_refresh_card(path_cards[p], w, p, main.gold)
 
@@ -1101,7 +1157,7 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			var ok: bool = main.gold >= cost and not main.game_over
 			card["tier"].text = nxt["name"]
 			card["desc"].text = nxt["desc"]
-			card["cost"].text = "%dg" % cost if compact else "%dg [%d]" % [cost, p + 1]
+			card["cost"].text = "%dg" % cost if compact or touch else "%dg [%d]" % [cost, p + 1]
 			_font_color(card["cost"], "font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
 			b.disabled = not ok
 		b.modulate = Color.WHITE if path_open else LOCKED_TINT
@@ -1115,14 +1171,14 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 		var ab_open: bool = main.missions.allowed("ability:" + key)
 		b.modulate = Color.WHITE if ab_open else LOCKED_TINT
 		if not ab_open:
-			b.text = "%s\nLocked" % d["name"] if compact else "%s\nLocked  [%d]" % [d["name"], n]
+			b.text = "%s\nLocked" % d["name"] if compact or touch else "%s\nLocked  [%d]" % [d["name"], n]
 			b.disabled = true
 		elif not powers.owned.has(key):
-			b.text = "%s\n%dg" % [d["name"], powers.cost(key)] if compact else "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
+			b.text = "%s\n%dg" % [d["name"], powers.cost(key)] if compact or touch else "%s\n%dg  [%d]" % [d["name"], powers.cost(key), n]
 			b.disabled = main.gold < powers.cost(key) or main.game_over
 		else:
 			var left: float = powers.ready_in(key)
-			b.text = "%s\n%s  [%d]" % [d["name"], "%ds" % ceili(left) if left > 0.0 else ("Aiming..." if powers.aiming == key else "Use"), n]
+			b.text = _keys("%s\n%s  [%d]" % [d["name"], "%ds" % ceili(left) if left > 0.0 else ("Aiming..." if powers.aiming == key else "Use"), n])
 			b.disabled = left > 0.0 or main.game_over
 	# Repairs: how much each size mends, and what it costs right now.
 	for i in repair_buttons.size():
@@ -1135,15 +1191,15 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			label = "Use all gold"
 		b.modulate = Color.WHITE if main.missions.allowed("repair") else LOCKED_TINT
 		if not main.missions.allowed("repair"):
-			b.text = "%s\nLocked\n[%d]" % [label, i + 1]
+			b.text = _keys("%s\nLocked\n[%d]" % [label, i + 1])
 		elif not main.castle_ctl.repair_job.is_empty():
 			b.text = "%s\nRepairing...\n%d%% done" % [label, roundi(100.0 * (1.0 - main.castle_ctl.repair_job["left"] / main.castle_ctl.repair_job["total"]))]
 		elif amount < 1.0:
-			b.text = "%s\n%s\n[%d]" % [label, "Castle at full" if main.castle_hp >= main.castle_max - 0.5 else "Not enough gold", i + 1]
+			b.text = _keys("%s\n%s\n[%d]" % [label, "Castle at full" if main.castle_hp >= main.castle_max - 0.5 else "Not enough gold", i + 1])
 		elif main.wave_active:
 			b.text = "%s\n+%d HP\nafter the wave" % [label, roundi(amount)]
 		else:
-			b.text = "%s\n+%d HP\n%dg  [%d]" % [label, roundi(amount), main.castle_ctl.repair_cost(amount), i + 1]
+			b.text = _keys("%s\n+%d HP\n%dg  [%d]" % [label, roundi(amount), main.castle_ctl.repair_cost(amount), i + 1])
 		b.disabled = not main.castle_ctl.can_repair(i)
 	# The ability bar, in the top-left corner of the field (above the enemy camp).
 	var shown := 0
@@ -1252,7 +1308,7 @@ func _show_ability_card(key: String, b: Button) -> void:
 				roundi(buff["rate"] * powers.boost() * 100), roundi(buff["speed"] * powers.boost() * 100)])
 	nums.append("Recharge %ds" % roundi(powers.recharge(key)))
 	_fill_card(d["name"], d["color"], sub, d["desc"] + "\n\n" + "   ".join(nums))
-	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), TOP - hover_card.size.y - 6.0)
+	hover_card.position = Vector2(clampf(b.global_position.x, 4.0, ui_w - hover_card.size.x - 4.0), maxf(4.0, panel_top - hover_card.size.y - 6.0))
 
 
 ## The hire tab a unit kind is on.
@@ -1327,7 +1383,7 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			affordable = gold >= cost
 			card["tier"].text = t["name"]
 			card["desc"].text = t["desc"]
-			card["cost"].text = "%dg" % cost if compact else "%dg [%s]" % [cost, PATH_KEYS[p]]
+			card["cost"].text = "%dg" % cost if compact or touch else "%dg [%s]" % [cost, PATH_KEYS[p]]
 			_font_color(card["cost"], "font_color", Color(1, 0.85, 0.3) if affordable else Color(1, 0.4, 0.35))
 		"max":
 			card["tier"].text = "Fully upgraded"
@@ -2705,7 +2761,7 @@ const ORDER_RIGHT := 44.0     # room kept clear on the right for the close butto
 func _order_row(box: Panel, y: float, label: String, field: String, keys: Array, names: Dictionary, tips: Dictionary, x0 := ORDER_X0, width := -1.0) -> void:
 	if label != "":
 		var lab := _label(box, Vector2(10, y + (10 if compact else 2)), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
-		lab.text = label
+		lab.text = _keys(label)
 	var span := (box.size.x - x0 - ORDER_RIGHT) if width < 0.0 else width
 	var bw := span / keys.size() - 4.0
 	var btns := {}
@@ -2786,7 +2842,7 @@ func _open_orders(main, units: Array) -> void:
 	var to_follow: Array = main.rules.followable() if not movers.is_empty() else []
 	if not to_follow.is_empty():
 		var fl := _label(box, Vector2(10, y + 2), Vector2(ORDER_X0 - 12.0, 20), Color(0.85, 0.82, 0.76), 12)
-		fl.text = "Follow [J]"
+		fl.text = _keys("Follow [J]")
 		var opts: Array = [null] + to_follow.slice(0, 2)
 		var bw := (box.size.x - ORDER_X0 - ORDER_RIGHT) / opts.size() - 4.0
 		var fbtns := []
