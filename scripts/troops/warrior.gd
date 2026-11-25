@@ -101,6 +101,9 @@ const WINDUP := 0.18      # melee troops rear back over the last moment before a
 const ARCHER_DRAW := 0.9  # Archer idle: draw an arrow out of the quiver (seconds)...
 const ARCHER_LOOP := 3.3  # ...then twirl it, flip it, one lazy turn, over and over while she stands idle...
 const ARCHER_STOW := 0.7  # ...and put it back only once she moves off (seconds)
+const TWIRL_LOOP := 3.6   # Assassin idle: both daggers spun, a hold, the right one flipped and caught, the left spun back (seconds)
+const DRILL_LOOP := 6.5   # Pikeman idle: at ease, then a drill (pike lowered, two thrusts, raised) every this many seconds
+const DRILL_AT := 2.5     # ...starting this far into each loop
 const PRIORITIES := ["closest", "first", "strongest", "valuable"]
 const VALUE := {"warmage": 5.0, "boltflinger": 5.0, "drummer": 4.0, "gravebinder": 4.0, "skeleton_archer": 3.0, "sapper": 2.0, "shieldbearer": 1.0, "wolf": 0.5}   # (on offer; "weakest" still works for anything set to it)
 const PRIORITY_NAMES := {
@@ -5817,6 +5820,13 @@ func _body_motion() -> Array:
 					off.y -= 1.5   # tapping a foot
 			"healer":
 				rot = sin(anim_t * 1.3) * 0.04   # swaying in prayer
+			"assassin":
+				rot = sin(anim_t * 2.0) * 0.03   # loose, easy on his feet
+			"pikeman":
+				var d := _drill()
+				if not d.is_empty():
+					off.x += flip * 2.5 * d["thrust"]   # stepping into each thrust
+					rot += 0.05 * d["k"] * flip
 			"archer":
 				# Easy-going: a lazy sway from foot to foot, leaning back to watch the
 				# arrow when she flips it.
@@ -5900,7 +5910,7 @@ func _carried_motion(off: Vector2, rot: float, sc: Vector2) -> Array:
 
 func _pose_name() -> String:
 	if data.get("pike", false):
-		return "level" if _pike_levelled() else ""   # (his sprite's pike taken away: drawn levelled on its own)
+		return "level" if _pike_levelled() or not _drill().is_empty() else ""   # (his sprite's pike taken away: drawn levelled on its own)
 	if pose_left > 0.0:
 		return pose
 	if swing <= 0.0 and _idling():
@@ -5922,6 +5932,8 @@ func _pose_name() -> String:
 			"alchemist":
 				if _toss() >= 0.0:
 					return "catch"
+			"assassin":
+				return "twirl"   # (his daggers drawn spinning: _twirl)
 	match kind:
 		"swordsman":
 			if swing > 0.0:
@@ -5990,26 +6002,86 @@ func _pike_levelled() -> bool:
 func _draw_pike() -> void:
 	if not _pike_levelled():
 		return   # (upright, it's in his sprite)
-	var hand := Vector2(5.0 * flip, -6.0)
-	var levelled := true
-	var dir: Vector2 = facing
 	var length: float = RADIUS + pike_range - 4.0 + (5.0 if swing > 0.0 else 0.0)
+	var tip := _draw_pike_at(Vector2(5.0 * flip, -6.0), facing, length, 1.0)
+	if still_t >= PIKE_SET and not brace.is_empty():
+		draw_arc(tip, 4.0, 0, TAU, 10, Color(0.85, 0.9, 1.0, 0.5), 1.5, true)   # (set: the point held steady)
+
+
+## A pike held at `hand`, pointing along `dir`: its shaft and its head (broader and darker
+## for the Impaler, with a hook for Hook & Shove), `th` times as thick. Returns the tip.
+func _draw_pike_at(hand: Vector2, dir: Vector2, length: float, th: float) -> Vector2:
 	var butt := hand - dir * 12.0
 	var tip := hand + dir * (length - 8.0)
-	draw_line(butt, tip, OUTLINE_COLOR, 4.0, true)
-	draw_line(butt, tip, Color(0.58, 0.4, 0.22), 2.0, true)
+	draw_line(butt, tip, OUTLINE_COLOR, 4.0 * th, true)
+	draw_line(butt, tip, Color(0.58, 0.4, 0.22), 2.0 * th, true)
 	var side := dir.orthogonal()
 	var big: bool = not hardened.is_empty()
-	var head := 9.0 if big else 7.0
+	var head := (9.0 if big else 7.0) * th
+	var wide := (3.0 if big else 2.5) * th
 	var steel := Color(0.62, 0.64, 0.7) if big else Color(0.85, 0.88, 0.95)
-	var pts := PackedVector2Array([tip + dir * head, tip + side * (3.0 if big else 2.5), tip - dir * 2.0, tip - side * (3.0 if big else 2.5)])
+	var pts := PackedVector2Array([tip + dir * head, tip + side * wide, tip - dir * 2.0 * th, tip - side * wide])
 	draw_colored_polygon(pts, steel)
-	draw_polyline(pts + PackedVector2Array([pts[0]]), OUTLINE_COLOR, 1.0, true)
+	draw_polyline(pts + PackedVector2Array([pts[0]]), OUTLINE_COLOR, 1.0 * th, true)
 	if not hook.is_empty():
-		draw_line(tip, tip + side * 5.0 - dir * 3.0, OUTLINE_COLOR, 3.0, true)
-		draw_line(tip, tip + side * 5.0 - dir * 3.0, steel, 1.5, true)
-	if still_t >= PIKE_SET and not brace.is_empty() and levelled:
-		draw_arc(tip, 4.0, 0, TAU, 10, Color(0.85, 0.9, 1.0, 0.5), 1.5, true)   # (set: the point held steady)
+		var barb := tip + (side * 5.0 - dir * 3.0) * th
+		draw_line(tip, barb, OUTLINE_COLOR, 3.0 * th, true)
+		draw_line(tip, barb, steel, 1.5 * th, true)
+	return tip
+
+
+## Pikeman idle: his drill, as {"k": lowered (0 upright, 1 level), "thrust": 0-1}, or {}
+## while he stands at ease with it upright in his sprite.
+func _drill() -> Dictionary:
+	if not data.get("pike", false) or not _idling() or swing > 0.0 or lift > 0.0 or _pike_levelled():
+		return {}
+	var t := fmod(idle_t - IDLE_AFTER, DRILL_LOOP) - DRILL_AT
+	if t < 0.0 or t >= 1.9:
+		return {}
+	if t < 0.5:
+		return {"k": smoothstep(0.0, 1.0, t / 0.5), "thrust": 0.0}   # brings it down level...
+	if t < 1.4:
+		return {"k": 1.0, "thrust": sin(PI * fmod(t - 0.5, 0.45) / 0.45)}   # ...thrust, thrust...
+	return {"k": 1.0 - smoothstep(0.0, 1.0, (t - 1.4) / 0.5), "thrust": 0.0}   # ...and back up
+
+
+## The drilled pike, turning about his grip from upright to level ahead.
+func _draw_drill(origin: Vector2, d: Dictionary) -> void:
+	var grip := _sprite_px(origin, 14, 10)
+	var ang := lerp_angle(-PI / 2, 0.0 if flip > 0 else PI, d["k"])
+	var dir := Vector2.from_angle(ang)
+	_draw_pike_at(grip + dir * 9.0 * d["thrust"], dir, 29.0, 1.5)
+
+
+## Assassin idle: his daggers spinning in his hands, by [left angle, right angle, right's
+## height tossed up]. Held point-down (reverse grip) between flourishes.
+func _twirl() -> Array:
+	var t := fmod(idle_t - IDLE_AFTER, TWIRL_LOOP)
+	var l := 0.0   # turns, forward
+	var r := 0.0
+	var up := 0.0
+	if t < 0.9:
+		l = 2.0 * smoothstep(0.0, 1.0, t / 0.9)   # both spun twice, the right a beat behind
+		r = 2.0 * smoothstep(0.0, 1.0, clampf((t - 0.12) / 0.78, 0.0, 1.0))
+	elif t >= 1.5 and t < 2.3:
+		var k := (t - 1.5) / 0.8
+		r = 2.0 * smoothstep(0.0, 1.0, k)   # the right one flipped up end over end, and caught
+		up = sin(PI * k) * 30.0
+	elif t >= 2.3 and t < 2.9:
+		l = -smoothstep(0.0, 1.0, (t - 2.3) / 0.6)   # the left spun back once
+	return [PI / 2 + TAU * l * flip, PI / 2 + TAU * r * flip, up]
+
+
+## A dagger gripped at `p`, its blade pointing along `ang`.
+func _draw_dagger(p: Vector2, ang: float, alpha: float) -> void:
+	draw_set_transform(p, ang, Vector2.ONE)
+	var k := Color(OUTLINE_COLOR, alpha)
+	draw_rect(Rect2(-4, -2, 4, 4), k)
+	draw_rect(Rect2(-3, -1, 3, 2), Color(0.75, 0.62, 0.35, alpha))   # the hilt
+	draw_colored_polygon(PackedVector2Array([Vector2(0, -2), Vector2(6, -2), Vector2(9, 0), Vector2(6, 2), Vector2(0, 2)]), k)
+	draw_colored_polygon(PackedVector2Array([Vector2(1, -1), Vector2(5.5, -1), Vector2(7.5, 0), Vector2(5.5, 1), Vector2(1, 1)]), Color(0.88, 0.92, 0.97, alpha))
+	draw_rect(Rect2(-0.5, -3.5, 2, 7), k)   # the guard
+	draw_set_transform(Vector2.ZERO)
 
 
 ## The slung weapon, drawn before the body so only what sticks out past it shows.
@@ -6659,6 +6731,17 @@ func _draw_idle_props(origin: Vector2, size: Vector2) -> void:
 	if not _idling() or swing > 0.0:
 		return
 	match kind:
+		"assassin":
+			if lift > 0.0:
+				return   # (carried: his daggers are back in his sprite)
+			var tw := _twirl()
+			var a := lerpf(1.0, STALK_ALPHA, stalk_k)
+			_draw_dagger(_sprite_px(origin, 1.3, 9), tw[0], a)
+			_draw_dagger(_sprite_px(origin, 13.7, 9) + Vector2(0, -tw[2]), tw[1], a)
+		"pikeman":
+			var d := _drill()
+			if not d.is_empty():
+				_draw_drill(origin, d)
 		"archer":
 			if _readying() <= 0.0:
 				var arrow := _archer_arrow(origin)
