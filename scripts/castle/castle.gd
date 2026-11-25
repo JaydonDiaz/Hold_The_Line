@@ -96,6 +96,11 @@ var cracks := []      # crack lines, revealed one by one as it takes damage
 var top_part := Top.new()   # the moving parts, drawn over everything else of the castle
 var _drawn_state := Vector3(-1, -1, -1)   # cracks shown, field width and lamplight the stonework was drawn with
 var pal: Dictionary = STYLES["keep"]
+var _ci: CanvasItem = self   # what the stonework helpers draw on (the picture's painter: see _repaint)
+var _bake_vp: SubViewport = null   # the stonework, painted once (see _repaint)
+var _bake_painter: Node2D = null
+var _bake_top := 0.0               # the field y the picture starts at
+const BAKE_RISE := 72.0            # the picture reaches this far above the wall (towers, merlons, icicles)
 
 
 ## Dresses the castle in one of STYLES.
@@ -200,9 +205,41 @@ func _towers() -> Array:
 	return out
 
 
-## The stonework: walls, towers, gate, ivy and cracks. (Drawn only when it changes;
-## the castle's own drawing is also what the x-ray silhouettes are clipped to.)
+## The stonework, shown from its painting (see _paint_stonework). The castle's own
+## drawing is also what the x-ray silhouettes are clipped to.
 func _draw() -> void:
+	_repaint()
+	draw_texture_rect(_bake_vp.get_texture(), Rect2(0, _bake_top, main.FIELD_W, main.FIELD_H - _bake_top), false)
+
+
+## Has the stonework painted afresh (it changed: cracks, the field's width, the style).
+## It's a thousand and more little blocks, so it's painted into a picture of its own
+## once, like the ground, and the castle shows that picture: one thing to draw a frame
+## instead of all the blocks (which matters most on a phone). Painted at the ground's
+## oversampling, so it's as sharp as drawing it straight onto the screen.
+func _repaint() -> void:
+	var os: int = main.get("GROUND_OVERSAMPLE") if main.get("GROUND_OVERSAMPLE") != null else 1
+	if _bake_vp == null:
+		_bake_vp = SubViewport.new()
+		_bake_vp.disable_3d = true
+		_bake_vp.transparent_bg = true
+		_bake_vp.canvas_item_default_texture_filter = Viewport.DEFAULT_CANVAS_ITEM_TEXTURE_FILTER_NEAREST
+		_bake_painter = Node2D.new()
+		_bake_painter.draw.connect(_paint_stonework.bind(_bake_painter))
+		_bake_vp.add_child(_bake_painter)
+		add_child(_bake_vp)
+	_bake_top = main.CASTLE_Y - BAKE_RISE
+	_bake_vp.size = Vector2i(main.FIELD_W * os, int(main.FIELD_H - _bake_top) * os)
+	_bake_painter.scale = Vector2.ONE * os
+	_bake_painter.position = Vector2(0, -_bake_top * os)
+	_bake_painter.queue_redraw()
+	_bake_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+## The stonework itself: walls, towers, gate, ivy, the region's details and cracks,
+## painted on `ci` (the picture's painter).
+func _paint_stonework(ci: CanvasItem) -> void:
+	_ci = ci
 	var w: float = main.FIELD_W
 	var top: float = main.CASTLE_Y
 	var bottom: float = main.FIELD_H
@@ -224,7 +261,8 @@ func _draw() -> void:
 	_extras(w, top, bottom, towers)
 	# Damage: cracks (smoke and fire are drawn by the top part).
 	for i in int(cracks.size() * _damage()):
-		draw_polyline(cracks[i], OUTLINE, 2.0)
+		_ci.draw_polyline(cracks[i], OUTLINE, 2.0)
+	_ci = self
 
 
 ## What moves on the castle: lamplit windows, torches, banners, flags, smoke, fire and
@@ -283,9 +321,9 @@ func _draw_top(ci: CanvasItem) -> void:
 ## Mortared stone: staggered courses of blocks, each a little different in tone and
 ## lit along its top, with a dark outline (and now and then a cracked one).
 func _stones(r: Rect2, tint: Color) -> void:
-	draw_rect(r, OUTLINE)
+	_ci.draw_rect(r, OUTLINE)
 	var inner := r.grow(-2)
-	draw_rect(inner, pal["stone_dark"] * tint)
+	_ci.draw_rect(inner, pal["stone_dark"] * tint)
 	var row := 0
 	var y := inner.position.y
 	while y < inner.end.y:
@@ -298,26 +336,26 @@ func _stones(r: Rect2, tint: Color) -> void:
 				var k := fposmod(sin(x * 12.9898 + y * 78.233) * 43758.5453, 1.0)
 				var c: Color = pal["stone"].lerp(pal["stone_light"] if k > 0.5 else pal["stone_dark"], absf(k - 0.5) * 1.1) * tint
 				var b := Rect2(x0 + (0.0 if x0 == inner.position.x else 1.0), y + 1.0, x1 - x0 - 1.0, h - 1.0)
-				draw_rect(b, c)
-				draw_rect(Rect2(b.position, Vector2(b.size.x, 1)), c.lightened(0.15))
+				_ci.draw_rect(b, c)
+				_ci.draw_rect(Rect2(b.position, Vector2(b.size.x, 1)), c.lightened(0.15))
 				if k > 0.93:
-					draw_line(b.position + Vector2(4, 1), b.position + Vector2(8, h - 2), pal["stone_dark"] * tint, 1.0)
+					_ci.draw_line(b.position + Vector2(4, 1), b.position + Vector2(8, h - 2), pal["stone_dark"] * tint, 1.0)
 			x += 16.0
 		y += 8.0
 		row += 1
 	# The wall's foot sits in a band of darker, larger stones.
 	if r.end.y >= main.FIELD_H - 1.0:
-		draw_rect(Rect2(inner.position.x, inner.end.y - 5, inner.size.x, 5), (pal["stone_dark"] * tint).darkened(0.25))
+		_ci.draw_rect(Rect2(inner.position.x, inner.end.y - 5, inner.size.x, 5), (pal["stone_dark"] * tint).darkened(0.25))
 
 
 func _merlon(p: Vector2, tint: Color) -> void:
-	draw_rect(Rect2(p + Vector2(0, -9), Vector2(14, 11)), OUTLINE)
-	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 8)), pal["stone_light"] * tint)
-	draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 2)), (pal["stone_light"] * tint).lightened(0.2))
-	draw_rect(Rect2(p + Vector2(10, -5), Vector2(2, 6)), pal["stone"] * tint)
+	_ci.draw_rect(Rect2(p + Vector2(0, -9), Vector2(14, 11)), OUTLINE)
+	_ci.draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 8)), pal["stone_light"] * tint)
+	_ci.draw_rect(Rect2(p + Vector2(2, -7), Vector2(10, 2)), (pal["stone_light"] * tint).lightened(0.2))
+	_ci.draw_rect(Rect2(p + Vector2(10, -5), Vector2(2, 6)), pal["stone"] * tint)
 	if pal["extras"].has("icicles"):
-		draw_rect(Rect2(p + Vector2(0, -11), Vector2(14, 4)), OUTLINE)
-		draw_rect(Rect2(p + Vector2(1, -10), Vector2(12, 3)), Color(0.96, 0.98, 1.0))
+		_ci.draw_rect(Rect2(p + Vector2(0, -11), Vector2(14, 4)), OUTLINE)
+		_ci.draw_rect(Rect2(p + Vector2(1, -10), Vector2(12, 3)), Color(0.96, 0.98, 1.0))
 
 
 func _tower(r: Rect2, tint: Color) -> void:
@@ -327,9 +365,9 @@ func _tower(r: Rect2, tint: Color) -> void:
 		_merlon(Vector2(x, r.position.y), tint)
 		x += 18.0
 	# A shadow under the battlements, and an arched window that's lamplit after dark.
-	draw_rect(Rect2(r.position.x + 2, r.position.y + 2, r.size.x - 4, 3), Color(0, 0, 0, 0.25))
+	_ci.draw_rect(Rect2(r.position.x + 2, r.position.y + 2, r.size.x - 4, 3), Color(0, 0, 0, 0.25))
 	var mid := r.position.x + r.size.x / 2
-	draw_rect(Rect2(mid - 5, r.position.y + 11, 10, 15), pal["stone_light"] * tint)   # the window's frame (its pane is in _draw_top)
+	_ci.draw_rect(Rect2(mid - 5, r.position.y + 11, 10, 15), pal["stone_light"] * tint)   # the window's frame (its pane is in _draw_top)
 
 
 ## The gate: an arched wooden door behind an iron portcullis, in a ring of carved stones.
@@ -343,17 +381,17 @@ func _gate(base: Vector2, tint: Color) -> void:
 		var a1 := PI + PI * (i + 1) / 9.0
 		var ring := PackedVector2Array([c + Vector2.from_angle(a0) * (half + 2), c + Vector2.from_angle(a0) * (half + 8),
 				c + Vector2.from_angle(a1) * (half + 8), c + Vector2.from_angle(a1) * (half + 2)])
-		draw_colored_polygon(ring, (pal["stone_light"] if i % 2 == 0 or i == 4 else pal["stone"]) * tint)
-		draw_polyline(ring + PackedVector2Array([ring[0]]), OUTLINE, 1.0)
-	Sprites.disc(self, Vector2(base.x, top + half), half + 2, OUTLINE)
-	draw_rect(Rect2(base.x - half - 2, top + half, half * 2 + 4, h - half), OUTLINE)
-	Sprites.disc(self, Vector2(base.x, top + half), half, pal["wood"] * tint)
-	draw_rect(Rect2(base.x - half, top + half, half * 2, h - half), pal["wood"] * tint)
+		_ci.draw_colored_polygon(ring, (pal["stone_light"] if i % 2 == 0 or i == 4 else pal["stone"]) * tint)
+		_ci.draw_polyline(ring + PackedVector2Array([ring[0]]), OUTLINE, 1.0)
+	Sprites.disc(_ci, Vector2(base.x, top + half), half + 2, OUTLINE)
+	_ci.draw_rect(Rect2(base.x - half - 2, top + half, half * 2 + 4, h - half), OUTLINE)
+	Sprites.disc(_ci, Vector2(base.x, top + half), half, pal["wood"] * tint)
+	_ci.draw_rect(Rect2(base.x - half, top + half, half * 2, h - half), pal["wood"] * tint)
 	for i in 5:
 		var x := base.x - half + 4 + i * 8.0
-		draw_line(Vector2(x, top + 4), Vector2(x, base.y), pal["iron"], 2.0)
+		_ci.draw_line(Vector2(x, top + 4), Vector2(x, base.y), pal["iron"], 2.0)
 	for y in [top + 14, top + 24]:
-		draw_line(Vector2(base.x - half, y), Vector2(base.x + half, y), pal["iron"], 2.0)
+		_ci.draw_line(Vector2(base.x - half, y), Vector2(base.x + half, y), pal["iron"], 2.0)
 
 
 ## A torch in a bracket on the gatehouse (its glow after dark is in ambience.gd).
@@ -419,7 +457,7 @@ func _ivy(foot: Vector2) -> void:
 		var k := fposmod(sin(foot.x * 3.1 + i * 7.7) * 9871.3, 1.0)
 		var k2 := fposmod(sin(foot.x * 1.7 + i * 3.3) * 5431.9, 1.0)
 		var p := foot + Vector2(k * 18.0 - 9.0, -k2 * 22.0)
-		draw_rect(Rect2(p, Vector2(4, 3)), Color(0.22, 0.42, 0.18) if i % 3 else Color(0.32, 0.55, 0.24))
+		_ci.draw_rect(Rect2(p, Vector2(4, 3)), Color(0.22, 0.42, 0.18) if i % 3 else Color(0.32, 0.55, 0.24))
 
 
 ## A banner flapping on a pole.
@@ -465,10 +503,10 @@ func _extras(w: float, top: float, bottom: float, towers: Array) -> void:
 				for k in 13:
 					var f := k / 12.0
 					var p := Vector2(lerpf(x, x1, f), top + 6.0 + sin(f * PI) * 9.0)
-					draw_rect(Rect2(p + Vector2(-2, -2), Vector2(5, 4)), OUTLINE)
-					draw_rect(Rect2(p + Vector2(-1, -1), Vector2(3, 2)), Color(0.28, 0.55, 0.26) if k % 2 else Color(0.38, 0.66, 0.3))
+					_ci.draw_rect(Rect2(p + Vector2(-2, -2), Vector2(5, 4)), OUTLINE)
+					_ci.draw_rect(Rect2(p + Vector2(-1, -1), Vector2(3, 2)), Color(0.28, 0.55, 0.26) if k % 2 else Color(0.38, 0.66, 0.3))
 					if k % 4 == 2:
-						draw_rect(Rect2(p + Vector2(0, 1), Vector2(2, 2)), Color(0.98, 0.96, 0.9))
+						_ci.draw_rect(Rect2(p + Vector2(0, 1), Vector2(2, 2)), Color(0.98, 0.96, 0.9))
 			x = x1 + 6.0
 	if ex.has("runes"):
 		# Carved rune-stones set in the wall, their marks glowing amber.
@@ -478,26 +516,26 @@ func _extras(w: float, top: float, bottom: float, towers: Array) -> void:
 			x += 120.0
 			if not clear.call(c.x, 12.0):
 				continue
-			draw_rect(Rect2(c + Vector2(-9, -9), Vector2(18, 18)), OUTLINE)
-			draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), pal["stone_light"])
+			_ci.draw_rect(Rect2(c + Vector2(-9, -9), Vector2(18, 18)), OUTLINE)
+			_ci.draw_rect(Rect2(c + Vector2(-8, -8), Vector2(16, 16)), pal["stone_light"])
 			var glow := Color(1.0, 0.7, 0.25)
-			draw_line(c + Vector2(-4, -5), c + Vector2(-4, 5), glow, 1.5)
-			draw_line(c + Vector2(-4, -1), c + Vector2(4, -5), glow, 1.5)
-			draw_line(c + Vector2(-4, 1), c + Vector2(4, 5), glow, 1.5)
-			draw_line(c + Vector2(4, -5), c + Vector2(4, 5), glow, 1.5)
+			_ci.draw_line(c + Vector2(-4, -5), c + Vector2(-4, 5), glow, 1.5)
+			_ci.draw_line(c + Vector2(-4, -1), c + Vector2(4, -5), glow, 1.5)
+			_ci.draw_line(c + Vector2(-4, 1), c + Vector2(4, 5), glow, 1.5)
+			_ci.draw_line(c + Vector2(4, -5), c + Vector2(4, 5), glow, 1.5)
 	if ex.has("flowers"):
 		# Window boxes along the wall, in flower.
 		var x := 70.0
 		while x < w - 70.0:
 			if clear.call(x, 16.0):
 				var p := Vector2(x, top + 18.0)
-				draw_rect(Rect2(p + Vector2(-7, -10), Vector2(14, 10)), OUTLINE)
-				draw_rect(Rect2(p + Vector2(-6, -9), Vector2(12, 8)), Color(0.22, 0.2, 0.26))
-				draw_rect(Rect2(p + Vector2(-10, 0), Vector2(20, 6)), OUTLINE)
-				draw_rect(Rect2(p + Vector2(-9, 1), Vector2(18, 4)), pal["wood"])
+				_ci.draw_rect(Rect2(p + Vector2(-7, -10), Vector2(14, 10)), OUTLINE)
+				_ci.draw_rect(Rect2(p + Vector2(-6, -9), Vector2(12, 8)), Color(0.22, 0.2, 0.26))
+				_ci.draw_rect(Rect2(p + Vector2(-10, 0), Vector2(20, 6)), OUTLINE)
+				_ci.draw_rect(Rect2(p + Vector2(-9, 1), Vector2(18, 4)), pal["wood"])
 				for k in 5:
-					draw_rect(Rect2(p + Vector2(-8 + k * 4, -3), Vector2(3, 3)), [Color(0.95, 0.4, 0.5), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 0.95)][k % 3])
-					draw_rect(Rect2(p + Vector2(-8 + k * 4, -1), Vector2(3, 1)), Color(0.3, 0.6, 0.28))
+					_ci.draw_rect(Rect2(p + Vector2(-8 + k * 4, -3), Vector2(3, 3)), [Color(0.95, 0.4, 0.5), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 0.95)][k % 3])
+					_ci.draw_rect(Rect2(p + Vector2(-8 + k * 4, -1), Vector2(3, 1)), Color(0.3, 0.6, 0.28))
 			x += 110.0
 	if ex.has("stakes"):
 		# Sharpened stakes along the wall's foot, leaning out.
@@ -506,9 +544,9 @@ func _extras(w: float, top: float, bottom: float, towers: Array) -> void:
 			if absf(x - w / 2.0) > GATE_W * 0.5 + 8.0:
 				var foot := Vector2(x, bottom - 2.0)
 				var tip := foot + Vector2(-5, -18)
-				draw_line(foot, tip, OUTLINE, 4.0)
-				draw_line(foot, tip, Color(0.5, 0.36, 0.22), 2.0)
-				draw_rect(Rect2(tip + Vector2(-1, -1), Vector2(2, 2)), Color(0.82, 0.72, 0.55))
+				_ci.draw_line(foot, tip, OUTLINE, 4.0)
+				_ci.draw_line(foot, tip, Color(0.5, 0.36, 0.22), 2.0)
+				_ci.draw_rect(Rect2(tip + Vector2(-1, -1), Vector2(2, 2)), Color(0.82, 0.72, 0.55))
 			x += 14.0
 	if ex.has("icicles"):
 		# Icicles hanging from under the battlements.
@@ -516,20 +554,20 @@ func _extras(w: float, top: float, bottom: float, towers: Array) -> void:
 		var i := 0
 		while x < w:
 			var drop := 4.0 + fposmod(sin(x * 7.13) * 431.7, 1.0) * 9.0
-			draw_colored_polygon(PackedVector2Array([Vector2(x - 2, top + 2), Vector2(x + 2, top + 2), Vector2(x, top + 2 + drop)]), Color(0.86, 0.94, 1.0))
-			draw_line(Vector2(x - 1, top + 3), Vector2(x - 1, top + 1 + drop * 0.6), Color(1, 1, 1, 0.8), 1.0)
+			_ci.draw_colored_polygon(PackedVector2Array([Vector2(x - 2, top + 2), Vector2(x + 2, top + 2), Vector2(x, top + 2 + drop)]), Color(0.86, 0.94, 1.0))
+			_ci.draw_line(Vector2(x - 1, top + 3), Vector2(x - 1, top + 1 + drop * 0.6), Color(1, 1, 1, 0.8), 1.0)
 			x += 9.0 + (i % 3) * 3.0
 			i += 1
 	if ex.has("lattice"):
 		# A red-lacquered beam along the wall, gold studs on it.
 		for seg in [[TOWER_W, w / 2.0 - GATE_W / 2.0], [w / 2.0 + GATE_W / 2.0, w - TOWER_W]]:
 			var r := Rect2(seg[0], top + 6.0, seg[1] - seg[0], 6.0)
-			draw_rect(r.grow(1.0), OUTLINE)
-			draw_rect(r, pal["wood"])
-			draw_rect(Rect2(r.position, Vector2(r.size.x, 1)), pal["wood"].lightened(0.3))
+			_ci.draw_rect(r.grow(1.0), OUTLINE)
+			_ci.draw_rect(r, pal["wood"])
+			_ci.draw_rect(Rect2(r.position, Vector2(r.size.x, 1)), pal["wood"].lightened(0.3))
 			var x: float = r.position.x + 8.0
 			while x < r.end.x - 4.0:
-				draw_rect(Rect2(x - 1, r.position.y + 2, 2, 2), pal["iron"])
+				_ci.draw_rect(Rect2(x - 1, r.position.y + 2, 2, 2), pal["iron"])
 				x += 16.0
 	if ex.has("shields"):
 		# Guild shields hung along the wall, each in a different livery.
@@ -540,10 +578,10 @@ func _extras(w: float, top: float, bottom: float, towers: Array) -> void:
 			if clear.call(x, 12.0):
 				var p := Vector2(x, top + 12.0)
 				var sh := PackedVector2Array([p + Vector2(-7, -6), p + Vector2(7, -6), p + Vector2(7, 2), p + Vector2(0, 9), p + Vector2(-7, 2)])
-				draw_colored_polygon(sh, OUTLINE)
+				_ci.draw_colored_polygon(sh, OUTLINE)
 				var inner := PackedVector2Array([p + Vector2(-6, -5), p + Vector2(6, -5), p + Vector2(6, 2), p + Vector2(0, 7.5), p + Vector2(-6, 2)])
-				draw_colored_polygon(inner, cols[i % cols.size()])
-				draw_line(p + Vector2(0, -5), p + Vector2(0, 7), pal["iron"], 1.5)
+				_ci.draw_colored_polygon(inner, cols[i % cols.size()])
+				_ci.draw_line(p + Vector2(0, -5), p + Vector2(0, 7), pal["iron"], 1.5)
 			x += 96.0
 			i += 1
 

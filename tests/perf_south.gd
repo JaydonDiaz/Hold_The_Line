@@ -45,6 +45,7 @@ func _initialize() -> void:
 	for k in ["swordsman", "archer", "healer", "mine", "cannon", "tower", "medbay"]:
 		c.unlocked[k] = [3, 2, 3, 2]
 	c.save_game()
+	c.started_once = true   # straight to the title screen, not the animated splash (it stayed over the battle)
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	var m: Dictionary = CD.MISSIONS[mission]

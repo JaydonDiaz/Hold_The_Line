@@ -148,16 +148,16 @@ func _ready() -> void:
 	menu_btn.tooltip_text = "Leave this game and go back to mode select"
 	menu_btn.pressed.connect(show_menu_confirm)
 	speed_btn = _button(panel, Vector2(404, 8), Vector2(42, 34), "1x")
-	speed_btn.add_theme_font_size_override("font_size", 14)
+	_font_size(speed_btn, "font_size", 14)
 	speed_btn.tooltip_text = "Change game speed [F]"
 	speed_btn.pressed.connect(func(): speed_pressed.emit())
 	auto_btn = _button(panel, Vector2(450, 8), Vector2(56, 34), "Auto")
-	auto_btn.add_theme_font_size_override("font_size", 14)
+	_font_size(auto_btn, "font_size", 14)
 	auto_btn.toggle_mode = true
 	auto_btn.tooltip_text = "Auto-play: start each wave by itself a few seconds after the last one is cleared [A]"
 	auto_btn.pressed.connect(func(): auto_pressed.emit())
 	start_btn = _button(panel, Vector2(510, 8), Vector2(118, 34), "Start Wave 1")
-	start_btn.add_theme_font_size_override("font_size", 14)
+	_font_size(start_btn, "font_size", 14)
 	start_btn.theme_type_variation = "ForgePrimary"
 	start_btn.tooltip_text = "Send the next wave [Space]"
 	start_btn.pressed.connect(func(): start_wave_pressed.emit())
@@ -192,9 +192,9 @@ func _ready() -> void:
 		ab.icon = _power_icon(key, 3)
 		ab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		ab.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		ab.add_theme_color_override("font_color", col)
-		ab.add_theme_color_override("font_hover_color", col.lightened(0.3))
-		ab.add_theme_color_override("font_disabled_color", Color(col, 0.45))
+		_font_color(ab, "font_color", col)
+		_font_color(ab, "font_hover_color", col.lightened(0.3))
+		_font_color(ab, "font_disabled_color", Color(col, 0.45))
 		ab.pressed.connect(func(): ability_pressed.emit(key))
 		ab.mouse_entered.connect(func(): _show_ability_card(key, ab))
 		ab.mouse_exited.connect(func():
@@ -203,8 +203,8 @@ func _ready() -> void:
 		ability_buttons[key] = ab
 	for i in Data.REPAIR_CHUNKS.size():
 		var rb := _button(panel, Vector2.ZERO, Vector2(10, 10), "")
-		rb.add_theme_color_override("font_color", Color(0.55, 1.0, 0.55))
-		rb.add_theme_color_override("font_hover_color", Color(0.75, 1.0, 0.75))
+		_font_color(rb, "font_color", Color(0.55, 1.0, 0.55))
+		_font_color(rb, "font_hover_color", Color(0.75, 1.0, 0.75))
 		rb.pressed.connect(func(): repair_pressed.emit(i))
 		repair_buttons.append(rb)
 	for key in Data.ABILITIES:
@@ -214,7 +214,7 @@ func _ready() -> void:
 		gb.icon = Sprites.frames(kind)[0]
 		gb.expand_icon = true
 		gb.add_theme_constant_override("icon_max_width", 40)
-		gb.add_theme_color_override("font_color", Data.WARRIORS[kind]["color"])
+		_font_color(gb, "font_color", Data.WARRIORS[kind]["color"])
 		gb.tooltip_text = "Click: keep only these.  Shift+click: drop these from the selection."
 		gb.visible = false
 		gb.pressed.connect(func(): group_kind_pressed.emit(kind))
@@ -230,24 +230,24 @@ func _ready() -> void:
 	sell_btn.theme_type_variation = "ForgePrimary"
 	sell_btn.pressed.connect(func(): sell_pressed.emit())
 	target_btn = _button(panel, Vector2(414, 212), Vector2(106, 48), "")
-	target_btn.add_theme_font_size_override("font_size", 12)
+	_font_size(target_btn, "font_size", 12)
 	target_btn.tooltip_text = ("This unit's orders [O]: which enemy it picks, how firmly it sticks to it,\n"
 			+ "and how far from its post it may go to fight.\n"
 			+ "T: next target priority.  M: Hold / Guard area / Free.  D: draw a guard area.")
 	target_btn.pressed.connect(func(): orders_pressed.emit())
 	song_btn = _button(panel, Vector2(326, 212), Vector2(84, 48), "")
-	song_btn.add_theme_font_size_override("font_size", 12)
+	_font_size(song_btn, "font_size", 12)
 	song_btn.tooltip_text = "Every instrument is on the field: play the Bards' song between waves, or not [G]"
 	song_btn.pressed.connect(func(): song_pressed.emit())
 	climb_btn = _button(panel, Vector2(234, 212), Vector2(84, 48), "Climb\ndown [L]")
-	climb_btn.add_theme_font_size_override("font_size", 12)
+	_font_size(climb_btn, "font_size", 12)
 	climb_btn.tooltip_text = "Come down out of the tower, to its foot [L]"
 	climb_btn.visible = false
 	climb_btn.pressed.connect(func(): climb_pressed.emit())
 
 	message_label = _label(self, Vector2(0, 20), Vector2(WIDTH, 40), Color.WHITE, 28)
 	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(message_label, "font_outline_color", Color.BLACK)
 	message_label.add_theme_constant_override("outline_size", 6)
 	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # long warnings take two lines
 	message_label.size.y = 80
@@ -261,7 +261,7 @@ func _ready() -> void:
 	boss_name = _label(boss_bar, Vector2(0, 0), Vector2(400, 22), Color(1, 0.8, 0.35), 16)
 	boss_name.text = "THE OGRE KING"
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_name.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(boss_name, "font_outline_color", Color.BLACK)
 	boss_name.add_theme_constant_override("outline_size", 4)
 	var back := ColorRect.new()
 	back.color = Color(0.1, 0.05, 0.05, 0.85)
@@ -279,29 +279,29 @@ func _ready() -> void:
 	hard_label = _label(self, Vector2(WIDTH - 340, 6), Vector2(330, 24), Color(1, 0.4, 0.35), 16)
 	hard_label.text = "HARD MODE"
 	hard_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	hard_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(hard_label, "font_outline_color", Color.BLACK)
 	hard_label.add_theme_constant_override("outline_size", 4)
 	hard_label.visible = false
 	# How the battle stands, for rules that say (objectives left, enemies through).
 	status_label = _label(self, Vector2(WIDTH - 340, 30), Vector2(330, 44), Color(1, 0.95, 0.8), 14)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # (a long one goes onto a second line)
-	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(status_label, "font_outline_color", Color.BLACK)
 	status_label.add_theme_constant_override("outline_size", 4)
 	status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	status_label.visible = false
 	# A battle's own order (Fighting Retreat: Fall back), over the field's top-left corner.
 	action_btn = _button(self, Vector2(10, 44), Vector2(170, 40), "")
-	action_btn.add_theme_font_size_override("font_size", 15)
+	_font_size(action_btn, "font_size", 15)
 	action_btn.tooltip_text = "[Y]"
 	action_btn.visible = false
 	action_btn.pressed.connect(func(): action_pressed.emit())
 	contract_btn = _button(self, Vector2(10, 44), Vector2(250, 32), "")
-	contract_btn.add_theme_font_size_override("font_size", 13)
+	_font_size(contract_btn, "font_size", 13)
 	contract_btn.visible = false
 	contract_btn.pressed.connect(func(): contract_pressed.emit())
 	merc_btn = _button(self, Vector2(10, 80), Vector2(250, 32), "")
-	merc_btn.add_theme_font_size_override("font_size", 13)
+	_font_size(merc_btn, "font_size", 13)
 	merc_btn.visible = false
 	merc_btn.pressed.connect(func(): merc_pressed.emit())
 
@@ -373,7 +373,7 @@ func _layout_bar() -> void:
 			_fit_text(tb, 15, TAB_W - 14.0)
 		count_btn.position = Vector2(12 + tabs.size() * (TAB_W + 6), 92)
 		count_btn.size = Vector2(count_w, 34)
-		count_btn.add_theme_font_size_override("font_size", 15)
+		_font_size(count_btn, "font_size", 15)
 		CONTENT_X = 12.0
 		CONTENT_Y = 134.0
 		CONTENT_H = 156.0
@@ -388,7 +388,7 @@ func _layout_bar() -> void:
 		climb_btn.size = Vector2(110, 50)
 		climb_btn.position = Vector2(130, y)
 		for b in [sell_btn, target_btn, song_btn, climb_btn]:
-			b.add_theme_font_size_override("font_size", 15)
+			_font_size(b, "font_size", 15)
 	else:
 		menu_btn.position = Vector2(ui_w - 298, 8)
 		speed_btn.position = Vector2(ui_w - 236, 8)
@@ -409,7 +409,7 @@ func _layout_bar() -> void:
 			_fit_text(tb, 14, TAB_W - 16.0)
 		count_btn.position = Vector2(12, 50 + tabs.size() * 42.0)
 		count_btn.size = Vector2(TAB_W, 34)
-		count_btn.add_theme_font_size_override("font_size", 14)
+		_font_size(count_btn, "font_size", 14)
 		CONTENT_X = 126.0
 		CONTENT_Y = 50.0
 		CONTENT_H = 128.0
@@ -422,31 +422,33 @@ func _layout_bar() -> void:
 		song_btn.position = Vector2(ui_w - 314, 212)
 		climb_btn.size = Vector2(84, 48)
 		climb_btn.position = Vector2(ui_w - (406 if song_btn.visible else 314), 212)
-		sell_btn.add_theme_font_size_override("font_size", 16)
+		_font_size(sell_btn, "font_size", 16)
 		for b in [target_btn, song_btn]:
-			b.add_theme_font_size_override("font_size", 12)
+			_font_size(b, "font_size", 12)
 
 
 ## Shrinks a button's font from `size` until its text fits `room`.
 func _fit_text(b: Button, size: int, room: float) -> void:
 	while size > 9 and Forge.font.get_string_size(b.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > room:
 		size -= 1
-	b.add_theme_font_size_override("font_size", size)
+	_font_size(b, "font_size", size)
 
 
-## Hire buttons: one row (name over price) when they fit, two rows of shorter
-## buttons with name and price on one line when they don't. Wide buttons show the
+## Hire buttons: one row (name over price) for up to six, two rows of shorter
+## buttons for more (the ten troops go five and five). Wide buttons show the
 ## unit's picture too.
 func _layout_hire() -> void:
 	var avail := ui_w - CONTENT_X - 12.0
 	var font := ThemeDB.fallback_font
 	for t in ["troops", "emplacements"]:
 		var kinds := tab_kinds(t)
-		var rows := 1 if kinds.size() <= 6 or avail >= kinds.size() * 92.0 else 2
+		var rows := 1 if kinds.size() <= 6 else 2   # (ten troops: two rows of five, roomier than ten thin boxes)
 		var per_row := ceili(kinds.size() / float(rows))
 		var w := (avail - 6.0 * (per_row - 1)) / per_row
 		if rows == 1:
 			w = minf(w, 82.0 if avail < 600.0 else 180.0)
+		else:
+			w = minf(w, 260.0)   # (on a wide screen, not stretched so far the name drifts off its picture)
 		var h := CONTENT_H if rows == 1 else (CONTENT_H - 6.0) / 2.0
 		var with_icon := w >= 110.0
 		var icon_w := 48.0 if rows == 1 else 40.0
@@ -484,7 +486,7 @@ func _layout_hire() -> void:
 			b.position = Vector2(CONTENT_X + (i % per_row) * (w + 6), CONTENT_Y + (i / per_row) * (h + 6))
 			b.size = Vector2(w, h)
 			b.text = text
-			b.add_theme_font_size_override("font_size", font_size)
+			_font_size(b, "font_size", font_size)
 			var mounted := Sprites.MOUNT_CREW.has(kind)
 			b.icon = (Sprites.mount_icon(kind) if mounted else Sprites.frames(kind)[0]) if with_icon else null
 			# The mounted towers' pictures are drawn big and shrunk smoothly onto the button.
@@ -498,14 +500,14 @@ func _layout_hire() -> void:
 		_layout_card(castle_cards[p], p)   # laid out like a unit's upgrade cards
 	_row(ability_buttons.values(), avail, 1000.0)
 	for ab in ability_buttons.values():
-		ab.add_theme_font_size_override("font_size", 13 if ab.size.x >= 96.0 else 12)
+		_font_size(ab, "font_size", 13 if ab.size.x >= 96.0 else 12)
 		# Tall buttons (one row) show the icon over the name; short ones (two rows) beside it.
 		var tall: bool = ab.size.y >= 100.0
 		ab.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER if tall else HORIZONTAL_ALIGNMENT_LEFT
 		ab.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP if tall else VERTICAL_ALIGNMENT_CENTER
 	_row(repair_buttons, avail, 1000.0)
 	for rb in repair_buttons:
-		rb.add_theme_font_size_override("font_size", 15)
+		_font_size(rb, "font_size", 15)
 	for i in power_buttons.size():
 		var pb: Button = power_buttons.values()[i]
 		pb.position.y = 6.0
@@ -543,8 +545,8 @@ func _layout_card(card: Dictionary, p: int) -> void:
 	card["tier"].size.x = cw - 12.0
 	card["desc"].size = Vector2(cw - 12.0, b.size.y - 58.0)   # (inside the card, under its name)
 	var wide := cw >= 200.0
-	card["tier"].add_theme_font_size_override("font_size", 14 if wide else 13)
-	card["desc"].add_theme_font_size_override("font_size", 12)
+	_font_size(card["tier"], "font_size", 14 if wide else 13)
+	_font_size(card["desc"], "font_size", 12)
 	card["desc"].max_lines_visible = -1   # (all of it, shrunk to fit: see _fit_label)
 	if compact:
 		card["desc"].size = Vector2(cw - 12.0, b.size.y - 58.0)
@@ -582,8 +584,8 @@ func _setup_hire_button(b: Button, kind: String, d: Dictionary) -> void:
 	b.mouse_exited.connect(func():
 		if hover_kind == kind:
 			hide_hover())
-	b.add_theme_color_override("font_color", d["color"])
-	b.add_theme_color_override("font_hover_color", (d["color"] as Color).lightened(0.3))
+	_font_color(b, "font_color", d["color"])
+	_font_color(b, "font_hover_color", (d["color"] as Color).lightened(0.3))
 	b.pressed.connect(func(): hire_pressed.emit(kind))
 	hire_buttons[kind] = b
 
@@ -616,7 +618,7 @@ func _fill_card(title: String, color: Color, sub: String, body: String) -> void:
 		hide_hover()
 		return
 	hover_title.text = title
-	hover_title.add_theme_color_override("font_color", color)
+	_font_color(hover_title, "font_color", color)
 	hover_sub.text = sub
 	hover_sub.visible = sub != ""
 	hover_body.text = body
@@ -760,6 +762,19 @@ func refresh(main) -> void:
 	_fit_texts()
 
 
+## A control's font size or colour override, set only when it changes: setting one, even
+## to what it already is, has the control lay its text out afresh, and the HUD sets them
+## every frame (that re-laying-out was a good part of what the HUD cost a frame).
+func _font_size(c: Control, name: StringName, size: int) -> void:
+	if not (c.has_theme_font_size_override(name) and c.get_theme_font_size(name) == size):
+		c.add_theme_font_size_override(name, size)
+
+
+func _font_color(c: Control, name: StringName, color: Color) -> void:
+	if not (c.has_theme_color_override(name) and c.get_theme_color(name) == color):
+		c.add_theme_color_override(name, color)
+
+
 ## Every box whose text could run long: shrunk to fit if it would spill out (see _fit_label).
 func _fit_texts() -> void:
 	for card in path_cards + castle_cards:
@@ -783,7 +798,7 @@ func _fit_label(l: Label, smallest := 9) -> void:
 	var key := "%s|%s|%d" % [l.text, l.size, base]
 	if l.get_meta("fit_key", "") == key:
 		if asked != int(l.get_meta("fit_size")):
-			l.add_theme_font_size_override("font_size", int(l.get_meta("fit_size")))
+			_font_size(l, "font_size", int(l.get_meta("fit_size")))
 		return
 	var font: Font = l.get_theme_font("font")
 	var wraps: bool = l.autowrap_mode != TextServer.AUTOWRAP_OFF
@@ -794,7 +809,7 @@ func _fit_label(l: Label, smallest := 9) -> void:
 		size -= 1
 	l.set_meta("fit_key", key)
 	l.set_meta("fit_size", size)
-	l.add_theme_font_size_override("font_size", size)
+	_font_size(l, "font_size", size)
 	# Still too much even at the smallest (a phone's short box): only the lines that fit show.
 	var line: float = font.get_height(size) + l.get_theme_constant("line_spacing")
 	l.max_lines_visible = -1 if _text_height(l, size) <= l.size.y + 1.0 else maxi(1, int((l.size.y + 1.0) / line))
@@ -822,14 +837,14 @@ func _refresh(main) -> void:
 	if hard_label.visible and main.missions.scripted():
 		var diff_name: String = Data.DIFFICULTIES[main.difficulty]["name"]
 		hard_label.text = (main.mission["name"] as String).to_upper() + ("" if main.difficulty == "normal" else "  ·  " + diff_name.to_upper())
-		hard_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+		_font_color(hard_label, "font_color", Color(1, 0.85, 0.3))
 	elif hard_label.visible and main.tutorial:
 		hard_label.text = "TUTORIAL"
-		hard_label.add_theme_color_override("font_color", Color(0.75, 1.0, 0.55))
+		_font_color(hard_label, "font_color", Color(0.75, 1.0, 0.55))
 	elif hard_label.visible:
 		var diff: Dictionary = Data.DIFFICULTIES[main.difficulty]
 		hard_label.text = (diff["name"] as String).to_upper()
-		hard_label.add_theme_color_override("font_color", diff["color"])
+		_font_color(hard_label, "font_color", diff["color"])
 	var boss = null
 	for e in main.battlefield.get_enemies():
 		if e.boss:
@@ -934,7 +949,7 @@ func _refresh(main) -> void:
 	if grave != null:
 		info_label.position = Vector2(14, 296 if compact else 162)
 		info_label.size = Vector2(ui_w - 26, 100)
-		info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
+		_font_size(info_label, "font_size", 12 if ui_w < 900.0 else 14)
 		info_label.text = grave.info_text()
 		for p in path_cards.size():
 			_grave_card(path_cards[p], grave, p)
@@ -949,7 +964,7 @@ func _refresh(main) -> void:
 	if in_group:
 		info_label.position = Vector2(14, CONTENT_Y + CONTENT_H + 8.0)
 		info_label.size = Vector2(ui_w - (26 if not target_btn.visible else ui_w - target_btn.position.x + 8.0), _panel_h() - CONTENT_Y - CONTENT_H - 12.0)
-		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
+		_font_size(info_label, "font_size", 13 if ui_w < 900.0 else 14)
 		info_label.text = "%d troops selected. Right-click to move them together (they keep their formation)%s. Shift+click or Shift+drag to add or remove; click a type above to keep only those, Shift+click to drop them." % [
 				main.group.size(), "" if main.hiring.fighting() else "; or drag one of them to move the group"]
 		target_btn.text = "Orders [O]\n%d troops" % main.group.filter(_takes_orders).size()
@@ -963,7 +978,7 @@ func _refresh(main) -> void:
 	if castle_sel:
 		info_label.position = Vector2(14, 296 if compact else 162)
 		info_label.size = Vector2(ui_w - 26, 100)
-		info_label.add_theme_font_size_override("font_size", 13 if ui_w < 900.0 else 14)
+		_font_size(info_label, "font_size", 13 if ui_w < 900.0 else 14)
 		var guards := {}
 		for g in main.powers.guards:
 			guards[g.data["name"]] = guards.get(g.data["name"], 0) + 1
@@ -974,7 +989,7 @@ func _refresh(main) -> void:
 	if w == null:
 		info_label.position = Vector2(CONTENT_X, CONTENT_Y + CONTENT_H + 8.0)
 		info_label.size = Vector2(ui_w - CONTENT_X - 12.0, _panel_h() - CONTENT_Y - CONTENT_H - 12.0)
-		info_label.add_theme_font_size_override("font_size", 14)
+		_font_size(info_label, "font_size", 14)
 		if main.placing_type == "barricade":
 			var d: Dictionary = Data.WARRIORS["barricade"]
 			info_label.text = ("Click where the wall starts, then where it ends (%dg + %dg per %s, as long as you can afford). Enemies go around walls if they can. Right-click cancels."
@@ -1002,7 +1017,7 @@ func _refresh(main) -> void:
 	if compact:
 		info_label.position = Vector2(14, 296)
 		info_label.size = Vector2(ui_w - 28, _panel_h() - 296 - 66)
-	info_label.add_theme_font_size_override("font_size", 12 if ui_w < 900.0 else 14)
+	_font_size(info_label, "font_size", 12 if ui_w < 900.0 else 14)
 	var how := "right-click to send it somewhere" if main.hiring.fighting() else "drag to reposition"
 	if w.is_emplacement():
 		how = "holds its ground" if main.hiring.fighting() else "drag to reposition"
@@ -1038,7 +1053,7 @@ func _refresh_group(main, show: bool) -> void:
 			_row(shown, ui_w - CONTENT_X - 12.0 + (CONTENT_X - 12.0), 200.0)
 			for b in shown:
 				b.position.x -= CONTENT_X - 12.0   # no tabs showing: use the full width
-				b.add_theme_font_size_override("font_size", 13)
+				_font_size(b, "font_size", 13)
 
 
 func _refresh_castle(main, show: bool, castle_sel := false) -> void:
@@ -1055,25 +1070,31 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 		card["title"].text = path["name"]
 		for j in Warrior.MAX_TIER:
 			card["pips"][j].color = Warrior.PATH_COLORS[p] if j < powers.tiers[p] else Color(1, 1, 1, 0.15)
-		var tips := []
+		# (Its tip, every tier and its price, is only written out again when a price changes.)
+		var costs := []
 		for i in path["tiers"].size():
-			var t: Dictionary = path["tiers"][i]
-			tips.append("%s (%dg): %s" % [t["name"], powers.tier_cost(p, i), t["desc"]])
-		b.tooltip_text = "\n".join(tips)
+			costs.append(powers.tier_cost(p, i))
+		if card.get("tip_costs") != costs:
+			card["tip_costs"] = costs
+			var tips := []
+			for i in path["tiers"].size():
+				var t: Dictionary = path["tiers"][i]
+				tips.append("%s (%dg): %s" % [t["name"], costs[i], t["desc"]])
+			b.tooltip_text = "\n".join(tips)
 		var nxt: Dictionary = powers.next_tier(p)
 		var path_open: bool = main.missions.allowed("path:%d" % p)
 		if not path_open:
 			card["tier"].text = path["tiers"][0]["name"]
 			card["desc"].text = main.missions.lock_note("path:%d" % p)
 			card["cost"].text = "LOCKED"
-			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			_font_color(card["cost"], "font_color", Color(0.7, 0.7, 0.7))
 			b.disabled = true
 		elif nxt.is_empty():
 			var last: Dictionary = path["tiers"][-1]
 			card["tier"].text = last["name"]
 			card["desc"].text = last["desc"]
 			card["cost"].text = "MAX"
-			card["cost"].add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+			_font_color(card["cost"], "font_color", Color(0.6, 1.0, 0.6))
 			b.disabled = true
 		else:
 			var cost: int = powers.tier_cost(p, powers.tiers[p])
@@ -1081,7 +1102,7 @@ func _refresh_castle(main, show: bool, castle_sel := false) -> void:
 			card["tier"].text = nxt["name"]
 			card["desc"].text = nxt["desc"]
 			card["cost"].text = "%dg" % cost if compact else "%dg [%d]" % [cost, p + 1]
-			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
+			_font_color(card["cost"], "font_color", Color(1, 0.85, 0.3) if ok else Color(1, 0.4, 0.35))
 			b.disabled = not ok
 		b.modulate = Color.WHITE if path_open else LOCKED_TINT
 	# Abilities: buy, then use (with the time left to recharge).
@@ -1165,7 +1186,7 @@ func _power_button(key: String) -> Button:
 	var lbl := _label(b, Vector2(0, 4), Vector2(34, 18), Color.WHITE, 13)
 	lbl.name = "Time"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(lbl, "font_outline_color", Color.BLACK)
 	lbl.add_theme_constant_override("outline_size", 4)
 	add_child(b)
 	return b
@@ -1307,7 +1328,7 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			card["tier"].text = t["name"]
 			card["desc"].text = t["desc"]
 			card["cost"].text = "%dg" % cost if compact else "%dg [%s]" % [cost, PATH_KEYS[p]]
-			card["cost"].add_theme_color_override("font_color", Color(1, 0.85, 0.3) if affordable else Color(1, 0.4, 0.35))
+			_font_color(card["cost"], "font_color", Color(1, 0.85, 0.3) if affordable else Color(1, 0.4, 0.35))
 		"max":
 			card["tier"].text = "Fully upgraded"
 			card["desc"].text = ""
@@ -1321,7 +1342,7 @@ func _refresh_card(card: Dictionary, w, p: int, gold: int) -> void:
 			card["tier"].text = t["name"]
 			card["desc"].text = "Open tier %s of %s for %s at the Training Grounds" % [["I", "II", "III", "IV"][w.tiers[p]], t_path_name(w, p), _trainee_name(w.kind)]
 			card["cost"].text = "TRAINING"
-			card["cost"].add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			_font_color(card["cost"], "font_color", Color(0.7, 0.7, 0.7))
 	b.disabled = state != "ok" or not affordable
 	b.modulate.a = 0.45 if state == "full" or state == "untrained" else 1.0
 	_refresh_sigil(card, w, p)
@@ -1345,7 +1366,7 @@ func _refresh_sigil(card: Dictionary, w, p: int) -> void:
 	var col: Color = C.COLORS[p]
 	var pulse := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 220.0)
 	card["glow"].modulate = Color(col.lightened(0.2), pulse if full else 0.35 + 0.15 * pulse)
-	card["sigil"].add_theme_color_override("font_color", col.lightened(0.35))
+	_font_color(card["sigil"], "font_color", col.lightened(0.35))
 	card["sigil"].text = ("Sigil: " + C.words(C.MATCH, true)) if full \
 			else "Sigil: %s (more as its main path)" % C.words(C.OTHER, true)
 
@@ -1461,9 +1482,9 @@ func show_splash(then: Callable) -> void:
 	_bleed(dark)   # (the night sky's colour all round, on a wide or tall window)
 	splash.add_child(preload("res://scripts/art/splash_art.gd").new())   # (the splash, drawn in code and animated)
 	var go := _button(splash, Vector2(WIDTH / 2.0 - 130, 88), Vector2(260, 66), "Start Game")
-	go.add_theme_font_size_override("font_size", 28)
+	_font_size(go, "font_size", 28)
 	for state in ["font_color", "font_focus_color", "font_hover_color", "font_pressed_color"]:
-		go.add_theme_color_override(state, Color(1, 0.85, 0.35) if state != "font_hover_color" else Color(1, 0.93, 0.6))
+		_font_color(go, state, Color(1, 0.85, 0.35) if state != "font_hover_color" else Color(1, 0.93, 0.6))
 	go.focus_mode = Control.FOCUS_ALL
 	go.grab_focus.call_deferred()   # (so Enter or Space press it)
 	go.pressed.connect(func():
@@ -1513,7 +1534,7 @@ func show_mode_select() -> void:
 	title.visible = false   # the scene draws the title as pixel art
 	title.text = "Hold the Line"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_outline_color", Color(0.25, 0.12, 0.05))
+	_font_color(title, "font_outline_color", Color(0.25, 0.12, 0.05))
 	title.add_theme_constant_override("outline_size", 8)
 	title.pivot_offset = title.size / 2
 	title.scale = Vector2(0.4, 0.4)
@@ -1523,7 +1544,7 @@ func show_mode_select() -> void:
 	tt.tween_property(title, "modulate:a", 1.0, 0.3)
 	var sub := _label(mode_screen, Vector2(0, 132), Vector2(WIDTH, 30), Color(1, 1, 1), 18)
 	sub.text = "Choose your difficulty"
-	sub.add_theme_color_override("font_outline_color", Color(0.1, 0.07, 0.1))
+	_font_color(sub, "font_outline_color", Color(0.1, 0.07, 0.1))
 	sub.add_theme_constant_override("outline_size", 6)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if compact:
@@ -1826,9 +1847,9 @@ func _mode_card(m: Array, at: Vector2, delay: float, w := 190.0) -> Button:
 	var size := 28
 	while size > 14 and ThemeDB.fallback_font.get_string_size(m[1], HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > w - 14.0:
 		size -= 1
-	name.add_theme_font_size_override("font_size", size)
+	_font_size(name, "font_size", size)
 	name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name.add_theme_color_override("font_outline_color", Color.BLACK)
+	_font_color(name, "font_outline_color", Color.BLACK)
 	name.add_theme_constant_override("outline_size", 4)
 	var icon := TextureRect.new()
 	icon.texture = m[4] if m[4] is Texture2D else Sprites.frames(m[4])[0]
@@ -1957,7 +1978,7 @@ func show_freeplay_bar() -> void:
 		b.pressed.connect(func(): freeplay_spawn_pressed.emit(kind))
 		freeplay_spawn_buttons[kind] = b
 	freeplay_clear = _button(bar, Vector2.ZERO, Vector2(102, 30), "Clear field")
-	freeplay_clear.add_theme_font_size_override("font_size", 13)
+	_font_size(freeplay_clear, "font_size", 13)
 	freeplay_clear.pressed.connect(func(): freeplay_clear_pressed.emit())
 	_layout_freeplay()
 
@@ -2489,7 +2510,7 @@ func show_campaign_end(won: bool, mission: Dictionary, survived: int, summary :=
 					"  ·  +%d training point%s!" % [got[1], "" if got[1] == 1 else "s"] if got[1] > 0 else ""]
 			line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			if got[1] > 0:
-				line.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+				_font_color(line, "font_color", Color(1, 0.85, 0.3))
 		if earned.size() > 8:
 			var more := _label(dim, Vector2(WIDTH / 2.0 - 240, 602 + 8 * 24), Vector2(480, 22), Color(0.75, 0.72, 0.68), 14)
 			var pts := 0
@@ -2536,7 +2557,7 @@ func _set_stat(l: Label, text: String) -> void:
 	var size := 28
 	while size > 16 and Forge.font_num.get_string_size(l.text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > l.size.x:
 		size -= 2
-	l.add_theme_font_size_override("font_size", size)
+	_font_size(l, "font_size", size)
 
 
 ## A top-bar figure's whole text ("Gold 540", "Wave 0/8").
@@ -2548,8 +2569,8 @@ func _label(parent: Node, pos: Vector2, size: Vector2, color: Color, font_size: 
 	var l := Label.new()
 	l.position = pos
 	l.size = size
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_font_size_override("font_size", font_size)
+	_font_color(l, "font_color", color)
+	_font_size(l, "font_size", font_size)
 	parent.add_child(l)
 	return l
 
@@ -2692,7 +2713,7 @@ func _order_row(box: Panel, y: float, label: String, field: String, keys: Array,
 		var key = keys[i]
 		var b := _button(box, Vector2(x0 + i * (bw + 4.0), y), Vector2(bw, ORDER_ROW - 2.0), names[key])
 		b.toggle_mode = true
-		b.add_theme_font_size_override("font_size", (13 if bw < 70.0 else 14) if compact else (11 if bw < 70.0 else 12))
+		_font_size(b, "font_size", (13 if bw < 70.0 else 14) if compact else (11 if bw < 70.0 else 12))
 		b.tooltip_text = tips.get(key, "")
 		b.pressed.connect(func(): _order_from_box(field, key))
 		btns[key] = b
@@ -2773,7 +2794,7 @@ func _open_orders(main, units: Array) -> void:
 			var o = opts[i]
 			var b := _button(box, Vector2(ORDER_X0 + i * (bw + 4.0), y), Vector2(bw, ORDER_ROW - 2.0), "Its post" if o == null else o.label)
 			b.toggle_mode = true
-			b.add_theme_font_size_override("font_size", 12)
+			_font_size(b, "font_size", 12)
 			b.tooltip_text = "Keeps to the post you gave it" if o == null else "Its post moves with the %s, and it keeps its place around it" % o.label.to_lower()
 			b.pressed.connect(func():
 				main.formation_ctl.set_follow(o, orders_units.filter(func(w): return is_instance_valid(w) and not w.is_emplacement() and not w.wall_guard))

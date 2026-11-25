@@ -39,6 +39,7 @@ func _initialize() -> void:
 	c.completed = ["ashwatch"]
 	c.allies = c.CD.FACTIONS.keys()
 	c.save_game()   # the game reloads the save as it starts
+	c.started_once = true   # straight to the title screen, not the animated splash (it stayed over the battle)
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 

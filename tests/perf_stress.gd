@@ -8,14 +8,23 @@ extends SceneTree
 ## frame time avg / p50 / p95 / p99 / max, frames over 33 ms, draw calls, objects.
 ##
 ## Run from the project folder:
-##   Godot --path . --fixed-fps 60 -s tests/perf_stress.gd -- <seconds> <label> [mode]
+##   Godot --path . --fixed-fps 60 --always-on-top -s tests/perf_stress.gd -- <seconds> <label> [mode]
+## (Keep the window in view: macOS stops drawing a covered window, and then the frame
+## times mean nothing. The summary warns if that happened.)
 ## label "typical..." runs a lighter, normal-speed game (16 units, ~50 enemies);
 ## label "shot" also saves two screenshots to user://.
+## A label with "phone" in it (typical_phone, heavy_phone) plays it as on a phone held
+## upright (give it a phone-shaped window: --resolution 400x866): the phone's layout and its drawing shortcuts (the game
+## drawn at its own size and scaled up, the ground painted at 1x). For phone-like CPU
+## speed, run it on the Mac's efficiency cores: `taskpolicy -c background Godot ...`.
 ## mode:
 ##   profile          times each system's _process (units, enemies, effects...)
 ##   hide=<layer>     hides a layer (enemies, warriors, castle, fx, hud, ambience,
 ##                    powers, ground, all) to see what drawing it costs
 ##   hide=freeze,<layer>  freezes the sim (drawing only), optionally hiding a layer
+##   drawprof         times each kind of thing's _draw (by script), and how often it redraws
+## Every run also splits the frame into its phases: the scripts' _process, the _draw
+## callbacks, and rendering (with the renderer's own CPU time).
 
 const Data = preload("res://scripts/data/data.gd")
 const EnemyScript = preload("res://scripts/enemies/enemy.gd")
@@ -31,6 +40,24 @@ var times := []          # ms per frame
 var draws := []
 var objs := []
 var proc := []
+var rcpu := []           # ms the renderer spent on the CPU (submitting the frame)
+var rgpu := []           # ...and on the GPU
+var ph_proc := []        # ms per frame in each phase: every node's _process...
+var ph_draw := []        # ...the _draw callbacks (redrawing what changed)...
+var t_proc_end := 0      # (when the last node's _process finished)
+var t_pre_draw := 0      # (when the renderer started on the frame)
+var t_frame_start := 0
+var undrawn := 0         # frames the renderer skipped (a hidden or covered window): the numbers don't count then
+var drawprof := false
+var dprof := {}          # script -> [total usec in _draw, redraws]
+var t_last_draw := 0
+
+
+## Runs after every other node's _process (the last in the frame), to time the phases.
+class PhaseProbe extends Node:
+	var on_done: Callable
+	func _process(_d: float) -> void:
+		on_done.call()
 var nodes_max := 0
 var spikes := 0
 var label := ""
@@ -54,16 +81,34 @@ func _initialize() -> void:
 		sim_frames = int(a[0]) * 60
 	label = a[1] if a.size() > 1 else "run"
 	profile = a.size() > 2 and a[2] == "profile"
+	drawprof = a.size() > 2 and a[2] == "drawprof"
+	if drawprof:
+		node_added.connect(_watch_draw)
 	hide_layer = a[2].substr(5) if a.size() > 2 and a[2].begins_with("hide=") else ""
 	if hide_layer.contains(","):
 		extra_hide = hide_layer.get_slice(",", 1)
 		hide_layer = hide_layer.get_slice(",", 0)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	# Straight to the title screen (a windowed run would otherwise open on the animated
+	# splash, which stays over the battle and was being measured with it).
+	root.get_node("Campaign").started_once = true
+	RenderingServer.viewport_set_measure_render_time(root.get_viewport_rid(), true)
 	main = load("res://main.tscn").instantiate()
+	if label.contains("phone"):
+		main.missions.pretend_phone = true
 	root.add_child(main)
+	var probe := PhaseProbe.new()
+	probe.process_priority = 1 << 30
+	probe.process_mode = Node.PROCESS_MODE_ALWAYS
+	probe.on_done = func():
+		t_proc_end = Time.get_ticks_usec()
+		t_last_draw = t_proc_end
+	root.add_child(probe)
+	RenderingServer.frame_pre_draw.connect(func(): t_pre_draw = Time.get_ticks_usec())
 
 
 func _setup() -> void:
+	main.hud.hide_mode_select()
 	main.hud.picking = true
 	main.setup.choose_mode("normal")
 	main.endless = true
@@ -138,6 +183,13 @@ func _top_up() -> void:
 func _process(_d: float) -> bool:
 	frames += 1
 	var now := Time.get_ticks_usec()
+	if frames > start_frame + 1:
+		if t_proc_end > t_frame_start and t_pre_draw > t_proc_end:
+			ph_proc.append((t_proc_end - t_frame_start) / 1000.0)
+			ph_draw.append((t_pre_draw - t_proc_end) / 1000.0)
+		else:
+			undrawn += 1
+	t_frame_start = now
 	if frames == 5:
 		_setup()
 	if frames >= 5:
@@ -184,6 +236,8 @@ func _process(_d: float) -> bool:
 		draws.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 		objs.append(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
 		proc.append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
+		rcpu.append(RenderingServer.viewport_get_measured_render_time_cpu(root.get_viewport_rid()) + RenderingServer.get_frame_setup_time_cpu())
+		rgpu.append(RenderingServer.viewport_get_measured_render_time_gpu(root.get_viewport_rid()))
 		nodes_max = maxi(nodes_max, int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)))
 		# Abilities every few seconds, at the thick of it.
 		if frames % 120 == 0:
@@ -214,6 +268,24 @@ func _process(_d: float) -> bool:
 		_report()
 		return true
 	return false
+
+
+## drawprof: a thing's "draw" signal comes right after its _draw, and redraws run one
+## after another, so the time since the last one's signal is (about) this one's _draw.
+func _watch_draw(n: Node) -> void:
+	if not n is CanvasItem:
+		return
+	var key: String = n.get_script().resource_path.get_file() if n.get_script() != null else n.get_class()
+	if n.get_script() != null and n.get_script().resource_path == "":
+		key = "inner:" + (n.get_script().get_instance_base_type() as String) + ":" + str(n.get_parent().get_script().resource_path.get_file() if n.get_parent() != null and n.get_parent().get_script() != null else "")
+	n.draw.connect(func():
+		var now := Time.get_ticks_usec()
+		if frames > start_frame:
+			var e: Array = dprof.get(key, [0, 0])
+			e[0] += now - t_last_draw
+			e[1] += 1
+			dprof[key] = e
+		t_last_draw = now)
 
 
 func _time(key: String, nodes: Array, d: float) -> void:
@@ -260,6 +332,15 @@ func _report() -> void:
 		keys.sort_custom(func(x, y): return prof[x] > prof[y])
 		for k in keys:
 			print("[%s] PROFILE %-15s %6.2f ms/frame" % [label, k, prof[k] / 1000.0 / times.size()])
+	if drawprof:
+		var keys := dprof.keys()
+		keys.sort_custom(func(x, y): return dprof[x][0] > dprof[y][0])
+		for k in keys.slice(0, 20):
+			print("[%s] DRAWPROF %-40s %6.3f ms/frame  %6.1f redraws/frame" % [label, k, dprof[k][0] / 1000.0 / times.size(), float(dprof[k][1]) / times.size()])
 	print("[%s] SUMMARY frames %d | frame ms avg %.2f p50 %.2f p95 %.2f p99 %.2f max %.2f | spikes>33ms %d | process ms avg %.2f p99 %.2f | draw calls avg %.0f max %.0f | objects avg %.0f | nodes max %d" % [
 			label, times.size(), _avg(times), _pct(times, 0.5), _pct(times, 0.95), _pct(times, 0.99), _pct(times, 1.0), spikes,
 			_avg(proc), _pct(proc, 0.99), _avg(draws), _pct(draws, 1.0), _avg(objs), nodes_max])
+	if undrawn > 0:
+		print("[%s] WARNING %d frames weren't drawn (the window was hidden or covered?): run it again, with the window in view" % [label, undrawn])
+	print("[%s] PHASES ms avg: scripts' _process %.2f | _draw callbacks %.2f | rendering and the rest %.2f" % [label, _avg(ph_proc), _avg(ph_draw), _avg(times) - _avg(ph_proc) - _avg(ph_draw)])
+	print("[%s] RENDER cpu ms avg %.2f p95 %.2f | gpu ms avg %.2f p95 %.2f" % [label, _avg(rcpu), _pct(rcpu, 0.95), _avg(rgpu), _pct(rgpu, 0.95)])

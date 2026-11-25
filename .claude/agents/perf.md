@@ -16,7 +16,9 @@ correctly after changes. Read CLAUDE.md first for the project's layout and testi
 - **Stress:** `tests/perf_stress.gd` is a late-game field: about 40 fully upgraded units, every emplacement, the castle maxed and about 150 enemies, at 3x speed. It needs a window (not --headless), with vsync off:
   - `Godot --path . --fixed-fps 60 -s tests/perf_stress.gd -- 40 heavy`
   - `Godot --path . --fixed-fps 60 -s tests/perf_stress.gd -- 40 typical` (a lighter, normal game)
-  - Add `profile` as a third argument to time each system's _process. Use `hide=<layer>` or `hide=freeze,<layer>` to see what drawing a layer costs.
+  - Add `profile` as a third argument to time each system's _process, or `drawprof` to time each kind of thing's _draw. Use `hide=<layer>` or `hide=freeze,<layer>` to see what drawing a layer costs. Every run also prints the frame's phases (scripts, _draw, rendering).
+  - Phones: a label with `phone` in it plays it as on a phone held upright; give it `--resolution 400x866` (`-- 30 typical_phone`, `-- 30 heavy_phone`). For phone-like CPU speed, prefix the command with `taskpolicy -c background` (the Mac's efficiency cores); those runs are noisier.
+  - Add `--always-on-top` and keep the window in view: macOS stops drawing a covered window, and the summary then warns that frames weren't drawn.
 - **Terrain:** `tests/perf_terrain.gd` (needs `--resolution 640x1040`) times a campaign map with rock against the same fight on open ground: `-- 30 stonehollow_quarry`, `-- 30 open`.
 
 ## How to work

@@ -182,7 +182,13 @@ func struck(attacker, amount: float) -> void:
 func _process(delta: float) -> void:
 	hurt = maxf(hurt - delta, 0.0)
 	anim_t += delta
-	queue_redraw()
+	# Drawn again only when its look changes (a brick or stone wall is a lot of shapes):
+	# always, while it shimmers or glows; otherwise when hit, mended, upgraded, resized,
+	# felled or rebuilt, or as its crew's hammers swing.
+	var key = _draw_key()
+	if key == null or key != _drawn_key:
+		_drawn_key = key
+		queue_redraw()
 	if rubble_left > 0.0:
 		rubble_left -= delta
 		if rubble_left <= 0.0:
@@ -235,6 +241,23 @@ func stats_text() -> String:
 
 
 # --- Drawing -------------------------------------------------------------------
+
+var _drawn_key = null   # what the wall was last drawn with (see _draw_key)
+
+
+## Everything _draw shows that can change; null while the wall animates every frame
+## (an energy wall, or the arcane seam), so it's always drawn afresh then.
+func _draw_key():
+	if rubble_left <= 0.0 and (_look_path() == 3 or tiers[3] > 0):
+		return null
+	var swings := 0
+	if tiers[2] > 0 and (rubble_left > 0.0 or (hp < max_hp and main.wave_active)):
+		swings = 1   # (working)
+		for i in 3:
+			swings = swings * 2 + int(anim_t * 5.0 + i * 1.7) % 2
+	return [hurt > 0.0, hp, max_hp, rubble_left > 0.0, rubble_left if rubble_left > 0.0 and rebuild > 0.0 else 0.0,
+			tiers.duplicate(), last_path, half, aegis.size(), swings]
+
 
 func _draw() -> void:
 	var a := -half
