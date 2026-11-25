@@ -4,7 +4,7 @@ extends SceneTree
 ## Run: godot --headless --path . -s tools/sprite_sheet.gd -- /path/to/out.png [prefix,prefix...]
 ## (the optional prefixes limit the sheet to sprites whose names start with one of them)
 
-const Sprites = preload("res://scripts/sprites.gd")
+const Sprites = preload("res://scripts/art/sprites.gd")
 const ZOOM := 6
 const PER_ROW := 9
 const POSES := ["swing", "strike", "strike2", "strum", "draw", "cast", "punch", "kick", "throw", "plant", "catch"]

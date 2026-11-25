@@ -8,7 +8,7 @@ extends SceneTree
 ##   Godot --headless --path . --fixed-fps 60 -s tests/orders_test.gd
 ## Classic on the open meadow, the field held at 640 wide. Exits 1 if anything failed.
 
-const Warrior = preload("res://scripts/warrior.gd")
+const Warrior = preload("res://scripts/troops/warrior.gd")
 
 var main
 var fails := 0
@@ -38,9 +38,9 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	await _frames(2)
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	main.gold = 99999
 	main.wave_active = true
@@ -51,24 +51,24 @@ func _fresh() -> void:
 ## Area with a `size`, its area is a square that far out from its post each way.
 func _hire(kind: String, at: Vector2, mode := "free", size := 0.0, commit := "focused", priority := "closest"):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	w.position = w.post
 	w.max_hp = 1e6
 	w.hp = 1e6
-	main.give_order("move_mode", mode, [w])
+	main.orders.give_order("move_mode", mode, [w])
 	if size > 0.0:
-		main.give_order("area", Rect2(w.post - Vector2.ONE * size, Vector2.ONE * size * 2.0), [w])
-	main.give_order("commit", commit, [w])
-	main.give_order("priority", priority, [w])
+		main.orders.give_order("area", Rect2(w.post - Vector2.ONE * size, Vector2.ONE * size * 2.0), [w])
+	main.orders.give_order("commit", commit, [w])
+	main.orders.give_order("priority", priority, [w])
 	return w
 
 
 ## An enemy standing still at `at` (it can't hurt anyone), with `hp` to spare.
 func _foe(kind: String, at: Vector2, hp := 1e5):
-	main._spawn_enemy(kind, 1, at)
-	var e = main.get_enemies()[-1]
+	main.waves._spawn_enemy(kind, 1, at)
+	var e = main.battlefield.get_enemies()[-1]
 	e.position = at
 	e.speed = 0.0
 	e.damage = 0.0
@@ -175,7 +175,7 @@ func _target_dies() -> void:
 	var w = _hire("swordsman", Vector2(320, 700))
 	var a = _foe("orc", Vector2(320, 380))   # nearest the castle: the First pick
 	var c = _foe("orc", Vector2(120, 300))
-	main.give_order("priority", "first", [w])
+	main.orders.give_order("priority", "first", [w])
 	await _frames(30)
 	var had_a: bool = w.target == a
 	a.take_damage(1e9)
@@ -244,7 +244,7 @@ func _opposite_sides() -> void:
 		far_r = maxf(far_r, right.position.distance_to(right.post))
 	check(left.target == null and far_l <= 2.0, "Opposite sides: the left unit holds its side while the fight is on the right (moved %dpx)" % roundi(far_l))
 	check(right.target != null and far_r <= 122.0, "...the right unit fights, within its own area (furthest %dpx)" % roundi(far_r))
-	main.give_order("move_mode", "free", [left])
+	main.orders.give_order("move_mode", "free", [left])
 	far_l = 0.0
 	for f in 240:
 		await process_frame
@@ -325,7 +325,7 @@ func _specials() -> void:
 	var sw = _hire("swordsman", post, "guard", 110.0)
 	main.selected = sw
 	for i in 4:
-		main.upgrade_selected(3)   # Charge: Running Strike, then Unstoppable
+		main.groups.upgrade_selected(3)   # Charge: Running Strike, then Unstoppable
 	main.selected = null
 	for p in [Vector2(320, 470), Vector2(250, 490), Vector2(400, 480), Vector2(320, 330), Vector2(140, 420), Vector2(520, 430)]:
 		_foe("orc", p, 120.0)
@@ -339,9 +339,9 @@ func _specials() -> void:
 	await _fresh()
 	var ma = _hire("martial", post, "guard", 110.0)
 	main.selected = ma
-	main.upgrade_selected(2)
-	main.upgrade_selected(2)
-	main.upgrade_selected(2)   # Mirror Self, Blinding Flash, Shadow Step (third now)
+	main.groups.upgrade_selected(2)
+	main.groups.upgrade_selected(2)
+	main.groups.upgrade_selected(2)   # Mirror Self, Blinding Flash, Shadow Step (third now)
 	main.selected = null
 	for p in [Vector2(320, 460), Vector2(200, 260), Vector2(520, 380)]:
 		_foe("orc", p)   # one it can reach from its area (Shadow Step lands inside), two it can't
@@ -349,7 +349,7 @@ func _specials() -> void:
 	var copies := 0
 	for f in 60 * 10:
 		await process_frame
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.kind == "martial":
 				far = maxf(far, Warrior.rect_gap(ma.zone_rect(), w.position))
 				if w.clone_of != null:
@@ -377,27 +377,27 @@ func _persistence() -> void:
 	main.wave_active = false
 	var w = _hire("swordsman", Vector2(320, 600), "guard", 150.0, "reactive", "weakest")
 	main.selected = w
-	main.upgrade_selected(0)
-	main.upgrade_selected(2)
+	main.groups.upgrade_selected(0)
+	main.groups.upgrade_selected(2)
 	main.selected = null
 	var keep := [w.move_mode, w.zone_rect(), w.commit, w.priority, w.danger_mode, w.call_help, w.answer]
 	check(keep == ["guard", Rect2(170, 450, 300, 300), "reactive", "weakest", "fight", true, "ignore"] and w.total_upgrades() == 2, "Orders stay through upgrades")
 	for i in 2:
-		main.start_wave()
+		main.waves.start_wave()
 		await _frames(5)
 		main.spawn_queue.clear()
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.free()
 		await _frames(90)
 	check(main.wave >= 2 and [w.move_mode, w.zone_rect(), w.commit, w.priority, w.danger_mode, w.call_help, w.answer] == keep, "...and from wave to wave (now wave %d)" % main.wave)
 	var w2 = _hire("swordsman", Vector2(200, 600))
-	main.give_order("priority", "weakest", [w2])
-	main.give_order("commit", "reactive", [w2])
+	main.orders.give_order("priority", "weakest", [w2])
+	main.orders.give_order("commit", "reactive", [w2])
 	# (_hire set Free Roam and Focused, so hire one plainly to see what it starts with.)
 	main.placing_type = "swordsman"
-	main.hire_at(Vector2(440, 600))
+	main.hiring.hire_at(Vector2(440, 600))
 	main.placing_type = ""
-	var w3 = main.get_warriors()[-1]
+	var w3 = main.battlefield.get_warriors()[-1]
 	check(w3.priority == "weakest" and w3.commit == "reactive", "A new hire starts with the orders last given to its kind")
 	# The panel: it opens without changing anything, and its buttons give orders.
 	main.selected = w
@@ -405,7 +405,7 @@ func _persistence() -> void:
 	main.hud.toggle_orders(main)
 	check(main.hud.orders_box != null and w.zone_rect() == Rect2(170, 450, 300, 300), "The orders panel opens on the selected unit without changing its area")
 	main.hud.orders_ui["area"]["left"].emit_signal("pressed")
-	check(w.move_mode == "guard" and w.zone_rect() == main.area_preset("left") and main.hud.orders_ui["area"]["left"].button_pressed,
+	check(w.move_mode == "guard" and w.zone_rect() == main.orders.area_preset("left") and main.hud.orders_ui["area"]["left"].button_pressed,
 			"...a preset area (Left flank) is given and shown lit")
 	main.hud.orders_ui["move_mode"]["hold"].emit_signal("pressed")
 	check(w.move_mode == "hold" and not main.hud.orders_ui.has("area"), "...Hold: the Area row goes")
@@ -420,14 +420,14 @@ func _areas() -> void:
 	var a = _hire("swordsman", Vector2(120, 650))
 	var b = _hire("swordsman", Vector2(180, 650))
 	main.group = [a, b]
-	main.start_area_pick()
+	main.orders.start_area_pick()
 	check(main.area_pick.size() == 2, "Draw area [D]: the group waits for an area to be drawn")
 	main.mouse_stand_in = Vector2(300, 300)
 	await _frames(2)
 	main.area_start = Vector2(300, 300)
 	main.mouse_stand_in = Vector2(560, 520)
 	await _frames(2)
-	main._finish_area()
+	main.orders._finish_area()
 	main.mouse_stand_in = Vector2.INF
 	var drawn := Rect2(300, 300, 260, 220)
 	check(a.move_mode == "guard" and b.move_mode == "guard" and a.zone_rect() == drawn and b.zone_rect() == drawn and main.area_pick.is_empty(),
@@ -443,28 +443,28 @@ func _areas() -> void:
 	await _frames(60 * 7)
 	check(a.position.distance_to(a.post) < 6.0, "...then goes back to its post")
 	# A small slip of the mouse isn't an area: still waiting.
-	main.start_area_pick([a])
+	main.orders.start_area_pick([a])
 	main.mouse_stand_in = Vector2(200, 200)
 	await _frames(2)
 	main.area_start = Vector2(200, 200)
 	main.mouse_stand_in = Vector2(205, 204)
 	await _frames(2)
-	main._finish_area()
+	main.orders._finish_area()
 	main.mouse_stand_in = Vector2.INF
 	check(a.zone_rect() == drawn and main.area_pick == [a], "A click without a drag doesn't change its area (it's still waiting for one)")
-	main._cancel()
+	main.formation_ctl._cancel()
 	check(main.area_pick.is_empty(), "...Esc stops waiting")
 	# Presets cover the field: the flanks overlap the centre, front and back halves meet.
-	var l: Rect2 = main.area_preset("left")
-	var c: Rect2 = main.area_preset("center")
-	var r: Rect2 = main.area_preset("right")
-	var front: Rect2 = main.area_preset("front")
-	var back: Rect2 = main.area_preset("back")
+	var l: Rect2 = main.orders.area_preset("left")
+	var c: Rect2 = main.orders.area_preset("center")
+	var r: Rect2 = main.orders.area_preset("right")
+	var front: Rect2 = main.orders.area_preset("front")
+	var back: Rect2 = main.orders.area_preset("back")
 	check(l.intersects(c) and r.intersects(c) and not l.intersects(r) and l.position.x == 0.0 and is_equal_approx(r.end.x, main.FIELD_W),
 			"Preset areas: the left and right flanks reach the edges and overlap the centre, not each other")
 	check(is_equal_approx(front.end.y, back.position.y) and front.position.y == main.DEPLOY_TOP and back.end.y == main.CASTLE_Y,
 			"...front and back halves split the field from the top down to the castle")
-	check(main.area_preset_of(l) == "left" and main.area_preset_of(drawn) == "", "...a preset is recognised as one; a drawn area isn't")
+	check(main.orders.area_preset_of(l) == "left" and main.orders.area_preset_of(drawn) == "", "...a preset is recognised as one; a drawn area isn't")
 
 
 # --- In danger: falling back, calling for help -------------------------------------------
@@ -476,23 +476,23 @@ func _danger() -> void:
 	w.hp = 200.0
 	var e = _foe("orc", Vector2(320, 420))
 	await _frames(60 * 2)
-	check(not w.in_danger() and not main.calling(w), "Not in danger at full health")
+	check(not w.in_danger() and not main.orders.calling(w), "Not in danger at full health")
 	w.hp = 50.0
 	w.take_damage(1.0)
 	await _frames(2)
-	check(w.in_danger() and main.calling(w), "Badly hurt and hit: in danger, and calling for help (on by default)")
-	main.give_order("call_help", false, [w])
-	await _frames(int(60 * (main.CALL_LINGER + 0.2)))
+	check(w.in_danger() and main.orders.calling(w), "Badly hurt and hit: in danger, and calling for help (on by default)")
+	main.orders.give_order("call_help", false, [w])
+	await _frames(int(60 * (main.orders.CALL_LINGER + 0.2)))
 	w.take_damage(1.0)
 	await _frames(2)
-	check(w.in_danger() and not main.calling(w), "...with Call for help off, it doesn't call")
+	check(w.in_danger() and not main.orders.calling(w), "...with Call for help off, it doesn't call")
 	# Fight on (the default): it keeps fighting.
 	check(w.target == e and not w.retreating, "Fight on: it keeps at its enemy")
 	# Fall back: it breaks off and makes for the Healer.
 	var h = _hire("healer", Vector2(120, 690))
-	main.give_order("priority", "heal", [h])
+	main.orders.give_order("priority", "heal", [h])
 	h.damage = 0.0   # (so it can't mend the swordsman before we've seen it fall back)
-	main.give_order("danger_mode", "fall_back", [w])
+	main.orders.give_order("danger_mode", "fall_back", [w])
 	w.take_damage(1.0)
 	await _frames(60 * 2)
 	check(w.retreating and w.target == null and w.position.distance_to(h.position) < 70.0,
@@ -507,7 +507,7 @@ func _danger() -> void:
 	check(w.target == e, "...and goes back for the enemy")
 	# No Healer: it falls back to its post, then rejoins once nothing's come near for a moment.
 	h.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	e.position = Vector2(320, 300)
 	w.position = Vector2(320, 340)
 	w.hp = 40.0
@@ -526,7 +526,7 @@ func _danger() -> void:
 	var foe = _foe("orc", Vector2(320, 470))
 	foe.speed = 0.0
 	foe.damage = 0.0
-	main.give_order("danger_mode", "fall_back", [ar])
+	main.orders.give_order("danger_mode", "fall_back", [ar])
 	ar.hp = ar.max_hp * 0.2
 	ar.take_damage(1.0)
 	await _frames(3)
@@ -549,7 +549,7 @@ func _danger() -> void:
 	var near_foe = _foe("orc", hl.position + Vector2(0, -110))
 	near_foe.speed = 0.0
 	near_foe.damage = 0.0   # (an enemy about, so it keeps falling back)
-	main.give_order("danger_mode", "fall_back", [hl])
+	main.orders.give_order("danger_mode", "fall_back", [hl])
 	hl.hp = hl.max_hp * 0.2
 	hl.take_damage(1.0)
 	await _frames(2)
@@ -580,8 +580,8 @@ func _answers() -> void:
 		caller.hp = 200.0
 		var attacker = _foe("orc", caller.position + Vector2(0, -Warrior.RADIUS - 16.0))
 		var helper = _hire("swordsman", Vector2(520, 600), "guard")
-		main.give_order("area", main.area_preset("right"), [helper])
-		main.give_order("answer", how, [helper])
+		main.orders.give_order("area", main.orders.area_preset("right"), [helper])
+		main.orders.give_order("answer", how, [helper])
 		var own = null
 		if how == "after":
 			own = _foe("orc", Vector2(520, 520), 100.0)   # its own enemy, in its area
@@ -612,8 +612,8 @@ func _answers() -> void:
 	c2.max_hp = 200.0
 	var att = _foe("orc", c2.position + Vector2(0, -Warrior.RADIUS - 16.0), 60.0)
 	var hl = _hire("swordsman", Vector2(520, 600), "guard")
-	main.give_order("area", main.area_preset("right"), [hl])
-	main.give_order("answer", "now", [hl])
+	main.orders.give_order("area", main.orders.area_preset("right"), [hl])
+	main.orders.give_order("answer", "now", [hl])
 	c2.hp = 40.0
 	c2.take_damage(1.0)
 	for f in 60 * 8:
@@ -645,7 +645,7 @@ func _healers() -> void:
 	# Allies in danger: it crosses the field (out of its area) to the one in danger first.
 	await _fresh()
 	h = _hire("healer", Vector2(520, 650), "guard", 60.0)
-	main.give_order("priority", "danger", [h])
+	main.orders.give_order("priority", "danger", [h])
 	var hurt = _hire("swordsman", Vector2(560, 600))
 	hurt.hp = hurt.max_hp * 0.5
 	var danger = _hire("swordsman", Vector2(100, 450))
@@ -671,7 +671,7 @@ func _group_panel() -> void:
 	var a = _hire("swordsman", Vector2(200, 600))
 	var b = _hire("archer", Vector2(260, 600))
 	var h = _hire("healer", Vector2(320, 640))
-	main.give_order("priority", "weakest", [a])
+	main.orders.give_order("priority", "weakest", [a])
 	main.selected = null
 	main.group = [a, b, h]
 	main.hud.refresh(main)
@@ -684,7 +684,7 @@ func _group_panel() -> void:
 	ui["priority"]["strongest"].emit_signal("pressed")
 	check(a.priority == "strongest" and b.priority == "strongest" and h.priority == "revive" and ui["priority"]["strongest"].button_pressed,
 			"...Target goes to the fighters at once (not the Healer)")
-	main.give_order("priority", "heal", [h])
+	main.orders.give_order("priority", "heal", [h])
 	ui["care"]["revive"].emit_signal("pressed")
 	check(h.priority == "revive", "...the Healers row goes to the Healer")
 	check(ui.has("priority") and ui.has("care") and ui.has("move_mode") and ui.has("danger_mode") and not ui.has("commit") and not ui.has("answer") and not ui.has("call_help"),
@@ -698,10 +698,10 @@ func _group_panel() -> void:
 	ui = main.hud.orders_ui
 	check(ui.has("area"), "...picking Guard area brings the Area row up")
 	ui["area"]["center"].emit_signal("pressed")
-	check([a, b, h].all(func(w): return w.move_mode == "guard" and w.zone_rect() == main.area_preset("center")), "...and a preset area")
+	check([a, b, h].all(func(w): return w.move_mode == "guard" and w.zone_rect() == main.orders.area_preset("center")), "...and a preset area")
 	ui["area"]["draw"].emit_signal("pressed")
 	check(main.area_pick.size() == 3, "...Draw waits for an area to be drawn for all three")
-	main._cancel()
+	main.formation_ctl._cancel()
 	main.hud.refresh(main)
 	check(main.hud.orders_box == null, "...and with nothing selected the panel closes")
 
@@ -714,29 +714,29 @@ func _group_panel() -> void:
 func _touch() -> void:
 	await _fresh()
 	var w = _hire("swordsman", Vector2(320, 560))
-	main.pointer_down(w.position + Vector2(28, 0), MOUSE_BUTTON_LEFT, false, true)
+	main.input.pointer_down(w.position + Vector2(28, 0), MOUSE_BUTTON_LEFT, false, true)
 	check(main.selected == w, "T  a tap near a troop selects it (a fingertip's width away)")
-	main.pointer_down(Vector2(200, 420), MOUSE_BUTTON_LEFT, false, true)
-	main._finish_box()
+	main.input.pointer_down(Vector2(200, 420), MOUSE_BUTTON_LEFT, false, true)
+	main.groups._finish_box()
 	check(main.selected == w and w.post.distance_to(Vector2(200, 420)) < 30.0, "T  in a wave, a tap on open ground sends it there (%s)" % str(w.post.round()))
-	main.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, true)
+	main.input.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, true)
 	check(main.selected == null, "T  a tap on the selected troop lets it go")
-	main.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, false)
-	main.pointer_down(Vector2(440, 420), MOUSE_BUTTON_LEFT, false, false)
-	main._finish_box()
+	main.input.pointer_down(w.position, MOUSE_BUTTON_LEFT, false, false)
+	main.input.pointer_down(Vector2(440, 420), MOUSE_BUTTON_LEFT, false, false)
+	main.groups._finish_box()
 	check(main.selected == null and w.post.distance_to(Vector2(440, 420)) > 60.0, "T  a mouse click on open ground still just clears the selection")
 	var v = _hire("archer", Vector2(380, 600))
-	main._set_group([w, v])
-	main.pointer_down(Vector2(320, 360), MOUSE_BUTTON_LEFT, false, true)
-	main._finish_box()
+	main.groups._set_group([w, v])
+	main.input.pointer_down(Vector2(320, 360), MOUSE_BUTTON_LEFT, false, true)
+	main.groups._finish_box()
 	var mid: Vector2 = (w.post + v.post) / 2.0
 	check(mid.distance_to(Vector2(320, 360)) < 30.0, "T  ...and a tap sends a whole group there, in formation (its middle at %s)" % str(mid.round()))
-	main._cancel()
+	main.formation_ctl._cancel()
 	main.wave_active = false
-	main.pointer_down(v.position, MOUSE_BUTTON_LEFT, false, true)
-	main._end_drag()
-	main.pointer_down(Vector2(120, 300), MOUSE_BUTTON_LEFT, false, true)
-	main._finish_box()
+	main.input.pointer_down(v.position, MOUSE_BUTTON_LEFT, false, true)
+	main.groups._end_drag()
+	main.input.pointer_down(Vector2(120, 300), MOUSE_BUTTON_LEFT, false, true)
+	main.groups._finish_box()
 	check(main.selected == null, "T  between waves, a tap on open ground just clears the selection (troops are dragged then)")
 	# A finger's drag: the troop stays under the finger, wherever the last touch was (the
 	# engine's "mouse" is a phone's previous touch, not the one being made).

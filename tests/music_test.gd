@@ -77,20 +77,20 @@ func _run() -> void:
 	au.set_track("title")
 	# Classic: the meadow's peaceful music, the battle music in a wave.
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	check(await _playing() == "calm", "Classic between waves: the meadow's peaceful music (the old calm track)")
-	main.start_wave()
+	main.waves.start_wave()
 	check(await _playing() == "battle", "Classic in a wave: the battle music")
 	# A Bard on the field brings its instrument into whatever's playing.
 	main.gold = 9999
 	main.placing_type = "bard"
-	main.hire_at(Vector2(320, 600))
+	main.hiring.hire_at(Vector2(320, 600))
 	main.placing_type = ""
 	await _frames(40)
 	check(not main.audio._layers.is_empty(), "a Bard plays along with the battle music (%s)" % ", ".join(main.audio._layers))
 	# The campaign: the prologue, the map, the villains' cutscenes, Stonehollow's mountains.
 	await _fresh()
-	main._on_mode_chosen("campaign:new:normal")
+	main.missions._on_mode_chosen("campaign:new:normal")
 	check(await _playing() == "story", "the prologue plays the story music")
 	main.hud.story.skip()
 	check(await _playing() == "map", "the campaign map plays its own music")
@@ -135,13 +135,13 @@ func _run() -> void:
 	campaign.completed = ["ashwatch"]
 	await _fresh()
 	main.hud.hide_mode_select()
-	main.start_mission("stonehollow")
+	main.missions.start_mission("stonehollow")
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
 	check(await _playing() == "mountain", "Stonehollow between waves: the mountains' peaceful music")
 	# Each map's own battle music.
-	var Maps = load("res://scripts/maps.gd")
+	var Maps = load("res://scripts/campaign/maps.gd")
 	var styles := {"": main.Audio.battle_for({})}
 	for id in Maps.MAPS.keys() + Maps.ZONES.keys():
 		styles[id] = main.Audio.battle_for(Maps.get_map(id))
@@ -164,7 +164,7 @@ func _run() -> void:
 	var t0 := Time.get_ticks_msec()
 	while not main.audio._music.has("battle_quarry") and Time.get_ticks_msec() - t0 < 150000:
 		await create_timer(0.2).timeout   # (composed while the battle's being set up)
-	main.start_wave()
+	main.waves.start_wave()
 	await _frames(5)
 	check(await _playing() == "battle_quarry", "...made while the battle's set up, and playing in the wave (%s; wanted %d, thread %s, cached %s)" % [main.audio._playing_track,
 			main.audio._wanted_first.size(), main.audio._thread, main.audio._cache.has("battle_quarry")])
@@ -182,7 +182,7 @@ func _run() -> void:
 		main.records_path = ""
 		main.classic_map = pair[0]
 		var c0 := Time.get_ticks_msec()
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		while not main.audio._music.has(pair[1]) and Time.get_ticks_msec() - c0 < 60000:   # (real seconds: it's composed on its own thread)
 			await process_frame
 		var ms := Time.get_ticks_msec() - c0

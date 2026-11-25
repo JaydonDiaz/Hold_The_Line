@@ -13,7 +13,7 @@ extends SceneTree
 ##    Bay brings it back (and a Healer doesn't hang about it); an Engineer rebuilds it for
 ##    gold, more the more it's been upgraded
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 var main
 var fails := 0
 var checks := 0
@@ -54,17 +54,17 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	await process_frame
 
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -139,7 +139,7 @@ func _dodging() -> void:
 	var ring: float = fall.RADIUS
 	var hp_free: float = free_one.hp
 	var hp_stun: float = stunned.hp
-	check(main.dangers().size() == 1, "D  falling stone marks where it'll land")
+	check(main.battlefield.dangers().size() == 1, "D  falling stone marks where it'll land")
 	await _frames(int(60 * 1.6))
 	check(free_one.hp == hp_free and free_one.position.distance_to(Vector2(335, 500)) > ring,
 			"D  a troop standing under it runs out of the ring by itself and isn't hit")
@@ -156,7 +156,7 @@ func _broken() -> void:
 	var bay = await _hire("medbay", Vector2(200, 640))
 	main.selected = bay
 	for i in 4:
-		main.upgrade_selected(2)   # (Field Hospital: it revives)
+		main.groups.upgrade_selected(2)   # (Field Hospital: it revives)
 	main.selected = null
 	var h = await _hire("healer", Vector2(380, 620))
 	var hurt = await _hire("swordsman", Vector2(460, 600))
@@ -173,7 +173,7 @@ func _broken() -> void:
 	var up = await _hire("cannon", Vector2(500, 480))
 	main.selected = up
 	for i in 3:
-		main.upgrade_selected(0)
+		main.groups.upgrade_selected(0)
 	main.selected = null
 	up.take_damage(1e6)
 	await _frames(2)
@@ -181,7 +181,7 @@ func _broken() -> void:
 	main.gold = 5000
 	main.selected = cannon
 	var g0: int = main.gold
-	main.rebuild_selected()
+	main.hiring.rebuild_selected()
 	check(main.gold == g0 - plain_cost and not cannon.broken and cannon.build_left > 0.0, "B  an Engineer comes out to rebuild it, for the gold")
 	await _frames(int(60 * (cannon.REBUILD_TIME + 4.0)))
 	check(cannon.is_active() and cannon.build_left <= 0.0 and cannon.hp >= cannon.max_hp * 0.99, "B  ...and it's back, whole and working")

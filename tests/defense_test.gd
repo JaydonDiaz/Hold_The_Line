@@ -23,8 +23,8 @@ extends SceneTree
 ## B  A mixed fight: some blows land, some are dodged, some braced; agile troops get clear
 ##    more than Knights; nobody spends the fight dodging
 
-const Data = preload("res://scripts/data.gd")
-const Defense = preload("res://scripts/defense.gd")
+const Data = preload("res://scripts/data/data.gd")
+const Defense = preload("res://scripts/troops/defense.gd")
 var main
 var fails := 0
 var checks := 0
@@ -94,7 +94,7 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	main.deploying = false
 	main.wave_active = true
@@ -103,10 +103,10 @@ func _fresh() -> void:
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -114,7 +114,7 @@ func _hire(kind: String, at: Vector2):
 
 
 func _foe(kind: String, at: Vector2, level := 1):
-	main._spawn_enemy(kind, level, at)
+	main.waves._spawn_enemy(kind, level, at)
 	return main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 
 
@@ -303,7 +303,7 @@ func _crowds() -> void:
 	for i in 8:
 		var e = _foe("orc", a.position + Vector2.from_angle(i * TAU / 8.0) * 40.0)
 		e.speed = 0.0
-	var box := {"key": 2, "kind": "stomp", "src": main.get_enemies()[0], "t": 0.9, "c": a.position, "r": 60.0, "dmg": 30.0, "push": 0.0, "stun": 0.0}
+	var box := {"key": 2, "kind": "stomp", "src": main.battlefield.get_enemies()[0], "t": 0.9, "c": a.position, "r": 60.0, "dmg": 30.0, "push": 0.0, "stun": 0.0}
 	var cb: Dictionary = Defense.choose(a, box, [box], [box])
 	check(cb["act"] == "continue", "C  boxed in by enemies, nowhere to go: it takes it (%s)" % cb["act"])
 	# Just after a dodge.

@@ -16,9 +16,9 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://monastery_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
-const Data = preload("res://scripts/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 var main
 var fails := 0
@@ -43,8 +43,8 @@ func _frames(n: int) -> void:
 
 
 func _foe(kind: String, at: Vector2, hp := 1e5, boss := false):
-	main._spawn_enemy(kind, 1, at)
-	var e = main.get_enemies()[-1]
+	main.waves._spawn_enemy(kind, 1, at)
+	var e = main.battlefield.get_enemies()[-1]
 	e.position = at
 	e.speed = 0.0
 	e.damage = 0.0
@@ -69,11 +69,11 @@ func _mission(mid: String, south: Array, extra_done := [], extra_allies := []) -
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.start_mission(mid)
+	main.missions.start_mission(mid)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 
 
@@ -102,9 +102,9 @@ func _steps() -> void:
 	check(walk.all(func(p): return not paths.blocked(p, 8.0)), "S  ...every stair and the rope bridge can be walked")
 	check(wall.all(func(p): return paths.blocked(p, 8.0)), "S  ...the cliffs and the chasm can't")
 	check(paths.wade_factor(Vector2(240, 266)) < 1.0 and paths.wade_factor(Vector2(320, 408)) == 1.0, "S  ...stairs are slow going; the bridge isn't")
-	var lent: Array = main.get_warriors().filter(func(w): return w.kind == "martial")
+	var lent: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "martial")
 	check(lent.size() == 3 and lent.all(func(w): return w.hits_air()), "S  three masters lent, trained in Spirit Bolts: they hit fliers")
-	check(main.allowed("martial") and not main.allowed("archer") and not main.allowed("mage"), "S  ...and with no Archers or magic of its own, this army can hire Martial Artists here")
+	check(main.missions.allowed("martial") and not main.missions.allowed("archer") and not main.missions.allowed("mage"), "S  ...and with no Archers or magic of its own, this army can hire Martial Artists here")
 	var m: Dictionary = CD.MISSIONS["mo_steps"]
 	var wyverns := 0
 	for w in m.get("extra", {}):
@@ -122,9 +122,9 @@ func _steps() -> void:
 	# training needed) gives it.
 	main.gold = 999
 	main.placing_type = "martial"
-	main.hire_at(Vector2(320, 640))
+	main.hiring.hire_at(Vector2(320, 640))
 	main.placing_type = ""
-	var hired = main.get_warriors()[-1]
+	var hired = main.battlefield.get_warriors()[-1]
 	var fresh_reach: bool = hired.hits_air()
 	hired.tiers = [1, 0, 0, 0]
 	hired._apply_upgrades()
@@ -142,9 +142,9 @@ func _retreat() -> void:
 	main.gold = 2000
 	for p in [Vector2(120, 200), Vector2(300, 200), Vector2(520, 200)]:
 		main.placing_type = "swordsman"
-		main.hire_at(p)
+		main.hiring.hire_at(p)
 	main.placing_type = ""
-	var troops: Array = main.get_warriors().filter(func(w): return not w.is_emplacement())
+	var troops: Array = main.battlefield.get_warriors().filter(func(w): return not w.is_emplacement())
 	for w in troops:
 		w.position = w.post
 	# One with a guard area of its own, drawn round its post.
@@ -187,7 +187,7 @@ func _retreat() -> void:
 
 ## Classic on the Monastery Gate: the map's own three bell towers, free-standing.
 func _classic_bells() -> void:
-	main._on_mode_chosen("normal|monastery_gate")
+	main.missions._on_mode_chosen("normal|monastery_gate")
 	await _frames(3)
 	var bells = main.bells
 	var towers: Array = bells.towers
@@ -198,14 +198,14 @@ func _classic_bells() -> void:
 	var p: Vector2 = bells.pos(towers[1])
 	check(not bells.ready(towers[1]), "B  ...not yours with no troop by it")
 	main.gold = 99999
-	main._on_hire_pressed("swordsman")
-	main.hire_at(p + Vector2(0, 40))
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(p + Vector2(0, 40))
 	main.placing_type = ""
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.position = w.post   # (on its post now, not walking out from the gate)
 	var near = _foe("orc", p + Vector2(60, -20))
 	check(bells.ready(towers[1]) and bells.ring(towers[1]) and near.stun_timer > 2.0, "B  ...a troop by one, and ringing it stuns the enemies round it")
-	main._on_mode_chosen("normal")
+	main.missions._on_mode_chosen("normal")
 	await _frames(3)
 	check(main.map_id == "" and not main.bells.active(), "B  Classic on the open meadow: no bells")
 
@@ -213,7 +213,7 @@ func _classic_bells() -> void:
 func _clear_foes() -> void:
 	main.spawn_queue.clear()
 	main.rules.stream_in = 1e9
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
 
 
@@ -254,15 +254,15 @@ func _bells() -> void:
 	main.wave = 1
 	main.wave_active = true
 	var b: Dictionary = bells.towers[0]
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
 	await _frames(2)
 	var lone: bool = bells.ready(b)
 	main.gold = 999
 	main.placing_type = "swordsman"
-	main.hire_at(bells.pos(b) + Vector2(0, 50))
+	main.hiring.hire_at(bells.pos(b) + Vector2(0, 50))
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	w.position = w.post
 	await _frames(2)
 	main.deploying = false

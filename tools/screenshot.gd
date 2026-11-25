@@ -17,7 +17,7 @@ func _initialize() -> void:
 
 
 func _setup(args: Array) -> void:
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 2000
 	main.wave = int(args[1]) - 1 if args.size() > 1 else 5
 	var hires := [
@@ -27,19 +27,19 @@ func _setup(args: Array) -> void:
 	]
 	for h in hires:
 		main.placing_type = h[0]
-		main.hire_at(h[1])
-	for w in main.get_warriors():
+		main.hiring.hire_at(h[1])
+	for w in main.battlefield.get_warriors():
 		w.position = w.post
 	# Show off a few upgrade builds: [kind, path, tiers].
 	var builds := [["mage", 2, 3], ["mage", 1, 1], ["frost", 2, 3], ["frost", 1, 2], ["swordsman", 0, 4], ["swordsman", 2, 2], ["archer", 1, 3]]
 	for b in builds:
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.kind == b[0]:
 				for i in b[2]:
 					main.selected = w
-					main.upgrade_selected(b[1])
+					main.groups.upgrade_selected(b[1])
 				break
-	main.start_wave()
+	main.waves.start_wave()
 
 
 func _process(_delta: float) -> bool:
@@ -47,7 +47,7 @@ func _process(_delta: float) -> bool:
 	if frames == 2:
 		_setup(OS.get_cmdline_user_args())
 	if frames == 30:
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.kind == "mage":
 				main.selected = w
 				break

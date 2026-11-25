@@ -116,8 +116,8 @@ func open() -> void:
 		return
 	taken = true
 	hp = 0.0
-	main.spawn_burst(position + Vector2(0, -30), 46.0, Color(0.7, 0.55, 0.35) if style != "portcullis" else Color(0.6, 0.6, 0.65))
-	main.sfx("boom", 0.9)
+	main.effects.spawn_burst(position + Vector2(0, -30), 46.0, Color(0.7, 0.55, 0.35) if style != "portcullis" else Color(0.6, 0.6, 0.65))
+	main.effects.sfx("boom", 0.9)
 	main.paths.invalidate()
 
 
@@ -404,7 +404,7 @@ func _draw_tower() -> void:
 			Vector2(px + 21, top - 8 + flutter), Vector2(px + 13, top - 10), Vector2(px + 9, top - 4), Vector2(px + 6, top - 11), Vector2(px + 2, top - 8)])
 	if taken:
 		rag = PackedVector2Array([Vector2(px + 2, top - 22), Vector2(px + 20, top - 21 + flutter), Vector2(px + 20, top - 9 + flutter), Vector2(px + 2, top - 10)])
-	preload("res://scripts/war_art.gd").outlined(cv, rag, flag)
+	preload("res://scripts/art/war_art.gd").outlined(cv, rag, flag)
 	if not taken:
 		cv.draw_rect(Rect2(px + 8, top - 19, 5, 5), Color(0.08, 0.06, 0.06))   # his daubed skull
 		cv.draw_rect(Rect2(px + 9, top - 18, 1, 1), flag)

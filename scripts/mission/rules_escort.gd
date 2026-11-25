@@ -22,7 +22,7 @@ extends "res://scripts/mission/rules.gd"
 ## "zones": one zone, its "route" and "ambushes" given in "convoy" itself.)
 
 const Objective = preload("res://scripts/mission/objective.gd")
-const Maps = preload("res://scripts/maps.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 const SETTLE := 6.0   # seconds to get set in a new zone before the wagon rolls on
 
 var wagon
@@ -84,7 +84,7 @@ func start() -> void:
 	wagon = Objective.new()
 	wagon.setup(main, {"id": "wagon", "kind": "wagon", "name": _c().get("name", "Wagon"), "at": route[0], "route": route.slice(1),
 			"speed": wagon_speed, "hp": _c().get("hp", 900.0), "cargo": _c().get("cargo", "")})
-	main.add_objective(wagon)
+	main.waves.add_objective(wagon)
 	wagon.destroyed.connect(func(_w): _end(false))
 	wagon.reached.connect(_on_reached)
 	_measure()
@@ -117,7 +117,7 @@ func _end(won: bool) -> void:
 		return
 	over = true
 	main.hud.show_message("The %s made it through!" % wagon.label.to_lower() if won else "The %s is lost!" % wagon.label.to_lower())
-	main.call_deferred("_finish", won)
+	main.modes.call_deferred("_finish", won)
 
 
 ## Out of the top of this zone and into the next: the screen goes dark, the field turns
@@ -155,16 +155,16 @@ func enter_next() -> void:
 	# new ground allows). Barricades are taken down, and paid back.
 	var shift: Vector2 = wagon.position - left_at
 	var refund := 0
-	for b in main.get_barricades():
+	for b in main.battlefield.get_barricades():
 		refund += int(b.spent)
 		b.queue_free()
 	if refund > 0:
 		main.gold += refund
-	main.walls_changed()
+	main.battlefield.walls_changed()
 	for w in main.warrior_layer.get_children():
 		if w.is_queued_for_deletion():
 			continue
-		var p: Vector2 = main.paths.open_spot(main._clamp_post(w.position + shift))
+		var p: Vector2 = main.paths.open_spot(main.hiring._clamp_post(w.position + shift))
 		w.position = p
 		w.post = p
 		w.fitted_post = Vector2.INF
@@ -172,9 +172,9 @@ func enter_next() -> void:
 		w.reset_targeting()   # a new stretch: everyone back on guarding the wagon
 	for n in main.fx_layer.get_children():
 		if n.has_method("gate"):
-			n.position = main._clamp_post(n.position + shift)
+			n.position = main.hiring._clamp_post(n.position + shift)
 	main.last_priority.clear()   # (and new hires start on it too)
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.paths.invalidate()
 	# A moment to get set, then on.
 	wagon.speed = 0.0
@@ -183,7 +183,7 @@ func enter_next() -> void:
 	main.hud.show_message("%s (%s)%s%s" % [z["name"], "stretch %d" % (zone_i + 1) if endless() else "%d of %d" % [zone_i + 1, zones().size()],
 			"  ·  the %s patched up (+%d%%)" % [wagon.label.to_lower(), roundi(mend / wagon.max_hp * 100.0)] if mend >= 1.0 else "",
 			"  ·  barricades taken down: %dg back" % refund if refund > 0 else ""])
-	main.sfx("horn")
+	main.effects.sfx("horn")
 
 
 func objectives() -> Array:
@@ -234,10 +234,10 @@ func process(delta: float) -> void:
 				p = _flank_point(flanks)
 				flanks += 1
 			elif i >= group.size():   # (more each time round, close by)
-				p = main._clamp_post(p + Vector2(randf_range(-30, 30), randf_range(-24, 24)))
-			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), p)
+				p = main.hiring._clamp_post(p + Vector2(randf_range(-30, 30), randf_range(-24, 24)))
+			main.waves._spawn_enemy(g[0], main.missions.wave_level(maxi(main.wave, 1)), p)
 		main.hud.show_message(a.get("note", "Ambush!"))
-		main.sfx("horn")
+		main.effects.sfx("horn")
 
 
 ## Where the n-th flanking attacker of an ambush breaks out: to the wagon's left, behind
@@ -250,7 +250,7 @@ func _flank_point(n: int) -> Vector2:
 		ahead = wagon.position.direction_to(wagon.route[wagon.leg])
 	var side := ahead.orthogonal()
 	var off: Vector2 = [side, -ahead, -side][n % 3] * FLANK_GAP
-	var p: Vector2 = main._clamp_post(wagon.position + off)
+	var p: Vector2 = main.hiring._clamp_post(wagon.position + off)
 	return main.paths.open_spot(p)
 
 
@@ -262,7 +262,7 @@ func enemy_goal(_e):
 func entry_point(_post: Vector2) -> Vector2:
 	if wagon == null or not wagon.is_target():
 		return Vector2.INF
-	return main._clamp_post(wagon.position + Vector2(0, 26))
+	return main.hiring._clamp_post(wagon.position + Vector2(0, 26))
 
 
 func on_reached_bottom(_e) -> bool:

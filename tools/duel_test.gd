@@ -3,7 +3,7 @@ extends SceneTree
 ## against a single Warlord. Reports which builds kill it before it reaches the bottom.
 ## Run: godot --headless --path . --fixed-fps 60 -s tools/duel_test.gd -- [level] [unit]
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 var main
 var frames := 0
@@ -42,8 +42,8 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("freeplay")
-		main.freeplay_level = level
+		main.setup.choose_mode("freeplay")
+		main.modes.freeplay_level = level
 		print("Solo vs Warlord, level %d" % level)
 		_next()
 		return false
@@ -69,21 +69,21 @@ func _process(_delta: float) -> bool:
 func _next() -> void:
 	current += 1
 	result = ""
-	main.clear_enemies()
-	for w in main.get_warriors():
+	main.modes.clear_enemies()
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	var d: Array = duels[current]
 	main.placing_type = d[0]
-	main.hire_at(Vector2(320, 450))
+	main.hiring.hire_at(Vector2(320, 450))
 	# The new hire isn't in the tree's warrior list until next frame; grab it directly.
 	var w = main.warrior_layer.get_child(main.warrior_layer.get_child_count() - 1)
 	w.position = w.post
 	for p in 3:
 		for t in d[1][p]:
 			main.selected = w
-			main.upgrade_selected(p)
+			main.groups.upgrade_selected(p)
 	main.selected = null
-	main._spawn_enemy("warlord", level)
+	main.waves._spawn_enemy("warlord", level)
 	warlord = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	warlord.position.x = 320
 	warlord.reached_castle.connect(_on_leak)

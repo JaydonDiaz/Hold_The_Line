@@ -71,7 +71,7 @@ func process(delta: float) -> void:
 	# Settled: every group out and gone one way or the other.
 	if not endless() and sent >= groups() and people.all(func(g): return g.dead or g.arrived):
 		over = true
-		main.call_deferred("_finish", saved >= need())
+		main.modes.call_deferred("_finish", saved >= need())
 
 
 ## A family sets out: each villager a little apart from the next, on a slightly different
@@ -96,7 +96,7 @@ func _send_group() -> void:
 		v.setup(main, {"id": "villager%d" % people.size(), "kind": "civilian", "name": "Villager", "at": line[0] + Vector2(0, off.y),
 				"route": line.slice(1), "speed": spd * randf_range(0.9, 1.1), "hp": _evac().get("hp", 60.0),
 				"variant": randi() % 24, "look": Objective.VILLAGERS[(people.size() + i * 3) % Objective.VILLAGERS.size()]})
-		main.add_objective(v)
+		main.waves.add_objective(v)
 		v.destroyed.connect(_on_lost)
 		v.reached.connect(_on_saved)
 		people.append(v)
@@ -110,8 +110,8 @@ func _send_group() -> void:
 
 func _on_saved(v) -> void:
 	saved += 1
-	main.spawn_text(v.position + Vector2(0, -40), "Safe!", Color(0.5, 1, 0.5))
-	main.sfx("coin", 1.2)
+	main.effects.spawn_text(v.position + Vector2(0, -40), "Safe!", Color(0.5, 1, 0.5))
+	main.effects.sfx("coin", 1.2)
 
 
 func _on_lost(_v) -> void:
@@ -121,14 +121,14 @@ func _on_lost(_v) -> void:
 		if lost > can_lose():
 			over = true
 			main.hud.show_message("Too many lost: the evacuation has failed")
-			main.call_deferred("_finish", false)
+			main.modes.call_deferred("_finish", false)
 		elif lost == can_lose():
 			main.hud.show_message("Lose one more villager and it's over!")
 		return
 	if not over and total() - lost < need():
 		over = true
 		main.hud.show_message("Too many lost: the evacuation has failed")
-		main.call_deferred("_finish", false)
+		main.modes.call_deferred("_finish", false)
 
 
 ## The enemy goes for the villagers on the road (the nearest one), and otherwise for the

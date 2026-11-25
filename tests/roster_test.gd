@@ -33,7 +33,7 @@ extends SceneTree
 ##    horde's squads marching together; the campaign keeps its first missions as they were
 ## K  The Ogre King's left as he was: none of the roster's new ways
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 var main
 var fails := 0
 var checks := 0
@@ -112,7 +112,7 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	main.deploying = false
 	main.wave_active = true
@@ -121,10 +121,10 @@ func _fresh() -> void:
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -132,7 +132,7 @@ func _hire(kind: String, at: Vector2):
 
 
 func _foe(kind: String, at: Vector2, level := 1):
-	main._spawn_enemy(kind, level, at)
+	main.waves._spawn_enemy(kind, level, at)
 	return main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 
 
@@ -574,7 +574,7 @@ func _upgraded(kind: String, at: Vector2, path: int, n: int):
 	var w = await _hire(kind, at)
 	main.selected = w
 	for i in n:
-		main.upgrade_selected(path)
+		main.groups.upgrade_selected(path)
 	main.selected = null
 	return w
 
@@ -596,7 +596,7 @@ func _necro() -> void:
 		await process_frame
 		if g.rite != null:
 			started = true
-		var cs: Array = main.get_enemies().filter(func(e): return e.corrupted)
+		var cs: Array = main.battlefield.get_enemies().filter(func(e): return e.corrupted)
 		if not cs.is_empty():
 			risen = cs[0]
 			break
@@ -625,7 +625,7 @@ func _necro() -> void:
 	risen = null
 	for f in 60 * 14:
 		await process_frame
-		var cs: Array = main.get_enemies().filter(func(e): return e.corrupted)
+		var cs: Array = main.battlefield.get_enemies().filter(func(e): return e.corrupted)
 		if not cs.is_empty():
 			risen = cs[0]
 			break
@@ -641,9 +641,9 @@ func _necro() -> void:
 	g.necro["max_raised"] = 2
 	for f in 60 * 20:
 		await process_frame
-		if main.get_enemies().filter(func(e): return e.corrupted).size() >= 2:
+		if main.battlefield.get_enemies().filter(func(e): return e.corrupted).size() >= 2:
 			break
-	var cs2: Array = main.get_enemies().filter(func(e): return e.corrupted)
+	var cs2: Array = main.battlefield.get_enemies().filter(func(e): return e.corrupted)
 	var cm = cs2.filter(func(e): return e.fallen_kind == "mage")
 	var ch = cs2.filter(func(e): return e.fallen_kind == "healer")
 	check(not cm.is_empty() and cm[0].cast.get("spells", []) == ["lightning"], "N  a Storm Mage raised keeps its path: it casts chain lightning")
@@ -683,7 +683,7 @@ func _necro() -> void:
 	check(g1.raised.size() <= 2, "N  ...and one never holds more than two raised (%d)" % g1.raised.size())
 	# What can't be raised: the raised themselves, bowmen, emplacements; and the dead lie
 	# only so long.
-	var cs3: Array = main.get_enemies().filter(func(e): return e.corrupted)
+	var cs3: Array = main.battlefield.get_enemies().filter(func(e): return e.corrupted)
 	var n0: int = main.fallen.size()
 	for e in cs3:
 		e.take_damage(1e6)
@@ -697,8 +697,8 @@ func _necro() -> void:
 	check(main.fallen.is_empty(), "N  a broken emplacement isn't a body to raise")
 	var k2 = await _hire("swordsman", Vector2(320, 400))
 	await _kill(k2)
-	await _frames(int(60 * (main.FALLEN_KEEP + 1.0)))
-	check(main.fallen.is_empty(), "N  the fallen lie only so long (%.0fs)" % main.FALLEN_KEEP)
+	await _frames(int(60 * (main.battlefield.FALLEN_KEEP + 1.0)))
+	check(main.fallen.is_empty(), "N  the fallen lie only so long (%.0fs)" % main.battlefield.FALLEN_KEEP)
 	# Its bowmen: called up, never more than its limit.
 	await _fresh()
 	await _tough("swordsman", Vector2(320, 380))
@@ -707,7 +707,7 @@ func _necro() -> void:
 	g.summon_t = 0.0
 	for f in 60 * 40:
 		await process_frame
-	var bows: int = main.get_enemies().filter(func(e): return e.kind == "skeleton_archer").size()
+	var bows: int = main.battlefield.get_enemies().filter(func(e): return e.kind == "skeleton_archer").size()
 	check(g.minions.size() > 0 and g.minions.size() <= int(g.necro["summon_max"]) and bows <= int(g.necro["summon_max"]),
 			"N  a Gravebinder calls up Skeleton Archers, never more than %d at once (%d)" % [g.necro["summon_max"], bows])
 
@@ -716,30 +716,30 @@ func _necro() -> void:
 
 func _integration() -> void:
 	var M = load("res://scripts/main.gd")
-	var CD = load("res://scripts/campaign_data.gd")
+	var CD = load("res://scripts/data/campaign_data.gd")
 	# Classic: the new kinds come in a few at a time, after the old ones have all been met.
 	var firsts := {}
-	for k in M.NEW_FOES:
-		firsts[k] = M.NEW_FOES[k]
+	for k in M.WavesCtl.NEW_FOES:
+		firsts[k] = M.WavesCtl.NEW_FOES[k]
 	check(firsts.values().min() >= 8 and firsts.values().max() <= 13, "I  Classic: the new kinds join the waves one at a time, from wave 8 to 13 (%s)" % str(firsts))
 	var by := {}
 	for n in range(1, 31):
-		for sq in M.squads_for(n):
+		for sq in M.WavesCtl.squads_for(n):
 			if not by.has(sq):
 				by[sq] = n
 	check(by.size() == Data.SQUADS.size() and by.values().min() >= 8 and by.get("Grave Procession", 0) >= 15,
 			"I  ...the horde's squads march in from wave 8, the Gravebinders' from wave 16 (%s)" % str(by))
-	check(range(1, 60).all(func(n): return M.squads_for(n).size() <= 3), "I  ...never more than three squads a wave")
+	check(range(1, 60).all(func(n): return M.WavesCtl.squads_for(n).size() <= 3), "I  ...never more than three squads a wave")
 	await _fresh()
 	main.wave = 1
-	var early: Array = main._build_wave(5)
-	var late: Array = main._build_wave(16)
+	var early: Array = main.waves._build_wave(5)
+	var late: Array = main.waves._build_wave(16)
 	var gp: Array = Data.SQUADS["Grave Procession"]["kinds"]
 	var at: int = late.find("gravebinder")
 	check(not early.any(func(k): return Data.SQUADS.values().any(func(q): return k in ["drummer", "shieldbearer", "ogre", "boltflinger", "warmage", "gravebinder"])),
 			"I  ...early waves just as before: none of the new kinds")
 	check(at > 0 and late[at - 2] == "skeleton_archer" and late[at - 1] == "skeleton_archer", "I  ...a squad marches together (its Gravebinder among its bowmen)")
-	check(late.size() <= M.wave_size(16) + Data.ENEMIES.size(), "I  ...and squads take the place of others: the wave's no bigger for them (%d)" % late.size())
+	check(late.size() <= M.WavesCtl.wave_size(16) + Data.ENEMIES.size(), "I  ...and squads take the place of others: the wave's no bigger for them (%d)" % late.size())
 	# The campaign: no new kind before the Deepdelve and Stonehollow missions, none in the
 	# first missions, and every kind it uses is a real one.
 	var new_kinds := ["drummer", "shieldbearer", "ogre", "boltflinger", "warmage", "gravebinder"]

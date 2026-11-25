@@ -12,12 +12,12 @@ func _run() -> void:
 	for with_people in [true, false, true, false]:
 		seed(3)
 		await _fresh_battle("battle:village_road:normal")
-		main._lock_portrait(false)
+		main.missions._lock_portrait(false)
 		await _go()
 		main.gold = 99999
 		for i in 16:
 			main.placing_type = ["swordsman", "archer"][i % 2]
-			main.hire_at(Vector2(main.FIELD_W * (0.15 + 0.7 * (i % 8) / 7.0), 420 + (i / 8) * 80))
+			main.hiring.hire_at(Vector2(main.FIELD_W * (0.15 + 0.7 * (i % 8) / 7.0), 420 + (i / 8) * 80))
 		main.placing_type = ""
 		var r = main.rules
 		if with_people:
@@ -31,8 +31,8 @@ func _run() -> void:
 		r.over = true
 		main.spawn_queue.clear()
 		for i in 100:
-			main._spawn_enemy(["goblin", "orc", "wolf", "troll"][i % 4], 6, Vector2(randf_range(40, main.FIELD_W - 40), randf_range(-200, 200)))
-		for e in main.get_enemies():
+			main.waves._spawn_enemy(["goblin", "orc", "wolf", "troll"][i % 4], 6, Vector2(randf_range(40, main.FIELD_W - 40), randf_range(-200, 200)))
+		for e in main.battlefield.get_enemies():
 			e.max_hp *= 20.0
 			e.hp = e.max_hp
 		await _frames(30)
@@ -48,5 +48,5 @@ func _run() -> void:
 		avg /= times.size()
 		print("PERF village_road %s: avg %.1f ms  p95 %.1f  max %.1f  (%d villagers, %d enemies, %d troops)" % [
 				"with villagers" if with_people else "no villagers", avg, times[int(times.size() * 0.95)], times[-1],
-				r.people.size(), main.get_enemies().size(), main.get_warriors().size()])
+				r.people.size(), main.battlefield.get_enemies().size(), main.battlefield.get_warriors().size()])
 	quit()

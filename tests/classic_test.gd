@@ -37,14 +37,14 @@ func _fresh(mode := "normal") -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	main.records_path = ""
-	main.choose_mode(mode)
+	main.setup.choose_mode(mode)
 	await _frames(2)
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 
 
 func _foe(kind: String, at: Vector2):
-	main._spawn_enemy(kind, 1, at)
+	main.waves._spawn_enemy(kind, 1, at)
 	var e = main.enemy_layer.get_children()[-1]
 	e.position = at
 	return e
@@ -68,13 +68,13 @@ func _run() -> void:
 func _castle() -> void:
 	await _fresh()
 	check(main.castle.visible and (not "camp" in main or main.camp == null), "Classic has its castle")
-	check(main.on_castle(Vector2(320, main.CASTLE_Y + 10)), "...which can be clicked")
-	main.select_castle()
+	check(main.castle_ctl.on_castle(Vector2(320, main.CASTLE_Y + 10)), "...which can be clicked")
+	main.castle_ctl.select_castle()
 	check(main.castle_selected, "...and selected, to upgrade")
 	main.gold = 99999
-	main.castle_upgrade(0)
+	main.castle_ctl.castle_upgrade(0)
 	check(main.powers.tiers[0] == 1 and main.powers.armor() > 0.0, "Fortify bought: the walls take less damage (%.0f%%)" % (main.powers.armor() * 100.0))
-	main.castle_upgrade(1)
+	main.castle_ctl.castle_upgrade(1)
 	await _frames(5)
 	var guards: Array = main.powers.guards.filter(func(w): return is_instance_valid(w))
 	check(guards.size() == 2, "Wall Archers bought: two Archers stand on the wall (%d)" % guards.size())
@@ -96,20 +96,20 @@ func _castle_paths() -> void:
 	var costs := []
 	for t in 4:
 		costs.append(main.powers.tier_cost(0, t) if main.powers.has_method("tier_cost") else 0)
-		main.castle_upgrade(0)
+		main.castle_ctl.castle_upgrade(0)
 	check(main.powers.tiers[0] == 4, "Castle paths: all four Fortify tiers can be bought")
 	check(main.castle_max >= hp0 * 1.6 - 1.0 and main.powers.armor() >= 0.35, "...the Citadel: +60%% health (%d to %d), 35%% less damage" % [roundi(hp0), roundi(main.castle_max)])
 	for t in 4:
-		main.castle_upgrade(2)
+		main.castle_ctl.castle_upgrade(2)
 	await _frames(5)
 	var kinds: Array = main.powers.guards.filter(func(w): return is_instance_valid(w)).map(func(w): return w.kind)
 	check(main.powers.tiers[2] == 4 and kinds.count("mage") == 2 and kinds.count("frost") == 2, "Wall Mages to the Archmage Tower: 2 Mages and 2 Frost Witches on the wall (%s)" % str(kinds))
 	var p0: float = main.powers.boost()
 	for t in 4:
-		main.castle_upgrade(3)
+		main.castle_ctl.castle_upgrade(3)
 	check(main.powers.tiers[3] == 4 and main.powers.boost() > p0 * 1.8, "Ability Power to the Crown of Storms: abilities %.1fx as strong" % main.powers.boost())
 	var g: int = main.gold
-	main.castle_upgrade(0)
+	main.castle_ctl.castle_upgrade(0)
 	check(main.gold == g, "...and a path at its top tier sells nothing more")
 
 
@@ -120,30 +120,30 @@ func _repairs() -> void:
 	main.castle_hp = main.castle_max * 0.3
 	main.gold = 99999
 	var share: float = main.Data.REPAIR_CHUNKS[1]
-	check(is_equal_approx(main.repair_amount(1), roundf(main.castle_max * share)), "Repairs: the %d%% button mends %d%% of the castle" % [roundi(share * 100), roundi(share * 100)])
-	check(main.repair_cost(main.castle_max) > main.repair_cost(main.castle_max * 0.25), "...a bigger repair costs more")
-	main.gold = main.repair_cost(main.castle_max * 0.2)
-	check(main.repair_all_gold() and main.repair_amount(3) <= main.castle_max * 0.2 + 1.0 and main.repair_amount(3) >= 1.0,
-			"...short of gold, the full repair mends what the gold buys (%d)" % roundi(main.repair_amount(3)))
+	check(is_equal_approx(main.castle_ctl.repair_amount(1), roundf(main.castle_max * share)), "Repairs: the %d%% button mends %d%% of the castle" % [roundi(share * 100), roundi(share * 100)])
+	check(main.castle_ctl.repair_cost(main.castle_max) > main.castle_ctl.repair_cost(main.castle_max * 0.25), "...a bigger repair costs more")
+	main.gold = main.castle_ctl.repair_cost(main.castle_max * 0.2)
+	check(main.castle_ctl.repair_all_gold() and main.castle_ctl.repair_amount(3) <= main.castle_max * 0.2 + 1.0 and main.castle_ctl.repair_amount(3) >= 1.0,
+			"...short of gold, the full repair mends what the gold buys (%d)" % roundi(main.castle_ctl.repair_amount(3)))
 	main.wave_active = true
-	check(not main.can_repair(0), "...and nothing is repaired during a wave")
+	check(not main.castle_ctl.can_repair(0), "...and nothing is repaired during a wave")
 	main.wave_active = false
 	main.castle_hp = main.castle_max
-	check(not main.can_repair(0), "...or when the castle is whole")
+	check(not main.castle_ctl.can_repair(0), "...or when the castle is whole")
 	# The alarm bell: below half, and again below a quarter (once each, until it's mended).
 	main.castle_warned = 0
-	main.damage_castle(main.castle_max * 0.3)
+	main.waves.damage_castle(main.castle_max * 0.3)
 	check(main.castle_warned == 0, "Alarm: quiet while the castle's above half")
-	main.damage_castle(main.castle_max * 0.25)
+	main.waves.damage_castle(main.castle_max * 0.25)
 	check(main.castle_warned == 1 and "cracking" in main.hud.message_label.text, "...below half, the bell rings: the walls are cracking")
-	main.damage_castle(main.castle_max * 0.05)
+	main.waves.damage_castle(main.castle_max * 0.05)
 	check(main.castle_warned == 1, "...once")
-	main.damage_castle(main.castle_max * 0.2)
+	main.waves.damage_castle(main.castle_max * 0.2)
 	check(main.castle_warned == 2 and "about to fall" in main.hud.message_label.text, "...and again below a quarter")
 	await _frames(2)
 	check(main.hud.lives_label.modulate != Color.WHITE, "...where the castle's health pulses")
 	main.castle_hp = main.castle_max
-	main.damage_castle(main.castle_max * 0.55)
+	main.waves.damage_castle(main.castle_max * 0.55)
 	check(main.castle_warned == 1, "...mended, it can ring again")
 	main.castle_hp = main.castle_max
 
@@ -157,7 +157,7 @@ func _siege() -> void:
 	await _frames(150)
 	check(orc.sieging and main.castle_hp < hp0, "An Orc at the castle lays siege and wears it down (%d to %d)" % [roundi(hp0), roundi(main.castle_hp)])
 	orc.free()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	hp0 = main.castle_hp
 	_foe("sapper", Vector2(200, main.CASTLE_Y - 20))
 	await _frames(90)
@@ -167,15 +167,15 @@ func _siege() -> void:
 	archer.speed = 0.0
 	await _frames(240)
 	check(main.castle_hp < hp0, "A Skeleton Archer in range shoots the castle (%d to %d)" % [roundi(hp0), roundi(main.castle_hp)])
-	for x in main.get_enemies():
+	for x in main.battlefield.get_enemies():
 		x.free()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	# Repairs: the Engineers walk out of the gate and mend it.
 	main.wave_active = false
 	main.gold = 99999
 	var low: float = main.castle_hp
-	check(main.can_repair(3), "Between waves the castle can be repaired")
-	main.repair_castle(3)
+	check(main.castle_ctl.can_repair(3), "Between waves the castle can be repaired")
+	main.castle_ctl.repair_castle(3)
 	await _frames(5)
 	var engineers: Array = main.fx_layer.get_children().filter(func(n): return n.get_script() != null and n.get_script().resource_path.ends_with("engineer.gd"))
 	check(not engineers.is_empty() and engineers[0].position.distance_to(engineers[0].gate()) < 40.0, "...Engineers come out of the gate (%d)" % engineers.size())
@@ -183,7 +183,7 @@ func _siege() -> void:
 	check(main.castle_hp > low, "...and mend it (%d to %d)" % [roundi(low), roundi(main.castle_hp)])
 	# It can fall.
 	main.wave_active = true
-	main.damage_castle(1e9)
+	main.waves.damage_castle(1e9)
 	await _frames(3)
 	check(main.game_over and not main.victory, "The castle falling ends the game")
 
@@ -192,68 +192,68 @@ func _walls() -> void:
 	await _fresh()
 	main.gold = 99999
 	main.placing_type = "barricade"
-	main._wall_click(Vector2(200, 450))
-	main._wall_click(Vector2(400, 450))
+	main.hiring._wall_click(Vector2(200, 450))
+	main.hiring._wall_click(Vector2(400, 450))
 	main.placing_type = ""
 	await _frames(3)
-	check(main.get_barricades().size() == 1, "A barricade goes up in two clicks")
-	check(main.wall_problem(Vector2(300, 500), Vector2(310, 500)) == "Too short", "...a wall can't be too short")
+	check(main.battlefield.get_barricades().size() == 1, "A barricade goes up in two clicks")
+	check(main.hiring.wall_problem(Vector2(300, 500), Vector2(310, 500)) == "Too short", "...a wall can't be too short")
 	main.placing_type = "swordsman"
-	main.hire_at(Vector2(300, 560))
+	main.hiring.hire_at(Vector2(300, 560))
 	main.placing_type = ""
-	check(main.wall_problem(Vector2(250, 560), Vector2(350, 560)) == "Blocked by a unit", "...nor run through a unit's post")
+	check(main.hiring.wall_problem(Vector2(250, 560), Vector2(350, 560)) == "Blocked by a unit", "...nor run through a unit's post")
 	main.wave_active = true
 	var gob = _foe("goblin", Vector2(300, 300))
 	await _frames(60 * 6)
 	check(not is_instance_valid(gob) or gob.dead or absf(gob.position.x - 300.0) > 60.0 or gob.position.y < 440.0,
 			"An enemy walks round a wall (or stops at it), not through")
-	check(not main.can_post_at(Vector2(300, 452)), "...nothing can be posted on a wall")
-	check(main.wall_cost(Vector2(0, 400), Vector2(300, 400)) > main.wall_cost(Vector2(0, 400), Vector2(100, 400)), "...a longer wall costs more")
+	check(not main.hiring.can_post_at(Vector2(300, 452)), "...nothing can be posted on a wall")
+	check(main.hiring.wall_cost(Vector2(0, 400), Vector2(300, 400)) > main.hiring.wall_cost(Vector2(0, 400), Vector2(100, 400)), "...a longer wall costs more")
 	# A wall sealing the field: enemies break through it rather than wait.
 	await _fresh()
 	main.gold = 99999
 	main.placing_type = "barricade"
-	main._wall_click(Vector2(0, 420))
-	main._wall_click(Vector2(main.FIELD_W, 420))
+	main.hiring._wall_click(Vector2(0, 420))
+	main.hiring._wall_click(Vector2(main.FIELD_W, 420))
 	main.placing_type = ""
 	await _frames(3)
-	var wall = main.get_barricades()[0]
+	var wall = main.battlefield.get_barricades()[0]
 	main.wave_active = true
 	var orc = _foe("orc", Vector2(320, 360))
 	await _frames(60 * 6)
 	check(wall.hp < wall.max_hp, "A wall across the whole field: enemies hack at it to get through")
 	# Selling a wall gives some back.
 	main.wave_active = false
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	var g: int = main.gold
 	main.selected = wall
-	main.sell_selected()
+	main.formation_ctl.sell_selected()
 	await _frames(3)
-	check(main.get_barricades().is_empty() and main.gold > g, "...and selling it gives some gold back")
+	check(main.battlefield.get_barricades().is_empty() and main.gold > g, "...and selling it gives some gold back")
 	# A downed troop can't be sold (no cashing in the fallen); back on its feet, it can.
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(320, 560))
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(320, 560))
 	main.placing_type = ""
-	var sw = main.get_warriors().filter(func(w): return w.kind == "swordsman")[-1]
+	var sw = main.battlefield.get_warriors().filter(func(w): return w.kind == "swordsman")[-1]
 	sw.take_damage(1e9)
 	g = main.gold
 	main.selected = sw
-	main.sell_selected()
+	main.formation_ctl.sell_selected()
 	await _frames(3)
 	check(is_instance_valid(sw) and sw.down_timer > 0.0 and main.gold == g and main.hud.sell_btn.disabled, "A downed troop can't be sold (the Sell button says so)")
 	sw.down_timer = 0.0
 	sw.hp = sw.max_hp
 	main.selected = sw
-	main.sell_selected()
+	main.formation_ctl.sell_selected()
 	await _frames(3)
 	check(not is_instance_valid(sw) and main.gold > g, "...and once it's back up, it can")
 
 
 func _modes() -> void:
 	await _fresh("freeplay")
-	main.damage_castle(1e9)
+	main.waves.damage_castle(1e9)
 	check(main.freeplay and not main.game_over and main.castle_hp >= 1.0, "Freeplay: the castle can't fall")
 	await _fresh("tutorial")
 	await _frames(10)
@@ -266,13 +266,13 @@ func _modes() -> void:
 ## anything (even selling what can't fight). Then it's over, after a moment.
 func _rout() -> void:
 	await _fresh("normal")
-	main.start_wave()
+	main.waves.start_wave()
 	await _frames(2)
 	main.spawn_queue.clear()
 	main.gold = 0
 	await _frames(60)
 	check(not main.game_over, "No army and no gold: not over straight away (it has to last a moment)")
-	await _frames(int(main.ROUT_GRACE * 60) + 20)
+	await _frames(int(main.waves.ROUT_GRACE * 60) + 20)
 	check(main.game_over and main.routed and not main.victory, "No troops, no Gold Mine, no gold to hire any: game over")
 	var shown := []
 	for n in main.hud.get_children():
@@ -284,7 +284,7 @@ func _rout() -> void:
 	# Each way out keeps it going.
 	for case in ["troop", "downed", "mine", "gold", "statue", "guards"]:
 		await _fresh("normal")
-		main.start_wave()
+		main.waves.start_wave()
 		await _frames(2)
 		main.spawn_queue.clear()
 		main.gold = 999
@@ -298,16 +298,16 @@ func _rout() -> void:
 			"statue":
 				main.placing_type = "statue"
 		if main.placing_type != "":
-			main.hire_at(Vector2(320, 600))
+			main.hiring.hire_at(Vector2(320, 600))
 			main.placing_type = ""
 		if case == "downed":
-			main.get_warriors()[-1].take_damage(1e9)
+			main.battlefield.get_warriors()[-1].take_damage(1e9)
 		if case == "guards":
-			main.select_castle()
-			main.castle_upgrade(1)
+			main.castle_ctl.select_castle()
+			main.castle_ctl.castle_upgrade(1)
 			main.castle_selected = false
-		main.gold = main.hire_cost("swordsman") if case == "gold" else 0
-		await _frames(int(main.ROUT_GRACE * 60) + 30)
+		main.gold = main.hiring.hire_cost("swordsman") if case == "gold" else 0
+		await _frames(int(main.waves.ROUT_GRACE * 60) + 30)
 		check(not main.game_over, "...not over with %s" % {"troop": "a troop still standing", "downed": "a troop downed (it may be revived)",
 				"mine": "a Gold Mine", "gold": "the gold for a Swordsman", "statue": "a War Statue to sell for one", "guards": "Wall Archers on the castle"}[case])
 
@@ -317,7 +317,7 @@ func _rout() -> void:
 ## opens twice.
 func _menu() -> void:
 	await _fresh("normal")
-	main._lock_portrait(false)
+	main.missions._lock_portrait(false)
 	await _frames(2)
 	var hud = main.hud
 	hud.menu_btn.emit_signal("pressed")

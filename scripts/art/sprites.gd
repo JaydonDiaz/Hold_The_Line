@@ -1,0 +1,4842 @@
+extends RefCounted
+## Pixel-art sprites defined as text and turned into textures on first use.
+## Each sprite is 16x16. "k" is the outline color, "." is transparent, other letters
+## come from the sprite's palette (falling back to COMMON). legs_b replaces the
+## bottom rows to make the second walk frame.
+
+const SIZE := 16
+const OUTLINE := Color(0.1, 0.07, 0.1)
+const COMMON := {
+	"s": Color(0.96, 0.77, 0.6),   # skin
+	"p": Color(0.32, 0.27, 0.38),  # pants
+	"f": Color(0.3, 0.19, 0.12),   # boots
+}
+
+const SPRITES := {
+	"swordsman": {
+		"poses": {
+			"swing": {
+				1: "....................kk",
+				2: "............____...kwk",
+				3: "............____..kwk",
+				4: "............____.kwk",
+				5: "............____kwk",
+				6: "............___kwk",
+				7: "............__kwk",
+				8: "............gkwk",
+				9: "............kgk_",
+				10: "............skg",
+			},
+			"plant": {  # idle: the sword planted point-down in front of him, both hands on the pommel
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____",
+				7: "......kgk...____",
+				8: ".....ksgsk..____",
+				9: "....kwwwwwk.____",
+				10: "...T.kkwkkT.___",
+				11: "......kwk...._..",
+				12: "......kwk.......",
+				13: "......kwk.......",
+				14: "......kwk.......",
+				15: ".......k........",
+			},
+			"strike": {
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____",
+				7: "............_k__",
+				8: "............kgkkkkkkkk",
+				9: "............sgwwwwwwwwk",
+				10: "............kgkkkkkkkk",
+			},
+		},
+		"palette": {
+			"r": Color(0.85, 0.2, 0.2), "h": Color(0.78, 0.8, 0.86), "H": Color(0.52, 0.55, 0.64),
+			"t": Color(0.9, 0.72, 0.3), "T": Color(0.68, 0.5, 0.2), "b": Color(0.42, 0.26, 0.12),
+			"w": Color(0.93, 0.95, 1.0), "g": Color(0.6, 0.4, 0.15),
+		},
+		"rows": [
+			"......rr........",
+			".....krrk.......",
+			"....khhhhk....k.",
+			"...khwhhhHk..kwk",
+			"...khkkkkHk..kwk",
+			"...khhhhhHk..kwk",
+			"....kssssk...kwk",
+			"..kkTttttTkk.kwk",
+			"..kTtrrrrtTk.kwk",
+			"..kTttrrttTkgggk",
+			"..ksbbttbbskskk.",
+			"..kTttttttTk.k..",
+			"...kTttttTk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"archer": {
+		"poses": {
+			"draw": {
+				2: "..............__k",
+				3: "............_k__bk",
+				4: "............s__wbk",
+				5: "............._w_.bk",
+				6: ".............w__.bk",
+				7: ".............w__.bk",
+				8: ".............seeeseak",
+				9: ".............w__.bk",
+				10: "............._w_bk",
+				11: ".............__wbk",
+				12: "............._..k",
+			},
+		},
+		"palette": {
+			"g": Color(0.35, 0.65, 0.3), "G": Color(0.22, 0.45, 0.2), "l": Color(0.6, 0.42, 0.25),
+			"L": Color(0.42, 0.28, 0.15), "b": Color(0.62, 0.4, 0.18), "w": Color(0.92, 0.9, 0.85),
+			"a": Color(0.8, 0.82, 0.88), "e": Color(0.92, 0.88, 0.78),
+		},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk...k.",
+			".k.kgGgggGgk.kbk",
+			".kskggGsGggkswbk",
+			"..kkgskssksgkw.b",
+			"...kgssssssgkw.b",
+			".kLkkLLLLLLkkw.b",
+			"kLklllllllllkssb",
+			"kGkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
+			"...kLLaLLLk..bk.",
+			"...kppppppk..k..",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"mage": {
+		"poses": {
+			"cast": {
+				0: "............____",
+				1: "............____",
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____......k",
+				7: "............_kkkkkkkkkok",
+				8: ".............swwwwwwwOook",
+				9: "............._kkkkkkkkok",
+				10: "..............__......k",
+				11: "..............__",
+				12: "..............__",
+				13: "..............__",
+				14: "..............__",
+			},
+		},
+		"palette": {
+			"P": Color(0.45, 0.25, 0.65), "Q": Color(0.3, 0.15, 0.45), "y": Color(1.0, 0.85, 0.3),
+			"W": Color(0.92, 0.92, 0.95), "r": Color(0.62, 0.38, 0.88), "R": Color(0.42, 0.22, 0.62),
+			"w": Color(0.55, 0.35, 0.15), "o": Color(0.85, 0.55, 1.0), "O": Color(1.0, 0.92, 1.0),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPPk..kOok",
+			".....kPPyPk..kok",
+			"....kPPPPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kskssksk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWWWWWrkswk",
+			"...krrWWWWrrk.wk",
+			"..krrrWWrrrRk.wk",
+			"..kRrryrrrrRk.wk",
+			"..kRrrrrryrRk.wk",
+			"..kRRrrrrrRRk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+		"legs_b": [
+			"...kkkfkkfkk..k.",
+			".....kk..kk.....",
+		],
+	},
+	"frost": {
+		"poses": {
+			"cast": {   # the staff swung level from her shoulder (the hand moves up from her side)
+				0: "..............._",
+				1: ".............___",
+				2: ".............___",
+				3: "..............__",
+				4: ".............kkkkkkkkkk",
+				5: ".............swwwwwwwiIk",
+				6: ".............kkkkkkkkkk",
+				7: "..............__",
+				8: "............hk__",
+				9: "..............__",
+				10: "..............__",
+				11: "..............__",
+				12: "..............__",
+				13: "..............__",
+				14: "..............__",
+			},
+
+		},
+		"palette": {
+			"c": Color(0.55, 0.85, 1.0), "C": Color(0.35, 0.6, 0.85), "h": Color(0.95, 0.97, 1.0),
+			"s": Color(0.98, 0.86, 0.78), "r": Color(0.45, 0.7, 0.95), "R": Color(0.3, 0.5, 0.8),
+			"w": Color(0.7, 0.75, 0.85), "i": Color(0.75, 0.95, 1.0), "I": Color(1.0, 1.0, 1.0),
+			"H": Color(0.78, 0.8, 0.92), "g": Color(0.84, 0.92, 1.0), "G": Color(0.66, 0.74, 0.88),   # hair shade; the robe's pale front
+			"u": Color(1.0, 1.0, 1.0), "n": Color(0.42, 0.26, 0.16), "m": Color(0.88, 0.55, 0.55),   # white trim; brows; mouth
+		},
+		"rows": [   # long white hair parted in the middle, a blue robe with a pale front and a snowflake, a white hem
+			".....kkkkkk...k.",
+			"....khhhhhhk.kik",
+			"...khhhHHhhhkkIk",
+			"..khhnnssnnhhkik",
+			"..khhsksskshhkwk",
+			"..khhssmmsshhkwk",
+			"..khhRRggRRhhkwk",
+			".khHRrrigrrRhkwk",
+			".khHRrrggrrRuswk",
+			".khHRrrggrrRhkwk",
+			".khHRrrgGrrRhkwk",
+			".khHuRrgGrRRk.wk",
+			"..kkRrrgGGrRk.wk",
+			"..kuuuuuuuuuk.wk",
+			"...kkkfkfkkk..k.",
+			"................",
+		],
+		"legs_b": [
+			"...kkfkkkfkk..k.",
+			"................",
+		],
+	},
+	"goblin": {
+		"poses": {
+			"strike": {
+				11: "............kkkk",
+				12: "............wwwk",
+				13: "............kkk_",
+			},
+		},
+		"palette": {
+			"g": Color(0.45, 0.72, 0.28), "G": Color(0.3, 0.52, 0.18), "e": Color(1.0, 0.85, 0.2),
+			"m": Color(0.3, 0.1, 0.1), "b": Color(0.5, 0.35, 0.2), "B": Color(0.36, 0.24, 0.13),
+			"w": Color(0.85, 0.87, 0.9),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".kk..........kk.",
+			".kGk..kkkk..kGk.",
+			"..kGkkggggkkGk..",
+			"..kgGggggggGgk..",
+			"...kkgeggegkk...",
+			"....kggggggk....",
+			"....kgwmmwgk....",
+			".....kkggkk.....",
+			"....kbbbbbbk.k..",
+			"...kgkBbbBkgkwk.",
+			"....kkbbbbkk.k..",
+			".....kgk.kgk....",
+			".....kkk.kkk....",
+		],
+		"legs_b": [
+			"....kgk..kgk....",
+			"....kkk...kkk...",
+		],
+	},
+	"orc": {
+		"poses": {
+			"raise": {   # the axe hauled up overhead
+				0: ".............kk.",
+				1: ".............xxk",
+				2: ".............xwk",
+				3: "............._wk",
+				4: "............._wk",
+				5: ".............kwk",
+				6: ".............gwk",
+				7: ".............gwk",
+				8: ".............kwk",
+				9: "............._wk",
+				10: ".............k__",
+				11: ".............___",
+				12: ".............___",
+			},
+			"strike": {  # brought down and forward
+				2: ".............__.",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: ".............kkkkkk",
+				8: ".............gwwwxxk",
+				9: ".............gkkkxxk",
+				10: ".............k___kk",
+				11: ".............___",
+				12: "..............__",
+			},
+		},
+		"palette": {
+			"g": Color(0.4, 0.55, 0.3), "G": Color(0.28, 0.4, 0.2), "e": Color(0.95, 0.3, 0.2),
+			"t": Color(0.95, 0.92, 0.8), "a": Color(0.45, 0.35, 0.3), "A": Color(0.32, 0.24, 0.2),
+			"x": Color(0.75, 0.78, 0.85), "w": Color(0.5, 0.32, 0.15), "p": Color(0.3, 0.25, 0.22),
+		},
+		"rows": [
+			"................",
+			".....kkkkkk.....",
+			"....kggggggk.kk.",
+			"...kgggggggGkxxk",
+			"...kgeggggeGkxwk",
+			"...kgtggggtGk.wk",
+			"...kkggggggkk.wk",
+			".kaxaaaaaaxaAkwk",
+			".kgkaaaaaaaakgwk",
+			".kgkaAaaaaAakgwk",
+			".kgkaaaaaaaakkwk",
+			"..kkAAAxxAAAk.wk",
+			"...kpppppppk..k.",
+			"...kppkkkppk....",
+			"...kGGk.kGGk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkkppk.....",
+			"..kGGk..kGGk....",
+			"..kkkk..kkkk....",
+		],
+	},
+	"wolf": {
+		"poses": {
+			"strike": {   # the bite: jaws open, teeth bared
+				7: "k........kggegkkk",
+				8: "kgk.kkkkkggggggnk",
+				9: ".kgkgggggggggkw__",
+				10: "..kgggggggggGgwwk",
+				11: "..kGgggggggGGkkk.",
+			},
+		},
+		"palette": {
+			"g": Color(0.6, 0.6, 0.66), "G": Color(0.42, 0.42, 0.5), "w": Color(0.82, 0.82, 0.86),
+			"e": Color(1.0, 0.85, 0.2), "n": Color(0.1, 0.07, 0.1),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			"................",
+			"...........k.k..",
+			"..........kGkGk.",
+			"..........kgggk.",
+			"k........kggegkk",
+			"kgk.kkkkkgggggnk",
+			".kgkgggggggggkk.",
+			"..kgggggggggGk..",
+			"..kGgggggggGGk..",
+			"..kGwwwwwwwGk...",
+			"..kGkGk..kGkGk..",
+			"..kGkGk..kGkGk..",
+			"..kkkkk..kkkkk..",
+		],
+		"legs_b": [
+			".kGk.kGkkGk.kGk.",
+			"kGk...kGGk...kGk",
+			"kk.....kk.....kk",
+		],
+	},
+	"skeleton_archer": {  # Bones in a tattered hood with a bow; red pinprick eyes
+		"poses": {
+			"raise": {   # an arrow nocked and drawn, about to loose
+				7: "................kkk",
+				8: "...kDBDBDkkkkkwDDBBk",
+				9: "................kkk",
+			},
+		},
+		"palette": {
+			"B": Color(0.9, 0.88, 0.8), "D": Color(0.62, 0.6, 0.55), "e": Color(1.0, 0.3, 0.2),
+			"h": Color(0.32, 0.3, 0.36), "H": Color(0.22, 0.2, 0.26), "w": Color(0.5, 0.34, 0.18), "s": Color(0.85, 0.85, 0.8),
+		},
+		"rows": [
+			"................",
+			"....kkkkkk......",
+			"...kHhhhhHk.....",
+			"..kHhBBBBhHk.kk.",
+			"..kHBeBBeBHk.kwk",
+			"..kHBBkkBBHk.kws",
+			"...kHBkBkHk..kws",
+			"....kkkkkk...kws",
+			"...kDBDBDkkkkkws",
+			"..kBkDBDkBBBBkws",
+			"..kBkkkkk.kk.kws",
+			"....kDDDDk...kwk",
+			"....kBkkBk...kk.",
+			"....kBk.kBk.....",
+			"....kBk.kBk.....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kBk..kBk.....",
+			"...kBk...kBk....",
+			"..kkkk...kkkk...",
+		],
+	},
+	"slime": {  # A wobbling green blob with a bright core; the second frame squashes down
+		"palette": {
+			"g": Color(0.4, 0.85, 0.35), "G": Color(0.25, 0.6, 0.22), "l": Color(0.7, 1.0, 0.6),
+			"c": Color(0.85, 1.0, 0.5), "e": Color(0.1, 0.15, 0.1),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			"................",
+			"................",
+			"......kkkk......",
+			"....kkllggkk....",
+			"...kllgggggGk...",
+			"..klgggggggGGk..",
+			"..kgggegggegGk..",
+			".kgggggggggggGk.",
+			".kggggccggggGGk.",
+			".kgggcccggggGGk.",
+			".kGgggccgggGGGk.",
+			"..kGGGGGGGGGGk..",
+			"...kkkkkkkkkk...",
+		],
+		"legs_b": [
+			"................",
+			".......kkkk.....",
+			".....kkllggkk...",
+			"...kkllgggggGkk.",
+			"..klggggggggGGk.",
+			"..kgggegggegGGk.",
+			".kggggggggggggGk",
+			".kgggggccgggGGGk",
+			".kGggggcccggGGGk",
+			"..kGGGGGGGGGGGk.",
+			"...kkkkkkkkkkk..",
+		],
+	},
+	"bat": {  # A giant bat; the second frame sweeps the wings down
+		"palette": {
+			"b": Color(0.35, 0.26, 0.4), "B": Color(0.5, 0.4, 0.55), "w": Color(0.55, 0.38, 0.5),
+			"e": Color(1.0, 0.3, 0.25),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			"kk....k..k....kk",
+			"kwk..kbkkbk..kwk",
+			"kwwkkbbbbbbkkwwk",
+			"kwwwkbebbebkwwwk",
+			".kwwwbbbbbbwwwk.",
+			"..kwkbbBBbbkwk..",
+			"...k.kbbbbk.k...",
+			"......kbbk......",
+			"......k..k......",
+			"................",
+			"................",
+			"................",
+			"................",
+		],
+		"legs_b": [
+			"......k..k......",
+			".....kbkkbk.....",
+			".....kbbbbk.....",
+			"....kbebbebk....",
+			"..kkkbbbbbbkkk..",
+			".kwwkbbBBbbkwwk.",
+			"kwwwwkbbbbkwwwwk",
+			"kwwk.kkbbkk.kwwk",
+			"kwk...k..k...kwk",
+			".k............k.",
+			"................",
+			"................",
+			"................",
+		],
+	},
+	"barricade": {  # A stretch of palisade: sharpened stakes lashed to a crossbeam (the hire button's icon)
+		"palette": {
+			"W": Color(0.8, 0.6, 0.35), "w": Color(0.6, 0.41, 0.22), "D": Color(0.55, 0.37, 0.2),
+			"d": Color(0.42, 0.27, 0.14), "m": Color(0.72, 0.72, 0.78),
+		},
+		"rows": [
+			"................",
+			".......kk.......",
+			".kk...kWwk...kk.",
+			"kWwk..kWwkkkkWwk",
+			"kWwkkkkWwkWwkWwk",
+			"kWwkWwkWwkWwkWwk",
+			"kWwkWwkWwkWwkWwk",
+			"kkkkkkkkkkkkkkkk",
+			"kDDDDDDDDDDDDDDk",
+			"kdmddddddddddmdk",
+			"kkkkkkkkkkkkkkkk",
+			"kWwkWwkWwkWwkWwk",
+			"kWwkWwkWwkWwkWwk",
+			"kWwkWwkWwkWwkWwk",
+			"kWwkWwkWwkWwkWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"wyvern": {  # A green wyvern, horned, wings spread; the second frame beats them down
+		"palette": {
+			"g": Color(0.3, 0.55, 0.45), "G": Color(0.62, 0.78, 0.5), "w": Color(0.6, 0.3, 0.3),
+			"e": Color(1.0, 0.8, 0.2), "h": Color(0.92, 0.88, 0.75),
+		},
+		"rows": [
+			"......k..k......",
+			".....khkkhk.....",
+			"k....kggggk....k",
+			"kk...keggek...kk",
+			"kwk..kgGGgk..kwk",
+			"kwwk.kkggkk.kwwk",
+			"kwwwkggggggkwwwk",
+			"kwwwwgGGGGgwwwwk",
+			".kwwwgGGGGgwwwk.",
+			"..kwkggGGggkwk..",
+			"...k.kggggk.k...",
+			"......kggk......",
+			".......kgk......",
+			"........kgk.....",
+			".........kk.....",
+			"................",
+		],
+		"legs_b": [
+			".....kggggk.....",
+			".....keggek.....",
+			".....kgGGgk.....",
+			"..kkkkkggkkkkk..",
+			".kwwkggggggkwwk.",
+			"kwwwwgGGGGgwwwwk",
+			"kwwwwgGGGGgwwwwk",
+			"kwwkkggGGggkkwwk",
+			"kwk..kggggk..kwk",
+			".k....kggk....k.",
+			".......kgk......",
+			"........kgk.....",
+			".........kk.....",
+			"................",
+		],
+	},
+	"sapper": {  # A goblin hugging a lit bomb
+		"base": "goblin",
+		"palette": {
+			"b": Color(0.3, 0.3, 0.37), "B": Color(0.62, 0.62, 0.7), "r": Color(0.85, 0.45, 0.15),
+			"y": Color(1.0, 0.9, 0.3),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".kk..........kk.",
+			".kGk..kkkk..kGk.",
+			"..kGkkggggkkGk..",
+			"..kgGggggggGgk..",
+			"...kkgeggegkk...",
+			"....kggggggk....",
+			"....kggmmggk..y.",
+			"....kkkkkkkkkr..",
+			"..kgkbBBbbbbkgk.",
+			"..kgkbBbbbbbkgk.",
+			"...kkbbbbbbbkk..",
+			".....kkkkkkk....",
+			".....kgk.kgk....",
+		],
+		"legs_b": [
+			"....kgk...kgk...",
+			"....kkk...kkk...",
+		],
+	},
+	"shieldbearer": {  # A goblin in an iron cap behind a great round-bossed shield (a red eye daubed on it), its spear stood up behind
+		"base": "goblin",
+		"poses": {
+			"strike": {   # the upright spear brought down and jabbed out over the shield
+				0: "..............__",
+				1: ".............___",
+				2: ".............___",
+				3: ".............___",
+				4: "..............k_",
+				5: "..............k_",
+				6: "..............__",
+				7: "..............kkkkkk",
+				8: "..............SSSSIIk",
+				9: "..............kkkkkk",
+			},
+		},
+		"palette": {
+			"r": Color(0.75, 0.2, 0.15),
+			"s": Color(0.55, 0.38, 0.2), "S": Color(0.4, 0.27, 0.14), "i": Color(0.55, 0.57, 0.62), "I": Color(0.78, 0.8, 0.85),
+		},
+		"rows": [
+			"..............k.",
+			".............kIk",
+			".............kIk",
+			".kk...kkkk...kSk",
+			".kGk.kiIiik.kGSk",
+			"..kGkiiiiiikkGSk",
+			"..kgGkkkkkkGgkSk",
+			"...kkgeggegkk.Sk",
+			"..kkkkkkkkkkkkSk",
+			"..kiSsssssSsik..",
+			"..kisSsIIsSsik..",
+			"..kiSsIrrIsSik..",
+			"..kisSsIIsSsik..",
+			"..kiSsssssSsik..",
+			"...kkkkkkkkkk...",
+			".....kgk.kgk....",
+		],
+		"legs_b": [
+			"...kkkkkkkkkk...",
+			"....kgk...kgk...",
+		],
+	},
+	"drummer": {  # A goblin with a red war-crest and cheek paint, a laced war drum slung in front (its sticks are drawn beating it)
+		"base": "goblin",
+		"palette": {
+			"R": Color(0.75, 0.2, 0.15),
+			"d": Color(0.9, 0.84, 0.7), "D": Color(0.5, 0.3, 0.16), "r": Color(0.75, 0.2, 0.15),
+		},
+		"rows": [
+			"................",
+			".......kk.......",
+			"......kRRk......",
+			".kk...kRRk...kk.",
+			".kGk.kRRRRk.kGk.",
+			"..kGkkggggkkGk..",
+			"..kgGggggggGgk..",
+			"...kkgeggegkk...",
+			"....kRggggRk....",
+			"...kkgwmmwgkk...",
+			"..kgkkkkkkkkgk..",
+			"..kddddddddddk..",
+			"..kDdDDdDDdDDk..",
+			"..krrrrrrrrrrk..",
+			"...kkkkkkkkkk...",
+			".....kgk.kgk....",
+		],
+		"legs_b": [
+			"...kkkkkkkkkk...",
+			"....kgk...kgk...",
+		],
+	},
+	"boltflinger": {  # A goblin in a leather cap and brass goggles, a great crossbow across its chest, the bolt laid ready
+		"base": "goblin",
+		"palette": {
+			"h": Color(0.45, 0.3, 0.18), "o": Color(0.95, 0.7, 0.25),
+			"W": Color(0.62, 0.42, 0.2), "x": Color(0.78, 0.8, 0.86), "y": Color(0.95, 0.92, 0.85),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".kk...kkkk...kk.",
+			".kGk.khhhhk.kGk.",
+			"..kGkhhhhhhkGk..",
+			"..kgGkokkokGgk..",
+			"...kkgeggegkk...",
+			"....kggggggk.kk.",
+			"....kgwmmwgk.kxk",
+			"...kkkkggkkkk.kx",
+			"..kWWWWWWWWWWWWy",
+			"...kkkgkkkkkk.kx",
+			"....kbbbbbbk.kxk",
+			".....kgk.kgk.kk.",
+			".....kkk.kkk....",
+		],
+		"legs_b": [
+			"....kgk..kgk.kk.",
+			"....kkk...kkk...",
+		],
+	},
+	"warmage": {  # A goblin shaman of the horde: a tall peaked hood, a bead collar, a bone-hung staff (its spell's colour drawn at the head)
+		"base": "goblin",
+		"poses": {
+			"strike": {   # the staff thrust out, the spell let go
+				2: "..............__",
+				3: "............._k_",
+				4: "..............kk",
+				5: "............kwwwk",
+				6: "..............kk",
+			},
+		},
+		"palette": {
+			"R": Color(0.33, 0.17, 0.38), "r": Color(0.85, 0.65, 0.25), "s": Color(0.48, 0.34, 0.18), "o": Color(0.9, 0.88, 0.8),
+		},
+		"rows": [
+			"......k.........",
+			".....kRk........",
+			".....kRRkk....k.",
+			"....kRRRRRk..kok",
+			"...kRRggggRk.kok",
+			".kkRRgeggegRkkk.",
+			".kGkRkggggkRkksk",
+			"..kkkgwmmwgkkgsk",
+			"....kRoRoRRk.ksk",
+			"...kRRRrRRRRk.sk",
+			"..kRRRRrRRRRk.sk",
+			"..kRRRRrRRRRk.sk",
+			"..kRRRRrRRRRk.sk",
+			"...kRRRrRRRk..sk",
+			"...kkkkkkkkk..k.",
+			"....kgk.kgk.....",
+		],
+		"legs_b": [
+			"...kkkkkkkkk..k.",
+			"...kgk...kgk....",
+		],
+	},
+	"gravebinder": {  # A tall orc necromancer: a black hood with a bone circlet, bone pauldrons, green runes, a skull-topped staff with green fire
+		"palette": {
+			"R": Color(0.16, 0.15, 0.2), "r": Color(0.28, 0.26, 0.34), "b": Color(0.9, 0.87, 0.78), "g": Color(0.48, 0.55, 0.42),
+			"e": Color(0.5, 1.0, 0.5), "t": Color(0.95, 0.92, 0.8), "s": Color(0.35, 0.25, 0.15), "f": Color(0.45, 1.0, 0.5),
+		},
+		"rows": [
+			"..............f.",
+			".....kkkkk...kfk",
+			"....kRRRRRk.kbbk",
+			"...kRbRbRbRkkbek",
+			"...kRgegegRk.kbk",
+			"...kRgggggRk.ks.",
+			"..kkkgtgtgkkk.s.",
+			".kbbkRkkkRkbbks.",
+			"kbbRbRbRbRRbbkk.",
+			"kRRrRRRRRRrRkgs.",
+			".kRrRRfRRRrRk.s.",
+			".kRrRRRRRRrRk.s.",
+			"..kRRRfRRRRk..s.",
+			"..kRRRRRRRRk..s.",
+			"..kRrRRRRrRk..k.",
+			"..kkkkkkkkkk....",
+		],
+		"legs_b": [
+			"..kRRrRRRrRk..k.",
+			"..kkkkkkkkkk....",
+		],
+	},
+	"ogre_king": {  # The final boss: a crowned ogre with a spiked club
+		"poses": {
+			"raise": {   # the spiked club hauled up overhead
+				0: "............_kk_",
+				1: "............kWWk",
+				2: "............kWWk",
+				3: "............_kWk",
+				4: "............_kWk",
+				5: "............_kWk",
+				6: "............_kWk",
+				7: "............skWk",
+				8: "............k___",
+				9: "............k__.",
+				10: "............k__.",
+			},
+			"strike": {   # and brought down in front of him
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____",
+				7: ".............___.kkkkk",
+				8: "............kkkkkkWWWk",
+				9: "............sWWWWWWWWk",
+				10: "............kkkkkkWWWk",
+				11: ".................kkkkk",
+			},
+		},
+		"palette": {
+			"g": Color(0.5, 0.6, 0.35), "G": Color(0.36, 0.45, 0.25), "y": Color(1.0, 0.82, 0.25),
+			"R": Color(0.85, 0.15, 0.2), "e": Color(1.0, 0.3, 0.2), "t": Color(0.95, 0.92, 0.8),
+			"a": Color(0.55, 0.3, 0.25), "Y": Color(1.0, 0.82, 0.25), "W": Color(0.45, 0.3, 0.15),
+			"s": Color(0.5, 0.6, 0.35), "p": Color(0.3, 0.25, 0.22),
+		},
+		"rows": [
+			"...k.k.k.k......",
+			"...kykykyk......",
+			"...kyyRyyk...kk.",
+			"..kgggggggk.kWWk",
+			"..kgegggegk.kWWk",
+			"..kgggggggk..kWk",
+			"..kgtkkktgk..kWk",
+			".kkkgggggkkk.kWk",
+			"kgaaaaaaaaagkkWk",
+			"kgkaaaaaaakgsWk.",
+			"kgkaaYaaaakgkWk.",
+			".kkaaaaaaaakkk..",
+			"..kppppppppk....",
+			"..kppkkkkppk....",
+			"..kGGk..kGGk....",
+			"..kkkk..kkkk....",
+		],
+		"legs_b": [
+			"..kppk..kppk....",
+			".kGGk....kGGk...",
+			".kkkk....kkkk...",
+		],
+	},
+	"ash_marshal": {  # The Ogre King's herald: horned black armour, a soot-red tabard, an ember-edged axe
+		"poses": {
+			"raise": {   # the ember-edged axe lifted high
+				0: "............_kk_",
+				1: "............_kOk",
+				2: "............_kOk",
+				3: "............HkOk",   # (his horn kept behind the axe)
+				4: "............_kWk",
+				5: "............_kWk",
+				6: "............_kWk",
+				7: "............kkWk",
+				8: ".............k__",
+				9: ".............k__",
+				10: ".............k__",
+				11: "..............__",
+			},
+			"strike": {   # and swept out in front
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: "..............__",
+				8: "..............kkkkkkkk",
+				9: ".............kWWWWWOOk",
+				10: "............skkkkkkkkk",
+				11: "..............__",
+			},
+		},
+		"palette": {
+			"H": Color(0.88, 0.82, 0.7), "A": Color(0.27, 0.25, 0.28), "e": Color(1.0, 0.55, 0.15), "R": Color(0.58, 0.16, 0.1),
+			"O": Color(1.0, 0.5, 0.15), "W": Color(0.35, 0.22, 0.14), "s": Color(0.42, 0.37, 0.36), "D": Color(0.36, 0.34, 0.38),
+		},
+		# As his portrait: horns sweeping out and up from a rounded black great-helm (a paler
+		# crest band on it), one ember slit for a visor, his grey jaw under it, broad pauldrons
+		# studded with embers, the soot-red tabard and a red band at the belt.
+		"rows": [
+			"................",
+			"H.....kkkk....H.",
+			"kH...kADDAk..Hk.",
+			".kH.kAAAAAAkHk..",
+			"..kkAAAAAAAAk.k.",
+			"...kAAAAAAAAkkOk",
+			"...keeeeeeeekkOk",
+			"...kAsssssAk.kOk",
+			"kkkkkssssskkkkWk",
+			"kAeAAkkkkkAeAkWk",
+			"kAAkRRRRRRkAAkWk",
+			"kskAAAAAAAAkskWk",
+			".kkRRRRRRRRkk.k.",
+			"..kAAkkkkAAk....",
+			"..kDDk..kDDk....",
+			"..kkkk..kkkk....",
+		],
+		"legs_b": [
+			"..kAAk..kAAk....",
+			".kDDk....kDDk...",
+			".kkkk....kkkk...",
+		],
+	},
+	"ogre": {  # The Wallbreaker: a hulking ogre, a topknot, heavy brow and tusks, a hide vest open on its gut, a great knotted club
+		"poses": {
+			"raise": {   # the club hauled right up and back
+				0: "............_kk_",
+				1: "............kWWk",
+				2: "............kWnk",
+				3: "............_kWk",
+				4: "............_kWk",
+				5: "............_kWk",
+				6: "............_kWk",
+				7: "............skWk",
+				8: "............k___",
+				9: "............k__.",
+				10: "............k__.",
+			},
+			"strike": {   # and brought down in front of it
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____",
+				7: ".............___.kkkkk",
+				8: "............kkkkkkWnWk",
+				9: "............sWWWWWWWWk",
+				10: "............kkkkkkWWWk",
+				11: ".................kkkkk",
+			},
+		},
+		"palette": {
+			"g": Color(0.63, 0.6, 0.42), "G": Color(0.47, 0.44, 0.3), "e": Color(1.0, 0.7, 0.2),
+			"t": Color(0.95, 0.92, 0.8), "h": Color(0.52, 0.4, 0.28), "H": Color(0.38, 0.28, 0.2),
+			"W": Color(0.42, 0.28, 0.14), "n": Color(0.6, 0.45, 0.25), "s": Color(0.63, 0.6, 0.42),
+			"l": Color(0.3, 0.24, 0.2),
+		},
+		"rows": [
+			".....kkk........",
+			"....kHHHk...kkk.",
+			"...kkgggkk..kWnk",
+			"..kGGGGGGGk.kWWk",
+			"..kgekgkegk.kWnk",
+			"..kgggGgggk..kWk",
+			"..ktgkkkgtk..kWk",
+			".kkkggggggkkkkWk",
+			"kgghhhggghhhggsk",
+			"kgkhhgggggghkgk.",
+			"kgkhgggggggHkgk.",
+			"kgkhGggkggGHkkk.",
+			".kkhhhhhhhhhk...",
+			"..khhkllkhhk....",
+			"..kGGk..kGGk....",
+			"..kkkk..kkkk....",
+		],
+		"legs_b": [
+			"..khhk..khhk....",
+			".kGGk....kGGk...",
+			".kkkk....kkkk...",
+		],
+	},
+	"troll": {
+		"poses": {
+			"raise": {
+				0: ".............kk.",
+				1: ".............cck",
+				2: ".............cCk",
+				3: ".............cCk",
+				4: "............._ck",
+				5: ".............kck",
+				6: ".............gck",
+				7: "............._ck",
+				8: "............._ck",
+				9: "............._kk",
+				10: ".............___",
+				11: ".............___",
+			},
+			"strike": {
+				2: ".............__.",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___.kkkk",
+				7: ".............kkkkkcCck",
+				8: ".............gcccccCck",
+				9: ".............kkkkkcCck",
+				10: ".............___.kkkk",
+				11: ".............___",
+			},
+		},
+		"palette": {
+			"g": Color(0.5, 0.6, 0.65), "G": Color(0.35, 0.43, 0.5), "e": Color(1.0, 0.85, 0.2),
+			"t": Color(0.95, 0.92, 0.8), "l": Color(0.5, 0.35, 0.2), "c": Color(0.45, 0.3, 0.15),
+			"C": Color(0.32, 0.2, 0.1),
+		},
+		"rows": [
+			"................",
+			"....kkkkkk......",
+			"...kggggggk..kk.",
+			"..kggggggggkkcck",
+			"..kgeggggegkkcCk",
+			"..kgtggggtgkkcCk",
+			".kkgggggggggk.ck",
+			"kgggGGGGGGgggkck",
+			"kgkgGGGGGGgkggck",
+			"kgkgggggggggk.ck",
+			".kklllllllllk.ck",
+			"..klkllklllkk.kk",
+			"..kgggkkkgggk...",
+			"..kgggk.kgggk...",
+			".kGGGGk.kGGGGk..",
+			".kkkkkk.kkkkkk..",
+		],
+		"legs_b": [
+			"..kgggkkgggk....",
+			"...kgggkkgggk...",
+			"..kGGGGkGGGGk...",
+			"..kkkkkkkkkkk...",
+		],
+	},
+	"warlord": {
+		"poses": {
+			"strike": {   # the greatsword swept out level
+				1: ".............._",
+				2: ".............___",
+				3: ".............___",
+				4: ".............___",
+				5: ".............___",
+				6: ".............___",
+				7: "..............__",
+				8: ".............kkykkkkkk",
+				9: ".............Rgywwwwwwk",
+				10: ".............kkykkkkkk",
+				11: "..............._",
+			},
+		},
+		"palette": {
+			"r": Color(0.7, 0.18, 0.18), "R": Color(0.45, 0.1, 0.12), "y": Color(1.0, 0.8, 0.25),
+			"h": Color(0.92, 0.88, 0.75), "m": Color(0.35, 0.33, 0.4), "e": Color(1.0, 0.45, 0.2),
+			"w": Color(0.85, 0.88, 0.95), "c": Color(0.3, 0.08, 0.1), "g": Color(0.4, 0.25, 0.12),
+		},
+		"rows": [
+			".kk........kk...",
+			".khk.kkkk.khk.k.",
+			"..khkmmmmkhk.kwk",
+			"...kmmmmmmk..kwk",
+			"...kmekkemk..kwk",
+			"...kmmmmmmk..kwk",
+			"..kykkkkkkyk.kwk",
+			".kcrryrryrrckkwk",
+			"kcrrRyyyyRrrkyyk",
+			"kcrrrRyyRrrrkRgk",
+			"kcRrrrrrrrRckkgk",
+			"kcyyyyyyyyyyck.k",
+			"kcRrrrRrrrrRck..",
+			"kcckRRkkRRkcck..",
+			".kckmmk.kmmkck..",
+			".kkkkkk.kkkkkk..",
+		],
+		"legs_b": [
+			"kcckRRkRRkccck..",
+			".kckmmkmmkcck...",
+			".kkkkkkkkkkkk...",
+		],
+	},
+
+	"martial": {  # White gi, red headband, bare fists
+		"poses": {
+			"punch": {
+				7: ".................kk",
+				8: "............kkkkkFFk",
+				9: "............AAZZXFFk",
+				10: "............kkkkkkk",
+				11: "............__",
+			},
+			"kick": {
+				11: "..............kkkkk",
+				12: "...........LLLLLLUUk",
+				13: "...........LLLLLLUUk",
+				14: "........kkkkkkkkkkk",
+				15: "........____",
+			},
+			"stance": {   # fighting stance: both fists raised in guard by the chin
+				5: ".kk.......kk",
+				6: "kFFk.....kFFk",
+				7: "kFFk.....kFFk",
+				8: ".kZk.....kZk",
+				9: ".kZk.....kZk",
+				10: ".__.........__",
+				11: ".__.........__",
+			},
+		},
+		"palette": {
+			"h": Color(0.2, 0.17, 0.25), "r": Color(0.85, 0.2, 0.2), "g": Color(0.93, 0.93, 0.9),
+			"G": Color(0.72, 0.72, 0.7), "b": Color(0.15, 0.13, 0.15),
+			# Pose colors: A upper arm, Z forearm, X wrist, F fist, L kicking leg, U its foot.
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.85, 0.2, 0.2),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.93, 0.93, 0.9), "U": Color(0.3, 0.19, 0.12),
+		},
+		"rows": [
+			"................",
+			"....k.k..k......",
+			"...khkhkkhk.....",
+			"...khhhhhhk.....",
+			"...krrrrrrkr....",
+			"...kskssksk.r...",
+			"....kssssk......",
+			"..kkGggggGkk....",
+			".kskgggggggksk..",
+			".kskgGgggGgksk..",
+			".krkbbbbbbbkrk..",
+			".kskgggggggksk..",
+			"...kgggkgggk....",
+			"...kgggkgggk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kggkggk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	# The Martial Artist's own path outfits (tier 3). (The Dragon Ball ones are a skin:
+	# see SKINS.) Each keeps "h" for hair, which the golden form turns gold.
+	"martial_p0": {  # Spirit: a mystic: a black top-knot, a sleeveless teal robe, an orange sash, glowing wrist wraps
+		"base": "martial",
+		"palette": {
+			"h": Color(0.12, 0.1, 0.14), "T": Color(0.15, 0.47, 0.52), "t": Color(0.09, 0.33, 0.38),
+			"o": Color(0.97, 0.52, 0.15), "w": Color(0.7, 0.95, 1.0), "W": Color(0.9, 0.9, 0.85),
+			"b": Color(0.22, 0.17, 0.14),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.7, 0.95, 1.0),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.9, 0.9, 0.85), "U": Color(0.22, 0.17, 0.14),
+		},
+		"rows": [
+			"......kk........",
+			".....khhk.......",
+			"....kkhhkk......",
+			"...khhhhhhk.....",
+			"...khhhhhhk.....",
+			"...kskssksk.....",
+			"....kssssk......",
+			"..kkTTsTTTkk....",
+			".kskTTTsTTTksk..",
+			".kskTtTTTtTksk..",
+			".kwkoooooookwk..",
+			".kskTTTTToTksk..",
+			"...kWWWkWWWk....",
+			"...kWWWkWWWk....",
+			"...kbbk.kbbk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kWWkWWk.....",
+			"....kbbkbbk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p1": {  # Brawling: a street brawler: a wild auburn mane, a tiger-striped vest, red-wrapped fists
+		"base": "martial",
+		"palette": {
+			"h": Color(0.5, 0.24, 0.12), "Y": Color(0.95, 0.62, 0.18), "n": Color(0.25, 0.15, 0.1),
+			"r": Color(0.82, 0.2, 0.2), "d": Color(0.25, 0.2, 0.18), "P": Color(0.3, 0.3, 0.37),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.82, 0.2, 0.2),
+			"F": Color(0.82, 0.2, 0.2), "L": Color(0.3, 0.3, 0.37), "U": Color(0.3, 0.19, 0.12),
+		},
+		"rows": [
+			"................",
+			"...k.kk.kk......",
+			"..khkhhkhhk.....",
+			".khhhhhhhhhk....",
+			"..khhhhhhhhk....",
+			"..khskssksk.....",
+			"..khkssssk......",
+			"..kkYYYYYYkk....",
+			".kskYnYYnYYksk..",
+			".kskYYnYYnYksk..",
+			".krkdddddddkrk..",
+			".krkYnYYYnYkrk..",
+			"...kPPPkPPPk....",
+			"...kPPPkPPPk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kPPkPPk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p2": {  # Secret Arts: a shadow monk: an indigo hood, a grey mask, a plum sash, wrapped shins
+		"base": "martial",
+		"palette": {
+			"N": Color(0.22, 0.2, 0.4), "n": Color(0.14, 0.13, 0.28), "M": Color(0.62, 0.62, 0.68),
+			"m": Color(0.52, 0.25, 0.55), "b": Color(0.12, 0.1, 0.14),
+			"A": Color(0.22, 0.2, 0.4), "Z": Color(0.22, 0.2, 0.4), "X": Color(0.62, 0.62, 0.68),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.22, 0.2, 0.4), "U": Color(0.12, 0.1, 0.14),
+		},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkk......",
+			"....kNNNNNk.....",
+			"...kNNNNNNNk....",
+			"...kNkssksNk....",
+			"...kNMMMMMNk....",
+			"..kkNNmNNNkk....",
+			".kNkNnNNNnNkNk..",
+			".kNkNNnNnNNkNk..",
+			".kMkmmmmmmmkMk..",
+			".kskNNNNNNNksk..",
+			"...kNNNkNNNk....",
+			"...kMMMkMMMk....",
+			"...kbbk.kbbk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kMMkMMk.....",
+			"....kbbkbbk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_p3": {  # Discipline: a mountain hermit: long hair tied back in a white band, an open crimson vest, iron bracers
+		"base": "martial",
+		"palette": {
+			"h": Color(0.16, 0.12, 0.12), "W": Color(0.95, 0.95, 0.92), "R": Color(0.62, 0.12, 0.14),
+			"I": Color(0.55, 0.57, 0.63), "b": Color(0.12, 0.1, 0.12), "D": Color(0.5, 0.36, 0.22),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.55, 0.57, 0.63),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.5, 0.36, 0.22), "U": Color(0.3, 0.19, 0.12),
+		},
+		"rows": [
+			"................",
+			"....kkkk........",
+			"...khhhhk.......",
+			"..khhhhhhk......",
+			"..khWWWWWWk.....",
+			"..khskssksk.....",
+			"..khkssssk......",
+			"..kkRssssRkk....",
+			".kskRsssssRksk..",
+			".kskRssssRRksk..",
+			".kIkbbbbbbbkIk..",
+			".kskRRRRRRRksk..",
+			"...kDDDkDDDk....",
+			"...kDDDkDDDk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kDDkDDk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_dbz": {  # The Dragon Ball skin's plain Martial Artist: as the unit's own
+		"base": "martial",
+		"palette": {},
+		"rows": [
+			"................",
+			"....k.k..k......",
+			"...khkhkkhk.....",
+			"...khhhhhhk.....",
+			"...krrrrrrkr....",
+			"...kskssksk.r...",
+			"....kssssk......",
+			"..kkGggggGkk....",
+			".kskgggggggksk..",
+			".kskgGgggGgksk..",
+			".krkbbbbbbbkrk..",
+			".kskgggggggksk..",
+			"...kgggkgggk....",
+			"...kgggkgggk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"martial_dbz_p0": {  # Dragon Ball skin, Spirit (a Vegeta nod): flame-tall hair, blue bodysuit, white armor
+		"base": "martial",
+		"palette": {
+			"h": Color(0.22, 0.2, 0.3), "b": Color(0.22, 0.3, 0.72), "W": Color(0.96, 0.96, 0.96),
+			"y": Color(0.95, 0.8, 0.35),
+			"A": Color(0.22, 0.3, 0.72), "Z": Color(0.22, 0.3, 0.72), "X": Color(0.96, 0.96, 0.96),
+			"F": Color(0.96, 0.96, 0.96), "L": Color(0.22, 0.3, 0.72), "U": Color(0.96, 0.96, 0.96),
+		},
+		"rows": [
+			"......k.k.......",
+			"....k.khkhk.....",
+			"....khkhhhhk....",
+			"...khhhhhhhk....",
+			"...khsshsshk....",
+			"...kskkskksk....",
+			"....ksssssk.....",
+			"..kyyWWWWWyyk...",
+			".kbkWWWWWWWkbk..",
+			".kbkWWWWWWWkbk..",
+			".kbkbbbbbbbkbk..",
+			".kWkbbbbbbbkWk..",
+			"...kbbbkbbbk....",
+			"...kbbbkbbbk....",
+			"...kWWk.kWWk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kbbkbbk.....",
+			"....kWWkWWk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_dbz_p2": {  # Dragon Ball skin, Secret Arts (a Krillin nod): his Orin Temple gi: mustard wrap top, maroon belt, orange pants, leg wraps
+		"poses": {
+			"punch": {
+				8: "................kk",
+				9: "...........kkkkkFFk",
+				10: "...........AAZZXFFk",
+				11: "...........kkkkkkk",
+			},
+		},
+		"base": "martial",
+		"palette": {
+			"d": Color(0.35, 0.25, 0.25), "Y": Color(0.85, 0.68, 0.25), "y": Color(0.68, 0.52, 0.18),
+			"m": Color(0.5, 0.24, 0.34), "o": Color(0.92, 0.5, 0.2), "c": Color(0.93, 0.85, 0.65),
+			"T": Color(0.8, 0.65, 0.35), "A": Color(0.85, 0.68, 0.25), "Z": Color(0.96, 0.77, 0.6),
+			"X": Color(0.96, 0.77, 0.6), "F": Color(0.96, 0.77, 0.6), "L": Color(0.92, 0.5, 0.2),
+			"U": Color(0.8, 0.65, 0.35),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".....kkkkk......",
+			"....ksdsdsk.....",
+			"...ksdsdsdsk....",
+			"...ksksssksk....",
+			"....ksssssk.....",
+			"...kkYyYYYkk....",
+			"..kYkYYyYYkYk...",
+			"..kskmmmmmksk...",
+			"..kskYYYYYksk...",
+			"...koookoook....",
+			"...kccckccck....",
+			"...kTTk.kTTk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kcckcck.....",
+			"....kTTkTTk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"healer": {  # White hooded robe, green trim, a gold cross and a glowing staff
+		"poses": {
+			"raise": {  # the splash: the staff held up before him in both hands, its orb over his head
+				0: "......kok.....__",
+				1: ".....kOok....___",
+				2: "......kok...____",
+				3: "......kwk....___",
+				4: "......kwk....___",
+				5: "......kwk....___",
+				6: "......kwk....___",
+				7: ".....skwks...___",
+				8: ".....skwks...___",
+				9: ".......k......__",
+				10: ".............___",
+				11: ".............___",
+				12: ".............___",
+				13: ".............___",
+				14: "..............__",
+			},
+			"cast": {
+				0: "............____",
+				1: "............____",
+				2: "............____",
+				3: "............____",
+				4: "............____",
+				5: "............____",
+				6: "............____......k",
+				7: "............_kkkkkkkkkok",
+				8: ".............swwwwwwwOook",
+				9: "............._kkkkkkkkok",
+				10: "..............__......k",
+				11: "..............__",
+				12: "..............__",
+				13: "..............__",
+				14: "..............__",
+			},
+		},
+		"palette": {
+			"H": Color(0.93, 0.93, 0.9), "g": Color(0.35, 0.7, 0.35), "G": Color(0.25, 0.55, 0.3),
+			"y": Color(1.0, 0.85, 0.3), "w": Color(0.55, 0.35, 0.15), "o": Color(0.6, 1.0, 0.6),
+			"O": Color(0.95, 1.0, 0.9),
+		},
+		"rows": [
+			"..............k.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"...kkHHHHHHk.kwk",
+			"..kHHHgggHHHkswk",
+			"..kHHHHyHHHHkswk",
+			"..kHHHyyyHHHk.wk",
+			"..kHHHHyHHHHk.wk",
+			"..kHHgggggHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kGGGGGGGGGk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+		"legs_b": [
+			"...kkkfkkfkk..k.",
+			".....kk..kk.....",
+		],
+	},
+	"healer_p0": {  # Mending: gold-trimmed robes and a halo
+		"base": "healer",
+		"palette": {"g": Color(1.0, 0.85, 0.3), "G": Color(0.85, 0.65, 0.2), "o": Color(1.0, 0.9, 0.45)},
+		"rows": [
+			".....yyyy.....k.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"...kkHHHHHHk.kwk",
+			"..kHHHgggHHHkswk",
+			"..kHHHHyHHHHkswk",
+			"..kHHHyyyHHHk.wk",
+			"..kHHHHyHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kGGGGGGGGGk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"healer_p1": {  # Radiance: sun-yellow robes with a sunburst
+		"base": "healer",
+		"palette": {
+			"H": Color(1.0, 0.95, 0.72), "y": Color(1.0, 0.58, 0.15), "G": Color(0.95, 0.6, 0.15),
+			"g": Color(1.0, 0.75, 0.25), "o": Color(1.0, 0.95, 0.4), "O": Color(1.0, 1.0, 0.8),
+		},
+		"rows": [
+			"..............k.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"...kkHHHHHHk.kwk",
+			"..kHHHgggHHHkswk",
+			"..kHHyHyHyHHkswk",
+			"..kHHHyyyHHHk.wk",
+			"..kHHyHyHyHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kGGGGGGGGGk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"healer_p2": {  # Renewal: a druid in leafy green with a flower and a budding staff
+		"base": "healer",
+		"palette": {
+			"H": Color(0.42, 0.66, 0.36), "l": Color(0.25, 0.45, 0.2), "g": Color(0.55, 0.38, 0.2),
+			"G": Color(0.3, 0.5, 0.25), "y": Color(0.95, 0.55, 0.75), "o": Color(0.45, 0.85, 0.35),
+			"O": Color(0.85, 1.0, 0.7), "w": Color(0.42, 0.27, 0.12),
+		},
+		"rows": [
+			".............kk.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"...kkHHHHHHk.kwk",
+			"..kHHHgggHHHkswk",
+			"..kHHHHyHHHHkswk",
+			"..kHlHyyyHHlk.wk",
+			"..kHHHHyHHHHk.wk",
+			"..kHHHlHHHHHk.wk",
+			"..kHHHHHHlHHk.wk",
+			"..kGGGGGGGGGk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"bard": {  # Feathered cap, teal tunic, a lute across the body
+		"poses": {
+			"strum": {
+				9: "...........s",
+				10: "...T......s",
+			},
+			"serenade": {  # the splash: lute swung up to the shoulder, neck to the sky, singing
+				2: "..............kk",
+				3: ".............knk",
+				4: "............knk.",
+				5: ".......o...knk__",
+				6: "..........kLLLk_",
+				7: ".........kLLoLLk",
+				8: ".........sLLLLLk",
+				9: "..........kLLLk_",
+				10: ".........k______",
+				11: ".........k______",
+				12: "..........k_____",
+				13: "...........____.",
+			},
+		},
+		"palette": {
+			"R": Color(0.8, 0.2, 0.25), "F": Color(0.95, 0.95, 0.85), "T": Color(0.2, 0.6, 0.6),
+			"y": Color(1.0, 0.85, 0.3), "L": Color(0.75, 0.48, 0.2), "n": Color(0.5, 0.3, 0.12),
+			"o": Color(0.25, 0.15, 0.08),
+		},
+		"rows": [
+			".......kk.k.....",
+			".....kkRRkFk....",
+			"....kRRRRRkk....",
+			"...kRRRRRRRk....",
+			"....kskssksk....",
+			"....kssssssk..kk",
+			".....kssssk..knk",
+			"...kkTTyyTTkknk.",
+			"..kTTTTyyTTTnkk.",
+			"..kTkTTTTTkLLLk.",
+			"..kskTTTTkLLoLLk",
+			"...knnynnkLLLLLk",
+			"...kppppppkLLLk.",
+			"...kppkkppk.kk..",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk.kk...",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"bard_p0": {  # Inspire: a royal herald in gold with a tall red plume, playing a red pipa
+		"poses": {
+			"strum": {
+				9: "...........s....",
+				10: "...T......s.....",
+			},
+		},
+		"base": "bard",
+		"palette": {
+			"R": Color(0.25, 0.35, 0.85), "F": Color(0.9, 0.2, 0.2), "T": Color(0.9, 0.7, 0.2),
+			"y": Color(0.95, 0.95, 0.95), "L": Color(0.78, 0.22, 0.2), "n": Color(0.5, 0.15, 0.12),
+			"o": Color(0.25, 0.08, 0.08),
+		},
+		"rows": [
+			"......kFFkk.....",
+			".....kkRRkFFk...",
+			"....kRRRRRkk....",
+			"...kRRRRRRRk....",
+			"....kskssksk....",
+			"....kssssssk..kk",
+			".....kssssk..knk",
+			"...kkTTyyTTkknk.",
+			"..kTTTTyyTTTnkk.",
+			"..kTkTTTTTkLLLk.",
+			"..kskTTTTkLLoLLk",
+			"...kTTTTTkLLLLLk",
+			"...kppppppkLLLk.",
+			"...kppkkppk.kk..",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"bard_p1": {  # Discord: a jester in purple and black with belled points, playing a little mouth instrument
+		"poses": {
+			"strum": {
+				6: ".....ksssskmk...",
+			},
+		},
+		"base": "bard",
+		"palette": {
+			"R": Color(0.5, 0.15, 0.55), "T": Color(0.22, 0.18, 0.28), "y": Color(0.6, 0.9, 0.3),
+			"m": Color(0.45, 0.3, 0.18),
+		},
+		"rows": [
+			"..ky.......yk...",
+			"...kRk.kk.kRk...",
+			"....kRRRRRRk....",
+			"...kRRRRRRRk....",
+			"....kskssksk....",
+			"....kssssssk....",
+			".....kssssmmk...",
+			"...kkTTyyTTksk..",
+			"..kTTTTyyTTTsk..",
+			"..kTkTTTTTkTk...",
+			"..kskTTTTkTk....",
+			"...kTTTTTk......",
+			"...kppppppk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"bard_p2": {  # Spellsong: a green nature-bard with a flower, playing a flute
+		"poses": {
+			"strum": {
+				6: ".....ksssskwkwwk",
+			},
+		},
+		"base": "bard",
+		"palette": {
+			"R": Color(0.3, 0.6, 0.25), "F": Color(1.0, 0.6, 0.8), "T": Color(0.42, 0.55, 0.25),
+			"y": Color(0.95, 0.8, 0.4), "l": Color(0.3, 0.7, 0.25), "w": Color(0.85, 0.72, 0.5),
+		},
+		"rows": [
+			"........kk......",
+			".....kkRRkFk....",
+			"....kRRRRRkk....",
+			"...kRRRRRRRk....",
+			"....kskssksk....",
+			"....kssssssk....",
+			".....ksssskwwwwk",
+			"...kkTTyyTTks.s.",
+			"..kTTTTyyTTTsk..",
+			"..kTkTTTTTkTk...",
+			"..kskTTTTkTk....",
+			"...kTlTTTk......",
+			"...kppppppk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"alchemist": {  # Brass goggles, leather apron, a bubbling green flask in hand
+		"poses": {
+			"catch": {  # idle: the flask is up in the air, hand open to catch it
+				5: "............____",
+				6: "............____",
+				7: "............k___",
+				8: "............sk__",
+				9: "............k___",
+				10: "...........k____",
+			},
+			"brew": {  # the splash: a green flask raised high, an orange one at the hip
+				1: ".............kk.",
+				2: ".............kvk",
+				3: "............kxxk",
+				4: "............kxxk",
+				5: "............ks..",
+				6: "............C__.",
+				7: "............C___",
+				8: "............____",
+				9: ".k..........____",
+				10: "kvk........k___.",
+				11: "kOOk",
+				12: "kOOk",
+				13: ".kk.",
+			},
+			"throw": {
+				1: ".............kk.",
+				2: ".............kvk",
+				3: "............kxxk",
+				4: "............kxxk",
+				5: "............ks..",
+				6: "............C__.",
+				7: "............C___",
+				8: "............____",
+				9: "............____",
+				10: "...........k___.",
+			},
+		},
+		"palette": {
+			"h": Color(0.45, 0.28, 0.15), "G": Color(0.8, 0.6, 0.25), "g": Color(0.6, 0.9, 0.95),
+			"A": Color(0.55, 0.38, 0.22), "a": Color(0.38, 0.25, 0.13), "C": Color(0.3, 0.5, 0.35),
+			"v": Color(0.85, 0.95, 0.95), "x": Color(0.45, 0.95, 0.35), "b": Color(0.15, 0.13, 0.15),
+			"O": Color(1.0, 0.55, 0.15),
+		},
+		"rows": [
+			"......kkkk......",
+			".....khhhhk.....",
+			"....khhhhhhk....",
+			"....kGgGGgGk....",
+			"....kssssssk....",
+			"....kskssksk....",
+			".....kssssk..kk.",
+			"...kkCAAAACk.kvk",
+			"..kCCAAAAAACkxxk",
+			"..kCkAAAAAkCkxxk",
+			"..kskAAAAAkssk..",
+			"...kaxavaak.....",
+			"...kAAAAAAk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"alchemist_p0": {  # Toxins: a plague doctor with a beaked mask and a purple poison
+		"base": "alchemist",
+		"palette": {
+			"H": Color(0.15, 0.13, 0.17), "m": Color(0.85, 0.8, 0.68), "g": Color(0.85, 0.25, 0.2),
+			"A": Color(0.2, 0.18, 0.23), "a": Color(0.12, 0.1, 0.14), "C": Color(0.28, 0.25, 0.32),
+			"x": Color(0.65, 0.35, 0.95),
+		},
+		"rows": [
+			"....kkkkkk......",
+			"....kHHHHk......",
+			"..kkHHHHHHkk....",
+			"...kmmmmmk......",
+			"...kmgmmgk......",
+			"...kmmmmmmmk....",
+			"....kmmmkkk..kk.",
+			"...kkCAAAACk.kvk",
+			"..kCCAAAAAACkxxk",
+			"..kCkAAAAAkCkxxk",
+			"..kbkAAAAAkbbk..",
+			"...kaaaaaak.....",
+			"...kAAAAAAk.....",
+			"...kAAkkAAk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"alchemist_p1": {  # Acids: goggles down, a yellow rubber apron and black gloves
+		"base": "alchemist",
+		"palette": {
+			"A": Color(0.9, 0.8, 0.2), "a": Color(0.68, 0.58, 0.1), "C": Color(0.35, 0.36, 0.38),
+			"x": Color(0.88, 0.95, 0.2), "g": Color(0.6, 1.0, 0.4),
+		},
+		"rows": [
+			"......kkkk......",
+			".....khhhhk.....",
+			"....khhhhhhk....",
+			"....khhhhhhk....",
+			"....kssssssk....",
+			"....kGgGGgGk....",
+			".....kssssk..kk.",
+			"...kkCAAAACk.kvk",
+			"..kCCAAAAAACkxxk",
+			"..kCkAAAAAkCkxxk",
+			"..kbkAAAAAkbbk..",
+			"...kaaaaaak.....",
+			"...kAAAAAAk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"alchemist_p2": {  # Volatiles: singed spiky hair, a scorched apron and a lit bomb
+		"base": "alchemist",
+		"poses": {
+			"throw": {
+				0: "..............y.",
+				1: "..............k.",
+				2: ".............kk.",
+				3: "............kbbk",
+				4: "............kbBk",
+				5: "............ks_.",
+				6: "............C._.",
+				7: "............C___",
+				8: "............____",
+				9: "............____",
+				10: "...........k___.",
+			},
+		},
+		"palette": {
+			"h": Color(0.2, 0.15, 0.12), "A": Color(0.6, 0.25, 0.15), "a": Color(0.4, 0.15, 0.1),
+			"C": Color(0.85, 0.5, 0.2), "B": Color(0.45, 0.45, 0.5), "y": Color(1.0, 0.8, 0.2),
+		},
+		"rows": [
+			".....k.kk.k.....",
+			"....khkhhkhk....",
+			"....khhhhhhk....",
+			"....kGgGGgGk....",
+			"....kssssssk....",
+			"....kskssksk..y.",
+			".....kssssk...k.",
+			"...kkCAAAACk.kk.",
+			"..kCCAAAAAACkbbk",
+			"..kCkAAAAAkCkbBk",
+			"..kskAAAAAkssk..",
+			"...kaaaaaak.....",
+			"...kAAAAAAk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"magetower": {  # Stone tower, a mage on top and a violet banner
+		"palette": {"P": Color(0.45, 0.25, 0.65), "Q": Color(0.3, 0.15, 0.45), "y": Color(1.0, 0.85, 0.3), "W": Color(0.92, 0.92, 0.95), "S": Color(0.62, 0.6, 0.7), "D": Color(0.42, 0.4, 0.5), "T": Color(0.52, 0.5, 0.6), "R": Color(0.55, 0.3, 0.8), "Y": Color(1.0, 0.85, 0.3)},
+		"rows": [
+			".......kk.......",
+			"......kPPk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.kskksk.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"magetower_p2": {  # Fire: a red hat tipped with flame, and glowing ember runes
+		"base": "magetower",
+		"palette": {"P": Color(0.85, 0.25, 0.15), "Q": Color(0.6, 0.15, 0.1), "R": Color(0.9, 0.4, 0.12),
+				"Y": Color(1.0, 0.85, 0.3), "y": Color(1.0, 0.6, 0.15), "S": Color(0.6, 0.52, 0.5)},
+		"rows": [
+			"......kyyk......",
+			"......kPPk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.kskksk.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSykRYYRkySk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDyk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"magetower_p0": {  # Storm: blue hat and a lightning banner
+		"base": "magetower",
+		"palette": {"P": Color(0.25, 0.4, 0.85), "Q": Color(0.15, 0.25, 0.6), "R": Color(0.25, 0.4, 0.85), "Y": Color(0.8, 0.95, 1.0), "y": Color(0.8, 0.95, 1.0)},
+		"rows": [
+			".......kk.......",
+			"......kPPk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.kskksk.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYRRkSSk..",
+			"..kDDkRRYRkDDk..",
+			"..kSDkRYRRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"magetower_p1": {  # Arcane Lance: a pink crystal crown on the hat
+		"base": "magetower",
+		"palette": {"P": Color(0.8, 0.3, 0.7), "Q": Color(0.55, 0.18, 0.5), "R": Color(0.85, 0.35, 0.75), "O": Color(1.0, 0.75, 1.0)},
+		"rows": [
+			"......kOOk......",
+			"......kPOk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.kskksk.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower": {  # Icy stone tower, a frost witch on top and an ice banner
+		"palette": {"c": Color(0.3, 0.55, 0.9), "C": Color(0.2, 0.4, 0.7), "h": Color(0.95, 0.97, 1.0), "s": Color(0.98, 0.86, 0.78), "r": Color(0.4, 0.65, 0.95), "S": Color(0.6, 0.74, 0.86), "D": Color(0.4, 0.54, 0.7), "T": Color(0.5, 0.64, 0.78), "R": Color(0.35, 0.6, 0.9), "Y": Color(1.0, 1.0, 1.0), "i": Color(0.75, 0.95, 1.0)},
+		"rows": [
+			"......kkkk......",
+			".....kcccck.....",
+			".kkkkcccccckkkk.",
+			".kSkkhskskshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower_p0": {  # Deep Cold: navy robes and icicles hanging from the walls
+		"base": "frosttower",
+		"palette": {"c": Color(0.2, 0.3, 0.6), "C": Color(0.12, 0.2, 0.45), "r": Color(0.18, 0.28, 0.6), "R": Color(0.15, 0.25, 0.55)},
+		"rows": [
+			"......kkkk......",
+			".....kcccck.....",
+			".kkkkcccccckkkk.",
+			".kSkkhskskshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kiSkRRRRkSik..",
+			"..kSSkRYYRkSSk..",
+			"..kiDkRRRRkDik..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kiDDDkkDDDik..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower_p1": {  # Blizzard: white fur hood and snow piled on the battlements
+		"base": "frosttower",
+		"palette": {"c": Color(0.95, 0.97, 1.0), "C": Color(0.72, 0.8, 0.9), "I": Color(1.0, 1.0, 1.0)},
+		"rows": [
+			"......kkkk......",
+			".....kcccck.....",
+			".kkkkcccccckkkk.",
+			".kSkkhskskshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kIIIIIIIIIIIIk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kIIDDkkDDIIk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower_p2": {  # Flash Freeze: glowing eyes and ice crystals on the merlons
+		"base": "frosttower",
+		"palette": {"e": Color(0.4, 1.0, 1.0), "I": Color(0.85, 1.0, 1.0)},
+		"rows": [
+			".i....kkkk....i.",
+			"kIk..kcccck..kIk",
+			".kkkkcccccckkkk.",
+			".kSkkhseseshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"medbay": {  # A canvas tent with a red cross
+		"palette": {"W": Color(0.94, 0.92, 0.86), "w": Color(0.75, 0.72, 0.66), "r": Color(0.85, 0.15, 0.15), "x": Color(0.18, 0.12, 0.1), "B": Color(0.6, 0.4, 0.2)},
+		"rows": [
+			"................",
+			"................",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWWWWwk",
+			"kwWWWkxxxxkWWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"medbay_p0": {  # Supplies: crates of medicine stacked by the tent
+		"base": "medbay",
+		"palette": {},
+		"rows": [
+			"................",
+			"................",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWkkkkk",
+			"kwWWWkxxxxkkBBBk",
+			"kwWWkxxxxxxkBkBk",
+			"kwWWkxxxxxxkBBBk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"medbay_p1": {  # Wards: a bigger blue-trimmed tent flying a pennant
+		"base": "medbay",
+		"palette": {"w": Color(0.35, 0.5, 0.85), "b": Color(0.3, 0.45, 0.9)},
+		"rows": [
+			".......kbbk.....",
+			".......k........",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWWWWwk",
+			"kwWWWkxxxxkWWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"medbay_p2": {  # Field Hospital: a healer's green cross
+		"base": "medbay",
+		"palette": {"r": Color(0.3, 0.75, 0.35), "W": Color(0.96, 0.95, 0.88)},
+		"rows": [
+			"................",
+			"................",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWWWWwk",
+			"kwWWWkxxxxkWWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"ballista": {  # A great crossbow on a wooden trestle, an iron-headed bolt laid in it
+		"palette": {"W": Color(0.58, 0.4, 0.22), "D": Color(0.38, 0.25, 0.13), "I": Color(0.52, 0.52, 0.58), "B": Color(0.72, 0.56, 0.32),
+			"S": Color(0.86, 0.82, 0.68)},
+		"rows": [
+			"................",
+			"..........kk....",
+			".........kIIk...",
+			".........kWk....",
+			"........kWkS....",
+			"..kkkkkkkWkkkk..",
+			".kSBBBBBBBBBBIk.",
+			"..kDDDDDDWDDDkk.",
+			"........kWkS....",
+			".........kWk....",
+			".........kIIk...",
+			"......kkkkkk....",
+			".....kDWWWWDk...",
+			"....kWk.kk.kWk..",
+			"...kWk......kWk.",
+			"..kkk........kkk",
+		],
+	},
+	"obelisk": {  # A tall rune-carved standing stone on a plinth, its runes glowing
+		"palette": {"S": Color(0.42, 0.4, 0.52), "D": Color(0.3, 0.28, 0.4), "L": Color(0.56, 0.54, 0.66), "R": Color(0.75, 0.55, 1.0),
+			"P": Color(0.55, 0.52, 0.5)},
+		"rows": [
+			".......kk.......",
+			"......kLSk......",
+			".....kLSSDk.....",
+			".....kLRSDk.....",
+			".....kLSSDk.....",
+			".....kLSRDk.....",
+			".....kLSSDk.....",
+			".....kLRSDk.....",
+			".....kLSSDk.....",
+			".....kLSRDk.....",
+			".....kLSSDk.....",
+			"....kLSRSSDk....",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+			"................",
+		],
+	},
+	"statue": {  # A stone knight raising a sword on a pedestal
+		"palette": {"S": Color(0.72, 0.72, 0.7), "D": Color(0.5, 0.5, 0.5), "P": Color(0.55, 0.5, 0.45)},
+		"rows": [
+			"...........k....",
+			"..........kSk...",
+			"......kk..kSk...",
+			".....kSSk.kSk...",
+			".....kSSk.kSk...",
+			"......kk..kDk...",
+			"....kkSSkkkDk...",
+			"...kSSSSSSSk....",
+			"...kSkSSSSk.....",
+			"...kSkSSSSk.....",
+			"...kDkSSSSk.....",
+			".....kSkSk......",
+			"...kkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+		],
+	},
+	"statue_p0": {  # Valor: cast in gold
+		"base": "statue",
+		"palette": {"S": Color(1.0, 0.82, 0.3), "D": Color(0.78, 0.58, 0.18)},
+		"rows": [
+			"...........k....",
+			"..........kSk...",
+			"......kk..kSk...",
+			".....kSSk.kSk...",
+			".....kSSk.kSk...",
+			"......kk..kDk...",
+			"....kkSSkkkDk...",
+			"...kSSSSSSSk....",
+			"...kSkSSSSk.....",
+			"...kSkSSSSk.....",
+			"...kDkSSSSk.....",
+			".....kSkSk......",
+			"...kkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+		],
+	},
+	"statue_p1": {  # Haste: green-bronze with spread wings
+		"base": "statue",
+		"palette": {"S": Color(0.5, 0.72, 0.62), "D": Color(0.32, 0.52, 0.45), "V": Color(0.95, 0.95, 0.92)},
+		"rows": [
+			"...........k....",
+			"..........kSk...",
+			"......kk..kSk...",
+			".....kSSk.kSk...",
+			".....kSSk.kSk...",
+			".V....kk..kDk...",
+			".VV.kkSSkkkDk...",
+			".VVkSSSSSSSk....",
+			"..VkSkSSSSk.....",
+			"...kSkSSSSk.....",
+			"...kDkSSSSk.....",
+			".....kSkSk......",
+			"...kkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+		],
+	},
+	"statue_p2": {  # Bulwark: dark iron with a tower shield
+		"base": "statue",
+		"palette": {"S": Color(0.5, 0.52, 0.56), "D": Color(0.34, 0.35, 0.38), "B": Color(0.3, 0.4, 0.75), "y": Color(1.0, 0.82, 0.3)},
+		"rows": [
+			"...........k....",
+			"..........kSk...",
+			"......kk..kSk...",
+			".....kSSk.kSk...",
+			".....kSSk.kSk...",
+			"......kk..kDk...",
+			"....kkSSkkkDk...",
+			"...kSSSSSSSk....",
+			".kBBBkSSSSk.....",
+			".kByBkSSSSk.....",
+			".kyyykSSSSk.....",
+			".kByBkSkSk......",
+			"..kBkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+		],
+	},
+	"mine": {  # A mine shaft in a rocky hill with gold piled outside
+		"palette": {"R": Color(0.5, 0.42, 0.36), "r": Color(0.62, 0.54, 0.46), "W": Color(0.55, 0.35, 0.17), "x": Color(0.08, 0.06, 0.06), "y": Color(1.0, 0.82, 0.25), "Y": Color(1.0, 0.95, 0.6), "M": Color(0.4, 0.42, 0.46)},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkkk.....",
+			"...kkRRrRRRkk...",
+			"..kRRRRRRrRRRk..",
+			".kRrRkkkkkkRRRk.",
+			".kRRkWWWWWWkRrk.",
+			"kRRRkWxxxxWkRRRk",
+			"kRrRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkrRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kkykkkkkkkkkkykk",
+			".kyYyk....kyYyk.",
+			"..kkk......kkk..",
+		],
+	},
+	"mine_p0": {  # Mother Lode: gold veins running through the rock
+		"base": "mine",
+		"palette": {},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkkk.....",
+			"...kkRRyRRRkk...",
+			"..kRyRRRRyRRRk..",
+			".kRyRkkkkkkRyRk.",
+			".kRRkWWWWWWkRrk.",
+			"kRRRkWxxxxWkRRRk",
+			"kRyRkWxxxxWkRyRk",
+			"kRRRkWxxxxWkrRRk",
+			"kyRRkWxxxxWkRRyk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kkykkkkkkkkkkykk",
+			".kyYyk....kyYyk.",
+			"..kkk......kkk..",
+		],
+	},
+	"mine_p1": {  # Mine Carts: a loaded cart on rails out front
+		"base": "mine",
+		"palette": {},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkkk.....",
+			"...kkRRrRRRkk...",
+			"..kRRRRRRrRRRk..",
+			".kRrRkkkkkkRRRk.",
+			".kRRkWWWWWWkRrk.",
+			"kRRRkWxxxxWkRRRk",
+			"kRrRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkrRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxkyYykRRRk",
+			"kRRRkWkyYyYkRRRk",
+			"kkykkkkMMMMkkykk",
+			".kyYyk.kMkMk.yk.",
+			"WWWWWWWWWWWWWWWW",
+		],
+	},
+	"mine_p2": {  # Treasury: a locked treasure chest beside the shaft
+		"base": "mine",
+		"palette": {},
+		"rows": [
+			"................",
+			"................",
+			".....kkkkkk.....",
+			"...kkRRrRRRkk...",
+			"..kRRRRRRrRRRk..",
+			".kRrRkkkkkkRRRk.",
+			".kRRkWWWWWWkRrk.",
+			"kRRRkWxxxxWkRRRk",
+			"kRrRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkrRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkkkkk",
+			"kRRRkWxxxxWkWWWk",
+			"kkykkkkkkkkkyykk",
+			".kyYyk....kWWWk.",
+			"..kkk.....kkkkk.",
+		],
+	},
+	"engineer": {  # A Stonehollow engineer, a dwarf: short and broad, a great ginger beard down over a
+		# leather apron, a leather cap with brass goggles pushed up on it, a tool belt, a hammer on the shoulder
+		"palette": {"L": Color(0.45, 0.3, 0.18), "G": Color(0.92, 0.72, 0.3), "g": Color(0.55, 0.82, 0.92),
+			"H": Color(0.9, 0.45, 0.14), "T": Color(0.36, 0.42, 0.56), "A": Color(0.38, 0.25, 0.15),
+			"b": Color(0.3, 0.2, 0.12), "Y": Color(0.95, 0.76, 0.3), "P": Color(0.3, 0.29, 0.33),
+			"M": Color(0.62, 0.64, 0.7), "W": Color(0.55, 0.35, 0.18)},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			"....kkkkkkk.....",
+			"...kLLLLLLLk....",
+			"..kLGgGLGgGLkkkk",
+			"..ksskssksskkMMk",
+			"..kHHsssssHHkMMk",
+			".kTTkHHHHHHkTkWk",
+			".kTkHHHHHHHkskWk",
+			".kskAHHHHHAk.kWk",
+			"..kAAAHHHAAAk.k.",
+			"..kbbbYbbbbbk...",
+			"..kPPPkkPPPk....",
+			"..kfffk.kfffk...",
+			"..kkkkk.kkkkk...",
+		],
+		"legs_b": [   # mid-stride, for the walk cycle (like the troops')
+			"..kPPPkPPPk.....",
+			"..kfffkkfffk....",
+			"..kkkkkkkkkk....",
+		],
+		"poses": {
+			"toss": {  # hand open, the hammer up in the air (drawn on its own)
+				5: ".............___",
+				6: "............____",
+				7: "............____",
+				8: "............kk__",
+				9: "............ksk_",
+				10: "............kk__",
+				11: "..............__",
+			},
+			"strike": {  # the hammer swung down in front of him
+				5: "............____",
+				6: "............____",
+				7: "............____",
+				8: ".............kkkkkk",
+				9: "............sWWWMMk",
+				10: "............kkkkMMk",
+				11: "..............__kk",
+			},
+		},
+	},
+	"miner": {  # A Deepdelve miner: a leather helmet with a lamp, a beard, a work vest, a pick on his shoulder
+		"palette": {"D": Color(0.42, 0.28, 0.16), "Y": Color(1.0, 0.85, 0.35), "H": Color(0.32, 0.2, 0.12),
+			"G": Color(0.55, 0.55, 0.58), "V": Color(0.5, 0.36, 0.22), "c": Color(0.3, 0.2, 0.12),
+			"p": Color(0.32, 0.3, 0.34), "f": Color(0.2, 0.14, 0.1), "W": Color(0.55, 0.36, 0.18), "M": Color(0.62, 0.64, 0.7)},
+		"rows": [
+			"...........kkk..",
+			".....kkkkkkMMMk.",
+			"....kDDDDDkkkWkk",
+			"...kDDkYkDDk.kWk",
+			"..kkkkkkkkkkkkWk",
+			"....kskssksk.kWk",
+			"....kHssssHk.kWk",
+			"...kkHHHHHHkkkWk",
+			"..kGGkHHHHkGGksk",
+			"..kGkVVVVVVkGkWk",
+			"..kskVVVVVVksk.k",
+			"...kcccYccck....",
+			"...kppppppk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+		"poses": {
+			"strike": {0: "..........._____", 1: "..........._____", 2: "..........._____", 3: "..........._____", 4: "..........._____", 5: "..........._____", 6: "..........._____", 7: "..........._____", 8: "..kGGkHHHHkGGk..", 9: "..kGkVVVVVVkGkkk", 10: "..kskVVVVVVksWWWkk", 11: "...kcccYccck..kWWWk", 12: "...kppppppk.....kMMk", 13: "...kppkkppk.....kMMk", 14: "...kffk.kffk.....kMk", 15: "...kkkk.kkkk......kk"},   # the pick swung down into the rock
+		},
+	},
+	"cannoneer": {  # A Deepdelve powder-gunner: red bandana with brass goggles pushed up, a short
+		# beard, a leather coat with a bandolier of powder, and a smouldering linstock in hand
+		"palette": {"R": Color(0.78, 0.2, 0.16), "G": Color(0.92, 0.72, 0.3), "g": Color(0.55, 0.82, 0.92),
+			"H": Color(0.26, 0.15, 0.09), "C": Color(0.56, 0.36, 0.2), "c": Color(0.34, 0.22, 0.14),
+			"Y": Color(0.95, 0.76, 0.3), "p": Color(0.3, 0.29, 0.33), "f": Color(0.2, 0.14, 0.1),
+			"W": Color(0.55, 0.36, 0.18), "M": Color(1.0, 0.55, 0.15), "m": Color(1.0, 0.92, 0.55),
+			"D": Color(0.26, 0.26, 0.3), "d": Color(0.55, 0.56, 0.62)},
+		"rows": [
+			"..............k.",
+			".....kkkkk...kmk",
+			"....kRRRRRk..kMk",
+			"...kRRRRRRRk.kWk",
+			"...kGgGkGgGk.kWk",
+			"....kskssksk.kWk",
+			"....kHssssHk.kWk",
+			"...kkHHHHHHkkkWk",
+			"..kCCCkHHkCCCkWk",
+			"..kCYCCCCCCCkssk",
+			"..kYCCCCCCCCkkWk",
+			"..ksCCCCCCCk.kWk",
+			"...kccccccck.kWk",
+			"...kppppppk..kWk",
+			"...kppkkppk..kWk",
+			"...kffk.kffk.kkk",
+		],
+		"legs_b": [   # mid-stride
+			"....kppkppk..kWk",
+			"....kffkffk..kWk",
+			"....kkkkkkk..kkk",
+		],
+		"poses": {
+			# The gun drill, in order: carry a ball up, load it into the muzzle, ram it home,
+			# touch off the fuse, and flinch with hands over the ears as the cannon fires.
+			"carry": {0: ".............___", 1: ".............___", 2: ".............___", 3: ".............___", 4: ".............___", 5: ".............___", 6: ".............___", 7: ".............___", 8: ".............kkk", 9: "............sdDk", 10: "............kDDk", 11: ".............kk_", 12: ".............___", 13: ".............___", 14: ".............___", 15: ".............___"},
+			"load": {0: ".............___", 1: ".............___", 2: ".............___", 3: ".............___", 4: ".............___", 5: ".............___", 6: ".............___", 7: ".............___", 8: ".............kkkkk", 9: "............CCsdDk", 10: ".............kkDDk", 11: ".............__kk", 12: ".............___", 13: ".............___", 14: ".............___", 15: ".............___"},
+			"ram": {0: ".............___", 1: ".............___", 2: ".............___", 3: ".............___", 4: ".............___", 5: ".............___", 6: ".............___", 7: ".............___", 8: ".............kkkkkkkkk", 9: "............ksWWWWWWWDk", 10: ".............kkkkkkkkDk", 11: ".............___....k", 12: ".............___", 13: ".............___", 14: ".............___", 15: ".............___"},
+			"light": {0: ".............___", 1: ".............___", 2: ".............___", 3: ".............___", 4: ".............___", 5: ".............___", 6: ".............___", 7: ".............___", 8: ".............kk", 9: "............ksWWk", 10: ".............__kWkMk", 11: ".............___kMmk", 12: ".............___.kk", 13: ".............___", 14: ".............___", 15: ".............___"},
+			"cover": {0: ".............___", 1: ".............___", 2: ".............___", 3: ".............___", 4: "..s.........s___", 5: "..s.........s___", 6: "..C.........C___", 7: "..C.........C___", 8: ".............___", 9: ".............___", 10: ".............___", 11: ".............___", 12: ".............___", 13: ".............___", 14: ".............___", 15: ".............___"},
+		},
+	},
+	# Villagers on the road (Civilian Evacuation): each one walks on its own, with its own
+	# health. Their clothes and hair are recoloured per villager (objective.gd), so a crowd
+	# of them doesn't look like copies.
+	"villager": {  # A farmhand in a straw hat and a belted tunic, a sack slung on his back
+		"palette": {"Y": Color(0.9, 0.78, 0.42), "y": Color(0.7, 0.56, 0.26), "H": Color(0.45, 0.28, 0.14),
+			"T": Color(0.42, 0.55, 0.3), "t": Color(0.3, 0.4, 0.2), "L": Color(0.35, 0.22, 0.12),
+			"B": Color(0.78, 0.66, 0.44), "b": Color(0.6, 0.48, 0.3)},
+		"rows": [
+			"................",
+			".....kkkkkk.....",
+			"....kYYYYYYk....",
+			"..kkyYYYYYYykk..",
+			"..kyyyyyyyyyyk..",
+			"...kHkssssskHk..",
+			"....kskssksk....",
+			"....kssssssk.kk.",
+			"...kkTTTTTTkkBBk",
+			"..kTTtTTTTtTkBbk",
+			"..kTkTTTTTTkkBbk",
+			"..kskLLLLLLksbk.",
+			"...kTTttTTTk.k..",
+			"...kppkkkppk....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kppkppk.....",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+
+	"villager_woman": {  # A headscarf, a long dress and an apron, a basket on her arm
+		"palette": {"R": Color(0.85, 0.35, 0.3), "r": Color(0.65, 0.24, 0.22), "D": Color(0.4, 0.45, 0.7), "d": Color(0.3, 0.33, 0.55),
+			"W": Color(0.92, 0.9, 0.82), "w": Color(0.76, 0.74, 0.68), "B": Color(0.72, 0.52, 0.28), "b": Color(0.52, 0.36, 0.18)},
+		"rows": [
+			"................",
+			".....kkkkkk.....",
+			"....kRRRRRRk....",
+			"...kRRRRRRRrk...",
+			"...kRskssksrk...",
+			"...kRssssssrk...",
+			"....kRssssrk....",
+			"...kkDDWWDDkk...",
+			"..kDDdWWWWdDDk..",
+			"..kDkDWWWWDkDk..",
+			"..kskDWwWWDkskk.",
+			"...kDWWWWwWkBBBk",
+			"...kdDDDDDDkbBbk",
+			"..kDdDDDDDDdkkk.",
+			"...kkffkkffkk...",
+			"....kk...kk.....",
+		],
+		"legs_b": [
+			"..kDdDDDDDDdk...",
+			"...kkfkffkfk....",
+			"....kkkkkkk.....",
+		],
+	},
+
+	"villager_child": {  # A child, a head shorter than the grown-ups, hurrying along
+		"palette": {"H": Color(0.85, 0.62, 0.3), "T": Color(0.82, 0.55, 0.25), "t": Color(0.62, 0.4, 0.18)},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			"......kkkkk.....",
+			".....kHHHHHk....",
+			"....kHHHHHHHk...",
+			"....kHskssksk...",
+			"....kHssssssk...",
+			".....kkssssk....",
+			"....kkTTTTTkk...",
+			"...kTkTtTTkTk...",
+			"...kskTTTTTksk..",
+			"....kTtTTTtk....",
+			"....kpkkkkpk....",
+			"....kfk..kfk....",
+			"....kkk..kkk....",
+		],
+		"legs_b": [
+			".....kpkkpk.....",
+			".....kfkkfk.....",
+			".....kkkkkk.....",
+		],
+	},
+
+	"villager_elder": {  # A white-haired, white-bearded elder in a long robe, leaning on a stick
+		"palette": {"G": Color(0.9, 0.9, 0.88), "g": Color(0.72, 0.72, 0.72), "O": Color(0.55, 0.38, 0.45), "o": Color(0.42, 0.28, 0.34),
+			"W": Color(0.5, 0.33, 0.18)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kGGGGGk.....",
+			"...kGGgGGGGk....",
+			"...kGskssksGk...",
+			"...kGssssssGk.k.",
+			"....kGGGGGGk.kWk",
+			"...kkOgGGgOkkkWk",
+			"..kOOOkGGkOOkskk",
+			"..kOkOOOOOOOkWk.",
+			"..kskOoOOoOk.kWk",
+			"...kOOOOOOOk.kWk",
+			"...kOoOOOoOk.kWk",
+			"...kOOOOOOOk.kWk",
+			"...kkffkffkk.kWk",
+			"....kkk.kkk..kk.",
+		],
+		"legs_b": [
+			"...kOOoOOOoOkkWk",
+			"....kffkffk..kWk",
+			"....kkkkkk...kk.",
+		],
+	},
+
+	"tower": {  # Stone tower, an archer at the battlements
+		"palette": {
+			"g": Color(0.35, 0.65, 0.3), "G": Color(0.22, 0.45, 0.2), "b": Color(0.62, 0.4, 0.18),
+			"S": Color(0.66, 0.64, 0.6), "D": Color(0.45, 0.43, 0.42), "T": Color(0.55, 0.53, 0.5),
+		},
+		"rows": [
+			"......kkkk......",
+			".....kggggk.....",
+			".kkk.kgssgk.kkk.",
+			".kSk.kGGGGk.kSk.",
+			".kSkkkbbbbkkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSDSSSSDSSk..",
+			"..kSSDSkkSDSSk..",
+			"..kDDDDkkDDDDk..",
+			"..kSDSSSSSSDSk..",
+			"..kTDSSSSSSDTk..",
+			"..kDDDDDDDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"cannon": {  # A gunner beside an iron cannon on a wooden carriage
+		"palette": {
+			"R": Color(0.8, 0.2, 0.18), "B": Color(0.25, 0.35, 0.65), "M": Color(0.28, 0.3, 0.34),
+			"N": Color(0.55, 0.57, 0.62), "W": Color(0.55, 0.35, 0.17), "t": Color(1.0, 0.6, 0.2),
+		},
+		"rows": [
+			"................",
+			"............kkk.",
+			"...........kNNNk",
+			"..........kMMMNk",
+			".........kMMMMk.",
+			"..kkk...kMMMMk..",
+			".kRRRk.kMMMMk...",
+			"..ksk.kMMMMk....",
+			"..ksk.kMMMk.....",
+			".kBBBk.kkkkk....",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.....",
+			".kpppk.kWWWk....",
+			".kpkpk.kWkWk....",
+			".kfkfk.kWWWk....",
+			".kkkkk..kkk.....",
+		],
+	},
+	# --- Tier-3 upgrade looks. "base" inherits that sprite's palette and walk frame. ---
+	"tower_p0": {  # Damage: a ballista mounted on an iron-banded tower
+		"base": "tower",
+		"palette": {"a": Color(0.8, 0.82, 0.88), "n": Color(0.7, 0.55, 0.35), "W": Color(0.5, 0.32, 0.15), "I": Color(0.36, 0.38, 0.44)},
+		"rows": [
+			".......kk.......",
+			"......kaak......",
+			"kkk...knnk...kkk",
+			"kWWkkkknnkkkkWWk",
+			".kkWWWWnnWWWWkk.",
+			".kSSSkWkkWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSDSSSSDSSk..",
+			"..kSSDSkkSDSSk..",
+			"..kIIIIkkIIIIk..",
+			"..kSDSSSSSSDSk..",
+			"..kTDSSSSSSDTk..",
+			"..kIIIIIIIIIIk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"tower_p1": {  # Range: a roofed lookout flying a pennant
+		"base": "tower",
+		"palette": {"R": Color(0.75, 0.22, 0.18), "Q": Color(0.55, 0.14, 0.12), "B": Color(0.3, 0.45, 0.85)},
+		"rows": [
+			".......kBBBk....",
+			".......kBBk.....",
+			"......kRRk......",
+			".....kRRQRk.....",
+			"....kRRRQRRk....",
+			"..kkRRRRQRRRkk..",
+			".kRRRRRRQRRRRRk.",
+			".kkkkkkkkkkkkkk.",
+			".kSk.kgssgk.kSk.",
+			".kSkkkGGGGkkkSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSDSkkSDSSk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"tower_p2": {  # Garrison: three archers on the walls and a war banner
+		"base": "tower",
+		"palette": {"R": Color(0.75, 0.2, 0.18), "Y": Color(1.0, 0.82, 0.3)},
+		"rows": [
+			"......kkkk......",
+			".kkk.kggggk.kkk.",
+			"kgggkkgssgkkgggk",
+			"kgsgkkGGGGkkgsgk",
+			"kGGGkkbbbbkkGGGk",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"..kSDkRYYRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"cannon_p0": {  # Firepower: a huge bronze siege mortar
+		"base": "cannon",
+		"palette": {"M": Color(0.72, 0.5, 0.2), "N": Color(0.95, 0.78, 0.4)},
+		"rows": [
+			"...........kkkk.",
+			"..........kNNNNk",
+			".........kMMMMNk",
+			"........kMMMMMNk",
+			".......kMMMMMMk.",
+			"..kkk.kMMMMMMk..",
+			".kRRRkkMMMMMk...",
+			"..ksk.kMMMMk....",
+			"..ksk.kMMMk.....",
+			".kBBBk.kkkkk....",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.....",
+			".kpppk.kWWWk....",
+			".kpkpk.kWkWk....",
+			".kfkfk.kWWWk....",
+			".kkkkk..kkk.....",
+		],
+	},
+	"cannon_p1": {  # Blast: red-banded barrel, goggles and a powder keg
+		"base": "cannon",
+		"palette": {"N": Color(0.85, 0.2, 0.15), "K": Color(0.5, 0.32, 0.15), "X": Color(0.3, 0.3, 0.32), "o": Color(0.55, 0.85, 1.0), "t": Color(0.45, 0.3, 0.15)},
+		"rows": [
+			"................",
+			"............kkk.",
+			"...........kNNNk",
+			"..........kMMMNk",
+			".........kMNMMk.",
+			"..kkk...kMMNMk..",
+			".kttRk.kMMMMk...",
+			"..kok.kMMMMk....",
+			"..ksk.kMMMk.....",
+			".kBBBk.kkkkk....",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.kkk.",
+			".kpppk.kWWWkKKKk",
+			".kpkpk.kWkWkXXXk",
+			".kfkfk.kWWWkKKKk",
+			".kkkkk..kkk.kkk.",
+		],
+	},
+	"cannon_p2": {  # Crew: a double-barrelled cannon
+		"base": "cannon",
+		"palette": {},
+		"rows": [
+			"................",
+			"..............kk",
+			".............kNN",
+			"............kMMk",
+			"...........kMMkk",
+			"..kkk.....kMMkNN",
+			".kRRRk...kMMkMMk",
+			"..ksk.k.kMMkMMk.",
+			"..ksk.kkMMkMMk..",
+			".kBBBkkMMkMMk...",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.....",
+			".kpppk.kWWWk....",
+			".kpkpk.kWkWk....",
+			".kfkfk.kWWWk....",
+			".kkkkk..kkk.....",
+		],
+	},
+	"swordsman_p0": {  # Damage: a broad axe on a long haft; a dark iron great helm with a red crest, a fur mantle and a red tabard
+		"poses": {
+			"plant": {  # idle: resting on the axe, its head on the ground
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............_k____",
+				6: "............kak___",
+				7: "............ksk___",
+				8: "............kak___",
+				9: "............kak___",
+				10: "..........bkkak___",
+				11: "............kakkk_",
+				12: "............kakwwk",
+				13: "............kakwWk",
+				14: "............kakwwk",
+				15: "............_kkkk.",
+			},
+			"swing": {  # raised high to chop
+				0: "............______",
+				1: "............______kkk",
+				2: "............_____kwwwk",
+				3: "............_____kwWWk",
+				4: "............____kawwwk",
+				5: "............___kakkkk",
+				6: "............__kak___",
+				7: "............_kak____",
+				8: "............kak_____",
+				9: "...........kak______",
+				10: "............______",
+				11: "............______",
+				12: "............______",
+			},
+			"strike": {  # the chop, haft out level
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............______",
+				6: "............______..kkk.",
+				7: "............______.kwwwk",
+				8: "............kkkkkkkkwWWk",
+				9: "............saaaaaakwWWk",
+				10: "............kkkkkkkkwwwk",
+				11: "............______",
+				12: "............______",
+			},
+		},
+		"base": "swordsman",
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0),
+			"i": Color(0.38, 0.38, 0.44), "I": Color(0.24, 0.24, 0.3), "r": Color(0.8, 0.15, 0.15), "m": Color(0.62, 0.5, 0.36), "M": Color(0.42, 0.32, 0.22), "T": Color(0.5, 0.1, 0.1), "t": Color(0.72, 0.16, 0.14), "n": Color(0.95, 0.78, 0.3)},
+		"rows": [
+			"....rrrr.....k....",
+			"...krrrrk...kakkk.",
+			"....kiiiik..kakwwk",
+			"...kiiiiiIk.kakwWk",
+			"...kkkkkkIk.kakwWk",
+			"...kiikiiIk.kakwwk",
+			"....kIIIIk..kakkk.",
+			"..kkmmmmmmkkkak...",
+			"..kmMmmmMmMkkak...",
+			"..ksTttttTskkak...",
+			"..ksbbnbbbsksak...",
+			"..kTttttttTkkak...",
+			"...kTttttTk..k....",
+			"...kppkkppk.......",
+			"...kffk.kffk......",
+			"...kkkk.kkkk......",
+		],
+		"legs_b": [
+			"...kppkppk........",
+			"....kffkffk.......",
+			"....kkkkkkk.......",
+		],
+	},
+	"swordsman_p1": {  # Blades: a sword in each hand; a duelist's green hood and scarf, a leather jerkin with a crossed belt
+		"poses": {
+			"plant": {  # idle: one sword planted, the other propped on his shoulder
+				0: ".k..............",
+				1: "kwk.............",
+				2: "kwk.........____",
+				3: "_kwk........____",
+				4: "_kwk........____",
+				5: "__kwk.......____",
+				6: "__kgk.......kgk_",
+				7: "__ks........ksk_",
+				8: "___........kgggk",
+				9: "__..........kwk_",
+				10: "__.L......Gkkwk_",
+				11: "._..........kwk.",
+				12: "............kwk.",
+				13: "............kwk.",
+				14: "............kwk.",
+				15: "............_k..",
+			},
+			"strike2": {
+				2: "__",
+				3: "___",
+				4: "___",
+				5: "___",
+				6: "___",
+				7: "__",
+				8: "__",
+				9: "__..k",
+				10: "__..gkkkkkkkkkkkkkkkkk",
+				11: "__ksgwwwwwwwwwwwwwwwwwk",
+				12: "....gkkkkkkkkkkkkkkkkk",
+				13: "....k",
+			},
+		},
+		"base": "swordsman",
+		"palette": {"v": Color(0.28, 0.52, 0.32), "V": Color(0.18, 0.36, 0.22), "q": Color(0.14, 0.26, 0.18), "L": Color(0.36, 0.23, 0.13), "l": Color(0.52, 0.35, 0.2), "x": Color(0.22, 0.14, 0.08), "G": Color(0.25, 0.6, 0.38)},
+		"rows": [
+			"......kkk.......",
+			".....kvvvk......",
+			".k..kvvvvvk...k.",
+			"kwkkvvvvvvVk.kwk",
+			"kwkkvksskvVk.kwk",
+			"kwkkvqqqqvVk.kwk",
+			"kwk.kqqqqVk..kwk",
+			"kwkkLxlllLkk.kwk",
+			"kwkLllxlllLk.kwk",
+			"ggkLlllxllLkgggk",
+			"kgksGGGGGGskskk.",
+			".kkLlllllxLk.k..",
+			"...kLllllLk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"swordsman_p0p1": {  # Damage and Blades both at tier 3: an axe in each hand; the duelist's hood over the fur and red tabard
+		"poses": {
+			"plant": {  # idle: resting on the right axe
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............_k____",
+				6: "............kak___",
+				7: "............ksk___",
+				8: "............kak___",
+				9: "............kak___",
+				10: "..........bkkak___",
+				11: "............kakkk_",
+				12: "............kakwwk",
+				13: "............kakwWk",
+				14: "............kakwwk",
+				15: "............_kkkk.",
+			},
+			"swing": {
+				0: "............______",
+				1: "............______kkk",
+				2: "............_____kwwwk",
+				3: "............_____kwWWk",
+				4: "............____kawwwk",
+				5: "............___kakkkk",
+				6: "............__kak___",
+				7: "............_kak____",
+				8: "............kak_____",
+				9: "...........kak______",
+				10: "............______",
+				11: "............______",
+				12: "............______",
+			},
+			"strike": {
+				0: "............______",
+				1: "............______",
+				2: "............______",
+				3: "............______",
+				4: "............______",
+				5: "............______",
+				6: "............______..kkk.",
+				7: "............______.kwwwk",
+				8: "............kkkkkkkkwWWk",
+				9: "............saaaaaakwWWk",
+				10: "............kkkkkkkkwwwk",
+				11: "............______",
+				12: "............______",
+			},
+			"strike2": {  # the off-hand axe swept across
+				0: "___",
+				1: "___",
+				2: "___",
+				3: "___",
+				4: "___",
+				5: "___",
+				6: "___",
+				7: "___",
+				8: "___",
+				9: "__................kkkk",
+				10: "__..kkkkkkkkkkkkkkkwWk",
+				11: "__ksaaaaaaaaaaaaaakwWk",
+				12: "....kkkkkkkkkkkkkkkwWk",
+				13: "....k.............kkkk",
+			},
+		},
+		"base": "swordsman",
+		"palette": {"a": Color(0.6, 0.42, 0.22), "w": Color(0.72, 0.75, 0.82), "W": Color(0.95, 0.97, 1.0),
+			"i": Color(0.38, 0.38, 0.44), "I": Color(0.24, 0.24, 0.3), "r": Color(0.8, 0.15, 0.15), "m": Color(0.62, 0.5, 0.36), "M": Color(0.42, 0.32, 0.22), "T": Color(0.5, 0.1, 0.1), "t": Color(0.72, 0.16, 0.14), "n": Color(0.95, 0.78, 0.3),
+			"v": Color(0.28, 0.52, 0.32), "V": Color(0.18, 0.36, 0.22), "q": Color(0.14, 0.26, 0.18), "L": Color(0.36, 0.23, 0.13), "l": Color(0.52, 0.35, 0.2), "x": Color(0.22, 0.14, 0.08), "G": Color(0.25, 0.6, 0.38)},
+		"rows": [
+			".kkk..kkk....k....",
+			"kwWk.kvvvk..kakkk.",
+			"kwWkkvvvvvk.kakwwk",
+			"kkakvvvvvvVkkakwWk",
+			"kakkvksskvVkkakwWk",
+			"kakkvqqqqvVkkakwwk",
+			"kak.kqqqqVk.kakkk.",
+			"kakkmmmmmmkkkak...",
+			"kakmMmmmMmMkkak...",
+			"kaksTttttTskkak...",
+			"kaksbbnbbbsksak...",
+			".kkTttttttTkkak...",
+			"...kTttttTk..k....",
+			"...kppkkppk.......",
+			"...kffk.kffk......",
+			"...kkkk.kkkk......",
+		],
+		"legs_b": [
+			"...kppkppk........",
+			"....kffkffk.......",
+			"....kkkkkkk.......",
+		],
+	},
+	"swordsman_p2": {  # Health: full plate with gold trim and a kite shield
+		"base": "swordsman",
+		"palette": {"y": Color(1.0, 0.82, 0.3), "r": Color(0.25, 0.45, 0.95)},
+		"rows": [
+			".....rrr........",
+			"....krrrk.......",
+			"...kyhhhhyk...k.",
+			"...khhhhhHk..kwk",
+			"...khkkkkHk..kwk",
+			"...kyhhhhyk..kwk",
+			"....kHHHHk...kwk",
+			"kkkkkkyyykhhkkwk",
+			"kryyrkhhhhHk.kwk",
+			"kyyyykyyhhHkgggk",
+			"kryyrkyyyysksk..",
+			"kryyrkhhhhHk.k..",
+			".kryk.hhhHk.....",
+			"..kkHHkkHHk.....",
+			"...khhk.khhk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"..kkHHkHHk......",
+			"....khhkhhk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"archer_p1": {  # Range: a crossbow
+		"poses": {
+			"draw": {
+				6: "................kk",
+				7: ".............wmnnak",
+				8: "............scccck",
+				9: ".............wmkk",
+			},
+		},
+		"base": "archer",
+		"palette": {"m": Color(0.6, 0.62, 0.68), "c": Color(0.5, 0.32, 0.15), "n": Color(0.7, 0.55, 0.35)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			".k.kgGgggGgk.k..",
+			".kskggGsGggks...",
+			"..kkgskssksgk.k.",
+			"...kgssssssgkkmk",
+			".kLkkLLLLLLkkwmk",
+			"kLklllllllllsccc",
+			"kGkLklllllkLkwmk",
+			".kkskLLLLLksk.mk",
+			"...kllllllk...k.",
+			"...kppppppk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"archer_p2": {  # Attack speed: a full quiver on the back
+		"base": "archer",
+		"palette": {"q": Color(0.5, 0.3, 0.15), "e": Color(0.85, 0.25, 0.2)},
+		"rows": [
+			"................",
+			".kek.kkkkk......",
+			".kekkgggggk...k.",
+			".kqkgGgggGgk.kbk",
+			".kqkggGsGggkswbk",
+			".kqkgskssksgkw.b",
+			".kqkgssssssgkw.b",
+			".kqkkLLLLLLkkw.b",
+			"kkklllllllllkssb",
+			"kGkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
+			"...kllllllk..bk.",
+			"...kppppppk..k..",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"mage_p0": {  # Storm: blue robes with lightning
+		"base": "mage",
+		"palette": {
+			"P": Color(0.25, 0.4, 0.85), "Q": Color(0.15, 0.25, 0.6), "r": Color(0.3, 0.5, 0.95),
+			"R": Color(0.18, 0.32, 0.7), "o": Color(0.6, 0.85, 1.0),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPPk..kOok",
+			".....kPPyPk..kok",
+			"....kPPPPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kskssksk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWWWWWrkswk",
+			"...krrWWWWrrk.wk",
+			"..krrrWWryrRk.wk",
+			"..kRrrrryrrRk.wk",
+			"..kRrrrrryyRk.wk",
+			"..kRRrrrryRRk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"mage_p1": {  # Arcane Lance: deep purple robes with stars
+		"base": "mage",
+		"palette": {
+			"P": Color(0.35, 0.18, 0.6), "Q": Color(0.22, 0.1, 0.4), "r": Color(0.45, 0.25, 0.75),
+			"R": Color(0.3, 0.15, 0.55), "y": Color(1.0, 0.95, 0.6), "o": Color(1.0, 0.95, 0.6),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPyk..kOok",
+			".....kPPPPk..kok",
+			"....kPPyPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kskssksk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWWWWWrkswk",
+			"...kryWWWWrrk.wk",
+			"..krrrWWrrrRk.wk",
+			"..kRrrrrryrRk.wk",
+			"..kRryrrrrrRk.wk",
+			"..kRRrrryrRRk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"mage_p2": {  # Fire: red robes with flames at the hem
+		"base": "mage",
+		"palette": {
+			"P": Color(0.75, 0.15, 0.12), "Q": Color(0.5, 0.08, 0.06), "r": Color(0.85, 0.22, 0.15),
+			"R": Color(0.6, 0.1, 0.08), "F": Color(1.0, 0.55, 0.1), "o": Color(1.0, 0.6, 0.2),
+			"O": Color(1.0, 0.95, 0.6),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPPk..kOok",
+			".....kPPyPk..kok",
+			"....kPPPPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kskssksk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWWWWWrkswk",
+			"...krrWWWWrrk.wk",
+			"..krrrWWrrrRk.wk",
+			"..kRrrrrrrrRk.wk",
+			"..kRFrrFrrFRk.wk",
+			"..kFyFFyFFyFk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"frost_p0": {  # Deep Cold: navy robes and an icicle crown
+		"base": "frost",
+		"palette": {
+			"c": Color(0.2, 0.3, 0.6), "C": Color(0.12, 0.2, 0.45), "r": Color(0.18, 0.28, 0.6),
+			"R": Color(0.1, 0.18, 0.42), "s": Color(0.85, 0.9, 0.98),
+		},
+		"rows": [ # the icicle crown on her hair; navy robes with a lighter front, icy cuffs
+			"...kikikkikik.k.",
+			"....khhhhhhk.kik",
+			"...khhhHHhhhkkIk",
+			"..khhnnssnnhhkik",
+			"..khhsksskshhkwk",
+			"..khhssmmsshhkwk",
+			"..khhRRccRRhhkwk",
+			".khHRrricrrRhkwk",
+			".khHRrrccrrRiswk",
+			".khHRrrccrrRhkwk",
+			".khHRrrcCrrRhkwk",
+			".khHiRrcCrRRk.wk",
+			"..kkRrrcCCrRk.wk",
+			"..kRRRrrrRRRk.wk",
+			"...kkkfkfkkk..k.",
+			"................",
+		],
+	},
+	"frost_p1": {  # Blizzard: white fur cloak dusted with snowflakes
+		"base": "frost",
+		"palette": {
+			"c": Color(0.95, 0.97, 1.0), "C": Color(0.72, 0.8, 0.9), "r": Color(0.88, 0.92, 0.98),
+			"R": Color(0.68, 0.76, 0.88), "b": Color(0.45, 0.7, 0.95),   # (b: the blue gown under the cloak)
+		},
+		"rows": [ # a white fur cloak over the blue gown, its collar and hem of fur, snowflakes on it
+			".....kkkkkk...k.",
+			"....khhhhhhk.kik",
+			"...khhhHHhhhkkIk",
+			"..khhnnssnnhhkik",
+			"..khhsksskshhkwk",
+			"..khhssmmsshhkwk",
+			"..kCCCCCCCCCCkwk",
+			".khHCrrbbrrChkwk",
+			".khHCirbbriCuswk",
+			".khHCrrbbrrChkwk",
+			".khHCrrbbrrChkwk",
+			".khHuRrbbirRk.wk",
+			"..kkRirbbrrRk.wk",
+			"..kCCCCCCCCCk.wk",
+			"...kkkfkfkkk..k.",
+			"................",
+		],
+	},
+	"frost_p2": {  # Flash Freeze: glowing eyes, ice shards and a giant crystal
+		"poses": {
+			"cast": {   # the staff swung level, the giant crystal at its end
+				0: ".............__",
+				1: "............____",
+				2: ".............___",
+				3: "..............__.....kk",
+				4: ".............kkkkkkkkiIk",
+				5: ".............swwwwwwwiiIk",
+				6: ".............kkkkkkkkiIk",
+				7: "..............__.....kk",
+				8: "............hk__",
+				9: "..............__",
+				10: "..............__",
+				11: "..............__",
+				12: "..............__",
+				13: "..............__",
+				14: "..............__",
+			},
+
+		},
+		"base": "frost",
+		"palette": {"e": Color(0.4, 1.0, 1.0)},
+		"rows": [ # glowing eyes, ice shards about her, a giant crystal atop the staff
+			".....kkkkkk..kk.",
+			"....khhhhhhkkiIk",
+			"...khhhHHhhhkiIk",
+			"..khhnnssnnhhkik",
+			"..khhsesseshhkwk",
+			"..khhssmmsshhkwk",
+			".ikhhRRggRRhhkwk",
+			"ikhHRrrigrrRhkwk",
+			".khHRrrggrrRuswk",
+			".khHRrrggrrRhkwk",
+			".khHRrrgGrrRhkwk",
+			".khHuRrgGrRRkiwk",
+			"..kkRrrgGGrRkiwk",
+			"..kuuuuuuuuuk.wk",
+			"...kkkfkfkkk..k.",
+			"................",
+		],
+	},
+	"martial_dbz_p1": {  # Dragon Ball skin, Brawling (a Yamcha nod): his desert-bandit look: long shaggy hair, green tunic, orange scarf, white sash
+		"base": "martial",
+		"palette": {
+			"h": Color(0.15, 0.13, 0.18), "V": Color(0.25, 0.55, 0.28), "O": Color(0.95, 0.55, 0.15),
+			"W": Color(0.95, 0.95, 0.92), "R": Color(0.8, 0.22, 0.2), "c": Color(0.93, 0.87, 0.7),
+			"b": Color(0.15, 0.13, 0.15), "P": Color(0.32, 0.26, 0.5), "A": Color(0.96, 0.77, 0.6),
+			"Z": Color(0.96, 0.77, 0.6), "X": Color(0.15, 0.13, 0.15), "F": Color(0.96, 0.77, 0.6),
+			"L": Color(0.93, 0.87, 0.7), "U": Color(0.32, 0.26, 0.5),
+		},
+		"rows": [
+			"....k..k.k......",
+			"...khkkhkhk.....",
+			"..khhhhhhhhk....",
+			".khhhhhhhhhhk...",
+			".khhshhhshhhk...",
+			".khkskssksk.hk..",
+			".kh.kssssk..hk..",
+			"..kkOOOOOOkk....",
+			".kskVOOOOVVksk..",
+			".kskVVOOVVVksk..",
+			".kbkWWWWWWWkbk..",
+			".kskVWVVVVVksk..",
+			"...kRRRRRRRk....",
+			"...kccckccck....",
+			"...kPPk.kPPk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kcckcck.....",
+			"....kPPkPPk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_dbz_p1p2": {  # Dragon Ball skin, Brawling and Secret Arts both at tier 3: Krillin's head on Yamcha's desert-bandit outfit
+		"poses": {
+			"punch": {
+				8: "................kk",
+				9: "...........kkkkkFFk",
+				10: "...........AAZZXFFk",
+				11: "...........kkkkkkk",
+			},
+		},
+		"base": "martial",
+		"palette": {
+			"d": Color(0.35, 0.25, 0.25), "V": Color(0.25, 0.55, 0.28), "O": Color(0.95, 0.55, 0.15),
+			"W": Color(0.95, 0.95, 0.92), "R": Color(0.8, 0.22, 0.2), "c": Color(0.93, 0.87, 0.7),
+			"b": Color(0.15, 0.13, 0.15), "P": Color(0.32, 0.26, 0.5),
+			"A": Color(0.96, 0.77, 0.6), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.15, 0.13, 0.15),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.93, 0.87, 0.7), "U": Color(0.32, 0.26, 0.5),
+		},
+		"rows": [
+			"................",
+			"................",
+			"................",
+			".....kkkkk......",
+			"....ksdsdsk.....",
+			"...ksdsdsdsk....",
+			"...ksksssksk....",
+			"....ksssssk.....",
+			"..kkOOOOOOkk....",
+			".kskVVOOVVVksk..",
+			".kbkWWWWWWWkbk..",
+			".kskVWVVVVVksk..",
+			"...kRRRRRRRk....",
+			"...kccckccck....",
+			"...kPPk.kPPk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kcckcck.....",
+			"....kPPkPPk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"martial_dbz_p3": {  # Dragon Ball skin, Discipline (a Goku nod): wild spiky hair, orange gi, blue undershirt and belt
+		"base": "martial",
+		"palette": {
+			"h": Color(0.2, 0.17, 0.25), "o": Color(0.95, 0.55, 0.15), "B": Color(0.2, 0.3, 0.75),
+			"A": Color(0.95, 0.55, 0.15), "Z": Color(0.96, 0.77, 0.6), "X": Color(0.2, 0.3, 0.75),
+			"F": Color(0.96, 0.77, 0.6), "L": Color(0.95, 0.55, 0.15), "U": Color(0.2, 0.3, 0.75),
+		},
+		"rows": [
+			"......k..k......",
+			"..k..khkkhk..k..",
+			"..khkhhhhhhkhk..",
+			".khhhhhhhhhhhhk.",
+			"..khhshhshhhk...",
+			"...kskssksk.....",
+			"....kssssk......",
+			"..kkoBBBBokk....",
+			".kokooBBoookok..",
+			".kokoooooookok..",
+			".kBkBBBBBBBkBk..",
+			".kskoooooooksk..",
+			"...koookoook....",
+			"...koookoook....",
+			"...kBBk.kBBk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"....kookook.....",
+			"....kBBkBBk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"swordsman_p3": {  # Charge: a spear knight: a closed steel helm with a blue plume, a blue tabard with a gold cross, and a pennoned spear
+		"poses": {
+			"plant": {},  # idle: the spear grounded upright beside him, as he stands
+			"swing": {  # drawn back at the shoulder, to thrust
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............__k_",
+				6: "kk..........k.kwk",
+				7: "ka..........sa.wwk",
+				8: "kk..........k.kwk",
+				9: "............___",
+				10: "............____",
+				11: "............____",
+				12: ".............___",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+			"strike": {  # the thrust, at full reach
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............____",
+				6: ".............___",
+				7: ".............___...kRRk",
+				8: ".............___...kRk..k",
+				9: "............_.k.kkkkkkkkwk",
+				10: ".............a.aaaaaaaaawwk",
+				11: "............_.k.kkkkkkkkwk",
+				12: ".............___........k",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+			"couch": {  # Charge: lowered and level for the run in, its pennant streaming
+				0: ".............._",
+				1: ".............___",
+				2: ".............___",
+				3: ".............____",
+				4: "............._____",
+				5: ".............____",
+				6: ".............___",
+				7: ".............___kRRk",
+				8: ".............___kRk...k",
+				9: "kk.........._.k.kkkkkkwk",
+				10: "ka...........a.aaaaaaawwk",
+				11: "kk.........._.k.kkkkkkwk",
+				12: ".............___......k",
+				13: ".............___",
+				14: ".............___",
+				15: ".............._",
+			},
+		},
+		"base": "swordsman",
+		"palette": {
+			"r": Color(0.3, 0.5, 0.95), "T": Color(0.18, 0.28, 0.6), "t": Color(0.28, 0.42, 0.82), "n": Color(0.95, 0.8, 0.3),
+			"a": Color(0.58, 0.4, 0.22), "R": Color(0.85, 0.2, 0.2),
+		},
+		"rows": [
+			"......rr......k...",
+			".....krrk....kwk..",
+			"....khhhhk...kwk..",
+			"...khhhhhHk..kakk.",
+			"...khkkkkHk..kaRRk",
+			"...khhhhhHk..kaRk.",
+			"....kHhhHk...kak..",
+			"..kkTttntTkk.kak..",
+			"..kTttnnntTk.kak..",
+			"..kTtttnttTkkkak..",
+			"..ksbbbbbbskssak..",
+			"..kTtttnttTkkkak..",
+			"...kTttttTk..kak..",
+			"...kppkkppk..kak..",
+			"...kffk.kffk.kak..",
+			"...kkkk.kkkk..k...",
+		],
+		"legs_b": [
+			"...kppkppk...kak..",
+			"....kffkffk..kak..",
+			"....kkkkkkk...k...",
+		],
+	},
+	"archer_p3": {  # Trick Shots: a mystic with blue hair, a glowing string and seeker arrows
+		"base": "archer",
+		"palette": {
+			"g": Color(0.28, 0.42, 0.78), "G": Color(0.17, 0.27, 0.55), "w": Color(0.55, 0.95, 1.0),
+			"c": Color(0.6, 1.0, 1.0),
+		},
+		"rows": [
+			"..............c.",
+			".....kkkkk......",
+			"....kgggggk...k.",
+			".k.kgGgggGgk.kbk",
+			".kskggGsGggkswbk",
+			"..kkgskssksgkw.b",
+			"...kgssssssgkw.b",
+			".kLkkLLLLLLkkw.b",
+			"kLklllllllllkssc",
+			"kLkLklllllkLkw.b",
+			".kkskLLLLLkskwbk",
+			"...kllllllk..bk.",
+			"...kppppppk..k..",
+			"...kppkkppk.c...",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"mage_p3": {  # Spellblade: a steel-blue battle hood and armoured robe, violet-lit eyes, a crystal-pommelled staff (the sword's drawn from it)
+		"base": "mage",
+		"palette": {
+			"P": Color(0.36, 0.42, 0.58), "Q": Color(0.24, 0.28, 0.4), "y": Color(0.85, 0.8, 1.0),
+			"e": Color(0.8, 0.7, 1.0), "W": Color(0.62, 0.66, 0.74), "r": Color(0.36, 0.42, 0.58),
+			"R": Color(0.22, 0.26, 0.36), "o": Color(0.88, 0.85, 1.0), "O": Color(0.6, 0.55, 0.85),
+		},
+		"rows": [
+			".......kk.....k.",
+			"......kPPk...kok",
+			"......kPPk..kOok",
+			".....kPPyPk..kok",
+			"....kPPPPQPk.kwk",
+			"..kQQQQQQQQk.kwk",
+			"....kseskesk.kwk",
+			"....kWWWWWWk.swk",
+			"...krWWyyWWrkswk",
+			"...krrWWWWrrk.wk",
+			"..krrrWWrrrRk.wk",
+			"..kRrrryrrrRk.wk",
+			"..kRrrrrrryRk.wk",
+			"..kRyRrrrrRRk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"frost_p3": {  # Shattercraft: a snow queen in a pale gown and blue cape, a tall ice crown and drifting frost
+		"base": "frost",
+		"palette": {
+			"r": Color(0.9, 0.92, 1.0), "R": Color(0.72, 0.78, 0.95), "C": Color(0.6, 0.8, 1.0),
+			"b": Color(0.3, 0.5, 0.9),
+		},
+		"rows": [ # a tall ice crown, a pale gown with an icy front, a blue cape behind her hair
+			".i..kikiikik..k.",
+			"....kIIIIIIk.kik",
+			"...khhhHHhhhkkIk",
+			"..khhnnssnnhhkik",
+			"..khhsksskshhkwk",
+			"..khhssmmsshhkwk",
+			".bkhhRRCCRRhhkwk",
+			"bkhHRrrICrrRhkwk",
+			"bkhHRrrCCrrRuswk",
+			"bkhHRrrCCrrRhkwk",
+			"bkhHRrrCRrrRhkwk",
+			"bkhHuRrCRrRRk.wk",
+			"bbkkRrrCRRrRk.wk",
+			"ibkuuuuuuuuuk.wk",
+			"...kkkfkfkkk..k.",
+			"..i.........i...",
+		],
+	},
+	"healer_p3": {  # Divine Retribution: angelic white-and-gold robes, feathered wings and a halo
+		"base": "healer",
+		"palette": {
+			"u": Color(0.97, 0.97, 1.0), "G": Color(0.95, 0.82, 0.35),
+		},
+		"rows": [
+			".....yyyy.....k.",
+			".....kkkk....kok",
+			"....kHHHHk..kOok",
+			"...kHHHHHHk..kok",
+			"...kHskssksk.kwk",
+			"...kHssssssk.kwk",
+			"uu.kkHHHHHHk.kwk",
+			"uukHHHgggHHHkswk",
+			"kukHHHHyHHHHkswk",
+			".kkHHHyyyHHHk.wk",
+			"..kHHHHyHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kHHHHHHHHHk.wk",
+			"..kyyyyyyyyyk.wk",
+			"...kkfkkfkkk..k.",
+			"....kk..kk......",
+		],
+	},
+	"bard_p3": {  # Bewitch: an enchanter in magenta and a masquerade mask, playing a jingling hand drum
+		"poses": {
+			"strum": {
+				9: "..kTkTTTTTkDsDk.",
+			},
+		},
+		"base": "bard",
+		"palette": {
+			"R": Color(0.7, 0.22, 0.58), "T": Color(0.92, 0.48, 0.75), "y": Color(0.98, 0.9, 0.95),
+			"F": Color(0.55, 0.95, 1.0), "m": Color(0.85, 0.3, 0.7), "p": Color(0.35, 0.18, 0.38),
+			"D": Color(0.9, 0.82, 0.62), "j": Color(1.0, 0.85, 0.3),
+		},
+		"rows": [
+			".......kk.k.....",
+			".....kkRRkFk....",
+			"....kRRRRRkk....",
+			"...kRRRRRRRk....",
+			"....kmkmmkmk....",
+			"....kssssssk....",
+			".....kssssk..kk.",
+			"...kkTTyyTTkkDDk",
+			"..kTTTTyyTTkDDDk",
+			"..kTkTTTTTskDjDk",
+			"..kskTTTTkkDDDk.",
+			"...kTTTTTk.kDDk.",
+			"...kppppppk.kk..",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"alchemist_p3": {  # Trapcraft: a sapper with goggles up on a leather cap, an olive coat and a bandolier of red charges
+		"base": "alchemist",
+		"palette": {
+			"h": Color(0.4, 0.27, 0.15), "C": Color(0.42, 0.45, 0.25), "A": Color(0.52, 0.55, 0.32),
+			"n": Color(0.4, 0.27, 0.15), "e": Color(0.88, 0.25, 0.2),
+		},
+		"rows": [
+			"......kkkk......",
+			".....khhhhk.....",
+			"....kGgGGgGk....",
+			"....khhhhhhk....",
+			"....kssssssk....",
+			"....kskssksk....",
+			".....kssssk..kk.",
+			"...kkCnAAACk.kek",
+			"..kCCAenAAACkeek",
+			"..kCkAAenAkCkeek",
+			"..kskAAAenkssk..",
+			"...kaaaaaak.....",
+			"...kAAAAAAk.....",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+	},
+	"tower_p3": {  # Fire Arrows: braziers blazing on both turrets and an orange war banner
+		"base": "tower",
+		"palette": {
+			"e": Color(1.0, 0.55, 0.15), "y": Color(1.0, 0.9, 0.4),
+		},
+		"rows": [
+			".e....kkkk....e.",
+			"eye..kggggk..eye",
+			".kkk.kgssgk.kkk.",
+			".kSk.kGGGGk.kSk.",
+			".kSkkkbbbbkkkSk.",
+			".kSSSSSSSSSSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSDkeeekSSk..",
+			"..kSSDkeyekSSk..",
+			"..kDDDkeeekDDk..",
+			"..kSDSkekekDSk..",
+			"..kTDSSSSSSDTk..",
+			"..kDDDDDDDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"cannon_p3": {  # Payloads: a soot-black barrel with flame stripes and a crate of incendiary shells
+		"base": "cannon",
+		"palette": {
+			"M": Color(0.18, 0.17, 0.2), "N": Color(1.0, 0.5, 0.15), "e": Color(0.9, 0.25, 0.2),
+			"d": Color(0.5, 0.33, 0.18),
+		},
+		"rows": [
+			"..............e.",
+			"............kkk.",
+			"...........kNNNk",
+			"..........kMNMNk",
+			".........kMNMMk.",
+			"..kkk...kMMNMk..",
+			".kRRRk.kMNMMk...",
+			"..ksk.kMMNMk....",
+			"..ksk.kMMMk.....",
+			".kBBBk.kkkkk....",
+			"kBBBBBkWWWWWk...",
+			"ksBBBsk.kkk.kkkk",
+			".kpppk.kWWWkeeek",
+			".kpkpk.kWkWkdddk",
+			".kfkfk.kWWWkdddk",
+			".kkkkk..kkk.kkkk",
+		],
+	},
+	"magetower_p3": {  # (old Mage Tower, Necromancy look: kept for old saves) dark stone, a black-hatted necromancer, a skull banner and green-lit windows
+		"base": "magetower",
+		"palette": {
+			"P": Color(0.18, 0.2, 0.18), "Q": Color(0.12, 0.14, 0.12), "y": Color(0.45, 0.95, 0.4),
+			"e": Color(0.45, 1.0, 0.45), "W": Color(0.25, 0.28, 0.25), "S": Color(0.42, 0.44, 0.42),
+			"D": Color(0.3, 0.32, 0.3), "T": Color(0.36, 0.38, 0.36), "R": Color(0.15, 0.3, 0.15),
+			"o": Color(0.9, 0.88, 0.8), "g": Color(0.45, 1.0, 0.45),
+		},
+		"rows": [
+			".......kk.......",
+			"......kPPk......",
+			".kkk.kPPyPk.kkk.",
+			".kSkkQQQQQQkkSk.",
+			".kSk.keskek.kSk.",
+			".kSSSkWWWWkSSSk.",
+			".kkkkkkkkkkkkkk.",
+			"..kSSkRRRRkSSk..",
+			"..kSykRooRkySk..",
+			"..kDDkRgRgkDDk..",
+			"..kSDkRRRRkDSk..",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			".kTSSDSSSSDSSTk.",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"frosttower_p3": {  # Frost Aura: an ice-blue spire with frost drifting off it and a glowing banner
+		"base": "frosttower",
+		"palette": {
+			"S": Color(0.72, 0.85, 0.95), "D": Color(0.55, 0.7, 0.85), "T": Color(0.62, 0.78, 0.9),
+			"I": Color(0.92, 0.97, 1.0), "e": Color(0.55, 0.95, 1.0), "Y": Color(0.6, 1.0, 1.0),
+		},
+		"rows": [
+			"i.....kkkk.....i",
+			".....kcccck.....",
+			".kkkkcccccckkkk.",
+			".kSkkhseseshkSk.",
+			".kSkkCrrrrCkkSk.",
+			".kIIIIIIIIIIIIk.",
+			".kkkkkkkkkkkkkk.",
+			"i.kSSkRRRRkSSk.i",
+			"..kSSkRYYRkSSk..",
+			"..kDDkRRRRkDDk..",
+			"i.kSDkRYYRkDSk.i",
+			"..kTDSkRRkSDTk..",
+			"..kDDDDkkDDDDk..",
+			".kSSSDSSSSDSSSk.",
+			"ikTSSDSSSSDSSTki",
+			".kkkkkkkkkkkkkk.",
+		],
+	},
+	"medbay_p3": {  # Consecration: a gold-trimmed chapel tent with a golden cross and a sunburst
+		"base": "medbay",
+		"palette": {
+			"r": Color(0.95, 0.78, 0.25), "w": Color(0.95, 0.8, 0.35), "y": Color(1.0, 0.92, 0.5),
+		},
+		"rows": [
+			"......y..y......",
+			".....y....y.....",
+			".......kk.......",
+			"......kWWk......",
+			".....kWWWWk.....",
+			"....kWWrrWWk....",
+			"...kWWWrrWWWk...",
+			"..kWWrrrrrrWWk..",
+			".kWWWrrrrrrWWWk.",
+			"kWWWWWWrrWWWWWWk",
+			"kwWWWWWrrWWWWWwk",
+			"kwWWWWkkkkWWWWwk",
+			"kwWWWkxxxxkWWWwk",
+			"kwWWkxxyyxxkWWwk",
+			"kwWWkxxxxxxkWWwk",
+			"kkkkkkkkkkkkkkkk",
+		],
+	},
+	"statue_p3": {  # March: a copper standard-bearer, a red banner streaming from the raised pole
+		"base": "statue",
+		"palette": {"S": Color(0.78, 0.5, 0.32), "D": Color(0.55, 0.33, 0.2), "R": Color(0.85, 0.2, 0.18), "Y": Color(1.0, 0.82, 0.3)},
+		"rows": [
+			"...........kkkkk",
+			"..........kSRRRk",
+			"......kk..kSRYRk",
+			".....kSSk.kSRRk.",
+			".....kSSk.kSkk..",
+			"......kk..kDk...",
+			"....kkSSkkkDk...",
+			"...kSSSSSSSk....",
+			"...kSkSSSSk.....",
+			"...kSkSSSSk.....",
+			"...kDkSSSSk.....",
+			"....kSk.kSk.....",
+			"...kkkkkkkkkk...",
+			"...kPPPPPPPPk...",
+			"..kPPPPPPPPPPk..",
+			"..kkkkkkkkkkkk..",
+		],
+	},
+	"mine_p3": {  # Gemcutters: the rock studded with big cyan and violet crystals, gems piled out front
+		"base": "mine",
+		"palette": {
+			"c": Color(0.55, 0.95, 1.0), "C": Color(0.3, 0.7, 0.9), "v": Color(0.8, 0.5, 1.0),
+			"V": Color(0.55, 0.3, 0.8),
+		},
+		"rows": [
+			"......c.........",
+			".....kckkkk..v..",
+			"...kkRcCRRRkkvk.",
+			"..kRRRRRRrRRvVk.",
+			"..kRRRRRRrRRRk..",
+			".kRrRkkkkkkRRRk.",
+			".kcRkWWWWWWkRrk.",
+			"kcCRkWxxxxWkRRRk",
+			"kRcRkWxxxxWkvRRk",
+			"kRRRkWxxxxWkVvRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kRRRkWxxxxWkRRRk",
+			"kkckkkkkkkkkkvkk",
+			".kcCck....kvVvk.",
+			"..kkk......kkk..",
+		],
+	},
+	"pikeman": {  # The Knight's cousin: a combed steel helm, steel shoulders, a blue tabard with a white spearhead, a pike upright (levelled in battle: warrior._draw_pike)
+		"poses": {
+			"level": {  # the pike brought down level (drawn on its own, at its real reach)
+				0: ".............._.",
+				1: ".............___",
+				2: ".............___",
+				3: ".............___",
+				4: "..............__",
+				5: ".............___",
+				6: ".............___",
+				7: ".............___",
+				8: ".............___",
+				9: ".............___",
+				10: "..............__",
+				11: ".............___",
+				12: ".............___",
+				13: ".............._.",
+			},
+		},
+		"palette": {"h": Color(0.78, 0.8, 0.86), "H": Color(0.52, 0.55, 0.64), "w": Color(0.95, 0.97, 1.0), "u": Color(0.3, 0.48, 0.82), "U": Color(0.2, 0.32, 0.6), "v": Color(0.93, 0.93, 0.96), "b": Color(0.42, 0.26, 0.12), "q": Color(0.58, 0.4, 0.22), "x": Color(0.85, 0.88, 0.95)},
+		"rows": [
+			"......kk......k.",
+			".....khHk....kxk",
+			"....khhhhk...kxk",
+			"...khwhhhHk..kxk",
+			".kHHHHHHHHHHkkqk",
+			"....kskssksk.kqk",
+			".....kssssk..kqk",
+			"..kkHuuuuHkk.kqk",
+			"..kHuvvvvuHk.kqk",
+			"..kUuuvvuuUk.kqk",
+			"..ksbbuubbskskqk",
+			"..kUuuuuuuUk.kqk",
+			"...kUuuuuUk..kqk",
+			"...kppkkppk...k.",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"pikeman_p0": {  # Spearwall: a red tabard
+		"base": "pikeman",
+		"palette": {"u": Color(0.7, 0.2, 0.2), "U": Color(0.48, 0.12, 0.12)},
+		"rows": [
+			"......kk......k.",
+			".....khHk....kxk",
+			"....khhhhk...kxk",
+			"...khwhhhHk..kxk",
+			".kHHHHHHHHHHkkqk",
+			"....kskssksk.kqk",
+			".....kssssk..kqk",
+			"..kkHuuuuHkk.kqk",
+			"..kHuvvvvuHk.kqk",
+			"..kUuuvvuuUk.kqk",
+			"..ksbbuubbskskqk",
+			"..kUuuuuuuUk.kqk",
+			"...kUuuuuUk..kqk",
+			"...kppkkppk...k.",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"pikeman_p1": {  # Impaler: grey mail, a darker, heavier point
+		"base": "pikeman",
+		"palette": {"u": Color(0.48, 0.5, 0.55), "U": Color(0.32, 0.34, 0.38), "v": Color(0.25, 0.26, 0.3), "x": Color(0.6, 0.62, 0.68)},
+		"rows": [
+			"......kk......k.",
+			".....khHk....kxk",
+			"....khhhhk...kxk",
+			"...khwhhhHk..kxk",
+			".kHHHHHHHHHHkkqk",
+			"....kskssksk.kqk",
+			".....kssssk..kqk",
+			"..kkHuuuuHkk.kqk",
+			"..kHuvvvvuHk.kqk",
+			"..kUuuvvuuUk.kqk",
+			"..ksbbuubbskskqk",
+			"..kUuuuuuuUk.kqk",
+			"...kUuuuuUk..kqk",
+			"...kppkkppk...k.",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"pikeman_p2": {  # Phalanx: a gilded helm and emblem, a regiment's colours
+		"base": "pikeman",
+		"palette": {"v": Color(0.95, 0.78, 0.3), "H": Color(0.85, 0.7, 0.3)},
+		"rows": [
+			"......kk......k.",
+			".....khHk....kxk",
+			"....khhhhk...kxk",
+			"...khwhhhHk..kxk",
+			".kHHHHHHHHHHkkqk",
+			"....kskssksk.kqk",
+			".....kssssk..kqk",
+			"..kkHuuuuHkk.kqk",
+			"..kHuvvvvuHk.kqk",
+			"..kUuuvvuuUk.kqk",
+			"..ksbbuubbskskqk",
+			"..kUuuuuuuUk.kqk",
+			"...kUuuuuUk..kqk",
+			"...kppkkppk...k.",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"pikeman_p3": {  # Hook & Shove: buff leather, a dull helm
+		"base": "pikeman",
+		"palette": {"u": Color(0.55, 0.4, 0.24), "U": Color(0.4, 0.28, 0.16), "v": Color(0.8, 0.72, 0.55), "h": Color(0.62, 0.6, 0.55)},
+		"rows": [
+			"......kk......k.",
+			".....khHk....kxk",
+			"....khhhhk...kxk",
+			"...khwhhhHk..kxk",
+			".kHHHHHHHHHHkkqk",
+			"....kskssksk.kqk",
+			".....kssssk..kqk",
+			"..kkHuuuuHkk.kqk",
+			"..kHuvvvvuHk.kqk",
+			"..kUuuvvuuUk.kqk",
+			"..ksbbuubbskskqk",
+			"..kUuuuuuuUk.kqk",
+			"...kUuuuuUk..kqk",
+			"...kppkkppk...k.",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"assassin": {  # An elf of the Woodland Watch, as her Archers are (green hair, the ears, their leathers), but in a dark cowl and a scarf over the face, a dagger in each hand
+		"palette": {"c": Color(0.16, 0.3, 0.2), "g": Color(0.35, 0.65, 0.3), "G": Color(0.22, 0.45, 0.2), "m": Color(0.2, 0.26, 0.22), "L": Color(0.42, 0.28, 0.15), "l": Color(0.6, 0.42, 0.25), "a": Color(0.75, 0.62, 0.35), "w": Color(0.88, 0.92, 0.97)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			"...kgGgggGgk....",
+			".kskggGsGggksk..",
+			"..kkgskssksgk...",
+			"...kcmmmmmmck...",
+			"..kccLLLLLLcck..",
+			".kcklalllalkck..",
+			"kaskllaaalllksak",
+			"kwk.kLLLLLLk.kwk",
+			"kwk.kLLaLLLk.kwk",
+			".k.kppppppk...k.",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"assassin_p0": {  # Ambush: black cowl and leathers
+		"base": "assassin",
+		"palette": {"c": Color(0.1, 0.1, 0.12), "m": Color(0.12, 0.12, 0.14), "L": Color(0.2, 0.18, 0.18), "l": Color(0.32, 0.28, 0.27)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			"...kgGgggGgk....",
+			".kskggGsGggksk..",
+			"..kkgskssksgk...",
+			"...kcmmmmmmck...",
+			"..kccLLLLLLcck..",
+			".kcklalllalkck..",
+			"kaskllaaalllksak",
+			"kwk.kLLLLLLk.kwk",
+			"kwk.kLLaLLLk.kwk",
+			".k.kppppppk...k.",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"assassin_p1": {  # Sabotage: a night-blue cowl
+		"base": "assassin",
+		"palette": {"c": Color(0.16, 0.22, 0.42), "m": Color(0.2, 0.26, 0.45)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			"...kgGgggGgk....",
+			".kskggGsGggksk..",
+			"..kkgskssksgk...",
+			"...kcmmmmmmck...",
+			"..kccLLLLLLcck..",
+			".kcklalllalkck..",
+			"kaskllaaalllksak",
+			"kwk.kLLLLLLk.kwk",
+			"kwk.kLLaLLLk.kwk",
+			".k.kppppppk...k.",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"assassin_p2": {  # Stealth: a smoke-grey cowl
+		"base": "assassin",
+		"palette": {"c": Color(0.48, 0.5, 0.5), "m": Color(0.6, 0.62, 0.62)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			"...kgGgggGgk....",
+			".kskggGsGggksk..",
+			"..kkgskssksgk...",
+			"...kcmmmmmmck...",
+			"..kccLLLLLLcck..",
+			".kcklalllalkck..",
+			"kaskllaaalllksak",
+			"kwk.kLLLLLLk.kwk",
+			"kwk.kLLaLLLk.kwk",
+			".k.kppppppk...k.",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"assassin_p3": {  # Execution: a crimson cowl
+		"base": "assassin",
+		"palette": {"c": Color(0.45, 0.1, 0.1), "m": Color(0.55, 0.12, 0.12)},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kgggggk.....",
+			"...kgGgggGgk....",
+			".kskggGsGggksk..",
+			"..kkgskssksgk...",
+			"...kcmmmmmmck...",
+			"..kccLLLLLLcck..",
+			".kcklalllalkck..",
+			"kaskllaaalllksak",
+			"kwk.kLLLLLLk.kwk",
+			"kwk.kLLaLLLk.kwk",
+			".k.kppppppk...k.",
+			"...kppkkppk.....",
+			"...kffk.kffk....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kppkppk......",
+			"....kffkffk.....",
+			"....kkkkkkk.....",
+		],
+	},
+	"skeleton": {  # Raised by Necromancy: bare bones, green-glowing eyes and a rusty sword
+		"palette": {
+			"B": Color(0.9, 0.88, 0.8), "D": Color(0.62, 0.6, 0.55), "e": Color(0.45, 1.0, 0.55),
+			"w": Color(0.62, 0.58, 0.52), "g": Color(0.45, 0.3, 0.15),
+		},
+		"rows": [
+			"................",
+			".....kkkkk......",
+			"....kBBBBBk..k..",
+			"...kBBBBBBBkkwk.",
+			"...kBkeBkeBkkwk.",
+			"...kBBBkBBBkkwk.",
+			"....kBkBkBk.kwk.",
+			".....kkkkk..kwk.",
+			"...kDBDBDk.kgggk",
+			"..kBkDBDkBk.kBk.",
+			"..kBkkkkkBk.....",
+			"....kDDDDk......",
+			"....kBkkBk......",
+			"....kBk.kBk.....",
+			"....kBk.kBk.....",
+			"...kkkk.kkkk....",
+		],
+		"legs_b": [
+			"...kBk..kBk.....",
+			"...kBk...kBk....",
+			"..kkkk...kkkk...",
+		],
+	},
+}
+
+## Accents (see Sprites.frames): one per upgrade path, in path order, worn when that
+## path is upgraded but another path sets the outfit. "behind" pixels only fill empty
+## space, so they tuck in behind any outfit; "over" pixels paint over it.
+const ACCENTS := {
+	"swordsman": [
+		{"behind": {7: "k1", 8: "k11", 9: "k11", 10: "k12", 11: "k12", 12: "k12", 13: ".kk"}, "palette": {"1": Color(0.75, 0.15, 0.15), "2": Color(0.55, 0.1, 0.12)}},
+		{"over": {10: "......1111", 11: ".........1", 12: ".........1"}, "palette": {"1": Color(0.8, 0.15, 0.18)}},
+		{"over": {7: "..k55k..k55k", 8: "..k6k....k6k"}, "palette": {"5": Color(0.8, 0.82, 0.88), "6": Color(0.55, 0.58, 0.66)}},
+		{"behind": {0: "....33", 1: "...33"}, "palette": {"3": Color(0.3, 0.5, 0.95)}},   # Charge: a blue feather trailing from the plume
+	],
+	"archer": [
+		{"palette": {}},   # Damage: her arrows change instead (see Warrior.ARROW_GRADES)
+		{"behind": {8: "k3", 9: "k33", 10: "k34", 11: "k34", 12: "k34", 13: ".kk"}, "palette": {"3": Color(0.22, 0.42, 0.22), "4": Color(0.15, 0.3, 0.15)}},
+		{"behind": {1: ".5.5", 2: ".k.k", 3: "k66", 4: "k66", 5: "k66", 6: ".kk"}, "palette": {"5": Color(0.92, 0.9, 0.85), "6": Color(0.55, 0.35, 0.18)}},
+		{"behind": {0: ".............7.7", 1: "..............7", 12: "..............7", 13: ".............7"}, "palette": {"7": Color(0.55, 0.95, 1.0)}},
+	],
+	"mage": [
+		{"behind": {1: "...1", 2: "..11", 3: "...1", 4: "..1"}, "palette": {"1": Color(0.6, 0.85, 1.0)}},
+		{"over": {10: ".....3", 11: "....333", 12: ".....3"}, "palette": {"3": Color(1.0, 0.55, 0.95)}},
+		{"over": {1: ".............k5k", 2: "............k65k", 3: ".............k5k"}, "palette": {"5": Color(1.0, 0.55, 0.15), "6": Color(1.0, 0.9, 0.4)}},
+		{"over": {9: "......777", 10: "......878"}, "palette": {"7": Color(0.9, 0.88, 0.8), "8": Color(0.2, 0.5, 0.2)}},
+	],
+	"frost": [
+		{"behind": {0: "...1.1...1.1"}, "over": {1: ".....1..1"}, "palette": {"1": Color(0.75, 0.95, 1.0)}},
+		{"behind": {6: ".k", 7: "k3", 8: "k3", 9: "k3", 10: "k4", 11: "k4", 12: "k34", 13: ".kk"}, "palette": {"3": Color(0.95, 0.97, 1.0), "4": Color(0.8, 0.85, 0.92)}},   # a fur cloak behind her hair
+		{"over": {4: "......5..5"}, "palette": {"5": Color(0.5, 0.95, 1.0)}},
+		{"behind": {1: "..7", 5: ".7", 9: "7", 12: ".7", 11: ".............7"}, "palette": {"7": Color(0.85, 0.97, 1.0)}},
+	],
+	"martial": [
+		{"behind": {9: "1.............1", 10: "1.............1"}, "palette": {"1": Color(1.0, 0.9, 0.35)}},
+		{"behind": {2: "..............k", 3: ".............k4k", 4: "............k4k", 5: "...........k3k", 6: "..........k3k"}, "palette": {"3": Color(0.3, 0.2, 0.15), "4": Color(0.75, 0.77, 0.82)}},
+		{"behind": {1: "5.5", 2: ".5", 3: "5.5"}, "palette": {"5": Color(1.0, 1.0, 0.75)}},
+		{"behind": {11: "7.............7", 12: ".7..........7", 13: "..7........7"}, "palette": {"7": Color(1.0, 0.85, 0.3)}},
+	],
+	"healer": [
+		{"behind": {8: ".k", 9: "k1", 10: "k2", 11: "k1", 12: "k1", 13: ".k"}, "over": {7: "...1", 8: "....1"}, "palette": {"1": Color(0.6, 0.4, 0.2), "2": Color(0.95, 0.3, 0.3)}},
+		{"behind": {0: "..3..........3", 1: "3..........3"}, "palette": {"3": Color(1.0, 0.9, 0.4)}},
+		{"behind": {5: "..5", 6: ".55", 7: "56", 8: ".5"}, "palette": {"5": Color(0.4, 0.8, 0.3), "6": Color(1.0, 0.6, 0.75)}},
+		{"behind": {0: ".....7777"}, "palette": {"7": Color(1.0, 0.92, 0.45)}},
+	],
+	"bard": [
+		{"behind": {0: "...........11", 1: "............1"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {3: "..k", 4: ".343", 5: "..3"}, "palette": {"3": Color(0.55, 0.25, 0.7), "4": Color(1.0, 0.85, 0.3)}},
+		{"behind": {0: "......56", 1: ".......5"}, "palette": {"5": Color(0.35, 0.75, 0.3), "6": Color(1.0, 0.6, 0.8)}},
+		{"over": {4: ".....7k77k7"}, "palette": {"7": Color(0.9, 0.3, 0.7)}},
+	],
+	"alchemist": [
+		{"over": {11: ".....11"}, "palette": {"1": Color(0.65, 0.35, 0.95)}},
+		{"over": {10: "...3.......33"}, "palette": {"3": Color(0.15, 0.15, 0.18)}},
+		{"behind": {9: "6", 10: ".5", 11: "565", 12: ".5"}, "palette": {"5": Color(0.2, 0.2, 0.22), "6": Color(1.0, 0.75, 0.2)}},
+		{"over": {7: "....8", 8: ".....87", 9: "......87", 10: ".......8"}, "palette": {"7": Color(0.9, 0.25, 0.2), "8": Color(0.45, 0.3, 0.15)}},
+	],
+	"tower": [
+		{"over": {9: "...1111..1111"}, "palette": {"1": Color(0.55, 0.57, 0.62)}},
+		{"behind": {0: "..........k33", 1: "..........k3"}, "palette": {"3": Color(0.3, 0.5, 0.9)}},
+		{"over": {7: "......5555", 8: "......5655", 9: "......5555", 10: ".......55"}, "palette": {"5": Color(0.8, 0.2, 0.2), "6": Color(0.95, 0.8, 0.3)}},
+		{"behind": {0: "..7..........7", 1: ".787........787"}, "palette": {"7": Color(1.0, 0.55, 0.15), "8": Color(1.0, 0.9, 0.4)}},
+	],
+	"cannon": [
+		{"behind": {13: ".............kk", 14: "............k11k", 15: "............kkkk"}, "palette": {"1": Color(0.25, 0.25, 0.28)}},
+		{"over": {4: "..........3", 6: "........3"}, "palette": {"3": Color(0.85, 0.2, 0.2)}},
+		{"behind": {9: ".............kkk", 10: ".............k5k", 11: ".............k6k", 12: ".............kkk"}, "palette": {"5": Color(0.55, 0.35, 0.18), "6": Color(0.35, 0.36, 0.4)}},
+		{"behind": {0: "............8.7.", 1: "...............7"}, "palette": {"7": Color(1.0, 0.55, 0.15), "8": Color(1.0, 0.85, 0.35)}},
+	],
+	"magetower": [
+		{"behind": {0: "..1", 1: ".1.1"}, "palette": {"1": Color(0.6, 0.85, 1.0)}},
+		{"behind": {0: ".............3", 1: "............343"}, "palette": {"3": Color(1.0, 0.55, 0.95), "4": Color(1.0, 0.95, 1.0)}},
+		{"behind": {7: ".5", 8: "56", 9: ".k"}, "palette": {"5": Color(1.0, 0.55, 0.15), "6": Color(1.0, 0.9, 0.4)}},
+		{"over": {8: ".......77", 9: ".......88"}, "palette": {"7": Color(0.9, 0.88, 0.8), "8": Color(0.45, 1.0, 0.4)}},
+	],
+	"frosttower": [
+		{"over": {7: "...1........1", 8: "...1........1"}, "palette": {"1": Color(0.85, 0.97, 1.0)}},
+		{"over": {5: "..3..3..3..3"}, "palette": {"3": Color(0.97, 0.98, 1.0)}},
+		{"over": {3: ".......5.5"}, "palette": {"5": Color(0.5, 0.95, 1.0)}},
+		{"behind": {0: "7............7", 8: "7..............7", 11: ".7............7"}, "palette": {"7": Color(0.85, 0.97, 1.0)}},
+	],
+	"medbay": [
+		{"over": {12: ".111", 13: ".121", 14: ".111"}, "palette": {"1": Color(0.6, 0.42, 0.24), "2": Color(0.42, 0.28, 0.15)}},
+		{"behind": {0: ".......k33", 1: ".......k"}, "palette": {"3": Color(0.3, 0.5, 0.9)}},
+		{"over": {10: "............5", 11: "...........555", 12: "............5"}, "palette": {"5": Color(0.4, 0.85, 0.4)}},
+		{"behind": {0: ".....7....7", 1: "......7..7"}, "palette": {"7": Color(1.0, 0.9, 0.45)}},
+	],
+	"statue": [
+		{"behind": {1: ".....1111"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {5: "3", 6: "33", 7: "33", 8: ".3"}, "palette": {"3": Color(0.75, 0.9, 0.85)}},
+		{"over": {8: ".kkk", 9: ".k5k", 10: ".k5k", 11: "..k"}, "palette": {"5": Color(0.35, 0.36, 0.42)}},
+		{"over": {0: "............77", 1: "............777", 2: "............77"}, "palette": {"7": Color(0.85, 0.2, 0.18)}},
+	],
+	"mine": [
+		{"over": {4: ".....1......1", 9: "...........1", 11: "..1"}, "palette": {"1": Color(1.0, 0.85, 0.3)}},
+		{"behind": {15: "33...333333...33"}, "palette": {"3": Color(0.5, 0.5, 0.55)}},
+		{"over": {12: "......6.6", 13: ".....k5665k", 14: ".....k5665k", 15: ".....kkkkkk"}, "palette": {"5": Color(0.6, 0.38, 0.18), "6": Color(1.0, 0.85, 0.3)}},
+		{"over": {3: "......7", 6: "..7", 10: "..............8", 11: "..8"}, "palette": {"7": Color(0.55, 0.95, 1.0), "8": Color(0.8, 0.5, 1.0)}},
+	],
+}
+
+## Special Bard instruments (see Warrior.special_instrument): laid over any outfit,
+## they wipe out the instrument it was holding (everything at x >= 10 below the face)
+## and draw the new one there instead.
+const INSTRUMENT_LAYERS := {
+	"violin": {"over": {4: "............$$$$", 5: "..........____kk", 6: "..........__kk#k", 7: "..........kk@@k_", 8: "..........k@#@k_", 9: "..........k@@@k_", 10: ".........._kkk__", 11: "..........k_____", 12: "..........k_____", 13: "..........k_____"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
+	"cello": {"over": {4: "..............k.", 5: "..........___k#k", 6: "..........___k#k", 7: "..........k_k@@k", 8: "..........kk@@@k", 9: "..........$$$$$$", 10: "..........kk@#@k", 11: "..........k_k@@k", 12: "..........k__kk_", 13: "..........k___k_"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
+	"harp": {"over": {5: "..........______", 6: "..........__k&&k", 7: "..........kk&%&k", 8: "..........k&%%&k", 9: "..........s&%%&k", 10: "..........k&%%&k", 11: "..........k&&&&k", 12: "..........kkkkk_", 13: "..........______"}, "palette": {"@": Color(0.62, 0.33, 0.14), "#": Color(0.35, 0.17, 0.07), "$": Color(0.95, 0.92, 0.85), "%": Color(0.95, 0.92, 0.8), "&": Color(1.0, 0.82, 0.3)}},
+}
+
+static var _cache := {}
+
+# Hair laid onto every look of a troop (all its outfits, combos and poses), after its
+# own layers: "behind" pixels only fill empty space, "over" paints on top.
+const HAIR := {
+	"archer": {   # her hair in a braid over her shoulder, tied in red: green, or blue as the Mystic
+		"over": {5: "...7", 6: ".k7k", 7: ".k8k", 8: ".k7k", 9: ".k8k", 10: ".k9k", 11: "..k."},
+		"palette": {"7": Color(0.35, 0.65, 0.3), "8": Color(0.22, 0.45, 0.2), "9": Color(0.85, 0.2, 0.2)},
+		"by_path": {3: {"7": Color(0.28, 0.42, 0.78), "8": Color(0.17, 0.27, 0.55)}},   # hair color by the look her head comes from
+	},
+	"bard": {   # long brown hair, one lock swept over her front shoulder
+		"behind": {4: "..k7", 5: "..k7", 6: "...k7"},
+		"over": {4: "...........7k", 5: "...........7k", 6: "..........77k", 7: "..........78k", 8: ".........k7k"},
+		"palette": {"7": Color(0.5, 0.3, 0.16), "8": Color(0.36, 0.2, 0.1)},
+	},
+}
+
+
+## A troop's layers plus its hair (see HAIR), by the kind its sprite name starts with.
+static func _with_hair(sprite: String, layers: Array) -> Array:
+	var kind := sprite.get_slice("_", 0)
+	var hair = HAIR.get(kind)
+	if hair == null:
+		return layers
+	# Some looks color the hair differently: match the one her head comes from.
+	for p in hair.get("by_path", {}):
+		if sprite == "%s_p%d" % [kind, p] or combo_source(sprite, "head") == p:
+			var recolored: Dictionary = hair.duplicate()
+			recolored["palette"] = (hair["palette"] as Dictionary).merged(hair["by_path"][p], true)
+			return layers + [recolored]
+	return layers + [hair]
+
+
+## Returns [walk frame A, walk frame B] for a sprite. recolor swaps palette letters
+## for other colors (e.g. golden hair), and layers are accents laid on top (see
+## ACCENTS); tag names the variant for the cache.
+static func frames(sprite: String, recolor := {}, tag := "", layers := []) -> Array:
+	var key := sprite + tag
+	layers = _with_hair(sprite, layers)
+	if not _cache.has(key):
+		var s: Dictionary = _entry(sprite)
+		var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
+		var rows: Array = s["rows"]
+		var alt: Array = s["alt"] if s.has("alt") else _alt_rows(sprite)
+		_cache[key] = [_make(_layered(rows, layers), palette), _make(_layered(alt, layers), palette)]
+	return _cache[key]
+
+
+## The walk cycle's frame for step `i` from a frames() pair: plant, lift the left foot,
+## plant, lift the right foot. The lifted-foot frames are made from the first frame by
+## raising one foot a pixel (that leg's bottom rows moved up a row); a figure without
+## two feet on the ground (a robe, four legs, a slime) keeps alternating its two frames.
+## They're built the first time it walks, and kept on the same frames array.
+static func step(fr: Array, i: int) -> Texture2D:
+	if fr.size() < 4:
+		var lifted := _lift_feet(_image_of(fr[0]))
+		if lifted.is_empty():
+			fr.append_array([fr[1], fr[1]])   # A, B, A, B
+		else:
+			fr.append_array([_pack(lifted[0]), _pack(lifted[1])])
+	return fr[2 if i % 4 == 1 else 3] if i % 2 == 1 else fr[0]
+
+
+## The same frame with its eyes shut, for blinking, or null if it has no eyes to shut:
+## eyes are outline pixels with skin on both sides, in the top ten rows (a face's
+## "kskssksk"); a blink paints them over in that skin. Kept per frame.
+static var _blinks := {}
+
+static func blink(tex: Texture2D):
+	var id := tex.get_instance_id()
+	if _blinks.has(id):
+		return _blinks[id]
+	_blinks[id] = null
+	var img := _image_of(tex)
+	var shut := img.duplicate()
+	var found := 0
+	for y in range(1, 10):
+		for x in range(1, img.get_width() - 1):
+			var c := img.get_pixel(x, y)
+			if c.a == 0.0 or not _same(c, OUTLINE):
+				continue
+			var l := img.get_pixel(x - 1, y)
+			var r := img.get_pixel(x + 1, y)
+			# (the shading may have lit one side a touch: both just have to be skin)
+			if l.a > 0.0 and r.a > 0.0 and _skin_like(l) and _skin_like(r):
+				var lid := l if l.get_luminance() < r.get_luminance() else r
+				shut.set_pixel(x, y, lid.darkened(0.15))   # a closed lid, a shade darker than the face
+				found += 1
+	if found >= 1 and found <= 3:
+		_blinks[id] = _pack(shut)
+	return _blinks[id]
+
+
+static func _same(a: Color, b: Color) -> bool:   # (8-bit pixels: near enough)
+	return absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) < 0.02
+
+
+static func _skin_like(c: Color) -> bool:
+	return c.r > 0.7 and c.r > c.g and c.g > c.b and c.r - c.b > 0.15
+
+
+## [left foot raised, right foot raised] for a figure standing on two feet, or [] if it
+## isn't: the bottom row has to have exactly two separate runs of pixels (the boots).
+static func _lift_feet(src: Image) -> Array:
+	var w := src.get_width()
+	var y0 := SIZE - 1
+	var runs := []
+	var x := 0
+	while x < w:
+		if src.get_pixel(x, y0).a > 0.0:
+			var start := x
+			while x < w and src.get_pixel(x, y0).a > 0.0:
+				x += 1
+			runs.append([start, x - 1])
+		x += 1
+	if runs.size() != 2 or runs[0][1] - runs[0][0] > 6 or runs[1][1] - runs[1][0] > 6:
+		return []
+	var split: int = (runs[0][1] + runs[1][0] + 1) / 2
+	var out := []
+	for side in 2:
+		var img := src.duplicate()
+		var from: int = runs[0][0] if side == 0 else split
+		var to: int = split - 1 if side == 0 else runs[1][1]
+		for cx in range(from, to + 1):
+			for cy in range(SIZE - 3, SIZE - 1):
+				img.set_pixel(cx, cy, src.get_pixel(cx, cy + 1))
+			img.set_pixel(cx, SIZE - 1, Color(0, 0, 0, 0))
+		out.append(img)
+	return out
+
+
+# --- Mounted emplacements ----------------------------------------------------
+# The Archer, Mage and Frost Witch towers are drawn bigger with a real troop standing
+# on the battlements, and the Cannon with its own Cannoneer beside it. The tower art
+# has a little figure built into its top (and the cannon a gunner on its left): the
+# mounted versions have them cleared away. [first col, last col, rows above the
+# parapet] of the figure, and the parapet row filled in with stone.
+const MOUNT_CLEAR := {
+	"tower": [4, 11, 5],
+	"tower_p1": [1, 14, 6],   # the Range lookout's roof comes off; its eaves become the parapet
+	"magetower": [4, 11, 5],
+	"frosttower": [4, 11, 5],
+	"cannon": [0, 6, 16],
+}
+
+
+const MOUNT_CREW := {"tower": "archer", "cannon": "cannoneer"}   # (a plain Tower's crew is whoever's posted in it: warrior._draw_tower)
+const TOWER_GROW := 1.4     # mounted towers are drawn this much bigger than other emplacements
+const CANNON_GROW := 1.25
+const CREW_STAND := 8.5     # tower rows down from the top where the troop's feet are (behind the parapet)
+const CREW_BESIDE := 9.5    # cannon pixels from its centre to where the Cannoneer stands
+
+
+## Where a mounted emplacement's parts go, for a unit drawn `scale` screen pixels per
+## sprite pixel: the tower's (or cannon's) scale and left edge, and where the crew's
+## feet are relative to the post.
+static func mount_layout(kind: String, scale: float) -> Dictionary:
+	if kind == "cannon":
+		var k := scale * CANNON_GROW
+		return {"k": k, "left": -11.5 * k, "crew": Vector2(-CREW_BESIDE * k, 0)}   # centred once its gunner's cleared
+	var k := scale * TOWER_GROW
+	return {"k": k, "left": -SIZE / 2.0 * k, "crew": Vector2(0, -(SIZE - CREW_STAND) * k)}
+
+
+## Draws a mounted emplacement facing `flip` (1 right, -1 left): the crew first (so a
+## tower's parapet hides the troop's legs; a Cannoneer stands beside the gun), then
+## the tower or cannon at `foot` (which a cannon's recoil moves; the crew stays at
+## base_foot). Returns the tower's rect, in the transform at `foot`.
+static func draw_mount(ci: CanvasItem, kind: String, foot: Vector2, base_foot: Vector2, flip: float,
+		base_tex: Texture2D, crew_tex: Texture2D, tint := Color.WHITE, breathe := 1.0, scale := 3.0) -> Rect2:
+	var lay := mount_layout(kind, scale)
+	var crew := lay["crew"] as Vector2
+	if crew_tex != null:   # (an empty Tower has nobody on its battlements)
+		ci.draw_set_transform(base_foot + Vector2(crew.x * flip, crew.y), 0, Vector2(flip, breathe))
+		ci.draw_texture_rect(crew_tex, Rect2(-SIZE / 2.0 * scale, -SIZE * scale, crew_tex.get_width() * scale, SIZE * scale), false, tint)
+	var k: float = lay["k"]
+	var rect := Rect2(lay["left"], -SIZE * k, base_tex.get_width() * k, SIZE * k)
+	ci.draw_set_transform(foot, 0, Vector2(flip, 1))
+	ci.draw_texture_rect(base_tex, rect, false, tint)
+	ci.draw_set_transform(Vector2.ZERO)
+	return rect
+
+
+## A hire-button picture of a mounted emplacement as it looks on the field (crew and
+## all), built at whole-pixel scales (the tower 7 or 5 to the crew's 5 or 4) with
+## mipmaps, so it shrinks smoothly onto the button.
+static func mount_icon(kind: String) -> Texture2D:
+	var key := "icon#" + kind
+	if _cache.has(key):
+		return _cache[key]
+	var scale := 5.0 if kind != "cannon" else 4.0
+	var lay := mount_layout(kind, scale)
+	var k: float = lay["k"]
+	var base := _image_of(mount_frames(kind, kind)[0])
+	var crew := _image_of(frames(MOUNT_CREW[kind])[0])
+	if kind == "tower":
+		crew = Image.create(1, 1, false, Image.FORMAT_RGBA8)   # (an empty Tower: nobody posted in it yet)
+	var crew_at := (lay["crew"] as Vector2) + Vector2(-SIZE / 2.0 * scale, -SIZE * scale)
+	var base_at := Vector2(lay["left"], -SIZE * k)
+	var lo := Vector2(minf(crew_at.x, base_at.x), minf(crew_at.y, base_at.y))
+	var hi := Vector2(maxf(crew_at.x + crew.get_width() * scale, base_at.x + base.get_width() * k), 0)
+	var img := Image.create(ceili(hi.x - lo.x), ceili(hi.y - lo.y), false, Image.FORMAT_RGBA8)
+	for part in [[crew, scale, crew_at], [base, k, base_at]]:
+		var src: Image = part[0].duplicate()
+		src.resize(roundi(src.get_width() * part[1]), roundi(src.get_height() * part[1]), Image.INTERPOLATE_NEAREST)
+		img.blend_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), Vector2i((part[2] - lo).round()))
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_cache[key] = tex
+	return tex
+
+
+## A sprite's pixels (out of the atlas if that's where it is).
+static func _image_of(tex: Texture2D) -> Image:
+	if tex is AtlasTexture:
+		return _atlas_img.get_region(Rect2i((tex as AtlasTexture).region))
+	return tex.get_image()
+
+
+## A tower's (or cannon's) frames with the figure on it cleared away, for drawing a
+## troop there instead. Same arguments as frames().
+static func mount_frames(sprite: String, kind: String, recolor := {}, tag := "", layers := []) -> Array:
+	var key := sprite + tag + "#mount"
+	if not _cache.has(key):
+		var s: Dictionary = _entry(sprite)
+		var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
+		var rows: Array = _layered(s["rows"], layers)
+		var alt: Array = _layered(s["alt"] if s.has("alt") else _alt_rows(sprite), layers)
+		var spec := _mount_spec(sprite, kind)
+		_cache[key] = [_make(_clear_mount(rows, spec), palette), _make(_clear_mount(alt, spec), palette)]
+	return _cache[key]
+
+
+## How to clear a sprite: by its own entry if it has one, a combined sprite by the
+## outfit its top came from, else by its kind.
+static func _mount_spec(sprite: String, kind: String) -> Array:
+	var outfit := sprite
+	if _generated.has(sprite):
+		var top := combo_source(sprite, "head")
+		if top < 0:
+			top = combo_source(sprite, "right")
+		outfit = "%s_p%d" % [kind, top] if top >= 0 else kind
+	return MOUNT_CLEAR.get(outfit, MOUNT_CLEAR[kind])
+
+
+static func _clear_mount(rows: Array, c: Array) -> Array:
+	# The parapet is filled with the tower's own stone (combined sprites rename their
+	# colors, so it's read off the wall below rather than assumed to be "S").
+	var stone := "S"
+	if c[2] + 2 < rows.size():
+		var below: String = rows[c[2] + 2]
+		if below.length() > 3 and below[3] != "k" and below[3] != ".":
+			stone = below[3]
+	var out := []
+	for y in rows.size():
+		var r: String = rows[y]
+		for x in range(c[0], mini(c[1] + 1, r.length())):
+			if y < c[2]:
+				r[x] = "."
+			elif y == c[2] and r[x] != "k":
+				r[x] = stone   # the parapet the troop stands behind
+		out.append(r)
+	return out
+
+
+## An attack pose (see "poses" on the sprites), or null if the sprite has none by
+## that name. Variants use the base sprite's poses unless they define their own.
+static func pose(sprite: String, pose_name: String, recolor := {}, tag := "", layers := []):
+	var key := sprite + tag + ":" + pose_name
+	layers = _with_hair(sprite, layers)
+	if not _cache.has(key):
+		var s: Dictionary = _entry(sprite)
+		_cache[key] = null
+		var posed = _posed_rows(sprite, pose_name)
+		if posed != null:
+			var palette := _layer_palette(_palette(sprite).merged(_recolor_for(s, recolor), true), layers)
+			_cache[key] = _make(_layered(posed, layers), palette)
+	return _cache[key]
+
+
+## A sprite's rows in an attack pose, or null if it has none by that name.
+static func _posed_rows(sprite: String, pose_name: String):
+	var s: Dictionary = _entry(sprite)
+	if s.has("full_poses"):
+		return s["full_poses"].get(pose_name)
+	var poses: Dictionary = s.get("poses", {})
+	if not poses.has(pose_name) and s.has("base"):
+		poses = SPRITES[s["base"]].get("poses", {})
+	return _overlay(s["rows"], poses[pose_name]) if poses.has(pose_name) else null
+
+
+## Second walk frame: the bottom rows swapped for legs_b (the base sprite's, if the
+## variant has none).
+static func _alt_rows(sprite: String) -> Array:
+	var s: Dictionary = _entry(sprite)
+	var legs: Array = s.get("legs_b", [])
+	if legs.is_empty() and s.has("base"):
+		legs = SPRITES[s["base"]].get("legs_b", [])
+	var rows: Array = s["rows"]
+	return rows.slice(0, SIZE - legs.size()) + legs
+
+
+## Variants inherit the base sprite's palette, overriding some colors.
+static func _palette(sprite: String) -> Dictionary:
+	var s: Dictionary = _entry(sprite)
+	if not SPRITES.has(sprite) and not _generated.has(sprite):
+		sprite = str(preload("res://scripts/data/data.gd").ENEMIES.get(sprite, {}).get("look", sprite))
+	if s.has("base"):
+		return SPRITES[s["base"]]["palette"].merged(s["palette"], true)
+	return s["palette"]
+
+
+## A drawn sprite, or one made up by combo().
+static func _entry(sprite: String) -> Dictionary:
+	if SPRITES.has(sprite):
+		return SPRITES[sprite]
+	if _generated.has(sprite):
+		return _generated[sprite]
+	# An enemy drawn with another's look (the Ogre King unbound: his own).
+	var look = preload("res://scripts/data/data.gd").ENEMIES.get(sprite, {}).get("look", "")
+	return SPRITES[look] if SPRITES.has(look) else _generated[sprite]
+
+
+## A recolor of the original letters (e.g. "h" for hair) also reaches a combined
+## sprite, whose letters were renamed when its two outfits were put together.
+static func _recolor_for(s: Dictionary, recolor: Dictionary) -> Dictionary:
+	if recolor.is_empty() or not s.has("from"):
+		return recolor
+	var out := {}
+	for sym in s["from"]:
+		if recolor.has(s["from"][sym]):
+			out[sym] = recolor[s["from"][sym]]
+	return out
+
+
+# --- Combined outfits ------------------------------------------------------------
+# When two of a unit's paths are both at tier 3, it wears a mix of the two outfits:
+# each part of the sprite comes from one of them. "map" cuts the sprite into parts:
+#   figure  head (rows 0..head_rows, left of right_col), left (cols 0..left_col below
+#           the head), right (cols right_col and on; the head rows too if right_full),
+#           body (the rest)
+#   top     head (rows 0..head_rows) and body (the rest)
+#   sides   left (cols 0..split) and right (the rest)
+# "lead" is picked first, by "order" (the first path in the list that's in the pair;
+# else the second path of the pair); every other part listed in "order" goes by its
+# list, and anything else comes from the other path. A hand-drawn sprite named
+# <kind>_p<a>p<b> (e.g. swordsman_p0p1) is used instead when there is one.
+const COMBOS := {
+	"swordsman": {"map": "figure", "head_rows": 6, "left_col": 4, "right_col": 12, "right_full": true,
+		"lead": "body", "order": {"body": [2, 0, 3, 1], "left": [1, 2, 0, 3], "right": [0, 1]}},   # (the head always from the other path: both armors show)
+	"archer": {"map": "figure", "head_rows": 7, "left_col": 3, "right_col": 12, "right_full": true,
+		"lead": "head", "order": {"head": [3], "left": [2], "right": [1, 3]}},
+	"mage": {"map": "figure", "head_rows": 5, "left_col": -1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [2, 3, 0, 1], "right": [3, 2, 0, 1]}},
+	"frost": {"map": "figure", "head_rows": 5, "left_col": 1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [3, 0, 2, 1], "left": [3, 1], "right": [2, 3, 0, 1]}},
+	"martial": {"map": "figure", "head_rows": 6, "left_col": -1, "right_col": 16, "right_full": false,
+		"lead": "head", "order": {"head": [3, 0, 1, 2]}, "head_rows_by_body": {"martial_dbz": {2: 7}}},
+	"healer": {"map": "figure", "head_rows": 6, "left_col": 1, "right_col": 13, "right_full": true,
+		"lead": "head", "order": {"head": [0, 3, 2, 1], "left": [3], "right": [2, 0, 1, 3]}},
+	"bard": {"map": "figure", "head_rows": 4, "left_col": -1, "right_col": 10, "right_full": false,
+		"lead": "head", "order": {"head": [1, 0, 3, 2], "right": [2, 3, 0, 1]}},
+	"alchemist": {"map": "figure", "head_rows": 6, "left_col": -1, "right_col": 12, "right_full": false,
+		"lead": "head", "order": {"head": [0, 2, 3, 1], "right": [2, 0, 3, 1]}},
+	"tower": {"map": "top", "head_rows": 6, "lead": "head", "order": {"head": [1, 0, 3, 2]}},
+	"magetower": {"map": "top", "head_rows": 5, "lead": "head", "order": {"head": [1, 2, 0, 3]}},
+	"frosttower": {"map": "top", "head_rows": 5, "lead": "head", "order": {"head": [2, 0, 1, 3]}},
+	"medbay": {"map": "top", "head_rows": 10, "lead": "head", "order": {"head": [3, 2, 1, 0]}},
+	"statue": {"map": "top", "head_rows": 11, "lead": "head", "order": {"head": [0, 1, 2, 3]}},
+	"mine": {"map": "sides", "split": 7, "lead": "left", "order": {"left": [0, 1, 2, 3]}},
+	"cannon": {"map": "sides", "split": 6, "lead": "right", "order": {"right": [0, 2, 3, 1]}},
+}
+const COMBO_SYMBOLS := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijlmnopqrstuvwxyz"
+static var _generated := {}
+
+
+## Unlockable looks for a unit: each skin is a set of outfits drawn in place of the
+## unit's own ("<kind>_<skin>" for the plain unit, "<kind>_<skin>_p<n>" for each path's
+## at tier 3, combinations made from those). Its name is what a player would see.
+const SKINS := {
+	"martial": {"dbz": "Dragon Ball"},
+}
+static var skin := {}   # kind -> the skin it's wearing ("" or missing: its own outfits)
+
+
+## The name a unit's outfits go by: its kind, or "<kind>_<skin>" in a skin.
+static func look_kind(kind: String) -> String:
+	var sk: String = skin.get(kind, "")
+	return kind if sk == "" or not SKINS.get(kind, {}).has(sk) else "%s_%s" % [kind, sk]
+
+
+## The sprite for a unit with paths a and b (a < b) both at tier 3: a hand-drawn one
+## if there is one, else made up from the two outfits. "" if the unit has no combos.
+## `look` is a skin's outfits (see look_kind) to use instead of the unit's own.
+static func combo(kind: String, a: int, b: int, look := "") -> String:
+	if look == "":
+		look = kind
+	var sprite_name := "%s_p%dp%d" % [look, a, b]
+	if SPRITES.has(sprite_name) or _generated.has(sprite_name):
+		return sprite_name
+	if not COMBOS.has(kind):
+		return ""
+	_generated[sprite_name] = _build_combo(kind, a, b, {}, look)
+	return sprite_name
+
+
+## Paths of a combined sprite that ended up showing nothing of their own (their
+## parts look just like the plain unit), so the unit wears their accent instead.
+static func combo_silent(sprite: String) -> Array:
+	return _entry(sprite).get("silent", []) if (SPRITES.has(sprite) or _generated.has(sprite)) else []
+
+
+## Which path a combined sprite took a part ("head", "body", "left", "right") from, or -1.
+static func combo_source(sprite: String, part: String) -> int:
+	if not _generated.has(sprite):
+		return -1
+	return _generated[sprite]["src"].get(part, -1)
+
+
+static func _outfit_of(kind: String, p: int) -> String:
+	var v := "%s_p%d" % [kind, p]
+	return v if SPRITES.has(v) else kind
+
+
+static func _combo_part(spec: Dictionary, x: int, y: int, head_rows: int) -> String:
+	match spec["map"]:
+		"top":
+			return "head" if y <= head_rows else "body"
+		"sides":
+			return "left" if x <= spec["split"] else "right"
+	var right: bool = x >= spec["right_col"] and (spec["right_full"] or y > head_rows)
+	if right:
+		return "right"
+	if y <= head_rows:
+		return "head"
+	return "left" if x <= spec["left_col"] else "body"
+
+
+## A combined sprite with some parts forced: `force` maps a part to the path it comes
+## from, or to another part's name to take whatever path that part came from. (A Knight
+## charging with his spear: its armor as ever, the spear in his hand.) Named `sprite_name`.
+static func combo_forced(kind: String, a: int, b: int, force: Dictionary, sprite_name: String) -> String:
+	if not _generated.has(sprite_name) and COMBOS.has(kind):
+		_generated[sprite_name] = _build_combo(kind, a, b, force)
+	return sprite_name
+
+
+static func _build_combo(kind: String, a: int, b: int, force := {}, look := "") -> Dictionary:
+	if look == "":
+		look = kind
+	var spec: Dictionary = COMBOS[kind]
+	var order: Dictionary = spec["order"]
+	var pair := [a, b]
+	var pick := func(part: String, fallback: int) -> int:
+		for p in order.get(part, []):
+			if pair.has(p):
+				return p
+		return fallback
+	var src := {}
+	var lead: String = spec["lead"]
+	src[lead] = pick.call(lead, b)
+	var other: int = a if src[lead] == b else b
+	for part in ["head", "body", "left", "right"]:
+		if part != lead:
+			src[part] = pick.call(part, other) if order.has(part) else other
+	for part in force:
+		src[part] = force[part] if force[part] is int else src[force[part]]
+	var head_rows: int = spec.get("head_rows", 0)
+	head_rows = spec.get("head_rows_by_body", {}).get(look, {}).get(src["body"], head_rows)
+	# Rename every color letter so the two outfits' palettes can't clash.
+	var palette := {}
+	var from := {}
+	var symbol := {}   # "outfit|letter" -> new letter
+	var outfits := {a: _outfit_of(look, a), b: _outfit_of(look, b)}
+	var unify := func(outfit: String, rows: Array) -> Array:
+		var pal := _palette(outfit)
+		var out := []
+		for row in rows:
+			var r: String = row
+			for x in r.length():
+				var ch := r[x]
+				if ch == "." or ch == "k" or ch == "_":
+					continue
+				var key: String = outfit + "|" + ch
+				if not symbol.has(key):
+					var sym := COMBO_SYMBOLS[symbol.size()]
+					symbol[key] = sym
+					palette[sym] = pal.get(ch, COMMON.get(ch, Color.MAGENTA))
+					from[sym] = ch
+				r[x] = symbol[key]
+			out.append(r)
+		return out
+	var merge := func(by_path: Dictionary) -> Array:
+		var width := SIZE
+		for p in by_path:
+			for row in by_path[p]:
+				width = maxi(width, (row as String).length())
+		var out := []
+		for y in SIZE:
+			var r := ""
+			for x in width:
+				var row: String = by_path[src[_combo_part(spec, x, y, head_rows)]][y]
+				r += row[x] if x < row.length() else "."
+			out.append(r)
+		return out
+	var rows: Array = merge.call({a: unify.call(outfits[a], _entry(outfits[a])["rows"]), b: unify.call(outfits[b], _entry(outfits[b])["rows"])})
+	var alt: Array = merge.call({a: unify.call(outfits[a], _alt_rows(outfits[a])), b: unify.call(outfits[b], _alt_rows(outfits[b]))})
+	var names := {}
+	for o in [outfits[a], outfits[b]]:
+		for n in (_entry(o).get("poses", {}) as Dictionary).keys():
+			names[n] = true
+		var base: String = _entry(o).get("base", "")
+		if base != "":
+			for n in (SPRITES[base].get("poses", {}) as Dictionary).keys():
+				names[n] = true
+	var full_poses := {}
+	for n in names:
+		var by_path := {}
+		for p in pair:
+			var posed = _posed_rows(outfits[p], n)
+			by_path[p] = unify.call(outfits[p], posed if posed != null else _entry(outfits[p])["rows"])
+		full_poses[n] = merge.call(by_path)
+	# A path whose parts look the same as the plain unit's adds its accent instead.
+	var silent := []
+	var plain := _palette(kind)
+	var plain_rows: Array = SPRITES[kind]["rows"]
+	for p in pair:
+		var own: Array = _entry(outfits[p])["rows"]
+		var pal := _palette(outfits[p])
+		var shows := false
+		for y in SIZE:
+			var r: String = own[y]
+			for x in r.length():
+				if src[_combo_part(spec, x, y, head_rows)] != p:
+					continue
+				var base_row: String = plain_rows[y]
+				var mine := r[x]
+				var theirs := base_row[x] if x < base_row.length() else "."
+				var c1 = null if mine == "." else (Color.BLACK if mine == "k" else pal.get(mine, COMMON.get(mine)))
+				var c2 = null if theirs == "." else (Color.BLACK if theirs == "k" else plain.get(theirs, COMMON.get(theirs)))
+				if c1 != c2:
+					shows = true
+					break
+			if shows:
+				break
+		if not shows:
+			silent.append(p)
+	return {"rows": rows, "alt": alt, "palette": palette, "from": from, "full_poses": full_poses, "silent": silent, "src": src}
+
+
+## Accent colors added to a palette.
+static func _layer_palette(palette: Dictionary, layers: Array) -> Dictionary:
+	for l in layers:
+		palette = palette.merged(l["palette"], true)
+	return palette
+
+
+## Lays accents on a sprite's rows: "behind" pixels only fill empty space, "over"
+## pixels paint over whatever is there (see _overlay).
+static func _layered(rows: Array, layers: Array) -> Array:
+	for l in layers:
+		if l.has("behind"):
+			rows = _behind(rows, l["behind"])
+		if l.has("over"):
+			rows = _overlay(rows, l["over"])
+	return rows
+
+
+static func _behind(rows: Array, changes: Dictionary) -> Array:
+	var out := []
+	for y in rows.size():
+		var row: String = rows[y]
+		if changes.has(y):
+			var c: String = changes[y]
+			while row.length() < c.length():
+				row += "."
+			for x in c.length():
+				if c[x] != "." and row[x] == ".":
+					row[x] = c[x]
+		out.append(row)
+	return out
+
+
+## Paints a pose over a sprite's rows. A pose maps row index to a row of changes:
+## "." keeps the pixel, "_" erases it, anything else paints. Rows can run past 16
+## to reach out to the right (sword thrusts, punches).
+static func _overlay(rows: Array, changes: Dictionary) -> Array:
+	var out := []
+	for y in SIZE:
+		var row: String = rows[y]
+		if changes.has(y):
+			var c: String = changes[y]
+			while row.length() < c.length():
+				row += "."
+			for x in c.length():
+				if c[x] == "_":
+					row[x] = "."
+				elif c[x] != ".":
+					row[x] = c[x]
+		out.append(row)
+	return out
+
+
+# --- Atlas ------------------------------------------------------------------
+# Every sprite goes into one shared texture (as an AtlasTexture region of it), along
+# with a white block and a soft round shadow. Drawing from a single texture lets the
+# renderer batch a whole crowd of units into a few draw calls instead of one or more
+# per unit. New sprites are blitted in as they're made and the texture is re-uploaded
+# once, just before the next frame is drawn.
+const ATLAS_SIZE := 1024
+const ATLAS_PAD := 2
+static var _atlas_img: Image = null
+static var _atlas_tex: ImageTexture = null
+static var _shelf := Vector3i(0, 0, 0)   # x, y and height of the shelf being filled
+static var _atlas_dirty := false
+static var _white: AtlasTexture = null
+static var _shadow: AtlasTexture = null
+
+
+## Puts an image in the atlas and returns its region as a texture (or a texture of
+## its own if the atlas is full).
+static func _pack(img: Image) -> Texture2D:
+	if _atlas_img == null:
+		_atlas_img = Image.create(ATLAS_SIZE, ATLAS_SIZE, false, Image.FORMAT_RGBA8)
+		_atlas_tex = ImageTexture.create_from_image(_atlas_img)
+	var w := img.get_width()
+	var h := img.get_height()
+	if _shelf.x + w + ATLAS_PAD > ATLAS_SIZE:
+		_shelf = Vector3i(0, _shelf.y + _shelf.z + ATLAS_PAD, 0)
+	if _shelf.y + h + ATLAS_PAD > ATLAS_SIZE:
+		return ImageTexture.create_from_image(img)
+	var at := Vector2i(_shelf.x + ATLAS_PAD, _shelf.y + ATLAS_PAD)
+	_atlas_img.blit_rect(img, Rect2i(0, 0, w, h), at)
+	_shelf.x += w + ATLAS_PAD
+	_shelf.z = maxi(_shelf.z, h)
+	var tex := AtlasTexture.new()
+	tex.atlas = _atlas_tex
+	tex.region = Rect2(at, Vector2(w, h))
+	if not _atlas_dirty:
+		_atlas_dirty = true
+		RenderingServer.frame_pre_draw.connect(_flush_atlas, CONNECT_ONE_SHOT)
+	return tex
+
+
+static func _flush_atlas() -> void:
+	_atlas_dirty = false
+	_atlas_tex.update(_atlas_img)
+
+
+## A white block in the atlas: draw it tinted for bars and plain shapes that should
+## batch with the sprites.
+static func white() -> Texture2D:
+	if _white == null:
+		var img := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+		img.fill(Color.WHITE)
+		_white = _pack(img)
+		_white.region = _white.region.grow(-1.0)   # sample only the middle, never the edge
+	return _white
+
+
+## A round disc in the atlas with a smoothed edge, for shadows, glows and filled
+## circles (draw it squashed and tinted; see disc()).
+static func shadow() -> Texture2D:
+	if _shadow == null:
+		var n := 32
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		for y in n:
+			for x in n:
+				var d := Vector2(x + 0.5 - n / 2.0, y + 0.5 - n / 2.0).length() / (n / 2.0)
+				img.set_pixel(x, y, Color(1, 1, 1, clampf((1.0 - d) * 16.0, 0.0, 1.0)))
+		_shadow = _pack(img)
+	return _shadow
+
+
+## A filled circle drawn with the atlas disc instead of draw_circle: one textured quad
+## that batches with the sprites, where a smooth draw_circle is a many-sided polygon
+## and a draw call of its own.
+static func disc(ci: CanvasItem, center: Vector2, r: float, col: Color) -> void:
+	ci.draw_texture_rect(shadow(), Rect2(center.x - r, center.y - r, r * 2.0, r * 2.0), false, col)
+
+
+static func _make(rows: Array, palette: Dictionary) -> Texture2D:
+	var width := SIZE
+	for row in rows:
+		width = maxi(width, (row as String).length())
+	var img := Image.create(width, SIZE, false, Image.FORMAT_RGBA8)
+	for y in SIZE:
+		var row: String = rows[y]
+		for x in row.length():
+			var ch := row[x]
+			if ch == ".":
+				continue
+			var col: Color = OUTLINE
+			if ch != "k":
+				col = palette.get(ch, COMMON.get(ch, Color.MAGENTA))
+			img.set_pixel(x, y, col)
+	_shade(img, rows)
+	return _pack(img)
+
+
+## Lights a sprite from the upper left: a pixel on the top edge of the figure (just under
+## its outline) is lightened a touch, one on the lower right edge darkened, so the flat
+## colors read as rounded. Only the outer outline counts as an edge (not eyes, belts and
+## other lines drawn inside the figure), and outline pixels themselves are left alone.
+static var shading := true
+const SHADE_LIGHT := 0.14
+const SHADE_DARK := 0.2
+
+static func _shade(img: Image, rows: Array) -> void:
+	if not shading:
+		return
+	var w := img.get_width()
+	var n := w * SIZE
+	# Per pixel: 0 empty, 1 outline ("k"), 2 color. Then edge: empty, or outline touching empty.
+	var kind := PackedByteArray()
+	kind.resize(n)
+	for y in SIZE:
+		var row: String = rows[y]
+		for x in mini(row.length(), w):
+			var ch := row[x]
+			if ch != ".":
+				kind[y * w + x] = 1 if ch == "k" else 2
+	var edge := PackedByteArray()
+	edge.resize((w + 2) * (SIZE + 2))   # with a border of empty all round
+	edge.fill(1)
+	for y in SIZE:
+		for x in w:
+			var i := y * w + x
+			var e := 0
+			if kind[i] == 0:
+				e = 1
+			elif kind[i] == 1:
+				if (x == 0 or kind[i - 1] == 0) or (x == w - 1 or kind[i + 1] == 0) \
+						or (y == 0 or kind[i - w] == 0) or (y == SIZE - 1 or kind[i + w] == 0):
+					e = 1
+			edge[(y + 1) * (w + 2) + x + 1] = e
+	var stride := w + 2
+	for y in SIZE:
+		for x in w:
+			if kind[y * w + x] != 2:
+				continue
+			var j := (y + 1) * stride + x + 1
+			var up := edge[j - stride] == 1
+			var left := edge[j - 1] == 1
+			var right := edge[j + 1] == 1
+			var down := edge[j + stride] == 1
+			if up or left:
+				if not (right and down):
+					img.set_pixel(x, y, img.get_pixel(x, y).lerp(Color.WHITE, SHADE_LIGHT))
+			elif right or down:
+				img.set_pixel(x, y, img.get_pixel(x, y).darkened(SHADE_DARK))
+
+
+## 16x16 ground tile. Variants 0-2 are plain grass, 3 has flowers, 4 is dirt.
+static func ground_tile(variant: int) -> ImageTexture:
+	var key := "ground%d" % variant
+	if _cache.has(key):
+		return _cache[key]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7919 * (variant + 1)
+	var base := Color(0.4, 0.3, 0.2) if variant == 4 else Color(0.25, 0.47, 0.22)
+	var img := Image.create(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+	img.fill(base)
+	for i in 22:
+		var c := base.darkened(0.15) if rng.randf() < 0.6 else base.lightened(0.1)
+		img.set_pixel(rng.randi() % SIZE, rng.randi() % SIZE, c)
+	if variant != 4:
+		# Grass tufts.
+		for i in 3:
+			var x := rng.randi_range(1, SIZE - 3)
+			var y := rng.randi_range(2, SIZE - 1)
+			var tuft := base.lightened(0.18)
+			img.set_pixel(x, y, tuft)
+			img.set_pixel(x + 1, y - 1, tuft)
+			img.set_pixel(x + 2, y, tuft)
+	else:
+		# Pebbles.
+		for i in 3:
+			img.set_pixel(rng.randi() % SIZE, rng.randi() % SIZE, Color(0.55, 0.5, 0.45))
+	if variant == 3:
+		for i in 2:
+			var x := rng.randi_range(2, SIZE - 3)
+			var y := rng.randi_range(2, SIZE - 3)
+			var petal := Color(1, 0.95, 0.6) if i == 0 else Color(0.95, 0.6, 0.8)
+			for d in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				img.set_pixelv(Vector2i(x, y) + d, petal)
+			img.set_pixel(x, y, Color(1, 0.75, 0.2))
+	var tex := ImageTexture.create_from_image(img)
+	_cache[key] = tex
+	return tex

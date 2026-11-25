@@ -33,9 +33,9 @@ extends "res://scripts/mission/rules.gd"
 ## Taken up again from a field's checkpoint (300 + the field), it's as the army came onto it.
 
 const Works = preload("res://scripts/mission/siege_works.gd")
-const Warrior = preload("res://scripts/warrior.gd")
-const Data = preload("res://scripts/data.gd")
-const CD = preload("res://scripts/campaign_data.gd")
+const Warrior = preload("res://scripts/troops/warrior.gd")
+const Data = preload("res://scripts/data/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 const CP := 300
 const MAP := "ds_dawnfield"
 const FIELDS := [
@@ -177,7 +177,7 @@ func take_over(c, coming: Array, std_hp: float) -> void:
 func resume(cp: Dictionary) -> void:
 	for w in main.warrior_layer.get_children():
 		w.queue_free()
-	main.temp_allies.clear()
+	main.missions.temp_allies.clear()
 	main.gold = int(cp.get("gold", main.gold))
 	main.wave = int(cp.get("wave", 0))
 	for key in cp.get("owned", []):
@@ -213,7 +213,7 @@ func _set_field(army: Array, std_hp: float, restored: bool, help_again := false)
 	standard.setup(main, {"id": "standard", "kind": "standard", "name": "The Line's standard", "at": STAND,
 			"hp": float(mission.get("assault", {}).get("castle", {}).get("standard", 900.0))})
 	standard.hp = standard.max_hp * clampf(std_hp, 0.05, 1.0)
-	main.add_objective(standard)
+	main.waves.add_objective(standard)
 	standard.destroyed.connect(func(_o): _end(false))
 	main.paths.set_objectives(objectives())
 	var c_old := Vector2.ZERO
@@ -230,7 +230,7 @@ func _set_field(army: Array, std_hp: float, restored: bool, help_again := false)
 	if restored:
 		if help_again:
 			_send_line_help(0)
-		main.warriors_changed()
+		main.battlefield.warriors_changed()
 		return
 	if field == 0:
 		# The crews who held the towers outside the walls come back into the fight.
@@ -246,7 +246,7 @@ func _set_field(army: Array, std_hp: float, restored: bool, help_again := false)
 			main.hud.show_message("The crews who held the towers outside come back to fight beside you.")
 		garrisons.clear()
 	_send_line_help(field)
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 
 
 ## The help of the peoples waiting on field `fi`: a unit for every point (joined; its
@@ -266,7 +266,7 @@ func _send_line_help(fi: int) -> void:
 		for i in pts:
 			var x := 60.0 + fmod(row * 46.0, 520.0)
 			var y := 700.0 - float(row / 12) * 36.0 - (40.0 if Data.WARRIORS[kind].get("emplacement", false) else 0.0)
-			main._lend_unit({"kind": kind, "at": Vector2(x, y), "tiers": tiers})
+			main.missions._lend_unit({"kind": kind, "at": Vector2(x, y), "tiers": tiers})
 			row += 1
 	if fi > 0 and not who.is_empty():
 		main.hud.show_message("%s: dug in here, waiting for you." % ", ".join(who))
@@ -312,7 +312,7 @@ func _escaped_out() -> void:
 		return
 	var kinds := ["orc", "skeleton_archer", "troll", "orc", "wolf", "warlord"]
 	for i in escaped:
-		main._spawn_enemy(kinds[i % kinds.size()], main.wave_level(maxi(main.wave, 1)))
+		main.waves._spawn_enemy(kinds[i % kinds.size()], main.missions.wave_level(maxi(main.wave, 1)))
 	main.hud.show_message("%d of his got out of the castle ahead of you: they're here." % escaped)
 
 
@@ -353,7 +353,7 @@ func process(delta: float) -> void:
 ## health as it was, his mark on this field, and one more of his moves each field.
 func _king_comes() -> void:
 	king_out = true
-	main._spawn_enemy("ogre_unbound", KING_LEVEL, Vector2(main.FIELD_W / 2.0, KING_Y))
+	main.waves._spawn_enemy("ogre_unbound", KING_LEVEL, Vector2(main.FIELD_W / 2.0, KING_Y))
 	king = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	base_size = {"scale": king.sprite_scale, "radius": king.radius, "stomp": float(king.stomp.get("radius", 0.0)),
 			"reach": float(king.cleave.get("reach", 0.0))}
@@ -380,7 +380,7 @@ func _king_comes() -> void:
 		main.hud.show_message("The Ogre King bursts out through the ruins of the Dawn Gate!")
 	else:
 		main.hud.show_message("The Ogre King comes on after you!")
-	main.sfx("horn", 0.6)
+	main.effects.sfx("horn", 0.6)
 
 
 ## How far the broken oath has swelled him (0: as he came out of the castle; 1: a giant).
@@ -402,7 +402,7 @@ func _grow(k: float) -> void:
 ## Dawnspire in ruins on this field (its walls broken by his power).
 func _ruins() -> void:
 	main.map_extra = {"ruined": true}
-	main._repaint_ground()
+	main.drawing._repaint_ground()
 
 
 ## The army comes out, and the broken oath's power tears Dawnspire apart: the ground shakes,
@@ -415,7 +415,7 @@ func _intro_step(delta: float) -> void:
 	if crossed.call(INTRO_SHAKE):
 		shake_base = main.position
 		main.hud.show_message("Dawnspire shakes. The broken oath is tearing it apart!")
-		main.sfx("crumble", 0.6)
+		main.effects.sfx("crumble", 0.6)
 	if intro_t >= INTRO_SHAKE and intro_t < INTRO_END:
 		# The ground shaking, hardest as the walls fall.
 		var amp: float = 6.0 if intro_t < INTRO_FALL + 0.6 else 2.5
@@ -425,27 +425,27 @@ func _intro_step(delta: float) -> void:
 		if burst_t <= 0.0 and intro_t < INTRO_GROWN:
 			burst_t = 0.12
 			var at := Vector2(randf_range(20.0, main.FIELD_W - 20.0), randf_range(30.0, 140.0))
-			main.spawn_burst(at, randf_range(24.0, 50.0), Color(0.6, 0.55, 0.5) if randf() < 0.6 else Color(1.0, 0.45, 0.15))
+			main.effects.spawn_burst(at, randf_range(24.0, 50.0), Color(0.6, 0.55, 0.5) if randf() < 0.6 else Color(1.0, 0.45, 0.15))
 			if randf() < 0.3:
-				main.sfx("crumble", randf_range(0.6, 0.9))
+				main.effects.sfx("crumble", randf_range(0.6, 0.9))
 	if crossed.call(INTRO_FALL):
 		collapsed = true
 		_ruins()
 		for i in 9:
-			main.spawn_burst(Vector2(main.FIELD_W * (i + 0.5) / 9.0, 90.0), 60.0, Color(0.55, 0.5, 0.46))
-		main.spawn_flash(Vector2(main.FIELD_W / 2.0, 90.0), 160.0)
-		main.sfx("boom", 0.5)
+			main.effects.spawn_burst(Vector2(main.FIELD_W * (i + 0.5) / 9.0, 90.0), 60.0, Color(0.55, 0.5, 0.46))
+		main.effects.spawn_flash(Vector2(main.FIELD_W / 2.0, 90.0), 160.0)
+		main.effects.sfx("boom", 0.5)
 	if crossed.call(INTRO_KING):
 		_king_comes()
 		king.boss_hold = INTRO_END - INTRO_KING + 0.5
-		main.spawn_burst(king.position, 120.0, Color(1.0, 0.3, 0.1))
+		main.effects.spawn_burst(king.position, 120.0, Color(1.0, 0.3, 0.1))
 	if intro_t > INTRO_KING and intro_t <= INTRO_GROWN + 0.05:
 		_grow((intro_t - INTRO_KING) / (INTRO_GROWN - INTRO_KING))
 	if crossed.call(INTRO_GROWN):
 		_grow(1.0)
-		main.spawn_flash(king.position, 130.0)
-		main.spawn_text(king.position + Vector2(0, -150), "The broken oath swells him!", Color(1.0, 0.45, 0.2))
-		main.sfx("stomp", 0.5)
+		main.effects.spawn_flash(king.position, 130.0)
+		main.effects.spawn_text(king.position + Vector2(0, -150), "The broken oath swells him!", Color(1.0, 0.45, 0.2))
+		main.effects.sfx("stomp", 0.5)
 	if intro_t >= INTRO_END:
 		intro_t = -1.0
 		main.position = shake_base
@@ -469,10 +469,10 @@ func floor_reached(e) -> void:
 	wrath.bottom = main.CASTLE_Y - 40.0
 	main.corpse_layer.add_child(wrath)
 	e.boss_hold = 1.0
-	main.spawn_burst(e.position, 140.0, Color(1.0, 0.3, 0.1))
-	main.spawn_flash(e.position, 110.0)
-	main.spawn_text(e.position + Vector2(0, -80), "He draws on the beacon!", Color(1.0, 0.4, 0.2))
-	main.sfx("horn", 0.5)
+	main.effects.spawn_burst(e.position, 140.0, Color(1.0, 0.3, 0.1))
+	main.effects.spawn_flash(e.position, 110.0)
+	main.effects.spawn_text(e.position + Vector2(0, -80), "He draws on the beacon!", Color(1.0, 0.4, 0.2))
+	main.effects.sfx("horn", 0.5)
 	main.hud.show_message("He's drawing on the beacon: in moments this field will burn. Pull your troops back down the field, toward %s!" % FIELDS[field + 1]["name"])
 
 
@@ -508,7 +508,7 @@ func _fall_back(earned: bool) -> void:
 			continue
 		army.append(_unit_record(w))
 		w.queue_free()
-	main.temp_allies.clear()
+	main.missions.temp_allies.clear()
 	var std: float = standard.hp / standard.max_hp if standard != null and is_instance_valid(standard) else 1.0
 	field += 1
 	_set_field(army, std, false)
@@ -519,7 +519,7 @@ func _fall_back(earned: bool) -> void:
 ## troop and emplacement and their training, the Line's help counted), against ARMY_REF.
 func army_mult() -> float:
 	var worth := 0.0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_queued_for_deletion() or w.summoned or w.clone_of != null:
 			continue
 		var d: Dictionary = Data.WARRIORS[w.kind]
@@ -537,7 +537,7 @@ func _arts_step(delta: float) -> void:
 		king.boss_hold = 0.2
 		if mercy_hp - king.hp >= king.max_hp * 0.04:
 			mercy_t = -1.0
-			main.spawn_text(king.position + Vector2(0, -80), "Broken off!", Color(1.0, 0.9, 0.5))
+			main.effects.spawn_text(king.position + Vector2(0, -80), "Broken off!", Color(1.0, 0.9, 0.5))
 			return
 		mercy_t -= delta
 		if mercy_t <= 0.0:
@@ -558,7 +558,7 @@ func _arts_step(delta: float) -> void:
 
 ## The troops he can see to use his arts on (not those up a tower), farthest first.
 func _marks() -> Array:
-	var out: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.sheltered() and not w.is_emplacement())
+	var out: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active() and not w.sheltered() and not w.is_emplacement())
 	out.sort_custom(func(a, b): return a.position.distance_to(king.position) > b.position.distance_to(king.position))
 	return out
 
@@ -568,7 +568,7 @@ func _knot():
 	var best = null
 	var most := 0
 	for w in _marks():
-		var n: int = main.warriors_near(w.position, 70.0).filter(func(o): return o.is_active()).size()
+		var n: int = main.battlefield.warriors_near(w.position, 70.0).filter(func(o): return o.is_active()).size()
 		if n > most:
 			most = n
 			best = w.position
@@ -579,7 +579,7 @@ func _knot():
 func use_art(art: String) -> void:
 	var at: Vector2 = king.position
 	var title: String = ART_NAMES[art]
-	main.spawn_text(at + Vector2(0, -90), title + "!", Color(1.0, 0.55, 0.25))
+	main.effects.spawn_text(at + Vector2(0, -90), title + "!", Color(1.0, 0.55, 0.25))
 	if not seen_arts.has(art):
 		seen_arts[art] = true
 		main.hud.show_message("%s: he turns %s's own art on you!" % [title, CD.FACTIONS[art]["name"]])
@@ -593,8 +593,8 @@ func use_art(art: String) -> void:
 				a.target = w
 				a.position = at + Vector2(0, -king.radius)
 				a.damage = 38.0 * lvl
-				main.add_projectile(a)
-			main.sfx("bow", 0.7)
+				main.effects.add_projectile(a)
+			main.effects.sfx("bow", 0.7)
 		"deepdelve":
 			# Mortar shells on where the army stands thickest (rings first).
 			var spots := []
@@ -613,8 +613,8 @@ func use_art(art: String) -> void:
 				v.color = Color(1.0, 0.6, 0.2)
 				v.fire = true
 				v.warn = 1.8
-				main.add_projectile(v)
-			main.sfx("cannon", 0.7)
+				main.effects.add_projectile(v)
+			main.effects.sfx("cannon", 0.7)
 		"stonehollow":
 			# A ballista bolt's line, through the thickest of them, then the bolt.
 			var k = _knot()
@@ -627,13 +627,13 @@ func use_art(art: String) -> void:
 			l.to = at + dir * 900.0
 			l.damage = 75.0 * lvl
 			main.corpse_layer.add_child(l)
-			main.sfx("lance", 0.6)
+			main.effects.sfx("lance", 0.6)
 		"spires":
 			# Necromancy: the dead rise round him.
 			for i in 3 + field:
-				main.spawn_minion("skeleton_archer", main.wave_level(maxi(main.wave, 1)), at + Vector2.from_angle(PI * 0.15 + i * 0.6) * (king.radius + 30.0))
-			main.spawn_burst(at, 90.0, Color(0.55, 0.9, 0.55))
-			main.sfx("rise", 0.8)
+				main.waves.spawn_minion("skeleton_archer", main.missions.wave_level(maxi(main.wave, 1)), at + Vector2.from_angle(PI * 0.15 + i * 0.6) * (king.radius + 30.0))
+			main.effects.spawn_burst(at, 90.0, Color(0.55, 0.9, 0.55))
+			main.effects.sfx("rise", 0.8)
 		"frostmarch":
 			# A ring of frost under the thickest of them: frozen, whoever's still in it.
 			var k = _knot()
@@ -645,7 +645,7 @@ func use_art(art: String) -> void:
 			r.radius = 70.0 + 10.0 * field
 			r.damage = 30.0 * lvl
 			main.corpse_layer.add_child(r)
-			main.sfx("frost", 0.7)
+			main.effects.sfx("frost", 0.7)
 		"monastery":
 			# A Spirit Bomb, gathered and thrown at the far end of the army.
 			var m: Array = _marks()
@@ -660,46 +660,46 @@ func use_art(art: String) -> void:
 			v.color = Color(1.0, 0.9, 0.4)
 			v.fire = true
 			v.warn = 2.2
-			main.add_projectile(v)
-			main.sfx("ki", 0.6)
+			main.effects.add_projectile(v)
+			main.effects.sfx("ki", 0.6)
 		"freecities":
 			# A dirge: the army round him weakened and slowed; his horde driven on.
-			for w in main.warriors_near(at, 220.0):
+			for w in main.battlefield.warriors_near(at, 220.0):
 				if w.is_active():
 					w.hex_for({"damage": 0.3, "rate": 0.25, "speed": 0.2}, 6.0)
-			for e in main.enemies_near(at, 220.0):
+			for e in main.battlefield.enemies_near(at, 220.0):
 				if not e.dead and e != king:
 					e.rally = 6.0
 					e.rally_dmg = 0.3
 					e.rally_speed = 0.25
-			main.spawn_burst(at, 220.0, Color(0.7, 0.4, 0.9))
-			main.sfx("violin", 0.6)
+			main.effects.spawn_burst(at, 220.0, Color(0.7, 0.4, 0.9))
+			main.effects.sfx("violin", 0.6)
 		"mercyvale":
 			# Stolen Mercy: he draws it for a moment (break it off by hitting him hard), then
 			# it mends his horde round him, and him a little.
 			mercy_t = 2.0
 			mercy_hp = king.hp
-			main.spawn_burst(at, 60.0, Color(0.5, 1.0, 0.6))
-			main.sfx("heal", 0.6)
+			main.effects.spawn_burst(at, 60.0, Color(0.5, 1.0, 0.6))
+			main.effects.sfx("heal", 0.6)
 
 
 ## Stolen Mercy, drawn: his horde round him healed, and him a little.
 func _mercy_lands() -> void:
 	mercy_t = -1.0
 	var at: Vector2 = king.position
-	for e in main.enemies_near(at, 220.0):
+	for e in main.battlefield.enemies_near(at, 220.0):
 		if not e.dead and e != king:
 			e.hp = minf(e.max_hp, e.hp + e.max_hp * 0.4)
 	king.hp = minf(king.max_hp, king.hp + king.max_hp * 0.04)
-	main.spawn_burst(at, 220.0, Color(0.5, 1.0, 0.6))
-	main.spawn_text(at + Vector2(0, -80), "Healed!", Color(0.5, 1.0, 0.6))
+	main.effects.spawn_burst(at, 220.0, Color(0.5, 1.0, 0.6))
+	main.effects.spawn_text(at + Vector2(0, -80), "Healed!", Color(0.5, 1.0, 0.6))
 
 
 ## Brought down (on the Approach): the horde breaks.
 func _slain(_e) -> void:
 	if over:
 		return
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.dead:
 			e.take_damage(1e9, false)
 	Campaign.flags["ds_united"] = true
@@ -739,7 +739,7 @@ func _end(won: bool) -> void:
 		return
 	over = true
 	main.hud.show_message("The Ogre King has fallen! The Line holds!" if won else "The army breaks!")
-	main.call_deferred("_finish", won)
+	main.modes.call_deferred("_finish", won)
 
 
 func status() -> String:

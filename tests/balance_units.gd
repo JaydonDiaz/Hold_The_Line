@@ -12,7 +12,7 @@ extends SceneTree
 ## builds: "all" (default) or a comma list like 4200,0402. Prints one "BU" line a build:
 ## the build, its gold cost, and each fight's figures, for comparing paths with each other.
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 var main
 var kind := "martial"
 var level := 6
@@ -35,8 +35,8 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
-	main._lock_portrait(true)
+	main.setup.choose_mode("normal")
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	main.castle_hp = 1e9
 	main.castle_max = 1e9
@@ -77,9 +77,9 @@ func _cost(tiers: Array) -> int:
 func _troop(tiers: Array):
 	main.gold = 99999
 	main.placing_type = kind
-	main.hire_at(Vector2(320, 470))
+	main.hiring.hire_at(Vector2(320, 470))
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	w.build_left = 0.0
 	w.position = w.post
 	w.tiers = tiers.duplicate()
@@ -106,7 +106,7 @@ func _fight(tiers: Array, spawns: Array, secs: float) -> Dictionary:
 	Engine.time_scale = 4.0
 	while t < secs:
 		while next < spawns.size() and t >= spawns[next][1]:
-			main._spawn_enemy(spawns[next][0], level, Vector2(320 + randf_range(-30, 30), 40))
+			main.waves._spawn_enemy(spawns[next][0], level, Vector2(320 + randf_range(-30, 30), 40))
 			all.append(main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1))
 			next += 1
 		await process_frame

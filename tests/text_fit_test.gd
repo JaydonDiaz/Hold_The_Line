@@ -6,7 +6,7 @@ extends SceneTree
 ##   Godot --headless --path . --fixed-fps 60 -s tests/text_fit_test.gd
 ## Exits 1 if anything spills.
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 var main
 var fails := 0
@@ -41,10 +41,10 @@ func _audit(phone: bool) -> Array:
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
-	main.pretend_phone = phone
-	main._fit_screen()
+	main.missions.pretend_phone = phone
+	main.setup._fit_screen()
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	for i in 3:
 		await process_frame
 	var bad := []
@@ -54,10 +54,10 @@ func _audit(phone: bool) -> Array:
 			continue
 		main.gold = 999999
 		main.placing_type = kind
-		main.hire_at(Vector2(x, 560))
+		main.hiring.hire_at(Vector2(x, 560))
 		main.placing_type = ""
 		x = 120.0 if x > 520.0 else x + 40.0
-		var w = main.get_warriors().back()
+		var w = main.battlefield.get_warriors().back()
 		w.build_left = 0.0
 		main.selected = w
 		for p in 4:
@@ -77,15 +77,15 @@ func _audit(phone: bool) -> Array:
 		main.selected = null
 		for i in 2:
 			await process_frame
-	main.select_castle()
+	main.castle_ctl.select_castle()
 	for i in 3:
 		await process_frame
 	for c in main.hud.castle_cards:
 		if _spills(c["desc"]):
 			bad.append("castle: " + c["desc"].text)
-	for k in main.FOE_HINTS:
+	for k in main.waves.FOE_HINTS:
 		main.hud.foe_card = null
-		main.hud.show_foe(k, main.FOE_HINTS[k][0], main.FOE_HINTS[k][1])
+		main.hud.show_foe(k, main.waves.FOE_HINTS[k][0], main.waves.FOE_HINTS[k][1])
 		await process_frame
 		for l in main.hud.foe_card.get_children():
 			if l is Label and _spills(l):

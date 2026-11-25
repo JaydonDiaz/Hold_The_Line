@@ -17,7 +17,7 @@ extends Node2D
 
 const OUTLINE := Color(0.1, 0.07, 0.1)
 const PX := 3.0
-const Maps = preload("res://scripts/maps.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 var main
 var t := 0.0
@@ -194,7 +194,7 @@ func _line(ci: CanvasItem, w: float, top: float, th: String, pal: Dictionary) ->
 				n += 1
 		"conclave":
 			# Rune posts glowing in the conduits' colours, a low starstone kerb.
-			var cols: Array = preload("res://scripts/conduits.gd").COLORS
+			var cols: Array = preload("res://scripts/field/conduits.gd").COLORS
 			var n := 0
 			for x in range(12, int(w), 30):
 				if gate.call(x):

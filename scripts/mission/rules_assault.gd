@@ -38,8 +38,8 @@ extends "res://scripts/mission/rules_escort.gd"
 ## Points are as drawn up, 640 wide.
 
 const Works = preload("res://scripts/mission/siege_works.gd")
-const Warrior = preload("res://scripts/warrior.gd")
-const Data = preload("res://scripts/data.gd")
+const Warrior = preload("res://scripts/troops/warrior.gd")
+const Data = preload("res://scripts/data/data.gd")
 # An enemy tower's archer reaches as far as a plain Archer up a plain Tower (its range, 30%
 # further for the height), measured to the edge of what it shoots at, as a troop's is.
 const TOWER_RANGE: float = Data.WARRIORS["archer"]["range"] * (1.0 + Warrior.PERCH_BASE)
@@ -131,7 +131,7 @@ func start() -> void:
 	wagon = Works.new()
 	wagon.setup(main, {"id": "ram", "kind": "wagon", "name": _c().get("name", "Battering ram"), "at": route[0], "route": route.slice(1),
 			"speed": wagon_speed, "hp": _c().get("hp", 1500.0), "cargo": "ram"})
-	main.add_objective(wagon)
+	main.waves.add_objective(wagon)
 	wagon.destroyed.connect(func(_w): _end(false))
 	wagon.reached.connect(_on_reached)
 	_measure()
@@ -184,7 +184,7 @@ func _setup_zone() -> void:
 	volley_t = float(v.get("first", 40.0)) if not v.is_empty() else INF
 	var k: float = main.FIELD_W / 640.0
 	for g2 in z.get("garrison", []) + (_prep("garrison") if united() else []):
-		main._spawn_enemy(g2[0], main.wave_level(maxi(main.wave, 1)), Vector2(g2[1].x * k, g2[1].y))
+		main.waves._spawn_enemy(g2[0], main.missions.wave_level(maxi(main.wave, 1)), Vector2(g2[1].x * k, g2[1].y))
 		var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 		e.set_meta("guard", true)   # (it holds its post by the gate: see enemy_goal)
 		e.goal = null
@@ -220,7 +220,7 @@ static func kings_guard(e) -> void:
 func _work(d: Dictionary):
 	var o = Works.new()
 	o.setup(main, d)
-	main.add_objective(o)
+	main.waves.add_objective(o)
 	return o
 
 
@@ -231,13 +231,13 @@ func _leave_zone() -> void:
 	var stayed := 0
 	var lost := 0
 	# Troops still down are left where they fell.
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if not w.is_queued_for_deletion() and w.down_timer > 0.0 and not w.data.get("emplacement", false):
 			lost += 1
 			w.queue_free()
 	# Enemies still on the field follow the army through.
 	stragglers.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.dead and not e.is_queued_for_deletion():
 			stragglers.append([e.kind, e.level])
 			e.queue_free()
@@ -261,7 +261,7 @@ func _leave_zone() -> void:
 		if o != null and is_instance_valid(o):
 			o.queue_free()
 	townsfolk.clear()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 
 
 func objectives() -> Array:
@@ -289,7 +289,7 @@ func _on_reached(_w) -> void:
 
 ## Whether an enemy is at the ram (it can't swing while one is).
 func _ram_beset() -> bool:
-	for e in main.enemies_near(wagon.position, wagon.RADIUS + 50.0):
+	for e in main.battlefield.enemies_near(wagon.position, wagon.RADIUS + 50.0):
 		if not e.dead and not e.flying and wagon.position.distance_to(e.position) <= wagon.RADIUS + e.radius + 10.0:
 			return true
 	return false
@@ -328,28 +328,28 @@ func process(delta: float) -> void:
 				if batter_t <= 0.0:
 					batter_t = BATTER_EVERY
 					wagon.swing = 1.0
-					main.sfx("hit", 0.9)
+					main.effects.sfx("hit", 0.9)
 		if gate.taken:
 			phase = "clear"
-			main.spawn_text(gate.position + Vector2(0, -110), "%s is open!" % gate.label, Color(1, 0.85, 0.3))
+			main.effects.spawn_text(gate.position + Vector2(0, -110), "%s is open!" % gate.label, Color(1, 0.85, 0.3))
 			main.hud.show_message("%s is open! Finish off the rest of them." % gate.label)
-			main.sfx("fanfare")
+			main.effects.sfx("fanfare")
 	if phase == "clear":
 		var down := _downed()
 		var where: String = "through " + gate.label.to_lower() if zone_i + 1 < zones().size() else "into the citadel"
-		if main.spawn_queue.is_empty() and main.get_enemies().is_empty() and down == 0:
+		if main.spawn_queue.is_empty() and main.battlefield.get_enemies().is_empty() and down == 0:
 			# The field's clear: the army waits for the order to go on (finish what's left
 			# to do here first, if you like).
 			phase = "ready"
 			main.hud.show_message("The way is clear. Go on %s when you're ready (%s, or Y)." % [where, action_label()])
-			main.sfx("horn", 1.2)
+			main.effects.sfx("horn", 1.2)
 		elif main.spawn_queue.is_empty():
 			# Nothing more coming: whatever's left (out of reach, say) can't keep the army here.
 			linger += delta
 			if linger >= LINGER:
 				phase = "ready"
 				main.hud.show_message("You can go on %s now (%s, or Y), or finish here first." % [where, action_label()])
-				main.sfx("horn", 1.2)
+				main.effects.sfx("horn", 1.2)
 
 
 ## Once the field's clear: the order to go on through the gate (or, past the last, to
@@ -366,7 +366,7 @@ func action() -> void:
 	var last := zone_i + 1 >= zones().size()
 	var crews := _crews_here()
 	var down := _downed()
-	var foes: int = main.get_enemies().size()
+	var foes: int = main.battlefield.get_enemies().size()
 	if crews == 0 and down == 0 and foes == 0:
 		_go(true)
 		return
@@ -445,7 +445,7 @@ func _leave_zone_keep_army() -> void:
 		if o != null and is_instance_valid(o):
 			o.queue_free()
 	townsfolk.clear()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 
 
 ## Towers taken in this field that have a crew up them now.
@@ -461,7 +461,7 @@ func _crews_here() -> int:
 ## Troops down (a Healer can still reach them).
 func _downed() -> int:
 	var n := 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if not w.is_queued_for_deletion() and w.down_timer > 0.0:
 			n += 1
 	return n
@@ -521,7 +521,7 @@ func _send_side(delta: float) -> void:
 	var crews := _empty_captured()
 	var jobs := _side_jobs()
 	var busy := {}
-	var troops: Array = main.get_warriors().filter(_on_side_duty)
+	var troops: Array = main.battlefield.get_warriors().filter(_on_side_duty)
 	# Those already on a job that's still open keep it.
 	for w in troops:
 		var j = (w.get_meta("side_job") if w.has_meta("side_job") else null)
@@ -554,7 +554,7 @@ func _send_side(delta: float) -> void:
 		var spot: Vector2 = best.position
 		if not crews.has(best):
 			var r: float = best.capture_r() * (0.25 if best.kind == "cache" else 0.6)
-			spot = main.paths.open_spot(main._clamp_post(best.position + Vector2.from_angle(PI * 0.5 + n * 1.3) * r))
+			spot = main.paths.open_spot(main.hiring._clamp_post(best.position + Vector2.from_angle(PI * 0.5 + n * 1.3) * r))
 		w.order_to(spot)
 
 
@@ -618,10 +618,10 @@ func holds_waves() -> bool:
 func _count(o) -> Array:
 	var mine := 0
 	var theirs := 0
-	for w in main.warriors_near(o.position, o.capture_r()):
+	for w in main.battlefield.warriors_near(o.position, o.capture_r()):
 		if w.is_active() and not w.is_emplacement() and w.position.distance_to(o.position) <= o.capture_r():
 			mine += 1
-	for e in main.enemies_near(o.position, o.capture_r() + 30.0):
+	for e in main.battlefield.enemies_near(o.position, o.capture_r() + 30.0):
 		if not e.dead and not e.flying and e.position.distance_to(o.position) <= o.capture_r():
 			theirs += 1
 	return [mine, theirs]
@@ -648,7 +648,7 @@ func _take(o, delta: float) -> bool:
 
 
 func _towers(delta: float) -> void:
-	var level: int = main.wave_level(maxi(main.wave, 1))
+	var level: int = main.missions.wave_level(maxi(main.wave, 1))
 	for t in towers:
 		if not is_instance_valid(t) or t.crewed:
 			continue
@@ -658,7 +658,7 @@ func _towers(delta: float) -> void:
 			if shot_t[t] <= 0.0:
 				var mark = null
 				var best := TOWER_RANGE
-				for w in main.warriors_near(t.position, TOWER_RANGE + 40.0):
+				for w in main.battlefield.warriors_near(t.position, TOWER_RANGE + 40.0):
 					if w.is_active() and not w.wall_guard and not w.sheltered() and not w.unmanned_tower():
 						var d: float = t.position.distance_to(w.position) - w.RADIUS
 						if d <= best:
@@ -668,21 +668,21 @@ func _towers(delta: float) -> void:
 					shot_t[t] = TOWER_COOLDOWN
 					t.loosed = 0.35
 					t.aim = 1.0 if mark.position.x >= t.position.x else -1.0
-					var shot = preload("res://scripts/enemy_shot.gd").new()
+					var shot = preload("res://scripts/enemies/enemy_shot.gd").new()
 					shot.main = main
 					shot.target = mark
 					shot.target_pos = mark.position
 					shot.position = t.position + Vector2(0, -78)
 					shot.speed = 380.0
 					shot.damage = 9.0 + level * 1.1
-					main.add_projectile(shot)
-					main.sfx("bow", 0.6)
+					main.effects.add_projectile(shot)
+					main.effects.sfx("bow", 0.6)
 				else:
 					shot_t[t] = 0.0   # (looking every moment)
 			if _take(t, delta):
-				main.spawn_text(t.position + Vector2(0, -160), "Tower taken!", Color(0.6, 0.85, 1.0))
+				main.effects.spawn_text(t.position + Vector2(0, -160), "Tower taken!", Color(0.6, 0.85, 1.0))
 				main.hud.show_message("An archer tower is yours! Order a ranged troop onto it to post it up there.")
-				main.sfx("fanfare")
+				main.effects.sfx("fanfare")
 				_tower_taken(t)
 
 
@@ -697,12 +697,12 @@ func _tower_taken(t) -> void:
 	main.warrior_layer.add_child(tw)
 	t.crewed = true   # (the enemy's tower is gone: yours stands there)
 	main.paths.invalidate()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 
 
 ## Captured towers with nobody in them yet.
 func _empty_captured() -> Array:
-	return main.get_warriors().filter(_is_empty_captured)
+	return main.battlefield.get_warriors().filter(_is_empty_captured)
 
 
 func _is_empty_captured(w) -> bool:
@@ -741,8 +741,8 @@ func _free_prisoners(pen) -> void:
 		var tiers := [0, 0, 0, 0]
 		tiers[clampi(int(s.get("path", 0)), 0, 3)] = clampi(int(s.get("tier", 1)), 1, 3)
 		var spot: Vector2 = at + Vector2(-26 + n * 26, 46)
-		main._lend_unit({"kind": s["kind"], "at": spot, "tiers": tiers})
-		var w = main.temp_allies.back()
+		main.missions._lend_unit({"kind": s["kind"], "at": spot, "tiers": tiers})
+		var w = main.missions.temp_allies.back()
 		w.set_meta("freed", true)
 		n += 1
 		joined += 1
@@ -757,20 +757,20 @@ func _free_prisoners(pen) -> void:
 		way.append(Vector2(bottom.x / k, 790))
 		c.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": start, "variant": randi() % 24,
 				"route": way, "speed": randf_range(30, 38), "hp": 40.0})
-		main.add_objective(c)
+		main.waves.add_objective(c)
 		c.reached.connect(func(o):
 			freed += 1
 			o.queue_free())
 		townsfolk.append(c)
-	main.warriors_changed()
-	main.spawn_text(pen.position + Vector2(0, -60), "Freed!", Color(0.6, 1.0, 0.6))
+	main.battlefield.warriors_changed()
+	main.effects.spawn_text(pen.position + Vector2(0, -60), "Freed!", Color(0.6, 1.0, 0.6))
 	var who := []
 	if n > 0:
 		who.append("%d soldier%s join%s you" % [n, "" if n == 1 else "s", "s" if n == 1 else ""])
 	if int(spec.get("townsfolk", 0)) > 0:
 		who.append("%d townsfolk run for safety" % int(spec["townsfolk"]))
 	main.hud.show_message("Prisoners freed: " + ", ".join(who) + ".")
-	main.sfx("fanfare")
+	main.effects.sfx("fanfare")
 	main.paths.invalidate()
 
 
@@ -786,8 +786,8 @@ func _caches() -> void:
 		if counts[0] > 0 and counts[1] == 0:
 			c.taken = true
 			main.gold += c.gold
-			main.spawn_text(c.position + Vector2(0, -30), "+%dg supplies" % c.gold, Color(1, 0.85, 0.3))
-			main.sfx("coin")
+			main.effects.spawn_text(c.position + Vector2(0, -30), "+%dg supplies" % c.gold, Color(1, 0.85, 0.3))
+			main.effects.sfx("coin")
 
 
 func _winch(delta: float) -> void:
@@ -819,7 +819,7 @@ func _volleys(delta: float) -> void:
 	var kinds: Array = v.get("kinds", ["arrows"])
 	var kind: String = kinds.pick_random()
 	var vd: Dictionary = VOLLEYS[kind]
-	var level: int = main.wave_level(maxi(main.wave, 1))
+	var level: int = main.missions.wave_level(maxi(main.wave, 1))
 	var fall := Volley.new()
 	fall.main = main
 	fall.position = spot
@@ -830,9 +830,9 @@ func _volleys(delta: float) -> void:
 	fall.color = vd["color"]
 	fall.fire = kind == "fire"
 	fall.warn = WARN
-	main.add_projectile(fall)
+	main.effects.add_projectile(fall)
 	main.hud.show_message("%s from the walls! Get clear of the ring!" % vd["name"])
-	main.sfx("horn", 0.7)
+	main.effects.sfx("horn", 0.7)
 
 
 ## Where a volley's aimed: the middle of the biggest knot of your troops (two or more,
@@ -840,10 +840,10 @@ func _volleys(delta: float) -> void:
 func _volley_spot():
 	var best = null
 	var most := 1
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if not w.is_active() or w.is_emplacement() or w.wall_guard:
 			continue
-		var near: Array = main.warriors_near(w.position, 70.0).filter(func(o): return o.is_active() and not o.is_emplacement())
+		var near: Array = main.battlefield.warriors_near(w.position, 70.0).filter(func(o): return o.is_active() and not o.is_emplacement())
 		if near.size() > most:
 			most = near.size()
 			var c := Vector2.ZERO
@@ -891,16 +891,16 @@ class Volley extends Node2D:
 		queue_redraw()
 
 	func _land() -> void:
-		for w in main.warriors_near(position, radius + 20.0):
+		for w in main.battlefield.warriors_near(position, radius + 20.0):
 			if w.is_active() and position.distance_to(w.position) <= radius:
 				w.take_damage(damage * (0.5 if w.is_emplacement() else 1.0))
 		if fire:
-			main.spawn_flash(position, radius * 0.8)
-			main.spawn_burst(position, radius, Color(1.0, 0.5, 0.15))
-			main.sfx("boom", 0.8)
+			main.effects.spawn_flash(position, radius * 0.8)
+			main.effects.spawn_burst(position, radius, Color(1.0, 0.5, 0.15))
+			main.effects.sfx("boom", 0.8)
 		else:
-			main.spawn_burst(position, radius * 0.8, Color(0.85, 0.8, 0.65))
-			main.sfx("bow", 0.9)
+			main.effects.spawn_burst(position, radius * 0.8, Color(0.85, 0.8, 0.65))
+			main.effects.sfx("bow", 0.9)
 
 	func _draw() -> void:
 		var k := clampf(t / warn, 0.0, 1.0)
@@ -926,7 +926,7 @@ func enter_next() -> void:
 		moving_on = false
 		return
 	_leave_zone()
-	var side: Array = main.get_warriors().filter(func(w): return w.priority == Warrior.SIDE_PRIORITY)
+	var side: Array = main.battlefield.get_warriors().filter(func(w): return w.priority == Warrior.SIDE_PRIORITY)
 	super.enter_next()   # the next field, the ram at the bottom of it, the army along with it
 	for w in side:
 		if is_instance_valid(w) and not w.is_queued_for_deletion():
@@ -945,7 +945,7 @@ func enter_next() -> void:
 ## it's deployed, taken up again from here).
 func _stragglers_come() -> void:
 	for st in stragglers:
-		main._spawn_enemy(str(st[0]), int(st[1]))   # (out at the top of the field, as any enemy)
+		main.waves._spawn_enemy(str(st[0]), int(st[1]))   # (out at the top of the field, as any enemy)
 	if not stragglers.is_empty():
 		main.hud.show_message("%d enem%s followed you through!" % [stragglers.size(), "y" if stragglers.size() == 1 else "ies"])
 	stragglers.clear()
@@ -984,7 +984,7 @@ func checkpoint() -> void:
 func _restore(cp: Dictionary) -> void:
 	for w in main.warrior_layer.get_children():
 		w.queue_free()
-	main.temp_allies.clear()
+	main.missions.temp_allies.clear()
 	for rec in cp.get("army", []):
 		if rec is Dictionary:
 			_make_unit(rec)
@@ -1000,7 +1000,7 @@ func _restore(cp: Dictionary) -> void:
 	joined = int(cp.get("joined", 0))
 	garrisons = (cp.get("garrisons", []) as Array).duplicate(true)
 	stragglers = (cp.get("stragglers", []) as Array).duplicate(true)
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.hud.show_message("Taken up again from %s." % cp_name)
 
 
@@ -1034,7 +1034,7 @@ func status() -> String:
 	if phase == "ready":
 		return text + "  ·  the way is clear: go on when you're ready (Y)"
 	if phase == "clear":
-		var left: int = main.get_enemies().size() + main.spawn_queue.size()
+		var left: int = main.battlefield.get_enemies().size() + main.spawn_queue.size()
 		var down := _downed()
 		if left > 0:
 			return text + "  ·  clear the field: %d left" % left

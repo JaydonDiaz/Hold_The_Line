@@ -1,7 +1,7 @@
 # Hold the Line: the world and its history
 
 The reference for the setting shared by *Hold the Line* and its planned real-time strategy
-prequel. What players see lives in `scripts/campaign_data.gd` (the prologue, each people's
+prequel. What players see lives in `scripts/data/campaign_data.gd` (the prologue, each people's
 description, and every line of the story); this file holds the wider history the game only
 touches on, and what the prequel can build on. Where the two differ, the game's text is canon.
 

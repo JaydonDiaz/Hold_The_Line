@@ -28,7 +28,7 @@ func process(delta: float) -> void:
 		if o.dead:
 			continue
 		o.contested = false
-		for e in main.enemies_near(o.position, o.RADIUS + 60.0):
+		for e in main.battlefield.enemies_near(o.position, o.RADIUS + 60.0):
 			if not e.dead and o.position.distance_to(e.position) <= o.RADIUS + e.radius + 14.0:
 				o.contested = true   # an enemy at it: the work stops
 				break
@@ -41,7 +41,7 @@ func process(delta: float) -> void:
 			return
 		done = true
 		main.hud.show_message("%s is done: it held!" % _charging()[0].label)
-		main.call_deferred("_finish", true)
+		main.modes.call_deferred("_finish", true)
 
 
 ## Endless: it's lit (the signal's away), then it burns down and has to be built up again.
@@ -56,9 +56,9 @@ func _relight() -> void:
 		o.hp = minf(o.max_hp, o.hp + o.max_hp * float(r.get("mend", 0.3)))
 		o.progress = 0.0
 		o.charge *= float(r.get("longer", 1.1))
-		main.spawn_text(o.position + Vector2(0, -150), "+%dg" % pay, Color(1, 0.85, 0.2))
+		main.effects.spawn_text(o.position + Vector2(0, -150), "+%dg" % pay, Color(1, 0.85, 0.2))
 	main.hud.show_message("%s is lit (%d)! +%d gold. It burns down: build it up again." % [_charging()[0].label, lit, pay])
-	main.sfx("fanfare")
+	main.effects.sfx("fanfare")
 
 
 func wave_cleared(_n: int) -> bool:

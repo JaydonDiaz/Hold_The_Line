@@ -38,22 +38,22 @@ func _initialize() -> void:
 		["06_hire_card", func(): main.selected = null; main.hud._show_hire_card("frost", main.hud.hire_buttons["frost"]); main.hud.show_foe("wolf", "Wolf", "Fast. Runs past your troops to bite at the walls."), 40],
 		["06b_pick", func(): main.hud.hide_hover(); _pick("swordsman"), 10],
 		["07_orders", func(): main.hud.toggle_orders(main), 40],
-		["08_abilities", func(): main.hud.toggle_orders(main); main.selected = null; main.switch_tab("abilities"), 30],
-		["09_castle", func(): main.select_castle(), 30],
+		["08_abilities", func(): main.hud.toggle_orders(main); main.selected = null; main.formation_ctl.switch_tab("abilities"), 30],
+		["09_castle", func(): main.castle_ctl.select_castle(), 30],
 		["10_menu", func(): main.hud.show_menu_confirm(), 30],
 		["11_end", func(): _battle(); main.hud.show_end(false, 7, 9, false, "The castle fell."), 60],
-		["12_freeplay", func(): _fresh(); main.hud.hide_mode_select(); main.choose_mode("freeplay"), 60],
-		["13_tutorial", func(): _fresh(); main.hud.hide_mode_select(); main.choose_mode("tutorial"), 120],
+		["12_freeplay", func(): _fresh(); main.hud.hide_mode_select(); main.setup.choose_mode("freeplay"), 60],
+		["13_tutorial", func(): _fresh(); main.hud.hide_mode_select(); main.setup.choose_mode("tutorial"), 120],
 		["14_story", func(): _battle(); main.hud.play_story([{"who": "hale", "text": "Commander, the scouts are back. Goblins on all three roads, and wolves with them."}]), 90],
 		["15_world_map", func(): _map(), 90],
 		["16_ledger", func(): main.hud.world_map.show_ledger(), 40],
 		["16b_training", func(): _map(); main.hud.world_map.show_training(), 60],
 		["19_cutscene", func(): _battle(); main.hud.play_story([{"who": "ogre", "text": "One little fire on the frontier? Let it flicker."}]), 120],
-		["20_group", func(): _battle(); main._set_group(main.get_warriors()), 40],
-		["21_powers", func(): main._cancel(); main.gold = 5000; main.ability_item("fireball"); main.ability_item("arrows"); main.ability_item("heal"), 40],
-		["22_retreat", func(): _fresh(); main.hud.hide_mode_select(); main._on_mode_chosen("battle:long_retreat:normal"), 200],
+		["20_group", func(): _battle(); main.groups._set_group(main.battlefield.get_warriors()), 40],
+		["21_powers", func(): main.formation_ctl._cancel(); main.gold = 5000; main.castle_ctl.ability_item("fireball"); main.castle_ctl.ability_item("arrows"); main.castle_ctl.ability_item("heal"), 40],
+		["22_retreat", func(): _fresh(); main.hud.hide_mode_select(); main.missions._on_mode_chosen("battle:long_retreat:normal"), 200],
 		["17_battle_end", func(): _battle(); main.hud.show_battle_end(true, "The Old Fort", "You held the fort for 12 waves.", "Best: 12 waves", "battle:old_fort", 12), 60],
-		["18_campaign_end", func(): _battle(); main.hud.show_campaign_end(true, (load("res://scripts/campaign_data.gd").MISSIONS["stonehollow"] as Dictionary), 5, "Every workshop stood."), 60],
+		["18_campaign_end", func(): _battle(); main.hud.show_campaign_end(true, (load("res://scripts/data/campaign_data.gd").MISSIONS["stonehollow"] as Dictionary), 5, "Every workshop stood."), 60],
 	]
 	if not only.is_empty():
 		steps = steps.filter(func(s): return only.has(s[0]))
@@ -71,13 +71,13 @@ func _battle() -> void:
 	_fresh()
 	main.classic_map = "greenwood_roads"
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 2000
 	for h in [["swordsman", Vector2(200, 420)], ["archer", Vector2(440, 520)], ["mage", Vector2(320, 600)], ["frost", Vector2(240, 600)]]:
 		main.placing_type = h[0]
-		main.hire_at(h[1])
+		main.hiring.hire_at(h[1])
 	main.placing_type = ""
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.position = w.post
 
 
@@ -89,7 +89,7 @@ func _view(id: String) -> void:
 
 
 func _pick(kind: String) -> void:
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.kind == kind:
 			main.selected = w
 			return

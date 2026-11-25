@@ -24,9 +24,9 @@ extends SceneTree
 ##                    loans; Greenwood's loaned Archers clear its bats on their own; Sable
 ##                    Crossing's help comes from exactly the peoples who've joined
 
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
-const Data = preload("res://scripts/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
+const Data = preload("res://scripts/data/data.gd")
 const TEST_SAVE := "user://campaign_test.cfg"
 const AIR_ATTACKS := ["arrow", "frost", "orb", "flask", "note", "combo"]   # Data "attack"s that can hit fliers (a Martial Artist's: Spirit Bolts, its tier I)
 const AIR_KEYS := ["path:1", "path:2"]   # wall archers and wall mages shoot fliers too
@@ -93,23 +93,23 @@ func _flawless() -> void:
 	campaign.new_campaign("normal")
 	await _play("ashwatch")
 	main.battle_xp = {"swordsman": 1000.0}
-	main._finish(true)
+	main.modes._finish(true)
 	check(main.rules.flawless() and is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0 * bonus),
 			"T  a flawless win (the castle never hit) trains %d%% more (%d XP for 1000)" % [roundi(CD.FLAWLESS_BONUS * 100), campaign.xp.get("swordsman", 0.0)])
 	# The castle hit once, then repaired to full: not flawless.
 	campaign.new_campaign("normal")
 	await _play("ashwatch")
-	main.damage_castle(10.0)
+	main.waves.damage_castle(10.0)
 	main.castle_hp = main.castle_max
 	main.battle_xp = {"swordsman": 1000.0}
-	main._finish(true)
+	main.modes._finish(true)
 	check(not main.rules.flawless() and is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0),
 			"T  ...the castle hit once and repaired to full: no bonus (%d XP)" % campaign.xp.get("swordsman", 0.0))
 	# A loss is never flawless.
 	campaign.new_campaign("normal")
 	await _play("ashwatch")
 	main.battle_xp = {"swordsman": 1000.0}
-	main._finish(false)
+	main.modes._finish(false)
 	check(is_equal_approx(campaign.xp.get("swordsman", 0.0), 1000.0 * CD.XP_LOSS_SHARE), "T  ...a loss gets no bonus")
 	# Each kind of battle by its own measure.
 	campaign.new_campaign("normal")
@@ -117,8 +117,8 @@ func _flawless() -> void:
 	campaign.allies = ["stonehollow", "greenwood", "mercyvale", "frostmarch"]
 	await _play("fm_pass")
 	var ok_before: bool = main.rules.flawless()
-	main._spawn_enemy("goblin", 1, Vector2(320, 700))
-	main.rules.on_reached_bottom(main.get_enemies()[-1])
+	main.waves._spawn_enemy("goblin", 1, Vector2(320, 700))
+	main.rules.on_reached_bottom(main.battlefield.get_enemies()[-1])
 	check(ok_before and not main.rules.flawless(), "T  Hold the Pass: one enemy through and it's not flawless")
 	await _play("fm_vigil")
 	ok_before = main.rules.flawless()
@@ -174,14 +174,14 @@ func _fresh_main() -> void:
 func _play(mission_id: String) -> void:
 	await _fresh_main()
 	main.hud.hide_mode_select()
-	main.start_mission(mission_id)
+	main.missions.start_mission(mission_id)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame
 	# Battles stretch to the window; these tests (and the balance bot) play on the width
 	# the maps are drawn up for. terrain_test.gd checks the maps stretched wide.
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await process_frame
 
 
@@ -199,16 +199,16 @@ func _key(code: Key) -> void:
 ## Ends the current wave at once: nothing left to spawn, every enemy gone.
 func _clear_wave() -> void:
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	await process_frame
 	await process_frame
 
 
 func _win_mission() -> void:
-	for i in main.last_wave():
-		main.start_wave()
+	for i in main.missions.last_wave():
+		main.waves.start_wave()
 		await _clear_wave()
 		if main.game_over:
 			break
@@ -291,7 +291,7 @@ func _slots() -> void:
 	check(campaign.slot_info(1).is_empty() and campaign.slot_info(2).is_empty(), "P  no saves: every slot is empty")
 	# A campaign in Save 2 from the menu's key, and another in Save 1.
 	await _fresh_main()
-	main._on_mode_chosen("campaign:new:hard:2")
+	main.missions._on_mode_chosen("campaign:new:hard:2")
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
@@ -317,7 +317,7 @@ func _slots() -> void:
 	main.hud._show_cards("slot:3")
 	names = main.hud.mode_cards.map(func(c): return (c.get_child(0) as Label).text)
 	check(not "Continue" in names, "P  ...an empty save has nothing to continue")
-	main._on_mode_chosen("campaign:continue:2")
+	main.missions._on_mode_chosen("campaign:continue:2")
 	await process_frame
 	check(campaign.slot == 2 and campaign.difficulty == "hard" and campaign.completed == ["ashwatch", "ashwatch_road"] and main.hud.world_map != null,
 			"P  continuing Save 2 loads it and opens the map")
@@ -357,76 +357,76 @@ func _unlocks() -> void:
 	check(main.campaign and main.started, "U  Ashwatch starts as a campaign battle")
 	var gold0: int = main.gold
 	# Troops: Swordsmen only.
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(200, 480))
-	check(main.gold == gold0 - main.hire_cost("swordsman"), "U  a Swordsman can be hired")
-	main._on_hire_pressed("archer")
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(200, 480))
+	check(main.gold == gold0 - main.hiring.hire_cost("swordsman"), "U  a Swordsman can be hired")
+	main.hiring._on_hire_pressed("archer")
 	check(main.placing_type == "", "U  the Archer button does nothing (locked)")
 	main.hud.hire_tab = "troops"
 	_key(KEY_3)   # the Archer's hotkey (the Pikeman's is 2: he's there from the start)
 	check(main.placing_type == "", "U  ...nor does its hotkey, 3")
 	main.placing_type = "archer"   # even if something sets it directly
-	var n: int = main.get_warriors().size()
-	main.hire_at(Vector2(300, 480))
-	check(main.get_warriors().size() == n and main.placing_type == "", "U  ...and hire_at refuses a locked kind outright")
+	var n: int = main.battlefield.get_warriors().size()
+	main.hiring.hire_at(Vector2(300, 480))
+	check(main.battlefield.get_warriors().size() == n and main.placing_type == "", "U  ...and hire_at refuses a locked kind outright")
 	for kind in ["mage", "frost", "martial", "healer", "bard", "alchemist"]:
-		main._on_hire_pressed(kind)
+		main.hiring._on_hire_pressed(kind)
 	check(main.placing_type == "", "U  every other troop is locked too")
 	# Emplacements and barricades.
 	main.hud.hire_tab = "emplacements"
 	for i in 8:
 		_key(KEY_1 + i)
-	main._on_hire_pressed("barricade")
+	main.hiring._on_hire_pressed("barricade")
 	check(main.placing_type == "", "U  no emplacement or barricade can be picked, by button or hotkeys 1-8")
 	# Abilities.
 	main.hud.hire_tab = "abilities"
 	for i in 6:
 		_key(KEY_1 + i)
 	for key in Data.ABILITIES:
-		main.ability_item(key)
-	check(main.powers.owned.is_empty() and main.gold == gold0 - main.hire_cost("swordsman"), "U  no ability can be bought, by button or hotkeys 1-6")
+		main.castle_ctl.ability_item(key)
+	check(main.powers.owned.is_empty() and main.gold == gold0 - main.hiring.hire_cost("swordsman"), "U  no ability can be bought, by button or hotkeys 1-6")
 	# Castle paths: by card, by number key and by Q/W/E/R with the castle selected.
-	main.select_castle()
+	main.castle_ctl.select_castle()
 	for p in 4:
-		main.castle_upgrade(p)
+		main.castle_ctl.castle_upgrade(p)
 	for i in 4:
 		_key(KEY_1 + i)
 	for k in [KEY_Q, KEY_W, KEY_E, KEY_R]:
 		_key(k)
 	check(main.powers.tiers == [0, 0, 0, 0], "U  no castle path can be bought: cards, 1-4 or Q/W/E/R")
-	main._cancel()
+	main.formation_ctl._cancel()
 	# Repairs.
 	main.castle_hp = main.castle_max * 0.5
 	main.hud.hire_tab = "repair"
 	_key(KEY_1)
-	main.repair_castle(3)
-	check(main.repair_job.is_empty() and not main.can_repair(0), "U  the castle can't be repaired")
+	main.castle_ctl.repair_castle(3)
+	check(main.castle_ctl.repair_job.is_empty() and not main.castle_ctl.can_repair(0), "U  the castle can't be repaired")
 	# The HUD shows it all as locked.
 	main.hud.refresh(main)
 	check(main.hud.hire_buttons["archer"].disabled and main.hud.hire_buttons["archer"].modulate.a < 1.0
 			and not main.hud.hire_buttons["swordsman"].disabled, "U  the HUD greys out locked hires, not the Swordsman")
 	check(main.hud.ability_buttons["arrows"].disabled and main.hud.castle_cards[0]["cost"].text == "LOCKED"
 			and main.hud.repair_buttons[0].disabled, "U  ...and locked abilities, castle paths and repairs")
-	check("Woodland Watch" in main.lock_note("archer") and "Engineers" in main.lock_note("path:0"), "U  locks say who unlocks them")
+	check("Woodland Watch" in main.missions.lock_note("archer") and "Engineers" in main.missions.lock_note("path:0"), "U  locks say who unlocks them")
 	# A mission's lent help: Stonehollow lends barricades, repairs and Engineers.
 	await _play("stonehollow")
-	check(main.allowed("barricade") and main.allowed("repair"), "U  Stonehollow's mission lends barricades and repairs")
-	check(not main.allowed("tower") and not main.allowed("path:0") and not main.allowed("archer"), "U  ...but not towers, Fortify or archers")
-	main._on_hire_pressed("barricade")
-	main.hire_at(Vector2(200, 480))
-	main.hire_at(Vector2(360, 480))
-	check(main.get_barricades().size() == 1, "U  a barricade can be built there")
+	check(main.missions.allowed("barricade") and main.missions.allowed("repair"), "U  Stonehollow's mission lends barricades and repairs")
+	check(not main.missions.allowed("tower") and not main.missions.allowed("path:0") and not main.missions.allowed("archer"), "U  ...but not towers, Fortify or archers")
+	main.hiring._on_hire_pressed("barricade")
+	main.hiring.hire_at(Vector2(200, 480))
+	main.hiring.hire_at(Vector2(360, 480))
+	check(main.battlefield.get_barricades().size() == 1, "U  a barricade can be built there")
 	# Once Stonehollow has joined: its unlocks everywhere, emplacements still need their people.
 	campaign.allies = ["stonehollow"]
 	campaign.completed = ["ashwatch", "stonehollow"]
 	await _play("ashwatch")
-	check(main.allowed("barricade") and main.allowed("repair") and main.allowed("path:0") and main.allowed("tower") and main.allowed("ballista"),
+	check(main.missions.allowed("barricade") and main.missions.allowed("repair") and main.missions.allowed("path:0") and main.missions.allowed("tower") and main.missions.allowed("ballista"),
 			"U  after Stonehollow joins: barricades, repairs, Fortify, Towers and Ballistae are open in every mission")
-	check(not main.allowed("archer") and not main.allowed("path:1") and not main.allowed("ability:arrows"), "U  ...Archers, Wall Archers and Arrow Storm still wait for Greenwood")
+	check(not main.missions.allowed("archer") and not main.missions.allowed("path:1") and not main.missions.allowed("ability:arrows"), "U  ...Archers, Wall Archers and Arrow Storm still wait for Greenwood")
 	campaign.allies = ["stonehollow", "greenwood"]
-	check(main.allowed("tower") and main.allowed("archer") and main.allowed("ability:arrows"), "U  with Greenwood too: Archers (to put in the Towers) and Arrow Storm")
+	check(main.missions.allowed("tower") and main.missions.allowed("archer") and main.missions.allowed("ability:arrows"), "U  with Greenwood too: Archers (to put in the Towers) and Arrow Storm")
 	campaign.allies = ["greenwood"]
-	check(main.allowed("archer") and not main.allowed("tower") and not main.allowed("ballista"), "U  Greenwood without the Engineers: Archers, but no Towers or Ballistae")
+	check(main.missions.allowed("archer") and not main.missions.allowed("tower") and not main.missions.allowed("ballista"), "U  Greenwood without the Engineers: Archers, but no Towers or Ballistae")
 	campaign.reset()
 
 
@@ -439,7 +439,7 @@ func _missions() -> void:
 			"M  a new campaign: Ashwatch under attack, Dawnspire known but locked, the rest undiscovered")
 	await _fresh_main()
 	main.hud.hide_mode_select()
-	main.start_mission("ashwatch")
+	main.missions.start_mission("ashwatch")
 	await process_frame
 	check(main.hud.story != null, "M  Ashwatch opens with its story")
 	main.hud.story.advance()
@@ -450,33 +450,33 @@ func _missions() -> void:
 	await process_frame
 	check(main.hud.story == null and campaign.seen.has("ashwatch_intro"), "M  the story can be skipped, and is remembered as seen")
 	var m: Dictionary = CD.MISSIONS["ashwatch"]
-	check(main.gold == m["gold"] and main.last_wave() == m["waves"] and main.wave == 0, "M  starting gold %d, %d waves" % [m["gold"], m["waves"]])
-	var kinds: Array = main.get_warriors().map(func(w): return w.kind)
+	check(main.gold == m["gold"] and main.missions.last_wave() == m["waves"] and main.wave == 0, "M  starting gold %d, %d waves" % [m["gold"], m["waves"]])
+	var kinds: Array = main.battlefield.get_warriors().map(func(w): return w.kind)
 	check(kinds.count("tower") == 0 and kinds.count("swordsman") == 2, "M  the garrison's two swordsmen are on the field (no watchtower)")
-	check(main.get_warriors().all(func(w): return w.sell_value() == 0), "M  ...and are on loan: selling them pays nothing")
+	check(main.battlefield.get_warriors().all(func(w): return w.sell_value() == 0), "M  ...and are on loan: selling them pays nothing")
 	# Waves come from the mission's pool, at the mission's level.
-	var w1: Array = main._build_wave(1)
+	var w1: Array = main.waves._build_wave(1)
 	check(w1.size() == m["count"][0] + m["count"][1] and w1.all(func(k): return k == "goblin"), "M  wave 1: %d goblins" % w1.size())
-	var w4: Array = main._build_wave(4)
+	var w4: Array = main.waves._build_wave(4)
 	check(w4.count("orc") >= 2 and w4.count("troll") == m["extra"][4].count("troll") and not w4.has("bat") and not w4.has("warlord"),
 			"M  wave 4 adds its orcs and its trolls; no bats or warlords")
-	check(main.wave_level(1) == m["level"], "M  enemies start at level %d" % m["level"])
+	check(main.missions.wave_level(1) == m["level"], "M  enemies start at level %d" % m["level"])
 	main.hud.refresh(main)
 	check(main.hud.stat_text(main.hud.wave_label) == "Wave 0/%d" % m["waves"], "M  the HUD counts waves out of %d" % m["waves"])
 	# Leaving mid-mission changes nothing.
-	main.start_wave()
+	main.waves.start_wave()
 	var before := FileAccess.get_md5(TEST_SAVE)
-	main.back_to_map()
+	main.missions.back_to_map()
 	check(campaign.screen == "map" and campaign.completed.is_empty() and FileAccess.get_md5(TEST_SAVE) == before, "M  leaving mid-mission for the map changes nothing")
 	await _fresh_main()
 	check(main.hud.world_map != null, "M  ...and the reload opens the map")
 	# Losing.
 	await _play("ashwatch")
-	main.start_wave()
-	main.damage_castle(99999)
+	main.waves.start_wave()
+	main.waves.damage_castle(99999)
 	check(main.game_over and not main.victory and campaign.completed.is_empty(), "M  losing ends the battle and records nothing")
 	check(not campaign.flags.has("watchtower_stood"), "M  ...and sets no story flags")
-	main.retry_mission()
+	main.missions.retry_mission()
 	check(campaign.screen == "battle", "M  Try again reloads into the same mission")
 	await _fresh_main()
 	check(main.campaign and main.mission["name"] == m["name"] and main.gold == m["gold"] and main.wave == 0 and main.castle_hp == main.castle_max,
@@ -486,13 +486,13 @@ func _missions() -> void:
 	await _win_mission()
 	check(main.game_over and main.victory, "M  clearing the last wave wins (no endless offer)")
 	check(campaign.completed == ["ashwatch"] and campaign.allies.is_empty(), "M  Ashwatch is recorded as won (it brings no faction)")
-	check(campaign.flags.is_empty() and main.get_warriors().all(func(w): return w.kind != "tower"), "M  Ashwatch's battle has no tower (its two knights, and whoever's hired), and sets no story flags")
+	check(campaign.flags.is_empty() and main.battlefield.get_warriors().all(func(w): return w.kind != "tower"), "M  Ashwatch's battle has no tower (its two knights, and whoever's hired), and sets no story flags")
 	var cfg := ConfigFile.new()
 	cfg.load(TEST_SAVE)
 	check((cfg.get_value("state", "completed", []) as Array).has("ashwatch"), "M  ...and saved straight away")
 	check(campaign.territory_state("ashwatch") == "unfinished" and campaign.territory_state("stonehollow") == "attack", "M  Stonehollow is discovered and under attack")
 	check(campaign.pending_story == "ashwatch_outro", "M  the map will play Ashwatch's outro")
-	main.back_to_map()
+	main.missions.back_to_map()
 	await _fresh_main()
 	check(main.hud.world_map != null and main.hud.world_map.overlay != null, "M  the map opens with the outro playing")
 	check(campaign.story_lines("ashwatch_outro").size() == CD.STORY["ashwatch_outro"].size() and campaign.story_lines("stonehollow_intro").size() == CD.STORY["stonehollow_intro"].size(),
@@ -504,7 +504,7 @@ func _missions() -> void:
 	for t in ["greenwood", "mercyvale", "deepdelve"]:
 		check(campaign.territory_state(t) == "attack" and campaign.playable_mission(t) != "", "M  %s opens up, under attack, with its first mission (%s)" % [t, campaign.playable_mission(t)])
 	check(campaign.territory_state("sable") == "hidden", "M  Sable Crossing is still undiscovered")
-	main.back_to_map()
+	main.missions.back_to_map()
 	await _fresh_main()
 	var map = main.hud.world_map
 	if map.overlay.has_method("skip"):
@@ -703,15 +703,15 @@ func _training() -> void:
 	check(not campaign.can_unlock("swordsman", 0) and not campaign.unlock("swordsman", 0), "T  no points, no training")
 	await _play("ashwatch")
 	main.gold = 99999
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(300, 470))
-	var w = main.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(300, 470))
+	var w = main.battlefield.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
 	main.selected = w
 	_key(KEY_Q)
 	check(w.tiers[0] == 1, "T  tier I can be bought (Q)")
 	var gold: int = main.gold
 	_key(KEY_Q)
-	main.upgrade_selected(0)
+	main.groups.upgrade_selected(0)
 	check(w.tiers[0] == 1 and main.gold == gold, "T  tier II can't, by Q or directly, and costs nothing")
 	check(w.path_state(0) == "untrained" and w.path_state(1) == "ok", "T  the path shows as needing training; untouched paths are still open")
 	main.hud.refresh(main)
@@ -721,7 +721,7 @@ func _training() -> void:
 	main.selected = null
 	w.position = w.post
 	main.wave_active = true
-	main._spawn_enemy("orc", 3, w.position + Vector2(0, -40))
+	main.waves._spawn_enemy("orc", 3, w.position + Vector2(0, -40))
 	for f in 60 * 4:
 		await process_frame
 	main.wave_active = false
@@ -743,14 +743,14 @@ func _training() -> void:
 			"T  training is saved")
 	await _play("stonehollow")
 	main.gold = 99999
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(226, 560))
-	w = main.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(226, 560))
+	w = main.battlefield.get_warriors().filter(func(x): return x.kind == "swordsman" and x.spent > 0)[0]
 	main.selected = w
 	for i in 4:
-		main.upgrade_selected(0)
-	main.upgrade_selected(1)
-	main.upgrade_selected(1)
+		main.groups.upgrade_selected(0)
+	main.groups.upgrade_selected(1)
+	main.groups.upgrade_selected(1)
 	check(w.tiers[0] == 3 and w.tiers[1] == 1, "T  in the next battle: path 1 goes to tier III (not IV), path 2 stops at tier I")
 	main.selected = null
 	# Twelve points train a unit fully, and no more.
@@ -773,7 +773,7 @@ func _training() -> void:
 	var had: float = campaign.xp["archer"]
 	main.game_over = false
 	main.battle_xp = {"archer": 400.0}
-	main.back_to_map()
+	main.missions.back_to_map()
 	check(is_equal_approx(campaign.xp["archer"], had) and main.battle_xp.is_empty(), "T  leaving a battle through the menu earns nothing")
 	# Closing the game mid-battle: nothing either, and the save is as it was.
 	main.battle_xp = {"archer": 200.0}
@@ -820,9 +820,9 @@ func _training() -> void:
 	await _play("stonehollow")
 	campaign.allies = CD.FACTIONS.keys()
 	main.gold = 99999
-	for x in main.get_warriors():
+	for x in main.battlefield.get_warriors():
 		x.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	var archer = _hire_at("archer", Vector2(320, 560))
 	var healer = _hire_at("healer", Vector2(260, 600))
 	var hurt = _hire_at("swordsman", Vector2(380, 600))
@@ -831,8 +831,8 @@ func _training() -> void:
 	hurt.max_hp = 1e5
 	hurt.hp = 1e4
 	main.wave_active = true
-	main._spawn_enemy("orc", 3, Vector2(320, 430))
-	var orc = main.get_enemies()[0]
+	main.waves._spawn_enemy("orc", 3, Vector2(320, 430))
+	var orc = main.battlefield.get_enemies()[0]
 	orc.max_hp = 1e5
 	orc.hp = 1e5
 	orc.speed = 0.0
@@ -860,7 +860,7 @@ func _training() -> void:
 		total_before += before[k]
 	archer.free()
 	healer.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.powers.owned["fireball"] = true
 	main.powers.cooldown["fireball"] = 0.0
 	main.powers.trigger("fireball")
@@ -874,12 +874,12 @@ func _training() -> void:
 	# Classic earns nothing.
 	await _fresh_main()
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 9999
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(320, 600))
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(320, 600))
 	main.wave_active = true
-	main._spawn_enemy("goblin", 1, Vector2(320, 560))
+	main.waves._spawn_enemy("goblin", 1, Vector2(320, 560))
 	for f in 120:
 		await process_frame
 	check(main.battle_xp.is_empty(), "T  Classic earns no XP")
@@ -890,10 +890,10 @@ func _training() -> void:
 
 func _hire_at(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(x): return x.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(x): return x.kind == kind)
 	var w = all[all.size() - 1]
 	w.position = w.post
 	return w
@@ -905,7 +905,7 @@ func _cutscene() -> void:
 	campaign.reset()
 	_delete_save()
 	await _fresh_main()
-	main._on_mode_chosen("campaign:new:normal")
+	main.missions._on_mode_chosen("campaign:new:normal")
 	await process_frame
 	var cut = main.hud.story
 	check(cut != null and cut.get_script().resource_path.ends_with("cutscene.gd"), "C  a new campaign opens with the prologue")
@@ -926,7 +926,7 @@ func _cutscene() -> void:
 	check(main.hud.world_map != null and main.hud.story == null, "C  the map opens after it")
 	# Esc skips straight to the map.
 	await _fresh_main()
-	main._on_mode_chosen("campaign:new:hard")
+	main.missions._on_mode_chosen("campaign:new:hard")
 	await process_frame
 	main.hud.story.skip()
 	await process_frame
@@ -974,7 +974,7 @@ func _cutscene() -> void:
 	main.hud.story.skip()
 	await process_frame
 	# Every named character has their own portrait.
-	var Portraits = load("res://scripts/portraits.gd")
+	var Portraits = load("res://scripts/campaign/portraits.gd")
 	var hashes := {}
 	for id in CD.SPEAKERS:
 		var img: Image = Portraits.image(CD.SPEAKERS[id]["look"])
@@ -1013,23 +1013,23 @@ func _balance() -> void:
 			while not main.game_over and guard < 60 * 60 * 10:
 				if not main.wave_active:
 					_bot_spend()
-					main.start_wave()
+					main.waves.start_wave()
 				await process_frame
 				guard += 1
 			Engine.time_scale = 1.0
 			print("   %s %s: XP earned %s" % [mid, diff, str(main.battle_xp)])
 			check(main.victory, "B  %s on %s, Swordsmen tier %s: the bot %s (castle %d/%d, %d troops left)" % [CD.MISSIONS[mid]["name"], diff, ["I", "II"][run[1] - 1],
 					"wins" if main.victory else "LOSES on wave %d" % main.wave, ceili(main.castle_hp), roundi(main.castle_max),
-					main.get_warriors().filter(func(w): return w.kind == "swordsman" and w.is_active()).size()])
+					main.battlefield.get_warriors().filter(func(w): return w.kind == "swordsman" and w.is_active()).size()])
 	campaign.reset()
 
 
 func _bot_spend() -> void:
 	# Repair first (where repairs are lent), then fill the line, then upgrade.
-	if main.allowed("repair") and main.castle_hp < main.castle_max * 0.6:
+	if main.missions.allowed("repair") and main.castle_hp < main.castle_max * 0.6:
 		for i in [2, 1, 0]:
-			if main.can_repair(i):
-				main.repair_castle(i)
+			if main.castle_ctl.can_repair(i):
+				main.castle_ctl.repair_castle(i)
 				break
 	# Fill any empty spot in the line (a Swordsman lost for good leaves a gap). On a
 	# battlefield with terrain the line holds the map's chokepoints (its bot_posts).
@@ -1041,12 +1041,12 @@ func _bot_spend() -> void:
 		for i in 7:
 			spots.append(Vector2(60.0 + i * (520.0 / 6.0), 420.0 + (i % 2) * 40.0))
 	for spot in spots:
-		if main.gold < main.hire_cost("swordsman"):
+		if main.gold < main.hiring.hire_cost("swordsman"):
 			break
-		if main.can_post_at(spot):
-			main._on_hire_pressed("swordsman")
-			main.hire_at(spot)
-	var troops: Array = main.get_warriors().filter(func(w): return w.kind == "swordsman")
+		if main.hiring.can_post_at(spot):
+			main.hiring._on_hire_pressed("swordsman")
+			main.hiring.hire_at(spot)
+	var troops: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "swordsman")
 	var spent := true
 	while spent:
 		spent = false
@@ -1056,7 +1056,7 @@ func _bot_spend() -> void:
 			for path in [0, 2, 1, 3]:
 				main.selected = w
 				var before: int = main.gold
-				main.upgrade_selected(path)
+				main.groups.upgrade_selected(path)
 				spent = spent or main.gold < before
 	main.selected = null
 
@@ -1080,28 +1080,28 @@ func _regression() -> void:
 	# Classic: everything open, and it goes on until the castle falls (harder past wave 20).
 	await _fresh_main()
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	check(not main.campaign and main.mission.is_empty() and main.gold == Data.START_GOLD, "R  Classic Normal: not a campaign, %d starting gold" % Data.START_GOLD)
 	var all_open := true
 	for k in Data.WARRIORS:
-		all_open = all_open and main.allowed(k)
+		all_open = all_open and main.missions.allowed(k)
 	for k in Data.ABILITIES:
-		all_open = all_open and main.allowed("ability:" + k)
+		all_open = all_open and main.missions.allowed("ability:" + k)
 	for p in 4:
-		all_open = all_open and main.allowed("path:%d" % p)
-	check(all_open and main.allowed("repair"), "R  ...every unit, ability, castle path and repair is open")
-	main._on_hire_pressed("archer")
-	main.hire_at(Vector2(300, 480))
-	check(main.get_warriors().size() == 1 and main.get_warriors()[0].kind == "archer", "R  ...an Archer can be hired")
+		all_open = all_open and main.missions.allowed("path:%d" % p)
+	check(all_open and main.missions.allowed("repair"), "R  ...every unit, ability, castle path and repair is open")
+	main.hiring._on_hire_pressed("archer")
+	main.hiring.hire_at(Vector2(300, 480))
+	check(main.battlefield.get_warriors().size() == 1 and main.battlefield.get_warriors()[0].kind == "archer", "R  ...an Archer can be hired")
 	main.hud.hire_tab = "abilities"
 	main.gold = 5000
 	_key(KEY_1)
 	check(main.powers.owned.has("arrows"), "R  ...the ability hotkeys still buy")
-	check(main.last_wave() == Data.FINAL_WAVE and main._build_wave(5).has("warlord") and main.wave_level(7) == 7, "R  ...Classic's wave mix and levels")
+	check(main.missions.last_wave() == Data.FINAL_WAVE and main.waves._build_wave(5).has("warlord") and main.missions.wave_level(7) == 7, "R  ...Classic's wave mix and levels")
 	main.hud.refresh(main)
-	check(main.survival() and main.hud.stat_text(main.hud.wave_label) == "Wave 0", "R  ...a survival run: the HUD just counts the waves")
+	check(main.waves.survival() and main.hud.stat_text(main.hud.wave_label) == "Wave 0", "R  ...a survival run: the HUD just counts the waves")
 	main.wave = Data.FINAL_WAVE - 1
-	main.start_wave()
+	main.waves.start_wave()
 	await _clear_wave()
 	if main.wave_active:   # the Ogre King came out: beat him too
 		await _clear_wave()
@@ -1109,7 +1109,7 @@ func _regression() -> void:
 	main.records_path = "user://campaign_test_records.cfg"
 	main.castle_hp = 1.0
 	main.wave = 23
-	main.damage_castle(10.0)
+	main.waves.damage_castle(10.0)
 	await process_frame
 	var shown := []
 	for n in main.hud.get_children():
@@ -1123,8 +1123,8 @@ func _regression() -> void:
 	# Freeplay.
 	await _fresh_main()
 	main.hud.hide_mode_select()
-	main.choose_mode("freeplay")
-	check(main.freeplay and not main.campaign and main.gold == main.FREEPLAY_GOLD and main.allowed("magetower"), "R  Freeplay: free gold, everything open")
+	main.setup.choose_mode("freeplay")
+	check(main.freeplay and not main.campaign and main.gold == main.FREEPLAY_GOLD and main.missions.allowed("magetower"), "R  Freeplay: free gold, everything open")
 	# The campaign keeps a portrait field.
 	campaign.new_campaign("normal")
 	await _play("ashwatch")
@@ -1162,39 +1162,39 @@ func _south() -> void:
 		_south_save(["greenwood", "mercyvale", "deepdelve"] if not mid in ["gw_exodus", "mv_wounded", "dd_entrance"] else [])
 		await _play(mid)
 		var e: Array = expect[mid]
-		var lent: Array = main.temp_allies.map(func(w): return w.kind)
+		var lent: Array = main.missions.temp_allies.map(func(w): return w.kind)
 		check(main.mission["name"] == CD.MISSIONS[mid]["name"] and main.map_id == e[0] and main.rules.get_script().resource_path.get_file() == e[1] and lent == e[2],
 				"S  %s: on %s, by %s, with %s" % [CD.MISSIONS[mid]["name"], main.map_id, main.rules.get_script().resource_path.get_file(), str(lent) if not lent.is_empty() else "no loans"])
 	# Greenwood's two loaned Archers bring down its bats on their own.
 	_south_save([])
 	await _play("gw_exodus")
-	main.start_wave()
+	main.waves.start_wave()
 	await process_frame
 	main.spawn_queue.clear()
 	main.rules.next_in = 999.0
-	for en in main.get_enemies():
+	for en in main.battlefield.get_enemies():
 		en.free()
 	var bats := []
 	for i in 4:
-		main._spawn_enemy("bat", 3, Vector2(200 + i * 70, 80))
-		bats.append(main.get_enemies()[-1])
+		main.waves._spawn_enemy("bat", 3, Vector2(200 + i * 70, 80))
+		bats.append(main.battlefield.get_enemies()[-1])
 	var t0 := 0
 	while bats.any(func(b): return is_instance_valid(b) and not b.dead) and t0 < 60 * 30:
 		await process_frame
 		t0 += 1
-	check(not bats.any(func(b): return is_instance_valid(b) and not b.dead) and main.get_warriors().filter(func(w): return w.kind == "archer").size() == 2,
+	check(not bats.any(func(b): return is_instance_valid(b) and not b.dead) and main.battlefield.get_warriors().filter(func(w): return w.kind == "archer").size() == 2,
 			"S  Greenwood's two loaned Archers bring down its bats on their own (%.0fs)" % (t0 / 60.0))
 	# Sable Crossing: help from exactly the peoples who've joined.
 	for joined in [["greenwood", "mercyvale"], ["deepdelve", "mercyvale"], ["greenwood", "deepdelve"], ["greenwood", "mercyvale", "deepdelve"]]:
 		_south_save(joined)
 		await _play("sable_crossing")
-		var kinds: Array = main.temp_allies.map(func(w): return w.kind)
+		var kinds: Array = main.missions.temp_allies.map(func(w): return w.kind)
 		var archers := kinds.count("archer")
 		var ok: bool = archers == (2 if joined.has("greenwood") else 0) and kinds.has("healer") == joined.has("mercyvale") \
 				and kinds.has("mine") == joined.has("deepdelve") and main.powers.owned.has("arrows") == joined.has("greenwood") \
 				and main.gold == CD.MISSIONS["sable_crossing"]["gold"] + (150 if joined.has("deepdelve") else 0) \
 				and is_equal_approx(main.down_time, main.Data.DIFFICULTIES["normal"]["down_time"] * (1.5 if joined.has("mercyvale") else 1.0)) \
-				and main.get_barricades().size() == 1
+				and main.battlefield.get_barricades().size() == 1
 		check(ok, "S  Sable Crossing with %s: help from exactly them (and Stonehollow's wall at the ford)" % ", ".join(joined))
-	check(main.allowed("ability:arrows"), "S  ...Greenwood's free Arrow Storm can be cast")
+	check(main.missions.allowed("ability:arrows"), "S  ...Greenwood's free Arrow Storm can be cast")
 	campaign.reset()

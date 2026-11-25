@@ -11,7 +11,7 @@ extends SceneTree
 ## Uses scratch save paths, never the player's own saves.
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
-const CD = preload("res://scripts/campaign_data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 const BASE := "user://migration_test.cfg"
 
 var campaign

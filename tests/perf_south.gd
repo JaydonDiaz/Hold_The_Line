@@ -12,7 +12,7 @@ extends SceneTree
 ## Prints a summary line like perf_stress.gd's: frame ms avg / p50 / p95 / p99 / max, FPS.
 
 const ArmyBot = preload("res://tests/army_bot.gd")
-const CD = preload("res://scripts/campaign_data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 
 var main
 var bot
@@ -57,16 +57,16 @@ func _initialize() -> void:
 
 func _setup() -> void:
 	main.hud.hide_mode_select()
-	main.start_mission(mission)
+	main.missions.start_mission(mission)
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(not wide)
+	main.missions._lock_portrait(not wide)
 	main.gold = 100000
 	bot = ArmyBot.new(main)
 	for i in 4:
 		bot.tick()   # the bot's army, upgraded
 	main.gold = 100000
-	print("[%s%s] setup: %d troops, field %d wide" % [mission, " wide" if wide else "", main.get_warriors().size(), main.FIELD_W])
+	print("[%s%s] setup: %d troops, field %d wide" % [mission, " wide" if wide else "", main.battlefield.get_warriors().size(), main.FIELD_W])
 	main.deploying = false
 	main.wave_active = true
 	main.castle_hp = 1e9
@@ -91,14 +91,14 @@ func _process(_d: float) -> bool:
 			if "hp" in o and o.kind != "civilian":
 				o.hp = o.max_hp
 		if frames % 30 == 0:
-			var have: int = main.get_enemies().size() + main.spawn_queue.size()
+			var have: int = main.battlefield.get_enemies().size() + main.spawn_queue.size()
 			for k in range(have, 120):
 				main.spawn_queue.append([pool[rng.randi() % pool.size()], 6])
 			main.spawn_interval = 0.05
-			if mission == "sable_crossing" and not main.get_enemies().any(func(e): return e.kind == "ash_marshal"):
-				main._spawn_enemy("ash_marshal", 6)   # the Marshal, kept on the field: his charges and his banner
+			if mission == "sable_crossing" and not main.battlefield.get_enemies().any(func(e): return e.kind == "ash_marshal"):
+				main.waves._spawn_enemy("ash_marshal", 6)   # the Marshal, kept on the field: his charges and his banner
 		if frames % 120 == 0:
-			for e in main.get_enemies():
+			for e in main.battlefield.get_enemies():
 				e.apply_knockback(Vector2(rng.randf_range(-70, 70), rng.randf_range(-70, 70)))
 		if frames % 60 == 0:
 			bot.tick()   # (fills gaps, keeps the escort following the cart)
@@ -107,14 +107,14 @@ func _process(_d: float) -> bool:
 			for s in sites:
 				if is_instance_valid(s):
 					s.free()
-			main.warriors_changed()
+			main.battlefield.warriors_changed()
 			sites.clear()
 			for k in 2:
 				var p := Vector2(rng.randf_range(60, main.FIELD_W - 60), rng.randf_range(520, 680))
-				if main.can_post_at(p):
+				if main.hiring.can_post_at(p):
 					main.placing_type = ["tower", "cannon"][k]
-					main.hire_at(p)
-					var all: Array = main.get_warriors().filter(func(w): return w.is_emplacement())
+					main.hiring.hire_at(p)
+					var all: Array = main.battlefield.get_warriors().filter(func(w): return w.is_emplacement())
 					if not all.is_empty():
 						sites.append(all[all.size() - 1])
 			main.placing_type = ""
@@ -132,7 +132,7 @@ func _process(_d: float) -> bool:
 		var spikes := times.filter(func(t): return t > 33.3).size()
 		print("[%s%s] SUMMARY frames %d | frame ms avg %.2f p50 %.2f p95 %.2f p99 %.2f max %.2f | FPS avg %.0f p5 %.0f | spikes>33ms %d | enemies %d troops %d" % [
 				mission, " wide" if wide else "", times.size(), avg, pct.call(0.5), pct.call(0.95), pct.call(0.99), sorted[-1],
-				1000.0 / avg, 1000.0 / pct.call(0.95), spikes, main.get_enemies().size(), main.get_warriors().size()])
+				1000.0 / avg, 1000.0 / pct.call(0.95), spikes, main.battlefield.get_enemies().size(), main.battlefield.get_warriors().size()])
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://perf_south.cfg"))
 		return true
 	return false

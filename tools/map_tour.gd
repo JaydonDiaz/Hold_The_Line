@@ -5,8 +5,8 @@ extends SceneTree
 ##   Godot --resolution 1380x800 --path . -s tools/map_tour.gd -- <out dir> [filter]
 ## Only shots whose name contains `filter` are taken. Uses a scratch campaign save.
 
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 const Scenarios = preload("res://scripts/mission/scenarios.gd")
 
 var main
@@ -67,7 +67,7 @@ func _run() -> void:
 			continue
 		await _fresh()
 		main.classic_map = id
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		await _quiet()
 		_shot("classic_" + id)
 	for id in CD.MISSIONS:
@@ -75,7 +75,7 @@ func _run() -> void:
 			continue
 		campaign.new_campaign("normal")
 		await _fresh()
-		main.start_mission(id)
+		main.missions.start_mission(id)
 		await process_frame
 		await _quiet()
 		_shot("mission_" + id)
@@ -85,7 +85,7 @@ func _run() -> void:
 			continue
 		await _fresh()
 		main.battle_id = id
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		await _quiet()
 		_shot("battle_" + id)
 		await _zones("battle_" + id)

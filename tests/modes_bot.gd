@@ -66,17 +66,17 @@ func _spend() -> void:
 	var kinds := ["swordsman", "archer", "swordsman", "archer", "healer", "swordsman", "archer", "swordsman", "mage", "swordsman"]
 	var i := 0
 	for spot in _spots():
-		var at: Vector2 = main._clamp_post(spot)
-		var have: bool = main.get_warriors().any(func(w): return w.post.distance_to(at) < 12.0)
+		var at: Vector2 = main.hiring._clamp_post(spot)
+		var have: bool = main.battlefield.get_warriors().any(func(w): return w.post.distance_to(at) < 12.0)
 		var kind: String = kinds[i % kinds.size()]
 		i += 1
-		if not have and main.allowed(kind) and main.gold >= main.hire_cost(kind) and main.can_post_at(at):
-			main._on_hire_pressed(kind)
-			main.hire_at(at)
+		if not have and main.missions.allowed(kind) and main.gold >= main.hiring.hire_cost(kind) and main.hiring.can_post_at(at):
+			main.hiring._on_hire_pressed(kind)
+			main.hiring.hire_at(at)
 			main.placing_type = ""
 	# With "emp" (the third argument): a few emplacements too, behind the troops, as a player
 	# would (to see what Sappers do to them).
-	if OS.get_cmdline_user_args().size() > 2 and OS.get_cmdline_user_args()[2] == "emp" and main.get_warriors().size() >= 6:
+	if OS.get_cmdline_user_args().size() > 2 and OS.get_cmdline_user_args()[2] == "emp" and main.battlefield.get_warriors().size() >= 6:
 		var spots: Array = _spots()
 		if not spots.is_empty():
 			var c := Vector2.ZERO
@@ -84,24 +84,24 @@ func _spend() -> void:
 				c += p
 			c /= spots.size()
 			for e in [["cannon", Vector2(-90, 90)], ["ballista", Vector2(90, 90)], ["medbay", Vector2(0, 120)]]:
-				var at: Vector2 = main._clamp_post(c + e[1])
-				var have: bool = main.get_warriors().any(func(w): return w.kind == e[0])
-				if not have and main.allowed(e[0]) and main.gold >= main.hire_cost(e[0]) and main.can_post_at(at):
-					main._on_hire_pressed(e[0])
-					main.hire_at(at)
+				var at: Vector2 = main.hiring._clamp_post(c + e[1])
+				var have: bool = main.battlefield.get_warriors().any(func(w): return w.kind == e[0])
+				if not have and main.missions.allowed(e[0]) and main.gold >= main.hiring.hire_cost(e[0]) and main.hiring.can_post_at(at):
+					main.hiring._on_hire_pressed(e[0])
+					main.hiring.hire_at(at)
 					main.placing_type = ""
 	if type == "escort":
-		var loose: Array = main.get_warriors().filter(func(w): return not w.is_emplacement() and w.anchor == null)
+		var loose: Array = main.battlefield.get_warriors().filter(func(w): return not w.is_emplacement() and w.anchor == null)
 		if not loose.is_empty():
-			main.set_follow(main.rules.wagon, loose)
+			main.formation_ctl.set_follow(main.rules.wagon, loose)
 	var spent := true
 	while spent:
 		spent = false
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			for path in [0, 2, 1, 3]:
 				main.selected = w
 				var before: int = main.gold
-				main.upgrade_selected(path)
+				main.groups.upgrade_selected(path)
 				spent = spent or main.gold < before
 	main.selected = null
 
@@ -145,11 +145,11 @@ func _run() -> void:
 				main.hud.hide_mode_select()
 				main.records_path = ""
 				if id == "classic":
-					main.choose_mode(diff)   # (Classic: the castle, endless waves)
+					main.setup.choose_mode(diff)   # (Classic: the castle, endless waves)
 				else:
-					main._on_mode_chosen("battle:%s:%s" % [id, diff])
+					main.missions._on_mode_chosen("battle:%s:%s" % [id, diff])
 				await process_frame
-				main._lock_portrait(true)
+				main.missions._lock_portrait(true)
 				await process_frame
 				type = main.mission["type"]
 				Engine.time_scale = speed
@@ -161,17 +161,17 @@ func _run() -> void:
 						tick = 60
 						_spend()
 						if prio != "":
-							for w in main.get_warriors():
+							for w in main.battlefield.get_warriors():
 								w.priority = prio
 						if not main.wave_active and not main.forced_auto:
-							main.start_wave()
+							main.waves.start_wave()
 						if main.rules.action_label() != "":
 							main.rules.action()
 							_answer_choice()
 					await process_frame
 					guard += 1
 				Engine.time_scale = 1.0
-				print("MB %s %s seed %d: %s %d waves  %s  %s" % [id, diff, s, "survived" if main.game_over else "still going after", main.waves_survived(),
+				print("MB %s %s seed %d: %s %d waves  %s  %s" % [id, diff, s, "survived" if main.game_over else "still going after", main.waves.waves_survived(),
 						main.rules.status().replace("\n", " "), _sapped()])
 	quit()
 
@@ -189,12 +189,12 @@ func _missions_bot(id: String) -> void:
 					campaign.unlocked["swordsman"] = [3, 3, 3, 3]
 				await _fresh_main()
 				main.hud.hide_mode_select()
-				main.start_mission(id)
+				main.missions.start_mission(id)
 				await process_frame
 				if main.hud.story != null:
 					main.hud.story.skip()
 				await process_frame
-				main._lock_portrait(true)
+				main.missions._lock_portrait(true)
 				await process_frame
 				type = main.mission.get("type", "castle")
 				Engine.time_scale = 4.0
@@ -206,7 +206,7 @@ func _missions_bot(id: String) -> void:
 						tick = 60
 						_spend()
 						if not main.wave_active and not main.forced_auto:
-							main.start_wave()
+							main.waves.start_wave()
 					await process_frame
 					guard += 1
 				Engine.time_scale = 1.0

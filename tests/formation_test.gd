@@ -14,8 +14,8 @@ extends SceneTree
 ## D  Dawnspire: from a save, through a door in order (no crowd in the doorway, nobody sent
 ##    to the same spot), into the next hall round their places, still the one formation
 
-const Data = preload("res://scripts/data.gd")
-const CD = preload("res://scripts/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 var main
 var fails := 0
 var checks := 0
@@ -72,7 +72,7 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	main.deploying = false
 	await process_frame
@@ -80,10 +80,10 @@ func _fresh() -> void:
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -185,9 +185,9 @@ func _army(spec: Array, y := 600.0) -> Array:
 
 func _formations() -> void:
 	await _fresh()
-	main.formations_path = "user://formation_test_saved.cfg"
+	main.formation_ctl.formations_path = "user://formation_test_saved.cfg"
 	var army: Array = await _army(["swordsman", "archer", "swordsman", "healer", "mage", "martial", "archer", "bard", "swordsman"], 380.0)
-	var f = main.make_formation(army, "shield_wall")
+	var f = main.formation_ctl.make_formation(army, "shield_wall")
 	await _frames(60 * 6)
 	var front := army.filter(func(w): return f.role(w) == "front")
 	var ranged := army.filter(func(w): return f.role(w) == "ranged")
@@ -200,7 +200,7 @@ func _formations() -> void:
 	check(f.cohesion() >= 0.85, "F  ...and they get there (%d%% in place)" % roundi(f.cohesion() * 100))
 	# No crossing: slots handed out left to right as they stood.
 	var xs_before: Array = front.map(func(w): return w.position.x)
-	var w2 = main.make_formation(army, "wedge")
+	var w2 = main.formation_ctl.make_formation(army, "wedge")
 	await _frames(60 * 6)
 	var tip = front[0]
 	for w in front:
@@ -211,33 +211,33 @@ func _formations() -> void:
 		if w.max_hp * w.damage > strongest.max_hp * strongest.damage:
 			strongest = w
 	check(tip == strongest and ranged.all(func(w): return w.post.y > tip.post.y), "F  Wedge: the strongest fighter at the point, the rest behind it")
-	var c = main.make_formation(army, "column")
+	var c = main.formation_ctl.make_formation(army, "column")
 	await _frames(60 * 6)
 	var xs: Array = army.map(func(w): return w.post.x)
 	check(xs.max() - xs.min() < 60.0, "F  Travel Column: two abreast (%.0fpx wide)" % (xs.max() - xs.min()))
 	# Turned and moved: the shape goes with it.
-	var sw = main.make_formation(army, "shield_wall")
+	var sw = main.formation_ctl.make_formation(army, "shield_wall")
 	await _frames(60 * 5)
-	main.turn_formation(army, PI / 2.0)
+	main.formation_ctl.turn_formation(army, PI / 2.0)
 	await _frames(60 * 6)
 	var fx: float = front.map(func(w): return w.post.x).min()
 	var rx: float = ranged.map(func(w): return w.post.x).max()
 	check(fx > rx and sw.cohesion() >= 0.8, "F  turned a quarter round: the line faces the side now (fighters from x %.0f, ranged to %.0f; %d%% in place)" % [fx, rx, roundi(sw.cohesion() * 100)])
 	main.group = army.duplicate()
-	main.order_group(Vector2(320, 420))
+	main.groups.order_group(Vector2(320, 420))
 	await _frames(60 * 6)
 	check(sw.anchor.distance_to(Vector2(320, 420)) < 2.0 and sw.cohesion() >= 0.8, "F  moved as a group: its anchor goes there and the shape with it (%d%% in place)" % roundi(sw.cohesion() * 100))
 	# One troop moved by hand: that's its slot now; saved and put back on.
 	var mover = ranged[0]
 	main.selected = mover
 	main.group = []
-	main.order_move(mover.post + Vector2(0, -150))   # (well clear of everyone's posts)
+	main.groups.order_move(mover.post + Vector2(0, -150))   # (well clear of everyone's posts)
 	check(sw.layout == "custom" and sw.slots[mover].distance_to(sw.local(mover.post)) < 1.0, "F  a troop's post moved by hand: that's its slot in the formation now (custom)")
 	main.selected = null
-	check(main.save_formation(army), "F  the formation saved")
-	main.leave_formation(army)
-	check(main.formation_of(army[0]) == null, "F  ...broken up")
-	var back = main.load_formation(army)
+	check(main.formation_ctl.save_formation(army), "F  the formation saved")
+	main.formation_ctl.leave_formation(army)
+	check(main.formation_ctl.formation_of(army[0]) == null, "F  ...broken up")
+	var back = main.formation_ctl.load_formation(army)
 	check(back != null and back.slots.size() == army.size() and back.slots[mover] != null, "F  ...and put back on them from the save")
 	# A member falls: the rest carry on, nothing breaks.
 	var gone = army[2]
@@ -250,7 +250,7 @@ func _formations() -> void:
 	var old: Dictionary = rec.duplicate()
 	old.erase("formation")
 	var u = main.rules._make_unit(old)
-	check(u != null and main.formation_of(u) == null, "F  ...an old record without one: no formation, nothing breaks")
+	check(u != null and main.formation_ctl.formation_of(u) == null, "F  ...an old record without one: no formation, nothing breaks")
 	if FileAccess.file_exists("user://formation_test_saved.cfg"):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path("user://formation_test_saved.cfg"))
 
@@ -260,14 +260,14 @@ func _formations() -> void:
 func _escort() -> void:
 	await _fresh()
 	main.hud.hide_mode_select()
-	main._on_mode_chosen("battle:supply_wagon:normal")
+	main.missions._on_mode_chosen("battle:supply_wagon:normal")
 	await _frames(10)
 	var movers: Array = main.rules.followable().filter(func(o): return o.is_mover())
 	if movers.is_empty():
 		check(false, "E  a battlefield with something to escort (supply_wagon)")
 		return
 	var ram = movers[0]
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	var army := []
@@ -275,23 +275,23 @@ func _escort() -> void:
 	for i in 6:
 		var at: Vector2 = ram.position + Vector2(-120 + i * 48, 90)
 		army.append(main.rules._make_unit({"kind": ["swordsman", "archer", "swordsman", "healer", "archer", "martial"][i], "post": Vector2(at.x / k, at.y)}))
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	var ram_from: Vector2 = ram.position
-	var f = main.make_formation(army, "escort")
+	var f = main.formation_ctl.make_formation(army, "escort")
 	check(f != null and f.follow == ram, "E  Convoy Escort round the %s" % ram.label.to_lower())
 	main.deploying = false
 	if not main.wave_active:
-		main.start_wave(true)
+		main.waves.start_wave(true)
 	var in_road := 0
 	var samples := 0
 	var stuck := 0.0
 	var last: Vector2 = ram.position
 	for fr in 60 * 20:
 		await process_frame
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.queue_free()   # (just the march: no fight)
 		if fr % 15 == 0:
-			var head: Vector2 = main._mover_heading(ram, Vector2.ZERO)
+			var head: Vector2 = main.formation_ctl._mover_heading(ram, Vector2.ZERO)
 			if head != Vector2.ZERO:
 				for w in army:
 					if not is_instance_valid(w):
@@ -337,7 +337,7 @@ func _doors() -> void:
 	main.hud.hide_mode_select()
 	campaign.op_resume_zone = 100 + gi
 	campaign.mission_id = "ds_assault"
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await _frames(3)
 	_skip()
 	main.deploying = false
@@ -348,13 +348,13 @@ func _doors() -> void:
 	for i in 60 * 15:
 		await process_frame
 		_skip()
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.queue_free()
 		if r.phase == "clear":
 			break
-	var here: Array = main.get_warriors().filter(func(w): return not w.is_emplacement())
-	var f0 = main.formation_of(here[0]) if not here.is_empty() else null
-	check(here.size() == 10 and f0 != null and here.all(func(w): return main.formation_of(w) == f0), "D  back from a save: all ten in their formation (%d)" % here.size())
+	var here: Array = main.battlefield.get_warriors().filter(func(w): return not w.is_emplacement())
+	var f0 = main.formation_ctl.formation_of(here[0]) if not here.is_empty() else null
+	check(here.size() == 10 and f0 != null and here.all(func(w): return main.formation_ctl.formation_of(w) == f0), "D  back from a save: all ten in their formation (%d)" % here.size())
 	var a = null
 	for x in r.arrows:
 		if x["to"] == "banners":
@@ -391,7 +391,7 @@ func _doors() -> void:
 	for i in 60 * 30:
 		await process_frame
 		_skip()
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.queue_free()
 		if main.rules.get("phase") not in ["march", "pan", "enter"]:
 			break
@@ -399,13 +399,13 @@ func _doors() -> void:
 	for i in 60 * 8:
 		await process_frame
 		_skip()
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.queue_free()   # (just the move: no fight in the new hall)
-	var now: Array = main.get_warriors().filter(func(w): return not w.is_emplacement())
+	var now: Array = main.battlefield.get_warriors().filter(func(w): return not w.is_emplacement())
 	var at_posts: int = now.filter(func(w): return w.position.distance_to(w.post) < 40.0).size()
 	check(r2.room()["id"] == "banners" and now.size() == 10 and at_posts >= 9, "D  ...into the Banner Hall, and round their places there (%d of %d)" % [at_posts, now.size()])
-	var f1 = main.formation_of(now[0]) if not now.is_empty() else null
-	check(f1 != null and now.all(func(w): return main.formation_of(w) == f1) and f1.layout == "shield_wall" and f1.cohesion() >= 0.8,
+	var f1 = main.formation_ctl.formation_of(now[0]) if not now.is_empty() else null
+	check(f1 != null and now.all(func(w): return main.formation_ctl.formation_of(w) == f1) and f1.layout == "shield_wall" and f1.cohesion() >= 0.8,
 			"D  ...still the one Shield Wall, together (%d%% in place)" % (roundi(f1.cohesion() * 100) if f1 != null else 0))
 	var front: Array = now.filter(func(w): return f1.role(w) == "front")
 	var back: Array = now.filter(func(w): return f1.role(w) != "front")

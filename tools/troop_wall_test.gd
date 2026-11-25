@@ -7,7 +7,7 @@ extends SceneTree
 ##   tower, alchemist: fire over it straight away
 ##   flashstep: a Martial Artist with Shadow Step teleports across a wall with no way around
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 const CASES := [
 	# [name, unit, upgrades [path, tiers], wall across the whole field?]
 	["swordsman", "swordsman", [], false],
@@ -40,14 +40,14 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("freeplay")
+		main.setup.choose_mode("freeplay")
 		_next()
 		return false
 	if frames < 3:
 		return false
 	var c: Array = CASES[current]
 	if is_instance_valid(unit) and not unit.is_emplacement():
-		for b in main.get_barricades():
+		for b in main.battlefield.get_barricades():
 			if b.gap_from(unit.position) < unit.RADIUS - 3.0:
 				clipped = true
 	var hurt: bool = not is_instance_valid(dummy) or dummy.hp < dummy_hp
@@ -65,34 +65,34 @@ func _process(_delta: float) -> bool:
 func _next() -> void:
 	current += 1
 	clipped = false
-	main.clear_enemies()
-	for w in main.get_warriors():
+	main.modes.clear_enemies()
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
-	for b in main.get_barricades():
+	for b in main.battlefield.get_barricades():
 		b.queue_free()
 	var c: Array = CASES[current]
 	main.placing_type = "barricade"
 	main.wall_start = null
 	if c[3]:
-		main.hire_at(Vector2(0, 400))
-		main.hire_at(Vector2(320, 400))
+		main.hiring.hire_at(Vector2(0, 400))
+		main.hiring.hire_at(Vector2(320, 400))
 		main.placing_type = "barricade"
-		main.hire_at(Vector2(320, 400))
-		main.hire_at(Vector2(640, 400))
+		main.hiring.hire_at(Vector2(320, 400))
+		main.hiring.hire_at(Vector2(640, 400))
 	else:
-		main.hire_at(Vector2(140, 400))
-		main.hire_at(Vector2(500, 400))
-	main.walls_changed()
+		main.hiring.hire_at(Vector2(140, 400))
+		main.hiring.hire_at(Vector2(500, 400))
+	main.battlefield.walls_changed()
 	main.placing_type = c[1]
-	main.hire_at(Vector2(320, 520))
+	main.hiring.hire_at(Vector2(320, 520))
 	unit = main.warrior_layer.get_child(main.warrior_layer.get_child_count() - 1)
 	unit.position = unit.post
 	if not c[2].is_empty():
 		for t in c[2][1]:
 			main.selected = unit
-			main.upgrade_selected(c[2][0])
+			main.groups.upgrade_selected(c[2][0])
 	main.selected = null
-	main._spawn_enemy("orc", 5)
+	main.waves._spawn_enemy("orc", 5)
 	dummy = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	dummy.position = Vector2(320, 300)
 	dummy.speed = 0.0

@@ -34,11 +34,11 @@ class OathArrow extends Node2D:
 		var arrived := to.length() <= step
 		position = target_pos if arrived else position + to.normalized() * step
 		rotation = to.angle()
-		for w in main.warriors_near(position, 24.0):
+		for w in main.battlefield.warriors_near(position, 24.0):
 			if w.is_active() and not w.sheltered() and not hit.has(w) and w.position.distance_to(position) <= w.RADIUS + 8.0:
 				hit[w] = true
 				w.take_damage(damage)
-				main.spawn_burst(w.position, 12.0, Color(1.0, 0.5, 0.15))
+				main.effects.spawn_burst(w.position, 12.0, Color(1.0, 0.5, 0.15))
 		if arrived:
 			queue_free()
 			return
@@ -75,15 +75,15 @@ class OathLance extends Node2D:
 			return
 		t += delta
 		if t >= WARN:
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				if not w.is_active() or w.sheltered():
 					continue
 				var c := Geometry2D.get_closest_point_to_segment(w.position, from, to)
 				if c.distance_to(w.position) <= WIDTH + w.RADIUS * 0.5:
 					w.take_damage(damage)
 					w.shove(from.direction_to(to) * 30.0, stun)
-			main.spawn_beam(from, to, Color(0.75, 0.75, 0.8), 10.0)
-			main.sfx("lance", 0.8)
+			main.effects.spawn_beam(from, to, Color(0.75, 0.75, 0.8), 10.0)
+			main.effects.sfx("lance", 0.8)
 			queue_free()
 			return
 		queue_redraw()
@@ -118,13 +118,13 @@ class WinterRing extends Node2D:
 			return
 		t += delta
 		if t >= WARN:
-			for w in main.warriors_near(position, radius + 20.0):
+			for w in main.battlefield.warriors_near(position, radius + 20.0):
 				if w.is_active() and not w.sheltered() and w.position.distance_to(position) <= radius + w.RADIUS * 0.5:
 					w.take_damage(damage)
 					w.shove(Vector2.ZERO, freeze)
-					main.spawn_text(w.position + Vector2(0, -30), "Frozen!", Color(0.6, 0.9, 1.0))
-			main.spawn_burst(position, radius, Color(0.65, 0.9, 1.0))
-			main.sfx("freeze", 0.8)
+					main.effects.spawn_text(w.position + Vector2(0, -30), "Frozen!", Color(0.6, 0.9, 1.0))
+			main.effects.spawn_burst(position, radius, Color(0.65, 0.9, 1.0))
+			main.effects.sfx("freeze", 0.8)
 			queue_free()
 			return
 		queue_redraw()
@@ -177,7 +177,7 @@ class BeaconWrath extends Node2D:
 			return
 		if was < WARN:
 			main.hud.show_message("The beacon's fire bursts across the field! Fall back ahead of it!")
-			main.sfx("boom", 0.6)
+			main.effects.sfx("boom", 0.6)
 		if front < bottom:
 			front = minf(front + speed * delta, bottom)
 			spawn_t -= delta
@@ -237,13 +237,13 @@ class WrathFire extends Node2D:
 		t += delta
 		if t >= WARN:
 			if was < WARN:
-				main.spawn_burst(position, radius, Color(1.0, 0.45, 0.12))
+				main.effects.spawn_burst(position, radius, Color(1.0, 0.45, 0.12))
 				if randf() < 0.3:
-					main.sfx("boom", randf_range(0.8, 1.0))
+					main.effects.sfx("boom", randf_range(0.8, 1.0))
 			tick -= delta
 			if tick <= 0.0:
 				tick = 0.25
-				for w in main.warriors_near(position, radius + 20.0):
+				for w in main.battlefield.warriors_near(position, radius + 20.0):
 					if w.is_active() and not w.is_emplacement() and w.position.distance_to(position) <= radius + w.RADIUS * 0.5:
 						w.take_damage(dps * 0.25)
 		queue_redraw()

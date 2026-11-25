@@ -7,7 +7,7 @@ extends SceneTree
 ##   sapper_wall  sappers against a sealed wall: they seek it out and blow it apart
 ##   sapper_troop sappers against a swordsman with no walls: the bomb hurts it, the sapper dies
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 const CASES := ["bats_melee", "bats_archer", "sapper_wall", "sapper_troop"]
 const LIMIT := 60 * 40
 
@@ -30,7 +30,7 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("freeplay")
+		main.setup.choose_mode("freeplay")
 		_next()
 		return false
 	if frames < 3:
@@ -54,7 +54,7 @@ func _process(_delta: float) -> bool:
 
 func _hire(kind: String, p: Vector2) -> void:
 	main.placing_type = kind
-	main.hire_at(p)
+	main.hiring.hire_at(p)
 	var w = main.warrior_layer.get_child(main.warrior_layer.get_child_count() - 1)
 	w.position = w.post
 	units.append(w)
@@ -63,8 +63,8 @@ func _hire(kind: String, p: Vector2) -> void:
 func _wall(a: Vector2, b: Vector2) -> void:
 	main.placing_type = "barricade"
 	main.wall_start = null
-	main.hire_at(a)
-	main.hire_at(b)
+	main.hiring.hire_at(a)
+	main.hiring.hire_at(b)
 	walls.append(main.wall_layer.get_child(main.wall_layer.get_child_count() - 1))
 
 
@@ -72,8 +72,8 @@ func _next() -> void:
 	current += 1
 	killed = 0
 	leaked = 0
-	main.clear_enemies()
-	for w in main.get_warriors() + main.get_barricades():
+	main.modes.clear_enemies()
+	for w in main.battlefield.get_warriors() + main.battlefield.get_barricades():
 		w.queue_free()
 	walls = []
 	units = []
@@ -96,9 +96,9 @@ func _next() -> void:
 		"sapper_troop":
 			kind = "sapper"
 			_hire("swordsman", Vector2(320, 420))
-	main.walls_changed()
+	main.battlefield.walls_changed()
 	for i in 4:
-		main._spawn_enemy(kind, 5)
+		main.waves._spawn_enemy(kind, 5)
 		var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 		e.position = Vector2(230 + i * 60, -10 - i * 40)
 		e.died.connect(func(_e): killed += 1)

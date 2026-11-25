@@ -35,14 +35,14 @@ func _initialize() -> void:
 func _wall(a: Vector2, b: Vector2) -> void:
 	main.placing_type = "barricade"
 	main.wall_start = null
-	main.hire_at(a)
-	main.hire_at(b)
+	main.hiring.hire_at(a)
+	main.hiring.hire_at(b)
 
 
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		main.gold = 5000
 		main.wave = 5
 		main.castle_hp = 1e9
@@ -59,15 +59,15 @@ func _process(_delta: float) -> bool:
 			"funnel":
 				_wall(Vector2(0, 250), Vector2(290, 420))
 				_wall(Vector2(640, 250), Vector2(350, 420))
-		print("%s: %d walls, gold left %d" % [scenario, main.get_barricades().size(), main.gold])
-		for b in main.get_barricades():
+		print("%s: %d walls, gold left %d" % [scenario, main.battlefield.get_barricades().size(), main.gold])
+		for b in main.battlefield.get_barricades():
 			print("  wall %s -> %s  hp %d  cost %d" % [b.seg_a(), b.seg_b(), b.max_hp, b.spent])
 			built[b] = b.position
 		for i in COUNT:
 			main.spawn_queue.append([KINDS[i % KINDS.size()], 5])
 		main.spawn_interval = 0.5
 		main.wave_active = true
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not tracked.has(e) and not seen.has(e):
 			seen[e] = true
 			tracked[e] = e.position.y

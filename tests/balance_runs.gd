@@ -136,23 +136,23 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 	main.hud.hide_mode_select()
 	if id.begins_with("battle:"):
 		main.records_path = ""
-		main._on_mode_chosen("%s:%s" % [id, diff])
+		main.missions._on_mode_chosen("%s:%s" % [id, diff])
 		id = id.substr(7)
 	else:
-		main.start_mission(id)
+		main.missions.start_mission(id)
 	await process_frame
 	if opts.has("heat"):
-		main.heat = int(opts["heat"])   # (as if this many other northern missions were won)
+		main.missions.heat = int(opts["heat"])   # (as if this many other northern missions were won)
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame
 	if width > 640:
-		main._lock_portrait(false)
+		main.missions._lock_portrait(false)
 		root.size = Vector2i(width, 1040)
 		await process_frame
-		main._fit_screen()
+		main.setup._fit_screen()
 	else:
-		main._lock_portrait(true)
+		main.missions._lock_portrait(true)
 	await process_frame
 	var bot = ArmyBot.new(main, opts["style"])
 	Engine.time_scale = 4.0
@@ -170,23 +170,23 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 			tick = 15   # once a second of game time
 			bot.tick()
 			if not main.wave_active and not main.forced_auto:
-				main.start_wave()
+				main.waves.start_wave()
 			low = minf(low, _margin())
-			if not main.deploying and main.wave > 0 and main.get_enemies().is_empty() and main.spawn_queue.is_empty():
+			if not main.deploying and main.wave > 0 and main.battlefield.get_enemies().is_empty() and main.spawn_queue.is_empty():
 				quiet += 1
 			if opts.get("trace", "") == "1" and int(frames / 15) % 10 == 0:
 				print("   T %3ds wave %d margin %.2f gold %d enemies %d army [%s]" % [roundi(frames * 4.0 / 60.0), main.wave, _margin(), main.gold,
-						main.get_enemies().size(), bot.army()])
+						main.battlefield.get_enemies().size(), bot.army()])
 				var kinds := {}
-				for e in main.get_enemies():
+				for e in main.battlefield.get_enemies():
 					var key: String = e.kind + ("@wall" if e.position.y > main.CASTLE_Y - 160.0 else "")
 					kinds[key] = kinds.get(key, 0) + 1
 				print("      enemies %s" % str(kinds))
 				if _margin() < float(opts.get("dump_at", "0.95")) and not dumped:
 					dumped = true
-					for e in main.get_enemies():
+					for e in main.battlefield.get_enemies():
 						print("      E %s at %s goal %s" % [e.kind, str(e.position.round()), e.goal.label if e.goal != null else "castle"])
-					for w in main.get_warriors():
+					for w in main.battlefield.get_warriors():
 						print("      W %s at %s post %s %s/%d target %s %s" % [w.kind, str(w.position.round()), str(w.post.round()), w.move_mode,
 								roundi(w.zone_rect().size.x / 2.0), (w.target.kind + str(w.target.position.round())) if is_instance_valid(w.target) and w.target != null else "-",
 								"downed" if not w.is_active() else ""])
@@ -195,11 +195,11 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 	Engine.time_scale = 1.0
 	if not main.game_over:
 		# Stuck: who's left, where, and what they're doing.
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			print("   STUCK %s at %s hp %.0f/%.0f target %s route %d" % [e.kind, str(e.position.round()), e.hp, e.max_hp,
 					str(e.target_pos.round()) if "target_pos" in e else "-", e.route.size() if "route" in e else -1])
 			var near = null
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				if w.is_active() and (near == null or w.position.distance_to(e.position) < near.position.distance_to(e.position)):
 					near = w
 			if near != null:
@@ -208,8 +208,8 @@ func _battle(id: String, diff: String, st: Array, trained: bool, sd: int, width:
 						roundi(near.zone_rect().size.x / 2.0), str(near.post.round()), near.hp, near.max_hp, str(main.paths.melee_can_reach(e.position))])
 		print("   STUCK queue %d wave_active %s" % [main.spawn_queue.size(), str(main.wave_active)])
 	var result := ("WON" if main.victory else "lost") if main.game_over else "unfinished"
-	if result == "unfinished" and not main.get_enemies().is_empty():
-		print("LEFT ", ", ".join(main.get_enemies().slice(0, 8).map(func(e): return "%s@%s" % [e.kind, e.position.round()])))
+	if result == "unfinished" and not main.battlefield.get_enemies().is_empty():
+		print("LEFT ", ", ".join(main.battlefield.get_enemies().slice(0, 8).map(func(e): return "%s@%s" % [e.kind, e.position.round()])))
 	if result == "lost" and main.rules.get("garrisons") != null:
 		print("WHY " + _why_lost())
 	var xp_sum := 0.0
@@ -230,7 +230,7 @@ func _why_lost() -> String:
 		hits_c.sort_custom(func(a, b): return main.obj_hits[a] > main.obj_hits[b])
 		return "castle room=%s phase=%s standard_hits=[%s] troops_up=%d gold=%d enemies=%d" % [r.room()["name"], r.phase,
 				", ".join(hits_c.slice(0, 4).map(func(k): return "%s %d" % [k, main.obj_hits[k]])),
-				main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement()).size(), main.gold, main.get_enemies().size()]
+				main.battlefield.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement()).size(), main.gold, main.battlefield.get_enemies().size()]
 	var hits: Array = main.obj_hits.keys()
 	hits.sort_custom(func(a, b): return main.obj_hits[a] > main.obj_hits[b])
 	var total := 0.0
@@ -242,7 +242,7 @@ func _why_lost() -> String:
 	var near := 0
 	var side := 0
 	var crews := 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_queued_for_deletion() or w.is_emplacement() and w.garrison == null:
 			continue
 		if w.down_timer > 0.0:
@@ -257,7 +257,7 @@ func _why_lost() -> String:
 			crews += 1
 	return "field=%d(%s) phase=%s along=%.2f gate=%.0f%% ram_hits=[%s] troops_up=%d down=%d near_ram=%d side=%d crews=%d gold=%d enemies=%d queue=%d" % [
 			r.zone_i, r.zone()["name"], r.phase, r.zone_along(), r.gate.hp / maxf(r.gate.max_hp, 1.0) * 100.0 if r.gate != null else 0.0,
-			", ".join(top), up, down, near, side, crews, main.gold, main.get_enemies().size(), main.spawn_queue.size()]
+			", ".join(top), up, down, near, side, crews, main.gold, main.battlefield.get_enemies().size(), main.spawn_queue.size()]
 
 
 ## How much the player had to spare, 0..1, by what the battle is about: the castle's

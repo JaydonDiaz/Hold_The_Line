@@ -39,8 +39,8 @@ extends SceneTree
 ##                   Archer, Mage and Frost Towers are gone
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
-const Data = preload("res://scripts/data.gd")
-const CD = preload("res://scripts/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 
 var main
 var fails := 0
@@ -71,18 +71,18 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.choose_mode("normal")
-	main._lock_portrait(true)
+	main.setup.choose_mode("normal")
+	main.missions._lock_portrait(true)
 	await _frames(3)
 
 
 func _hire(kind: String, at: Vector2):
 	main.gold = 99999
-	var had: Array = main.get_warriors()
+	var had: Array = main.battlefield.get_warriors()
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var fresh: Array = main.get_warriors().filter(func(x): return not had.has(x))
+	var fresh: Array = main.battlefield.get_warriors().filter(func(x): return not had.has(x))
 	if fresh.is_empty():
 		return null
 	var w = fresh[0]
@@ -92,7 +92,7 @@ func _hire(kind: String, at: Vector2):
 
 
 func _foe(kind: String, at: Vector2, hp := 0.0):
-	main._spawn_enemy(kind, 1, at)
+	main.waves._spawn_enemy(kind, 1, at)
 	var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	if hp > 0.0:
 		e.max_hp = hp
@@ -162,7 +162,7 @@ func _crews() -> void:
 		var cool: float = c.cooldown
 		var song: float = c.song_radius
 		main.selected = c
-		main.order_move(t.position)
+		main.groups.order_move(t.position)
 		main.selected = null
 		await _frames(60 * 4)
 		var up: bool = c.garrison == t
@@ -181,11 +181,11 @@ func _crews() -> void:
 		# Up and down three times: back to its ground stats exactly, then the same again up there.
 		for k in 3:
 			main.selected = c
-			main.climb_down()
+			main.hiring.climb_down()
 			main.selected = null
 			await _frames(20)
 			main.selected = c
-			main.order_move(t.position)
+			main.groups.order_move(t.position)
 			main.selected = null
 			await _frames(60 * 2)
 		check(c.garrison == t and is_equal_approx(c.attack_range, want_r) and is_equal_approx(c.cooldown, want_c),
@@ -226,7 +226,7 @@ func _volley(tiers: Array) -> Array:
 	for i in 60 * 3:
 		await process_frame
 		for n in main.fx_layer.get_children():
-			if n.get_script() == preload("res://scripts/projectile.gd") and n.style == "ki" and not seen.has(n):
+			if n.get_script() == preload("res://scripts/troops/projectile.gd") and n.style == "ki" and not seen.has(n):
 				seen.append(n)
 				shots.append({"splash": n.splash, "size": n.size, "damage": n.damage})   # (as fired: it's gone once it lands)
 		if shots.size() >= 1 and i > 60:
@@ -249,7 +249,7 @@ func _ki() -> void:
 	await _frames(int(60 * 0.9) - 5)
 	var bolts := 0
 	for n in main.fx_layer.get_children():
-		if n.get_script() == preload("res://scripts/projectile.gd") and n.style == "ki":
+		if n.get_script() == preload("res://scripts/troops/projectile.gd") and n.style == "ki":
 			bolts += 1
 	check(bolts <= 2, "K  ...one blast a volley, not a stream of bolts (%d in flight)" % bolts)
 	main.wave_active = false
@@ -263,7 +263,7 @@ func _monk() -> void:
 	var plain = _hire("martial", Vector2(200, 620))
 	plain.order_to(t.position)
 	await _frames(60 * 3)
-	check(plain.garrison == null and main.tower_for(t.position, plain) == null, "M  a Martial Artist with no Spirit bolts can't go up a Tower")
+	check(plain.garrison == null and main.hiring.tower_for(t.position, plain) == null, "M  a Martial Artist with no Spirit bolts can't go up a Tower")
 	plain.queue_free()
 	await _frames(2)
 	var m = _hire("martial", Vector2(200, 620))
@@ -273,11 +273,11 @@ func _monk() -> void:
 	# The marker, dragged near the tower.
 	main.wave_active = false
 	main.selected = m
-	main._start_drag(m)
+	main.groups._start_drag(m)
 	m.post = t.position + Vector2(10, 6)
 	m.position = m.post
-	check(main.dragging == m and main.tower_for(m.post, m) == t, "M  dragged next to the empty Tower: it's the one he'd go up (the marker shows on it)")
-	main._end_drag()
+	check(main.dragging == m and main.hiring.tower_for(m.post, m) == t, "M  dragged next to the empty Tower: it's the one he'd go up (the marker shows on it)")
+	main.groups._end_drag()
 	await _frames(60 * 2)
 	check(m.garrison == t and m.blast["range"] > ground_range * 1.25, "M  ...dropped there, up he goes; his bolts reach further from it (%.0f -> %.0f)" % [ground_range, m.blast["range"]])
 	main.wave_active = true
@@ -286,7 +286,7 @@ func _monk() -> void:
 	var near = _foe("orc", t.position + Vector2(90, 70), 1e6)
 	near.speed = 0.0
 	await _frames(60 * 6)
-	var copies: Array = main.get_warriors().filter(func(w): return w.clone_of == m)
+	var copies: Array = main.battlefield.get_warriors().filter(func(w): return w.clone_of == m)
 	check(m.garrison == t and m.position.distance_to(t.position) < 8.0 and m.teleport_timer <= 0.0 or m.garrison == t,
 			"M  ...with Shadow Step, he never steps out of the tower")
 	var cdesc: String = "none" if copies.is_empty() else "at %s, zoned %s, area %s" % [copies[0].position.round(), copies[0].zoned(), copies[0].guard_area]
@@ -319,10 +319,10 @@ func _rubble() -> void:
 	var bare = _hire("tower", Vector2(480, 480))
 	bare.take_damage(1e6)
 	await _frames(2)
-	check(cost >= main.price(t.spent * 0.5) - 1 and cost > bare.rebuild_cost(), "R  rebuilding costs half what's gone into it: more for an upgraded one (%d against %d)" % [cost, bare.rebuild_cost()])
+	check(cost >= main.hiring.price(t.spent * 0.5) - 1 and cost > bare.rebuild_cost(), "R  rebuilding costs half what's gone into it: more for an upgraded one (%d against %d)" % [cost, bare.rebuild_cost()])
 	main.gold = cost + 5
 	main.selected = t
-	main.climb_down()   # (L, or the panel's Rebuild button)
+	main.hiring.climb_down()   # (L, or the panel's Rebuild button)
 	check(main.gold == 5 and not t.broken and t.build_left > 0.0, "R  ...rebuilt: paid for, an Engineer sets out to it")
 	for i in 60 * 30:
 		if t.build_left <= 0.0:
@@ -339,15 +339,15 @@ func _fighting() -> void:
 	var e = _foe("orc", Vector2(320, 200), 1e5)
 	e.speed = 0.0
 	await _frames(2)
-	main.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
-	check(main.fighting() and main.dragging == null, "F  an enemy on the field (no wave on): the battle's on, a troop can't be picked up and moved")
-	main._end_drag() if main.dragging != null else null
+	main.input.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
+	check(main.hiring.fighting() and main.dragging == null, "F  an enemy on the field (no wave on): the battle's on, a troop can't be picked up and moved")
+	main.groups._end_drag() if main.dragging != null else null
 	e.queue_free()
 	await _frames(3)
 	main.selected = null
-	main.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
-	check(not main.fighting() and main.dragging == sw, "F  ...the field clear: it can")
-	main._end_drag()
+	main.input.pointer_down(sw.position, MOUSE_BUTTON_LEFT)
+	check(not main.hiring.fighting() and main.dragging == sw, "F  ...the field clear: it can")
+	main.groups._end_drag()
 
 
 # --- T ---------------------------------------------------------------------------------------
@@ -378,13 +378,13 @@ func _tower() -> void:
 	a._apply_upgrades()
 	var reach: float = a.attack_range
 	main.selected = a
-	main.order_move(t.position)
+	main.groups.order_move(t.position)
 	main.selected = null
 	await _frames(60 * 4)
 	check(a.garrison == t and t.crew_in == a and a.tiers == [2, 0, 0, 2], "T  an Archer ordered onto it climbs in, keeping its upgrades")
 	check(is_equal_approx(a.attack_range, reach * 1.3), "T  ...and reaches 30%% further from the high ground (%.0f -> %.0f)" % [reach, a.attack_range])
 	main.selected = t
-	main.upgrade_selected(1)
+	main.groups.upgrade_selected(1)
 	main.selected = null
 	await _frames(2)
 	check(is_equal_approx(a.attack_range, reach * 1.35), "T  ...35%% with the tower's first Lookout upgrade (%.0f)" % a.attack_range)
@@ -400,19 +400,19 @@ func _tower() -> void:
 	# Taken out with Climb down (L): it comes down to the foot and stays down.
 	main.wave_active = false
 	main.selected = a
-	main.climb_down()
+	main.hiring.climb_down()
 	await _frames(60)
 	check(a.garrison == null and t.crew_in == null and a.visible and a.position.distance_to(t.position) < 60.0,
 			"T  Climb down (L) takes it out of the tower, to its foot, and it stays out")
 	main.selected = a
-	main.order_move(t.position)
+	main.groups.order_move(t.position)
 	main.selected = null
 	await _frames(60 * 2)
 	check(a.garrison == t, "T  ...and ordered back onto it, up it goes again")
 	main.wave_active = true
 	# Sent elsewhere: down it climbs.
 	main.selected = a
-	main.order_move(Vector2(200, 640))
+	main.groups.order_move(Vector2(200, 640))
 	main.selected = null
 	await _frames(30)
 	check(a.garrison == null and t.crew_in == null and a.visible and is_equal_approx(a.attack_range, reach), "T  ordered elsewhere, it climbs down (its reach back to normal)")
@@ -420,10 +420,10 @@ func _tower() -> void:
 	var m = null
 	main.gold = 99999
 	main.placing_type = "mage"
-	main.hire_at(t.position + Vector2(6, 4))
+	main.hiring.hire_at(t.position + Vector2(6, 4))
 	main.placing_type = ""
 	await _frames(60 * 6)
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.kind == "mage":
 			m = w
 	check(m != null and m.garrison == t, "T  a Mage hired onto an empty Tower walks over and climbs in")
@@ -436,10 +436,10 @@ func _tower() -> void:
 	var t2 = _hire("tower", Vector2(320, 480))
 	var ok := []
 	for k in ["frost", "alchemist", "bard"]:
-		ok.append(main.tower_for(t2.position, k) == t2)
+		ok.append(main.hiring.tower_for(t2.position, k) == t2)
 	var sw = _hire("swordsman", Vector2(200, 620))
 	main.selected = sw
-	main.order_move(t2.position)
+	main.groups.order_move(t2.position)
 	main.selected = null
 	await _frames(60 * 3)
 	check(ok.all(func(x): return x) and sw.garrison == null, "T  any ranged troop can go up (Frost Witch, Alchemist, Bard); a Knight can't")
@@ -486,15 +486,15 @@ func _ballista() -> void:
 	# The Chain Net, and Blasting Tips.
 	for p in [1, 1, 1]:
 		main.selected = b
-		main.upgrade_selected(p)
+		main.groups.upgrade_selected(p)
 	main.selected = null
 	check(not b.net.is_empty(), "B  Skyhunter's Chain Net: its bolts net flyers")
-	var bolt = preload("res://scripts/bolt.gd").new()
+	var bolt = preload("res://scripts/troops/bolt.gd").new()
 	bolt.main = main
 	bolt.blast_end = {"share": 1.0, "radius": 60.0, "stun": 1.0}
 	bolt.damage = 50.0
 	bolt.position = front.position
-	main.add_projectile(bolt)
+	main.effects.add_projectile(bolt)
 	var f0: float = front.hp
 	bolt._burst()
 	check(front.hp < f0 and front.stun_timer > 0.0, "B  a Thunderbolt bursts where it stops, and stuns")
@@ -512,7 +512,7 @@ func _obelisk() -> void:
 	check(m.buff["damage"] >= 0.15 - 0.001 and far.buff["damage"] < 0.01, "O  a Mage near an Obelisk hits 15% harder (one far off doesn't)")
 	main.wave_active = true
 	main.selected = ob
-	main.upgrade_selected(0)   # Storm Rune
+	main.groups.upgrade_selected(0)   # Storm Rune
 	main.selected = null
 	var e = _foe("orc", Vector2(320, 420), 1e5)
 	e.speed = 0.0
@@ -523,7 +523,7 @@ func _obelisk() -> void:
 	main.wave_active = true
 	ob = _hire("obelisk", Vector2(320, 520))
 	main.selected = ob
-	main.upgrade_selected(2)
+	main.groups.upgrade_selected(2)
 	main.selected = null
 	var crowd := []
 	for p in [Vector2(300, 420), Vector2(330, 425), Vector2(315, 445)]:
@@ -531,7 +531,7 @@ func _obelisk() -> void:
 		x.speed = 0.0
 		crowd.append(x)
 	await _frames(60 * 2)
-	var glyphs: Array = main.corpse_layer.get_children().filter(func(n): return n.get_script() == preload("res://scripts/rune_glyph.gd"))
+	var glyphs: Array = main.corpse_layer.get_children().filter(func(n): return n.get_script() == preload("res://scripts/field/rune_glyph.gd"))
 	check(glyphs.size() == 1 and glyphs[0].position.distance_to(Vector2(315, 430)) < 40.0 and crowd.all(func(x): return x.hp < x.max_hp),
 			"O  Sunfire Glyphs: a glyph burns into the ground under the crowd and burns all of them")
 	check(crowd.all(func(x): return x.burn_timer > 0.0 and x.burn_dps >= 4.0 - 0.01), "O  ...and sets them on fire")
@@ -540,7 +540,7 @@ func _obelisk() -> void:
 	main.wave_active = true
 	ob = _hire("obelisk", Vector2(320, 520))
 	main.selected = ob
-	main.upgrade_selected(3)
+	main.groups.upgrade_selected(3)
 	main.selected = null
 	var low = _foe("orc", Vector2(300, 600), 1e5)
 	var high = _foe("orc", Vector2(360, 440), 1e5)
@@ -608,11 +608,11 @@ func _sappers() -> void:
 	await _frames(60 * 2)
 	check(is_instance_valid(lone) and lone.position.y > y0 + 30.0 and lone.sap_target == null, "S  ...with none in reach it makes for the castle as before")
 	main.placing_type = "barricade"
-	main._wall_click(Vector2(200, 520))
-	main._wall_click(Vector2(320, 520))
+	main.hiring._wall_click(Vector2(200, 520))
+	main.hiring._wall_click(Vector2(320, 520))
 	main.placing_type = ""
 	await _frames(70)
-	check(is_instance_valid(lone) and lone.sap_target != null and lone.sap_target.get_script() == preload("res://scripts/barricade.gd"), "S  ...and goes for a wall in its reach too")
+	check(is_instance_valid(lone) and lone.sap_target != null and lone.sap_target.get_script() == preload("res://scripts/troops/barricade.gd"), "S  ...and goes for a wall in its reach too")
 
 
 # --- U ---------------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ extends Node2D
 signal destroyed(o)
 signal reached(o)
 
-const Sprites = preload("res://scripts/sprites.gd")
+const Sprites = preload("res://scripts/art/sprites.gd")
 const PX := 3.0
 const OUTLINE := Color(0.1, 0.07, 0.1)
 const MOVERS := ["civilian", "wagon"]
@@ -132,7 +132,7 @@ void fragment() {
 		queue_redraw()
 	func _draw() -> void:
 		var at: Vector2 = obj.position
-		for w in main.warriors_near(at + Vector2(0, -80), 200.0):
+		for w in main.battlefield.warriors_near(at + Vector2(0, -80), 200.0):
 			if not w.visible or w.xray_tex == null or w.position.y >= at.y:
 				continue   # (only those standing behind it)
 			draw_set_transform_matrix(Transform2D(0, w.position - at) * w.xray_xform)
@@ -214,7 +214,7 @@ func receive_heal(amount: float, _regen: Array = []) -> float:
 	var before := hp
 	hp = minf(max_hp, hp + amount)
 	if hp - before >= 1.0:
-		main.spawn_text(position + Vector2(randf_range(-8, 8), -40), "+%d" % roundi(hp - before), Color(0.5, 1.0, 0.5))
+		main.effects.spawn_text(position + Vector2(randf_range(-8, 8), -40), "+%d" % roundi(hp - before), Color(0.5, 1.0, 0.5))
 	return hp - before
 
 
@@ -233,14 +233,14 @@ func take_damage(amount: float) -> void:
 		hp = 0.0
 		dead = true
 		if kind == "civilian":
-			main.spawn_burst(position, 18.0, Color(0.8, 0.3, 0.25))
-			main.spawn_text(position + Vector2(0, -36), "Lost!", Color(1, 0.4, 0.3))
-			main.sfx("hit", 0.7)
+			main.effects.spawn_burst(position, 18.0, Color(0.8, 0.3, 0.25))
+			main.effects.spawn_text(position + Vector2(0, -36), "Lost!", Color(1, 0.4, 0.3))
+			main.effects.sfx("hit", 0.7)
 			destroyed.emit(self)
 			return
-		main.spawn_burst(position, 40.0, Color(0.7, 0.6, 0.5))
-		main.spawn_text(position + Vector2(0, -40), "%s %s!" % [label, "lost" if is_mover() else "destroyed"], Color(1, 0.4, 0.3))
-		main.sfx("boom", 0.8)
+		main.effects.spawn_burst(position, 40.0, Color(0.7, 0.6, 0.5))
+		main.effects.spawn_text(position + Vector2(0, -40), "%s %s!" % [label, "lost" if is_mover() else "destroyed"], Color(1, 0.4, 0.3))
+		main.effects.sfx("boom", 0.8)
 		if is_solid() or kind in ["workshop", "watchtower", "beacon", "stone", "bell"]:
 			main.paths.invalidate()   # rubble: the way through is open again
 		destroyed.emit(self)
@@ -264,10 +264,10 @@ func make_roof(layer: Node2D) -> void:
 ## Whether a troop or an enemy is behind it (under its roof, as seen).
 func _anyone_behind() -> bool:
 	var area := Rect2(position.x - RADIUS - 14.0, position.y + _top() + 10.0, RADIUS * 2.0 + 28.0, -_top() - 34.0)
-	for e in main.enemies_near(position + Vector2(0, _top() * 0.5), -_top() * 0.6 + RADIUS):
+	for e in main.battlefield.enemies_near(position + Vector2(0, _top() * 0.5), -_top() * 0.6 + RADIUS):
 		if area.has_point(e.position):
 			return true
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if area.has_point(w.position):
 			return true
 	return false
@@ -291,7 +291,7 @@ func _process(delta: float) -> void:
 func _walk(delta: float) -> void:
 	halted = false
 	if kind == "wagon":
-		for e in main.enemies_near(position, RADIUS + 40.0):
+		for e in main.battlefield.enemies_near(position, RADIUS + 40.0):
 			if not e.dead and not e.flying and position.distance_to(e.position) <= RADIUS + e.radius + 10.0:
 				halted = true
 				break
@@ -368,7 +368,7 @@ func _draw_body() -> void:
 		"stone":
 			_draw_stone()
 		"bell":
-			preload("res://scripts/bells.gd").draw_bell_tower(cv, Vector2.ZERO, t, 1.0 if hit > 0.0 else 0.0)
+			preload("res://scripts/field/bells.gd").draw_bell_tower(cv, Vector2.ZERO, t, 1.0 if hit > 0.0 else 0.0)
 		"exchange":
 			_draw_exchange()
 		"spire":

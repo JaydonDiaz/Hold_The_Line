@@ -38,21 +38,21 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		main.gold = 999999
 		for a in ARMY:
 			main.placing_type = a[0]
-			main.hire_at(a[1])
+			main.hiring.hire_at(a[1])
 			var w = main.warrior_layer.get_child(main.warrior_layer.get_child_count() - 1)
 			w.position = w.post
 			for t in tiers:
 				main.selected = w
-				main.upgrade_selected(a[2][0] if t < 4 else a[2][1])
+				main.groups.upgrade_selected(a[2][0] if t < 4 else a[2][1])
 		main.selected = null
 		main.wave = 19
-		main.start_wave()
+		main.waves.start_wave()
 	if boss_frame == 0:
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			if e.boss:
 				boss = e
 				boss_frame = frames
@@ -69,9 +69,9 @@ func _process(_delta: float) -> bool:
 		pushed_back = maxf(pushed_back, last_y - boss.position.y)
 		last_y = boss.position.y
 		if boss.lunge > 0.149:
-			var hurt: int = main.get_warriors().filter(func(w): return w.hurt > 0.099).size()
+			var hurt: int = main.battlefield.get_warriors().filter(func(w): return w.hurt > 0.099).size()
 			most_hit = maxi(most_hit, hurt)
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.dazed > 1.49:
 				dazed_seen += 1
 	if main.choosing or main.game_over or frames > 60 * 400:
@@ -80,6 +80,6 @@ func _process(_delta: float) -> bool:
 				pushed_back, most_hit, dazed_seen, horns])
 		print("%s after %.0fs of boss fight (castle %d, %d stomps, %d summons, %d of %d warriors standing)" % [how,
 				fight, main.castle_hp, stomps, summons,
-				main.get_warriors().filter(func(w): return w.is_active()).size(), main.get_warriors().size()])
+				main.battlefield.get_warriors().filter(func(w): return w.is_active()).size(), main.battlefield.get_warriors().size()])
 		return true
 	return false

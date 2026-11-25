@@ -17,9 +17,9 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://spires_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
-const Conduits = preload("res://scripts/conduits.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
+const Conduits = preload("res://scripts/field/conduits.gd")
 
 ## A stand-in for an enemy coming in: all the rules look at to pick its objective.
 class Foe:
@@ -70,11 +70,11 @@ func _mission(mid: String) -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.start_mission(mid)
+	main.missions.start_mission(mid)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 
 
@@ -95,18 +95,18 @@ func _run() -> void:
 
 func _mage(at: Vector2, path := -1, kind := "mage"):
 	main.gold = 99999
-	var had: Array = main.get_warriors()
+	var had: Array = main.battlefield.get_warriors()
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var fresh: Array = main.get_warriors().filter(func(x): return not had.has(x))
+	var fresh: Array = main.battlefield.get_warriors().filter(func(x): return not had.has(x))
 	assert(fresh.size() == 1, "nothing hired at %s" % str(at))
 	var w = fresh[0]
 	w.position = w.post
 	if path >= 0:
 		main.selected = w
-		main.upgrade_selected(path)
-		main.upgrade_selected(path)
+		main.groups.upgrade_selected(path)
+		main.groups.upgrade_selected(path)
 		main.selected = null
 	return w
 
@@ -119,8 +119,8 @@ func _conduits() -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	main.classic_map = "spires_circle"
-	main.choose_mode("normal")
-	main._lock_portrait(true)
+	main.setup.choose_mode("normal")
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	var c = main.conduits
 	check(c.active() and c.spots.size() == 4 and c.spots.map(func(s): return s["path"]).duplicate().all(func(p): return p >= 0 and p < 4)
@@ -186,7 +186,7 @@ func _conduits() -> void:
 	tower.build_left = 0.0   # (built)
 	var up = _mage(by_path[1] + Vector2(-70, 70), 1)
 	main.selected = up
-	main.order_move(tower.position)
+	main.groups.order_move(tower.position)
 	main.selected = null
 	await _frames(60 * 3)
 	check(up.garrison == tower and up.buff["damage"] >= Conduits.MATCH["damage"] - 0.001, "C  a Lance Mage posted up in a Tower on the Lance conduit draws on it too")
@@ -197,8 +197,8 @@ func _conduits() -> void:
 
 func _missions() -> void:
 	await _mission("sp_circle")
-	var lent: Array = main.get_warriors().filter(func(w): return w.kind == "mage")
-	check(main.map_id == "spires_circle" and main.conduits.active() and lent.size() == 2 and main.allowed("mage"),
+	var lent: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "mage")
+	check(main.map_id == "spires_circle" and main.conduits.active() and lent.size() == 2 and main.missions.allowed("mage"),
 			"M  the Broken Circle: its map and conduits, two Conclave Mages lent, Mages to hire")
 	check(lent.all(func(w): return w.total_upgrades() >= 2) and Conduits.art_of(lent[0]) != Conduits.art_of(lent[1]),
 			"M  ...the lent Mages trained in different arts")
@@ -210,7 +210,7 @@ func _missions() -> void:
 	# On a wide field, an enemy coming in over one side's bridge goes for that side's spire
 	# (or one about as near), never off along the camp to the spire across the map.
 	root.size = Vector2i(1500, 800)
-	main._lock_portrait(false)
+	main.missions._lock_portrait(false)
 	await _frames(3)
 	var left = objs[0]
 	var right = objs[0]
@@ -226,7 +226,7 @@ func _missions() -> void:
 		crossed += 1 if main.rules.enemy_goal(foe) == right else 0
 	check(main.FIELD_W >= 1000 and crossed == 0,
 			"M  ...enemies go for the spire up the bridge in front of them, not across the map (field %d wide, %d crossed)" % [main.FIELD_W, crossed])
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _mission("sp_archive")
 	objs = main.rules.objectives()
 	check(main.map_id == "spires_archive" and objs.size() == 1 and CD.MISSIONS["sp_archive"]["type"] == "protect"

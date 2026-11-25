@@ -17,8 +17,8 @@ extends SceneTree
 ##                    powers, ground, all) to see what drawing it costs
 ##   hide=freeze,<layer>  freezes the sim (drawing only), optionally hiding a layer
 
-const Data = preload("res://scripts/data.gd")
-const EnemyScript = preload("res://scripts/enemy.gd")
+const Data = preload("res://scripts/data/data.gd")
+const EnemyScript = preload("res://scripts/enemies/enemy.gd")
 const ENEMY_KINDS := ["goblin", "orc", "wolf", "bat", "sapper", "troll", "warlord", "wyvern"]
 var TARGET_ENEMIES := 150
 
@@ -39,7 +39,7 @@ var window := []         # frame times in the current 2 s window
 var cast_i := 0
 var last_cache := 0
 var last_fields := 0
-const SpritesS = preload("res://scripts/sprites.gd")
+const SpritesS = preload("res://scripts/art/sprites.gd")
 var profile := false
 var hide_layer := ""
 var extra_hide := ""
@@ -65,7 +65,7 @@ func _initialize() -> void:
 
 func _setup() -> void:
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.endless = true
 	main.wave = 30
 	main.gold = 10000000
@@ -80,31 +80,31 @@ func _setup() -> void:
 		for x in range(50, 600, 70):
 			var kind: String = troops[i % troops.size()] if y < 600.0 else emps[i % emps.size()]
 			main.placing_type = kind
-			main.hire_at(Vector2(x + (35 if int(y) % 160 == 0 else 0), y))
+			main.hiring.hire_at(Vector2(x + (35 if int(y) % 160 == 0 else 0), y))
 			i += 1
 	main.placing_type = ""
 	# Six upgrades each: 3 in one path and 3 in the next (tier-3 powers everywhere).
 	var n := 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		main.selected = w
 		var p := n % 4
 		for k in 3:
-			main.upgrade_selected(p)
-			main.upgrade_selected((p + 1) % 4)
+			main.groups.upgrade_selected(p)
+			main.groups.upgrade_selected((p + 1) % 4)
 		n += 1
 	main.selected = null
 	# Walls.
 	main.placing_type = "barricade"
 	for seg in [[Vector2(40, 230), Vector2(200, 230)], [Vector2(440, 230), Vector2(600, 230)], [Vector2(260, 700), Vector2(380, 700)]]:
-		main._wall_click(seg[0])
-		main._wall_click(seg[1])
+		main.hiring._wall_click(seg[0])
+		main.hiring._wall_click(seg[1])
 	main.placing_type = ""
 	# Castle: everything.
 	for p in 4:
 		for t in 4:
-			main.castle_upgrade(p)
+			main.castle_ctl.castle_upgrade(p)
 	for k in Data.ABILITIES:
-		main.ability_item(k)
+		main.castle_ctl.ability_item(k)
 	main.wave_active = true
 	Engine.time_scale = 1.0 if label.begins_with("typical") else 3.0
 	if profile:
@@ -124,11 +124,11 @@ func _setup() -> void:
 		"all":
 			for l in [main.enemy_layer, main.warrior_layer, main.castle, main.fx_layer, main.hud, main.ambience, main.powers, main.overlay, main.wall_layer, main.grave_layer]:
 				l.visible = false
-	print("[%s] setup: %d warriors, %d guards, %d walls" % [label, main.get_warriors().size(), main.powers.guards.size(), main.get_barricades().size()])
+	print("[%s] setup: %d warriors, %d guards, %d walls" % [label, main.battlefield.get_warriors().size(), main.powers.guards.size(), main.battlefield.get_barricades().size()])
 
 
 func _top_up() -> void:
-	var have: int = main.get_enemies().size() + main.spawn_queue.size()
+	var have: int = main.battlefield.get_enemies().size() + main.spawn_queue.size()
 	for k in range(have, TARGET_ENEMIES):
 		var kind: String = ENEMY_KINDS[rng.randi() % ENEMY_KINDS.size()]
 		main.spawn_queue.append([kind, 30])
@@ -178,7 +178,7 @@ func _process(_d: float) -> bool:
 		var cache_n: int = SpritesS._cache.size()
 		var fields_n: int = main.paths.fields.size() + (1 if main.paths.troop_grid != null else 0)
 		if ms > 55.0:
-			print("[%s] SPIKE f%d %.0f ms | new sprites %d | path fields %d->%d | enemies %d fx %d" % [label, frames, ms, cache_n - last_cache, last_fields, fields_n, main.get_enemies().size(), main.fx_layer.get_child_count()])
+			print("[%s] SPIKE f%d %.0f ms | new sprites %d | path fields %d->%d | enemies %d fx %d" % [label, frames, ms, cache_n - last_cache, last_fields, fields_n, main.battlefield.get_enemies().size(), main.fx_layer.get_child_count()])
 		last_cache = cache_n
 		last_fields = fields_n
 		draws.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
@@ -193,13 +193,13 @@ func _process(_d: float) -> bool:
 			main.powers.cooldown[key] = 0.0
 			main.powers.trigger(key)
 			if main.powers.aiming != "":
-				var es: Array = main.get_enemies()
+				var es: Array = main.battlefield.get_enemies()
 				if not es.is_empty():
 					main.powers.aim_click(es[0].position)
 		if window.size() == 120:
 			window.sort()
 			print("[%s] t=%3ds enemies %3d fx %3d nodes %4d | frame avg %5.1f max %5.1f ms | draws %d" % [label, (frames - start_frame) / 60,
-					main.get_enemies().size(), main.fx_layer.get_child_count(), Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+					main.battlefield.get_enemies().size(), main.fx_layer.get_child_count(), Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 					_avg(window), window[-1], draws[-1]])
 			window.clear()
 			var mix := {}

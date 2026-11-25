@@ -1,4 +1,10 @@
 ; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -7,16 +13,19 @@ config_version=5
 config/name="Hold the Line"
 config/version="0.4"
 run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.6")
-config/icon="res://icon.png"
+config/features=PackedStringArray("4.7")
 boot_splash/bg_color=Color(0.04, 0.03, 0.06, 1)
-boot_splash/image="res://splash.png"
-boot_splash/stretch_mode=1
 boot_splash/use_filter=false
+boot_splash/image="res://splash.png"
+config/icon="res://icon.png"
+
+[audio]
+
+general/default_playback_type.web=0
 
 [autoload]
 
-Campaign="*res://scripts/campaign.gd"
+Campaign="*res://scripts/campaign/campaign.gd"
 
 [display]
 
@@ -30,12 +39,8 @@ window/handheld/orientation=1
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-environment/defaults/default_clear_color=Color(0.08, 0.07, 0.06, 1)
-textures/canvas_textures/default_texture_filter=0
 textures/vram_compression/import_etc2_astc=true
-
-[audio]
-
-general/default_playback_type.web=0
+environment/defaults/default_clear_color=Color(0.08, 0.07, 0.06, 1)

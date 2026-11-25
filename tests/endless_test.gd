@@ -12,7 +12,7 @@ extends SceneTree
 ##    battle on each plays (enemies come down through the wall's gaps); three Battle Modes
 ##    on them, locked till then
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 const Scenarios = preload("res://scripts/mission/scenarios.gd")
 var main
 var campaign
@@ -41,22 +41,22 @@ func _frames(n: int) -> void:
 func _run() -> void:
 	var M = load("res://scripts/main.gd")
 	# --- E ---
-	check(M.wave_size(1) == 8 and M.wave_size(20) == 46, "E  up to wave 20, two more enemies a wave, as before (8 ... 46)")
-	check(M.wave_size(21) == 47 and M.wave_size(30) == 56 and M.wave_size(200) == Data.MAX_WAVE_SIZE,
-			"E  past it, one more a wave, up to %d (%d, %d, %d)" % [Data.MAX_WAVE_SIZE, M.wave_size(21), M.wave_size(30), M.wave_size(200)])
+	check(M.WavesCtl.wave_size(1) == 8 and M.WavesCtl.wave_size(20) == 46, "E  up to wave 20, two more enemies a wave, as before (8 ... 46)")
+	check(M.WavesCtl.wave_size(21) == 47 and M.WavesCtl.wave_size(30) == 56 and M.WavesCtl.wave_size(200) == Data.MAX_WAVE_SIZE,
+			"E  past it, one more a wave, up to %d (%d, %d, %d)" % [Data.MAX_WAVE_SIZE, M.WavesCtl.wave_size(21), M.WavesCtl.wave_size(30), M.WavesCtl.wave_size(200)])
 	var hp20: float = Data.level_growth(20, Data.HP_GROWTH, Data.LATE_HP_GROWTH)
 	var hp40: float = Data.level_growth(40, Data.HP_GROWTH, Data.LATE_HP_GROWTH)
 	check(is_equal_approx(hp20, pow(1.12, 19)) and hp40 / hp20 < 3.5, "E  enemy health climbs slowly past wave 20 (x%.1f from 20 to 40; was x19.5)" % (hp40 / hp20))
 	check(Data.LATE_DAMAGE_GROWTH <= 1.03 and Data.LATE_GOLD_MIN >= 0.6 and Data.LATE_GOLD_STEP <= 0.01, "E  damage +3% a wave, gold cut 1% a wave to 60%")
 	await _fresh()
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	await _frames(3)
 	var kings := {}
 	for w in [20, 30, 40, 50, 60]:
 		main.wave = w
-		main.boss_spawned = false
-		main._spawn_boss()
+		main.waves.boss_spawned = false
+		main.waves._spawn_boss()
 		kings[w] = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	var full := func(kind: String, w: int) -> float: return Data.ENEMIES[kind]["hp"] * Data.level_growth(w, Data.HP_GROWTH, Data.LATE_HP_GROWTH)
 	check(kings[20].kind == "ogre_king" and kings[30].kind == "ogre_king" and kings[40].kind == "ogre_king"
@@ -68,7 +68,7 @@ func _run() -> void:
 	campaign.reset()
 	campaign.new_campaign("normal")
 	check(campaign.has_save() and not campaign.open_maps().has("ds_bailey"), "D  Dawnspire's fields locked before the campaign reaches it")
-	var MV = load("res://scripts/map_viewer.gd")
+	var MV = load("res://scripts/ui/map_viewer.gd")
 	var v = MV.new()
 	v.setup("normal", [], "")
 	check(not v.maps.any(func(m): return String(m).begins_with("dsc_")) and v.maps.has("ds_bailey"),
@@ -91,12 +91,12 @@ func _run() -> void:
 		await _fresh()
 		main.classic_map = map
 		main.hud.picking = true
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		await _frames(3)
 		main.deploying = false
-		main.start_wave(true)
+		main.waves.start_wave(true)
 		await _frames(60 * 18)   # (the first warband forms up at the top before it marches)
-		var es: Array = main.get_enemies()
+		var es: Array = main.battlefield.get_enemies()
 		var down: bool = es.any(func(e): return e.position.y > 300.0)
 		check(main.map_id == map and main.rules.has_castle() and not es.is_empty() and down,
 				"D  Classic on %s: the castle below, enemies through the wall's gaps and down the field" % map)
@@ -105,14 +105,14 @@ func _run() -> void:
 		check(not sc.is_empty() and String(sc["map"]).begins_with("ds_") and Scenarios.TYPES.has(sc["type"]), "D  Battle Mode: %s (%s)" % [sc.get("name", id), sc.get("type", "?")])
 		await _fresh()
 		main.hud.hide_mode_select()
-		main._on_mode_chosen("battle:%s:normal" % id)
+		main.missions._on_mode_chosen("battle:%s:normal" % id)
 		await _frames(5)
 		main.deploying = false
-		main.start_wave(true)
+		main.waves.start_wave(true)
 		await _frames(60 * 8)
-		check(main.map_id == sc["map"] and not main.game_over and not main.get_enemies().is_empty(), "D  ...it plays: %s on %s" % [sc["name"], main.map_id])
+		check(main.map_id == sc["map"] and not main.game_over and not main.battlefield.get_enemies().is_empty(), "D  ...it plays: %s on %s" % [sc["name"], main.map_id])
 	# --- B ---
-	const CD = preload("res://scripts/campaign_data.gd")
+	const CD = preload("res://scripts/data/campaign_data.gd")
 	for t in ["positions", "pass", "protect", "evac", "capture", "escort", "retreat"]:
 		var story: Array = CD.MISSIONS.keys().filter(func(m): return CD.MISSIONS[m].get("type", "castle") == t)
 		var ids: Array = Scenarios.of_type(t)
@@ -140,13 +140,13 @@ func _run() -> void:
 			continue
 		await _fresh()
 		main.hud.hide_mode_select()
-		main._on_mode_chosen("battle:story:%s:normal" % m)
+		main.missions._on_mode_chosen("battle:story:%s:normal" % m)
 		await _frames(5)
 		main.deploying = false
 		if not main.wave_active:
-			main.start_wave(true)
+			main.waves.start_wave(true)
 		await _frames(60 * 6)
-		check(main.map_id == CD.MISSIONS[m]["map"] and not main.game_over and main.survival() and main.mission.get("from_story", "") == m,
+		check(main.map_id == CD.MISSIONS[m]["map"] and not main.game_over and main.waves.survival() and main.mission.get("from_story", "") == m,
 				"B  %s (%s) plays as a Battle Mode, endless" % [CD.MISSIONS[m]["name"], t])
 	if main != null:
 		main.free()

@@ -144,7 +144,7 @@ static func of_type(t: String) -> Array:
 	return out
 
 
-const CD = preload("res://scripts/campaign_data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 const STORY_TYPES := ["positions", "pass", "protect", "evac", "capture", "escort", "retreat"]   # (the castle's battlefields are Classic's)
 # What a campaign mission keeps of its story when it's played as a Battle Mode: none of it.
 const STORY_ONLY := ["intro", "outro", "reward", "track", "help", "requires", "waves", "story", "unlocks", "training"]

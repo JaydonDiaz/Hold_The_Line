@@ -20,22 +20,22 @@ func _initialize() -> void:
 
 func _hire(kind: String, p: Vector2, path := -1, tiers := 0):
 	main.placing_type = kind
-	main.hire_at(p)
+	main.hiring.hire_at(p)
 	var w = main.warrior_layer.get_child(main.warrior_layer.get_child_count() - 1)
 	w.position = w.post
 	for t in tiers:
 		main.selected = w
-		main.upgrade_selected(path)
+		main.groups.upgrade_selected(path)
 	main.selected = null
 	return w
 
 
 func _clear() -> void:
-	main.clear_enemies()
-	for w in main.get_warriors() + main.get_barricades():
+	main.modes.clear_enemies()
+	for w in main.battlefield.get_warriors() + main.battlefield.get_barricades():
 		w.queue_free()
 	main.paths.walls = []
-	main.walls_changed()
+	main.battlefield.walls_changed()
 
 
 func _wait(n: int) -> void:
@@ -51,7 +51,7 @@ func _process(_delta: float) -> bool:
 
 
 func _run() -> void:
-	main.choose_mode("freeplay")
+	main.setup.choose_mode("freeplay")
 	await _wait(2)
 
 	# Statues.
@@ -86,7 +86,7 @@ func _run() -> void:
 	for n in [1, 2]:
 		for i in n:
 			_hire("alchemist", Vector2(260 + i * 120, 400), 0, 2)
-		main._spawn_enemy("troll", 1)
+		main.waves._spawn_enemy("troll", 1)
 		var dummy = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 		dummy.position = Vector2(320, 300)
 		dummy.speed = 0.0
@@ -116,9 +116,9 @@ func _run() -> void:
 			[Vector2(380, 560), Vector2(260, 560)], [Vector2(260, 560), Vector2(260, 440)]]:
 		main.placing_type = "barricade"
 		main.wall_start = null
-		main.hire_at(seg[0])
-		main.hire_at(seg[1])
-	main.walls_changed()
+		main.hiring.hire_at(seg[0])
+		main.hiring.hire_at(seg[1])
+	main.battlefield.walls_changed()
 	sw.position = Vector2(320, 650)
 	var t0 := frames
 	while sw.position.distance_to(sw.post) > 3.0 and frames - t0 < 60 * 15:
@@ -129,7 +129,7 @@ func _run() -> void:
 
 	# Spawn area.
 	sw = _hire("swordsman", Vector2(320, 140))
-	main._spawn_enemy("orc", 1)
+	main.waves._spawn_enemy("orc", 1)
 	var orc = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	orc.position = Vector2(320, 40)
 	orc.speed = 0.0
@@ -142,4 +142,4 @@ func _run() -> void:
 
 
 func Data():
-	return preload("res://scripts/data.gd")
+	return preload("res://scripts/data/data.gd")

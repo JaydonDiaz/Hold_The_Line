@@ -27,7 +27,7 @@ extends RefCounted
 ##   "economy" (two mines before anything else).
 ## Use: var bot = ArmyBot.new(main, "mixed"); then bot.tick() once a second of game time.
 
-const Maps = preload("res://scripts/maps.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 const UPGRADE_ORDER := [0, 2, 1, 3]
 const MELEE := "swordsman"
@@ -58,7 +58,7 @@ func _init(m, s := "mixed") -> void:
 
 
 func can(kind: String) -> bool:
-	return main.allowed(kind)
+	return main.missions.allowed(kind)
 
 
 ## What a battle like this calls for, in the order to buy it: [kind, where] pairs.
@@ -313,12 +313,12 @@ func tick() -> void:
 
 
 func _repair() -> void:
-	if not main.rules.has_castle() or not main.allowed("repair") or main.wave_active:
+	if not main.rules.has_castle() or not main.missions.allowed("repair") or main.wave_active:
 		return
 	if main.castle_hp < main.castle_max * 0.6:
 		for i in [2, 1, 0]:
-			if main.can_repair(i):
-				main.repair_castle(i)
+			if main.castle_ctl.can_repair(i):
+				main.castle_ctl.repair_castle(i)
 				return
 
 
@@ -332,7 +332,7 @@ func _filled(i: int) -> bool:
 func _fill() -> void:
 	var items := plan()
 	if slots.is_empty():
-		var lent: Array = main.temp_allies.filter(func(w): return is_instance_valid(w))
+		var lent: Array = main.missions.temp_allies.filter(func(w): return is_instance_valid(w))
 		for i in items.size():
 			for w in lent:
 				if w.kind == items[i][0]:
@@ -341,32 +341,32 @@ func _fill() -> void:
 					break
 	for i in items.size():
 		var kind: String = items[i][0]
-		var at: Vector2 = main._clamp_post(items[i][1])
+		var at: Vector2 = main.hiring._clamp_post(items[i][1])
 		if items[i].size() > 2:
 			# A Tower's crew: hired straight onto the Tower once it's built (not before).
-			var t = main.tower_for(at, kind)
+			var t = main.hiring.tower_for(at, kind)
 			if t == null:
 				continue
 			at = t.position
 			main.placing_type = kind
-		if not main.can_post_at(at):
-			at = main._clamp_post(main.paths.open_spot(at))
+		if not main.hiring.can_post_at(at):
+			at = main.hiring._clamp_post(main.paths.open_spot(at))
 		if _filled(i):
 			main.placing_type = ""
 			continue
-		if main.gold < main.hire_cost(kind):
+		if main.gold < main.hiring.hire_cost(kind):
 			main.placing_type = ""
 			if _core(kind):
 				return   # (the line comes first: save for it rather than skip ahead)
 			continue     # (support and buildings: buy them when there's gold to spare)
-		var ok: bool = main.can_post_at(at)
+		var ok: bool = main.hiring.can_post_at(at)
 		main.placing_type = ""
 		if not ok:
 			continue
 		var before: int = main.gold
 		var count: int = main.warrior_layer.get_child_count()
-		main._on_hire_pressed(kind)
-		main.hire_at(at)
+		main.hiring._on_hire_pressed(kind)
+		main.hiring.hire_at(at)
 		main.placing_type = ""
 		if main.gold < before:
 			hired[kind] = hired.get(kind, 0) + 1
@@ -377,7 +377,7 @@ func _fill() -> void:
 
 ## Orders for whoever hasn't had them yet (see the top of the file).
 func _orders() -> void:
-	var troops: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and not w.wall_guard)
+	var troops: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and not w.wall_guard)
 	var fresh := troops.filter(func(w): return not ordered.has(w.get_instance_id()))
 	if fresh.is_empty():
 		return
@@ -393,25 +393,25 @@ func _orders() -> void:
 		if w.kind in [RANGED, "alchemist", "mage", "frost", "bard"]:
 			_guard([w], 80.0)
 		elif bridgeheads.any(func(p): return p.distance_to(w.post) < 30.0):
-			main.give_order("move_mode", "hold", [w])
+			main.orders.give_order("move_mode", "hold", [w])
 		else:
 			_guard([w], 170.0 if type == "evac" else 130.0)
 	if type == "escort" or type == "assault":
 		var loose := troops.filter(func(w): return w.anchor == null and not w.is_mobile_healer() and not sent.has(w.get_instance_id()))
 		if not loose.is_empty():
 			if main.rules.get("wagon") != null:
-				main.set_follow(main.rules.wagon, loose)
+				main.formation_ctl.set_follow(main.rules.wagon, loose)
 			_guard(loose, 70.0)
 	# Healers: on Heal in an evacuation (villagers too), else staying with the troops near them.
 	for h in fresh.filter(func(w): return w.is_mobile_healer()):
 		if type == "evac":
-			main.give_order("priority", "heal", [h])
+			main.orders.give_order("priority", "heal", [h])
 			continue
 		var near := troops.filter(func(w): return not w.is_mobile_healer() and w.post.distance_to(h.post) < 220.0)
 		if near.is_empty():
 			near = troops.filter(func(w): return not w.is_mobile_healer())
 		if not near.is_empty():
-			main.stay_with([h], near.slice(0, 4))
+			main.orders.stay_with([h], near.slice(0, 4))
 
 
 ## The battle's own calls: fall back when it's time; when a position falls, its
@@ -431,13 +431,13 @@ func _react() -> void:
 		for o in main.rules.objectives():
 			if not o.dead:
 				continue
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				if w.is_active() and not w.is_emplacement() and w.post.distance_to(o.position) < 110.0:
 					var weakest = standing[0]
 					for s in standing:
 						if s.hp / s.max_hp < weakest.hp / weakest.max_hp:
 							weakest = s
-					var to: Vector2 = main.paths.open_spot(main._clamp_post(weakest.position + Vector2(randf_range(-50, 50), -50)))
+					var to: Vector2 = main.paths.open_spot(main.hiring._clamp_post(weakest.position + Vector2(randf_range(-50, 50), -50)))
 					w.order_to(to)
 
 
@@ -457,7 +457,7 @@ func _assault() -> void:
 		if not is_instance_valid(o) or o.taken or w == null or not is_instance_valid(w) or not w.is_active():
 			sent.erase(id)
 			if w != null and is_instance_valid(w) and w.is_active():
-				main.set_follow(r.wagon, [w])
+				main.formation_ctl.set_follow(r.wagon, [w])
 	var jobs := []
 	if r.winch != null and is_instance_valid(r.winch) and not r.winch.taken:
 		jobs.append([r.winch, 3])
@@ -472,7 +472,7 @@ func _assault() -> void:
 		var have := sent.values().filter(func(x): return x == o).size()
 		for i in job[1] - have:
 			var best = null
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				if w.is_active() and not w.is_emplacement() and not w.is_mobile_healer() and w.kind == MELEE \
 						and not sent.has(w.get_instance_id()) and (best == null or w.position.distance_to(o.position) < best.position.distance_to(o.position)):
 					best = w
@@ -480,11 +480,11 @@ func _assault() -> void:
 				break
 			sent[best.get_instance_id()] = o
 			best.anchor = null
-			best.order_to(main.paths.open_spot(main._clamp_post(o.position + Vector2(randf_range(-30, 30), 40))))
+			best.order_to(main.paths.open_spot(main.hiring._clamp_post(o.position + Vector2(randf_range(-30, 30), 40))))
 	for t in r.towers:
 		if is_instance_valid(t) and t.taken and not t.crewed:
-			for w in main.get_warriors():
-				if w.is_active() and w.kind in ["archer", "mage", "frost"] and not main.temp_allies.has(w):
+			for w in main.battlefield.get_warriors():
+				if w.is_active() and w.kind in ["archer", "mage", "frost"] and not main.missions.temp_allies.has(w):
 					w.anchor = null
 					w.order_to(t.position)
 					break
@@ -494,7 +494,7 @@ func _assault() -> void:
 ## everyone's reach (shooting from afar, or hacking at something that's being mended): the
 ## nearest troops are moved onto them.
 func _hunt() -> void:
-	var left: Array = main.get_enemies()
+	var left: Array = main.battlefield.get_enemies()
 	var clearing: bool = type in ["assault", "citadel"] and main.rules.get("phase") == "clear"
 	if (not main.wave_active and not clearing) or left.size() > 3 or not main.spawn_queue.is_empty() or left.is_empty():
 		lull = 0
@@ -507,12 +507,12 @@ func _hunt() -> void:
 	lull = 0
 	for e in left:
 		var best = null
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.is_active() and not w.is_emplacement() and not w.is_mobile_healer() and w.anchor == null \
 					and (best == null or w.position.distance_to(e.position) < best.position.distance_to(e.position)):
 				best = w
 		if best != null:
-			best.order_to(main.paths.open_spot(main._clamp_post(e.position)))
+			best.order_to(main.paths.open_spot(main.hiring._clamp_post(e.position)))
 
 
 ## Spends what's left on upgrades: the line first, then the rest, keeping enough back to
@@ -526,28 +526,28 @@ func _upgrade() -> void:
 			continue
 		var core: bool = _core(items[i][0])
 		if core:
-			keep = maxi(keep, main.hire_cost(items[i][0]))   # always save for the line
+			keep = maxi(keep, main.hiring.hire_cost(items[i][0]))   # always save for the line
 			break
 		if not support_seen:
 			support_seen = true
 			if waited < 20:
-				keep = main.hire_cost(items[i][0])
-			waited = 0 if main.gold >= main.hire_cost(items[i][0]) else waited + 1
+				keep = main.hiring.hire_cost(items[i][0])
+			waited = 0 if main.gold >= main.hiring.hire_cost(items[i][0]) else waited + 1
 	# Slimes or fliers on the field: Martial Artists' Spirit Bolts (path 0, tier I) first,
 	# whatever's being saved for, as a player would (ki is all that touches them).
-	if main.get_enemies().any(func(e): return not e.dead and (e.flying or e.gooey)):
-		for w in main.get_warriors().filter(func(w): return w.is_active() and w.kind == "martial" and w.tiers[0] == 0):
+	if main.battlefield.get_enemies().any(func(e): return not e.dead and (e.flying or e.gooey)):
+		for w in main.battlefield.get_warriors().filter(func(w): return w.is_active() and w.kind == "martial" and w.tiers[0] == 0):
 			if w.path_state(0) == "ok" and main.gold >= w.upgrade_cost(0):
 				main.selected = w
 				var before0: int = main.gold
-				main.upgrade_selected(0)
+				main.groups.upgrade_selected(0)
 				if main.gold < before0:
 					upgrades += 1
 					spent += before0 - main.gold
 	var spent_any := true
 	while spent_any:
 		spent_any = false
-		var units: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.wall_guard)
+		var units: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active() and not w.wall_guard)
 		units.sort_custom(func(a, b): return (a.kind == MELEE) and not (b.kind == MELEE))
 		for w in units:
 			for path in UPGRADE_ORDER:
@@ -558,7 +558,7 @@ func _upgrade() -> void:
 					continue
 				main.selected = w
 				var before: int = main.gold
-				main.upgrade_selected(path)
+				main.groups.upgrade_selected(path)
 				if main.gold < before:
 					upgrades += 1
 					spent += before - main.gold
@@ -575,7 +575,7 @@ func _ring() -> void:
 	for b in bells.towers:
 		if not bells.ready(b):
 			continue
-		var near: Array = main.enemies_near(bells.pos(b), bells.REACH).filter(func(e): return not e.dead and e.position.distance_to(bells.pos(b)) <= bells.REACH)
+		var near: Array = main.battlefield.enemies_near(bells.pos(b), bells.REACH).filter(func(e): return not e.dead and e.position.distance_to(bells.pos(b)) <= bells.REACH)
 		if near.size() >= 3 or near.any(func(e): return e.boss or e.kind in ["troll", "wyvern"]):
 			bells.ring(b)
 
@@ -583,7 +583,7 @@ func _ring() -> void:
 ## A line summing up the army: "swordsman 7, archer 4, healer 1 | 23 upgrades".
 func army() -> String:
 	var counts := {}
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_active() and not w.wall_guard:
 			counts[w.kind] = counts.get(w.kind, 0) + 1
 	var parts := []
@@ -595,7 +595,7 @@ func army() -> String:
 ## Guard Area: a square `half` out each way from each unit's post (as the old circle was).
 func _guard(units: Array, half: float) -> void:
 	for w in units:
-		main.give_order("area", Rect2(w.post - Vector2.ONE * half, Vector2.ONE * half * 2.0), [w])
+		main.orders.give_order("area", Rect2(w.post - Vector2.ONE * half, Vector2.ONE * half * 2.0), [w])
 
 
 ## The line itself (bought before support): melee and ranged troops, the North's included.

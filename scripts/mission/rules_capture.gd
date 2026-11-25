@@ -42,7 +42,7 @@ func start() -> void:
 	zone = Objective.new()
 	zone.setup(main, {"id": "zone", "kind": "zone", "name": _c().get("name", "the fort"), "at": _c().get("at", Vector2(320, 300)),
 			"radius": _c().get("radius", 80.0)})
-	main.add_objective(zone)
+	main.waves.add_objective(zone)
 	hold_left = float(_c().get("hold", 60.0))
 	take_left = limit()
 
@@ -61,10 +61,10 @@ func process(delta: float) -> void:
 	elapsed += delta
 	mine = 0
 	theirs = 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_active() and not w.is_emplacement() and w.position.distance_to(zone.position) <= zone.zone_r:
 			mine += 1
-	for e in main.enemies_near(zone.position, zone.zone_r + 30.0):
+	for e in main.battlefield.enemies_near(zone.position, zone.zone_r + 30.0):
 		if not e.dead and not e.flying and e.position.distance_to(zone.position) <= zone.zone_r:
 			theirs += 1
 	zone.contested = mine > 0 and theirs > 0
@@ -81,7 +81,7 @@ func process(delta: float) -> void:
 	if phase == "take" and zone.progress >= 1.0:
 		phase = "hold"
 		main.hud.show_message("%s is yours! Hold it for %ds." % [zone.label.capitalize(), ceili(hold_left)])
-		main.sfx("fanfare")
+		main.effects.sfx("fanfare")
 	elif phase == "hold":
 		if zone.progress <= 0.0:
 			phase = "take"
@@ -90,12 +90,12 @@ func process(delta: float) -> void:
 			hold_left -= delta
 			if hold_left <= 0.0:
 				phase = "done"
-				main.call_deferred("_finish", true)
+				main.modes.call_deferred("_finish", true)
 				return
 	if elapsed >= limit() and phase != "done":
 		phase = "done"
 		main.hud.show_message("Out of time!")
-		main.call_deferred("_finish", false)
+		main.modes.call_deferred("_finish", false)
 
 
 ## Endless: take it, then hold it for good (each spell held pays), and retake it in time
@@ -107,13 +107,13 @@ func _endless(delta: float) -> void:
 			taken = true
 			hold_left = float(_c().get("hold", 60.0))
 			main.hud.show_message("%s is yours! Hold it." % zone.label.capitalize())
-			main.sfx("fanfare")
+			main.effects.sfx("fanfare")
 			return
 		take_left -= delta
 		if take_left <= 0.0:
 			phase = "done"
 			main.hud.show_message("Out of time!")
-			main.call_deferred("_finish", false)
+			main.modes.call_deferred("_finish", false)
 		elif take_left <= 10.0 and take_left + delta > 10.0:
 			main.hud.show_message("10 seconds to take %s!" % zone.label)
 		return
@@ -121,7 +121,7 @@ func _endless(delta: float) -> void:
 		phase = "take"
 		take_left = float(_c().get("retake", 45.0))
 		main.hud.show_message("They've taken %s back! Retake it within %ds." % [zone.label, ceili(take_left)])
-		main.sfx("horn")
+		main.effects.sfx("horn")
 		return
 	if not (theirs > 0 and mine == 0):
 		hold_left -= delta
@@ -130,9 +130,9 @@ func _endless(delta: float) -> void:
 			hold_left = float(_c().get("hold", 60.0))
 			var pay := 60 + 20 * held
 			main.gold += pay
-			main.spawn_text(zone.position + Vector2(0, -zone.zone_r - 10), "+%dg" % pay, Color(1, 0.85, 0.2))
+			main.effects.spawn_text(zone.position + Vector2(0, -zone.zone_r - 10), "+%dg" % pay, Color(1, 0.85, 0.2))
 			main.hud.show_message("Held! +%d gold for holding %s." % [pay, zone.label])
-			main.sfx("coin")
+			main.effects.sfx("coin")
 
 
 ## The enemy makes for the ground you're after (fighting whoever's in the way).

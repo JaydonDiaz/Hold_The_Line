@@ -33,7 +33,7 @@ func _run() -> void:
 	for i in 10:
 		await process_frame
 	var buttons: Array = main.hud.splash.find_children("*", "Button", true, false)
-	var art: Array = main.hud.splash.get_children().filter(func(c): return c.get_script() == preload("res://scripts/splash_art.gd"))
+	var art: Array = main.hud.splash.get_children().filter(func(c): return c.get_script() == preload("res://scripts/art/splash_art.gd"))
 	check(buttons.size() == 1 and buttons[0].text == "Start Game" and art.size() == 1,
 			"The start screen: the animated splash picture and a Start Game button")
 	check(main.audio._wanted_track == "", "...silent while it's up")
@@ -57,17 +57,17 @@ func _run() -> void:
 	shown.append(main.hud.hover_card.visible)
 	check(not shown.has(true), "The title screen: hovering where the troops, abilities and castle would be shows nothing (%s)" % [shown])
 	# On a phone the game is played upright: turned on its side, it waits behind a card.
-	main._turn_upright(Vector2(900, 420))
-	check(main._upright == null and not paused, "A desktop's wide window is just a wide window")
-	main.pretend_phone = true
-	main._turn_upright(Vector2(900, 420))
-	check(main._upright != null and paused, "A phone turned on its side: the game pauses behind a 'turn it upright' card")
-	main._turn_upright(Vector2(420, 900))
+	main.missions._turn_upright(Vector2(900, 420))
+	check(main.missions._upright == null and not paused, "A desktop's wide window is just a wide window")
+	main.missions.pretend_phone = true
+	main.missions._turn_upright(Vector2(900, 420))
+	check(main.missions._upright != null and paused, "A phone turned on its side: the game pauses behind a 'turn it upright' card")
+	main.missions._turn_upright(Vector2(420, 900))
 	await process_frame
-	check(main._upright == null and not paused, "...and turned back upright, it carries on")
-	main.pretend_phone = false
+	check(main.missions._upright == null and not paused, "...and turned back upright, it carries on")
+	main.missions.pretend_phone = false
 	# ...and once a game is under way, the same button shows its card.
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	await process_frame
 	hb.emit_signal("mouse_entered")
 	check(main.hud.hover_card.visible, "...while in a game, hovering a troop's button shows its card")

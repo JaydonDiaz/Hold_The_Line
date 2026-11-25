@@ -34,9 +34,9 @@ extends "res://scripts/mission/rules.gd"
 ##     "caches": [{"at", "gold", "style": "" or "chest"}]}]}}
 
 const Works = preload("res://scripts/mission/siege_works.gd")
-const Warrior = preload("res://scripts/warrior.gd")
-const Data = preload("res://scripts/data.gd")
-const Maps = preload("res://scripts/maps.gd")
+const Warrior = preload("res://scripts/troops/warrior.gd")
+const Data = preload("res://scripts/data/data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 const CP_BASE := 100          # a room's checkpoint is kept at this plus its place in the rooms
 const LINGER := 20.0          # seconds after its last enemy came in that the army may go on anyway
 const WAKE := 200.0           # a room's garrison stays at its posts until a troop's this near
@@ -151,10 +151,10 @@ func take_over(a, gate_at: Vector2) -> void:
 	cp_xp = a.cp_xp.duplicate()
 	cp_name = a.cp_name
 	room_i = -1
-	for b in main.get_barricades():
+	for b in main.battlefield.get_barricades():
 		main.gold += int(b.spent)
 		b.queue_free()
-	main.walls_changed()
+	main.battlefield.walls_changed()
 	_march_to({"id": "gate", "side": "n", "at": gate_at, "point": gate_at}, 0)
 
 
@@ -164,7 +164,7 @@ func resume(cp: Dictionary) -> void:
 	room_i = clampi(int(cp.get("room", 0)), 0, rooms.size() - 1)
 	for w in main.warrior_layer.get_children():
 		w.queue_free()
-	main.temp_allies.clear()
+	main.missions.temp_allies.clear()
 	main.gold = int(cp.get("gold", main.gold))
 	main.wave = int(cp.get("wave", 0))
 	for key in cp.get("owned", []):
@@ -245,7 +245,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 		standard = Works.new()
 		standard.setup(main, {"id": "standard", "kind": "standard", "name": "The Line's standard", "at": _base(spot),
 				"hp": float(_c().get("standard", 900.0))})
-		main.add_objective(standard)
+		main.waves.add_objective(standard)
 		standard.destroyed.connect(func(_o): _end(false))
 	standard.position = main.paths.open_spot(spot)
 	standard.hp = standard.max_hp * clampf(standard_hp, 0.05, 1.0)
@@ -256,7 +256,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 	king = null
 	if not st["cleared"] and not escaping:
 		for g in r.get("garrison", []) + (r.get("prepared_garrison", []) if united() else []):
-			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)) + int(_c().get("level_bonus", 0)), Vector2(g[1].x * k, g[1].y))
+			main.waves._spawn_enemy(g[0], main.missions.wave_level(maxi(main.wave, 1)) + int(_c().get("level_bonus", 0)), Vector2(g[1].x * k, g[1].y))
 			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 			e.set_meta("guard", true)
 			e.goal = null
@@ -267,7 +267,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 		# The Ogre King on his throne.
 		if r.has("boss"):
 			var b: Dictionary = r["boss"]
-			main._spawn_enemy(b["kind"], int(b.get("level", 10)), Vector2(b["at"].x * k, b["at"].y))
+			main.waves._spawn_enemy(b["kind"], int(b.get("level", 10)), Vector2(b["at"].x * k, b["at"].y))
 			king = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 			king.max_hp *= float(b.get("hp_mult", 1.0))
 			king.hp = king.max_hp
@@ -286,7 +286,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 		pen.setup(main, {"id": id, "kind": "stockade", "style": "iron", "name": "A cell", "at": p["at"],
 				"prisoners": int(p.get("townsfolk", 0)) + (p.get("soldiers", []) as Array).size()})
 		pen.set_meta("spec", p)
-		main.add_objective(pen)
+		main.waves.add_objective(pen)
 		pens.append(pen)
 	n = 0
 	for c in r.get("caches", []):
@@ -297,7 +297,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 		var cache := Works.new()
 		cache.setup(main, {"id": id, "kind": "cache", "style": str(c.get("style", "")), "name": "Treasure" if c.get("style", "") == "chest" else "Supplies",
 				"at": c["at"], "gold": int(c.get("gold", 60))})
-		main.add_objective(cache)
+		main.waves.add_objective(cache)
 		caches.append(cache)
 	main.paths.set_objectives(objectives())
 	# The army, as it comes in: its shape kept round where it comes to stand.
@@ -318,7 +318,7 @@ func _enter_room(i: int, coming: Array, standard_hp: float, by := "s", restored 
 			off = Vector2(-off.y * inward.x, off.x)
 		var post: Vector2 = (c_new + off) if not restored else Vector2(p.x * k, p.y)
 		post = Vector2(clampf(post.x, 50.0 * k, main.FIELD_W - 50.0 * k), clampf(post.y, 70.0, 720.0))
-		arrivals.append([rec, float(row[1]), main.paths.open_spot(main._clamp_post(post))])
+		arrivals.append([rec, float(row[1]), main.paths.open_spot(main.hiring._clamp_post(post))])
 	arrivals.sort_custom(func(a, b): return a[1] < b[1])
 	restored_entry = restored
 	wave0 = main.wave
@@ -351,15 +351,15 @@ func _arrive(rec: Dictionary, post: Vector2, at_post := false) -> void:
 	else:
 		w.position = main.paths.open_spot(at + Vector2(randf_range(-10, 10), randf_range(-10, 10)))
 		w.order_to(post)
-	var f = main.formation_of(w)
+	var f = main.formation_ctl.formation_of(w)
 	if f != null and not w.data.get("emplacement", false) and not at_post:
 		# In a formation: it takes its shape again in this hall, faced the way the army came
 		# in, round where the castle has them stand (each arrival puts those in so far back
 		# in their places).
 		f.facing = _inward(door["side"])
-		main._refit_anchor(f)
-		main._place_formation(f, true)
-	main.warriors_changed()
+		main.formation_ctl._refit_anchor(f)
+		main.formation_ctl._place_formation(f, true)
+	main.battlefield.warriors_changed()
 
 
 ## New troops (and Engineers) come into a room by the door the army came in by.
@@ -403,10 +403,10 @@ func _awake() -> bool:
 	if phase == "fight" and fight_t >= ALERT:
 		_woke = true
 		return true
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.has_meta("guard"):
 			continue
-		if e.hp < e.max_hp or not main.warriors_near(e.position, WAKE).filter(func(w): return w.is_active() and not w.is_emplacement()).is_empty():
+		if e.hp < e.max_hp or not main.battlefield.warriors_near(e.position, WAKE).filter(func(w): return w.is_active() and not w.is_emplacement()).is_empty():
 			_woke = true
 			return true
 	return false
@@ -457,7 +457,7 @@ func wave_text() -> String:
 	if phase == "clear":
 		return "Room taken"
 	if phase != "fight" or _waves() == 0:
-		return "Foes %d" % main.get_enemies().size()
+		return "Foes %d" % main.battlefield.get_enemies().size()
 	return "Wave %d/%d" % [clampi(main.wave - wave0, 0, _waves()), _waves()]
 
 
@@ -485,13 +485,13 @@ func process(delta: float) -> void:
 					_room_taken()   # (no clearing it: out, as fast as the army can)
 				elif _waves() > 0:
 					main.deploying = false
-					main.start_wave(true)   # (the room's first wave at once: no lull on coming in)
+					main.waves.start_wave(true)   # (the room's first wave at once: no lull on coming in)
 		"fight":
 			fight_t += delta
 			if king != null and is_instance_valid(king) and not king.has_meta("beaten"):
 				return   # (the throne room isn't taken while he stands)
 			var done: bool = main.wave - wave0 >= _waves() and main.spawn_queue.is_empty()
-			if done and main.get_enemies().is_empty() and _downed() == 0:
+			if done and main.battlefield.get_enemies().is_empty() and _downed() == 0:
 				_room_taken()
 			elif done:
 				linger += delta
@@ -520,7 +520,7 @@ func _make_warden(e) -> void:
 
 
 func _warden_alive() -> bool:
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.dead and e.has_meta("warden"):
 			return true
 	return false
@@ -532,7 +532,7 @@ var told_keys := false
 func _pens(delta: float) -> void:
 	if not pens.is_empty() and _warden_alive():
 		for pen in pens:
-			if is_instance_valid(pen) and not pen.taken and not told_keys and not main.warriors_near(pen.position, pen.capture_r()).is_empty():
+			if is_instance_valid(pen) and not pen.taken and not told_keys and not main.battlefield.warriors_near(pen.position, pen.capture_r()).is_empty():
 				told_keys = true
 				main.hud.show_message("Locked fast: the Warden has the keys. Bring him down first.")
 		return
@@ -541,10 +541,10 @@ func _pens(delta: float) -> void:
 			continue
 		var mine := 0
 		var theirs := 0
-		for w in main.warriors_near(pen.position, pen.capture_r()):
+		for w in main.battlefield.warriors_near(pen.position, pen.capture_r()):
 			if w.is_active() and not w.is_emplacement() and w.position.distance_to(pen.position) <= pen.capture_r():
 				mine += 1
-		for e in main.enemies_near(pen.position, pen.capture_r() + 30.0):
+		for e in main.battlefield.enemies_near(pen.position, pen.capture_r() + 30.0):
 			if not e.dead and not e.flying and e.position.distance_to(pen.position) <= pen.capture_r():
 				theirs += 1
 		pen.contested = mine > 0 and theirs > 0
@@ -568,8 +568,8 @@ func _free_prisoners(pen) -> void:
 		var tiers := [0, 0, 0, 0]
 		tiers[clampi(int(s.get("path", 0)), 0, 3)] = clampi(int(s.get("tier", 1)), 1, 3)
 		var spot: Vector2 = main.paths.open_spot(pen.position + Vector2(-26 + n * 26, 46))
-		main._lend_unit({"kind": s["kind"], "at": Vector2(spot.x / k, spot.y), "tiers": tiers})
-		var w = main.temp_allies.back()
+		main.missions._lend_unit({"kind": s["kind"], "at": Vector2(spot.x / k, spot.y), "tiers": tiers})
+		var w = main.missions.temp_allies.back()
 		w.set_meta("freed", true)
 		n += 1
 		joined += 1
@@ -583,21 +583,21 @@ func _free_prisoners(pen) -> void:
 		var pts: Array = Array(route) + [out]
 		c.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": _base(start), "variant": randi() % 24,
 				"route": pts.map(_base), "speed": randf_range(30, 38), "hp": 40.0})
-		main.add_objective(c)
+		main.waves.add_objective(c)
 		c.reached.connect(func(o):
 			freed += 1
 			townsfolk.erase(o)
 			o.queue_free())
 		townsfolk.append(c)
-	main.warriors_changed()
-	main.spawn_text(pen.position + Vector2(0, -60), "Freed!", Color(0.6, 1.0, 0.6))
+	main.battlefield.warriors_changed()
+	main.effects.spawn_text(pen.position + Vector2(0, -60), "Freed!", Color(0.6, 1.0, 0.6))
 	var who := []
 	if n > 0:
 		who.append("%d soldier%s join%s you" % [n, "" if n == 1 else "s", "s" if n == 1 else ""])
 	if int(spec.get("townsfolk", 0)) > 0:
 		who.append("%d townsfolk make for the way out" % int(spec["townsfolk"]))
 	main.hud.show_message("Prisoners freed: " + ", ".join(who) + ".")
-	main.sfx("fanfare")
+	main.effects.sfx("fanfare")
 	main.paths.invalidate()
 
 
@@ -606,15 +606,15 @@ func _caches() -> void:
 	for c in caches:
 		if not is_instance_valid(c) or c.taken:
 			continue
-		if not main.enemies_near(c.position, 50.0).filter(func(e): return not e.dead).is_empty():
+		if not main.battlefield.enemies_near(c.position, 50.0).filter(func(e): return not e.dead).is_empty():
 			continue
-		for w in main.warriors_near(c.position, c.capture_r() + 14.0):
+		for w in main.battlefield.warriors_near(c.position, c.capture_r() + 14.0):
 			if w.is_active() and not w.is_emplacement():
 				c.taken = true
 				_had(c.id)
 				main.gold += c.gold
-				main.spawn_text(c.position + Vector2(0, -40), "+%dg" % c.gold, Color(1, 0.85, 0.3))
-				main.sfx("coin")
+				main.effects.spawn_text(c.position + Vector2(0, -40), "+%dg" % c.gold, Color(1, 0.85, 0.3))
+				main.effects.sfx("coin")
 				main.hud.show_message("%s: +%d gold" % [c.label, c.gold])
 				c.queue_free()
 				break
@@ -631,7 +631,7 @@ func _send_side(delta: float) -> void:
 		return
 	side_t = 0.5
 	var jobs := (pens + caches).filter(func(o): return is_instance_valid(o) and not o.taken and not o.is_queued_for_deletion())
-	var troops: Array = main.get_warriors().filter(func(w): return w.is_active() and w.priority == Warrior.SIDE_PRIORITY \
+	var troops: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active() and w.priority == Warrior.SIDE_PRIORITY \
 			and not w.is_emplacement() and not w.summoned and w.clone_of == null and not w.held)
 	var busy := {}
 	for w in troops:
@@ -655,14 +655,14 @@ func _send_side(delta: float) -> void:
 				# Nothing left to do here: back by the standard.
 				if standard != null and is_instance_valid(standard):
 					var off := Vector2.from_angle((w.get_instance_id() % 8) * TAU / 8.0) * 70.0
-					w.order_to(main.paths.open_spot(main._clamp_post(standard.position + off)))
+					w.order_to(main.paths.open_spot(main.hiring._clamp_post(standard.position + off)))
 			continue
 		var n: int = busy.get(best, 0)
 		busy[best] = n + 1
 		w.set_meta("side_job", best)
 		w.anchor = null
 		var rr: float = best.capture_r() * (0.25 if best.kind == "cache" else 0.6)
-		w.order_to(main.paths.open_spot(main._clamp_post(best.position + Vector2.from_angle(PI * 0.5 + n * 1.3) * rr)))
+		w.order_to(main.paths.open_spot(main.hiring._clamp_post(best.position + Vector2.from_angle(PI * 0.5 + n * 1.3) * rr)))
 
 
 ## Something in this room had (a cell opened, supplies claimed): not to be had again.
@@ -696,7 +696,7 @@ func _room_taken() -> void:
 		arrows.append({"door": d, "at": _door_at(d), "to": to})
 	if first:
 		main.hud.show_message("%s is yours. On through a door when you're ready (click its arrow; Y for the way on)." % room()["name"])
-		main.sfx("horn", 1.2)
+		main.effects.sfx("horn", 1.2)
 	main.queue_redraw()
 
 
@@ -749,7 +749,7 @@ func _ask(a: Dictionary) -> void:
 		return
 	var notes := []
 	var down := _downed()
-	var foes: int = main.get_enemies().size()
+	var foes: int = main.battlefield.get_enemies().size()
 	if down > 0:
 		notes.append("%d troop%s down: a Healer can still get %s up. Go now and %s left behind." % [down, " is" if down == 1 else "s are",
 				"it" if down == 1 else "them", "it's" if down == 1 else "they're"])
@@ -855,9 +855,9 @@ func _queue_march() -> void:
 		else:
 			var k := i - DOOR_ABREAST
 			spot = at + inward * (DOOR_GAP + QUEUE_ROW * (k / 2)) + across * (-1.0 if k % 2 == 0 else 1.0) * QUEUE_ACROSS
-			spot = main.paths.open_spot(main._clamp_post(spot))
+			spot = main.paths.open_spot(main.hiring._clamp_post(spot))
 		if w.post.distance_to(spot) > 6.0 or not w.ordered:
-			w.order_to(main._clamp_post(spot))
+			w.order_to(main.hiring._clamp_post(spot))
 		i += 1
 
 
@@ -919,7 +919,7 @@ func _pan() -> void:
 	if left > 0:
 		main.hud.show_message("%d troop%s left behind where %s fell." % [left, "" if left == 1 else "s", "it" if left == 1 else "they"])
 	stragglers.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.dead and not e.is_queued_for_deletion():
 			if escaping:
 				escaped += 1   # (fleeing like the army: out ahead of it, to fight for him outside)
@@ -968,14 +968,14 @@ func _stragglers_come() -> void:
 	var door := _door(entry)
 	var at := _door_at(door) + _inward(door["side"]) * 20.0
 	for st in stragglers:
-		main._spawn_enemy(str(st[0]), int(st[1]), main.paths.open_spot(at + Vector2(randf_range(-20, 20), randf_range(-20, 20))))
+		main.waves._spawn_enemy(str(st[0]), int(st[1]), main.paths.open_spot(at + Vector2(randf_range(-20, 20), randf_range(-20, 20))))
 	main.hud.show_message("%d enem%s followed you through!" % [stragglers.size(), "y" if stragglers.size() == 1 else "ies"])
 	stragglers.clear()
 
 
 func _downed() -> int:
 	var n := 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if not w.is_queued_for_deletion() and w.down_timer > 0.0:
 			n += 1
 	return n
@@ -1012,21 +1012,21 @@ func boss_beaten(e) -> void:
 		_story("ds_king_falls", func():
 			e.remove_meta("undying")
 			e.take_damage(1e9, false)
-			for x in main.get_enemies():
+			for x in main.battlefield.get_enemies():
 				if not x.dead:
 					x.take_damage(1e9, false)   # (the horde breaks at the sight of it)
 			Campaign.flags.erase("ds_united")
 			_end(true))
 		return
 	_story("ds_unbound", func():
-		main.spawn_burst(e.position, 120.0, Color(1.0, 0.3, 0.1))
-		main.spawn_flash(e.position, 90.0)
-		main.sfx("boom", 0.6)
+		main.effects.spawn_burst(e.position, 120.0, Color(1.0, 0.3, 0.1))
+		main.effects.spawn_flash(e.position, 90.0)
+		main.effects.sfx("boom", 0.6)
 		e.queue_free()   # (gone through the window, to meet the Line outside)
 		king = null
 		escaping = true
 		_state(room()["id"])["cleared"] = true
-		for x in main.get_enemies():
+		for x in main.battlefield.get_enemies():
 			if not x.dead:
 				x.set_meta("fleeing", true)
 				x.remove_meta("guard")
@@ -1069,7 +1069,7 @@ func _fleeing_out(r: Dictionary, k: float) -> void:
 		var door := _door(id)
 		var at := _door_at(door) + _inward(door["side"]) * 30.0
 		for g in spec.get("garrison", []):
-			main._spawn_enemy(g[0], main.wave_level(maxi(main.wave, 1)), main.paths.open_spot(at + Vector2(randf_range(-30, 30), randf_range(-30, 30))))
+			main.waves._spawn_enemy(g[0], main.missions.wave_level(maxi(main.wave, 1)), main.paths.open_spot(at + Vector2(randf_range(-30, 30), randf_range(-30, 30))))
 			var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 			e.set_meta("fleeing", true)
 			e.goal = null
@@ -1084,14 +1084,14 @@ func _rockfall(delta: float) -> void:
 	if rock_t > 0.0:
 		return
 	rock_t = ROCK_EVERY / (3.0 if fight_t > ROCK_COLLAPSE else 1.0)
-	var troops: Array = main.get_warriors().filter(func(w): return w.is_active())
+	var troops: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active())
 	if troops.is_empty():
 		return
 	var w = troops.pick_random()
 	var fall := RockFall.new()
 	fall.main = main
 	fall.position = w.position + Vector2(randf_range(-30, 30), randf_range(-30, 30))
-	fall.damage = 35.0 + 3.0 * main.wave_level(maxi(main.wave, 1))
+	fall.damage = 35.0 + 3.0 * main.missions.wave_level(maxi(main.wave, 1))
 	main.corpse_layer.add_child(fall)
 
 
@@ -1110,14 +1110,14 @@ class RockFall extends Node2D:
 	func _process(delta: float) -> void:
 		t += delta
 		if t >= WARN:
-			for w in main.warriors_near(position, RADIUS + 20.0):
+			for w in main.battlefield.warriors_near(position, RADIUS + 20.0):
 				if w.is_active() and w.position.distance_to(position) <= RADIUS + w.RADIUS * 0.5:
 					w.take_damage(damage)
-			for e in main.enemies_near(position, RADIUS + 30.0):
+			for e in main.battlefield.enemies_near(position, RADIUS + 30.0):
 				if not e.dead and not e.flying and e.position.distance_to(position) <= RADIUS + e.radius * 0.5:
 					e.take_damage(damage, false)
-			main.spawn_burst(position, RADIUS, Color(0.55, 0.52, 0.5))
-			main.sfx("crumble", 0.9)
+			main.effects.spawn_burst(position, RADIUS, Color(0.55, 0.52, 0.5))
+			main.effects.sfx("crumble", 0.9)
 			queue_free()
 			return
 		queue_redraw()
@@ -1192,7 +1192,7 @@ func _end(won: bool) -> void:
 	if won and main.campaign:
 		Campaign.held_towers = garrisons.duplicate(true)
 	main.hud.show_message("Through the castle's halls!" if won else "The standard's fallen: the army breaks!")
-	main.call_deferred("_finish", won)
+	main.modes.call_deferred("_finish", won)
 
 
 # --- What the HUD shows -------------------------------------------------------------------

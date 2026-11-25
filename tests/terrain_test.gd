@@ -30,9 +30,9 @@ extends SceneTree
 ##                  Ogre King, the biggest enemy, walking it to the castle
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
-const Maps = preload("res://scripts/maps.gd")
-const CD = preload("res://scripts/campaign_data.gd")
-const Data = preload("res://scripts/data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 const TEST_SAVE := "user://terrain_test_campaign.cfg"
 
@@ -126,7 +126,7 @@ func _walk_down(from: Vector2, r: float) -> Array:
 func _water() -> void:
 	for wide in [false, true]:
 		await _fresh()
-		main._lock_portrait(not wide)
+		main.missions._lock_portrait(not wide)
 		await _frames(2)
 		var paths = main.paths
 		paths.set_map(RIVER)
@@ -148,7 +148,7 @@ func _water() -> void:
 			w.setup("barricade", main.Data.WARRIORS["barricade"], main, Vector2(x * k, 430))
 			w.position = w.post
 			main.wall_layer.add_child(w)
-		main.walls_changed()
+		main.battlefield.walls_changed()
 		await _frames(2)
 		var walled: Array = _walk_down(Vector2(95 * k, 120), 11.0)
 		check(walled[2] and walled[0] and not walled[1], "%s with both bridges walled off, it goes by the ford instead (%s)" % [tag, str(walled)])
@@ -160,13 +160,13 @@ func _water() -> void:
 		check(not route.is_empty() and not wet, "%s a troop sent across the river goes round by a crossing (%d steps)" % [tag, route.size()])
 	# Wading is slow.
 	await _fresh()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	main.paths.set_map(RIVER)
-	main._spawn_enemy("orc", 1, Vector2(325, 300))
+	main.waves._spawn_enemy("orc", 1, Vector2(325, 300))
 	var orc = main.enemy_layer.get_children()[-1]
 	orc.position = Vector2(325, 300)
-	main._spawn_enemy("orc", 1, Vector2(200, 450))
+	main.waves._spawn_enemy("orc", 1, Vector2(200, 450))
 	var dry = main.enemy_layer.get_children()[-1]
 	dry.position = Vector2(200, 450)
 	await _frames(20)
@@ -217,7 +217,7 @@ func _hall(id: String, m: Dictionary, tag: String) -> void:
 func _zones() -> void:
 	for wide in [false, true]:
 		await _fresh()
-		main._lock_portrait(not wide)
+		main.missions._lock_portrait(not wide)
 		await _frames(2)
 		var paths = main.paths
 		var tag := "Z  %s" % ("(wide) " if wide else "")
@@ -244,7 +244,7 @@ func _zones() -> void:
 					"%s%s: every size of enemy reaches the bottom from its lanes, Warlords from %d starts without grazing terrain, troops can stand at the gate%s" % [
 					tag, id, arrived, "" if stuck.is_empty() else " (stuck: %s)" % str(stuck.slice(0, 3))])
 	await _fresh()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	var paths = main.paths
 	for id in Maps.ZONES:
@@ -286,7 +286,7 @@ func _fresh(map_id := "") -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	if map_id != "":
 		main.paths.set_map(Maps.get_map(map_id))
@@ -305,14 +305,14 @@ func _mission(mid: String, diff := "normal") -> void:
 	root.add_child(main)
 	await process_frame
 	main.hud.hide_mode_select()
-	main.start_mission(mid)
+	main.missions.start_mission(mid)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
 	await process_frame
 	# Battles stretch to the window; these tests hold the field at the width the maps are
 	# drawn up for (as wide windows are checked in G).
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await process_frame
 	main.gold = 99999
 	campaign.allies = CD.FACTIONS.keys()   # every troop and emplacement open, for the tests
@@ -330,7 +330,7 @@ func _grid() -> void:
 			"G  ...and every terrain check passes everything through")
 	# A known shape: a 64px square at (96..160, 192..256), on a field held at the width
 	# maps are drawn up for (so it isn't stretched).
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await process_frame
 	paths.set_map({"terrain": [{"kind": "rock", "poly": [Vector2(96, 192), Vector2(160, 192), Vector2(160, 256), Vector2(96, 256)]}]})
 	var wrong := []
@@ -419,7 +419,7 @@ func _grid() -> void:
 		for z in m["no_build"]:
 			check(paths.in_no_build(z.get_center()) and not paths.in_no_build(z.position - Vector2(10, 10)), "G  %s: the no-build zone %s is kept" % [map_id, z])
 		# The same map stretched across a wide window's field.
-		main._lock_portrait(false)
+		main.missions._lock_portrait(false)
 		await _frames(2)
 		paths = main.paths
 		var k: float = main.FIELD_W / Maps.BASE_W
@@ -449,7 +449,7 @@ func _grid() -> void:
 						break
 		check(touched_w == 0 and arrived_w > 0, "G  %s, wide: Warlords walk it to the castle (%d arrived, %d touched rock)" % [map_id, arrived_w, touched_w])
 		var bad_w := []
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if not paths.troop_can_stand(w.post):
 				bad_w.append("%s %s" % [w.kind, w.post.round()])
 		for q in wide["bot_posts"]:
@@ -461,17 +461,17 @@ func _grid() -> void:
 # --- E: enemies on terrain ---------------------------------------------------------------
 
 func _spawn(kind: String, at: Vector2, level := 3):
-	main._spawn_enemy(kind, level, at)
-	var all: Array = main.get_enemies().filter(func(e): return e.kind == kind)
+	main.waves._spawn_enemy(kind, level, at)
+	var all: Array = main.battlefield.get_enemies().filter(func(e): return e.kind == kind)
 	return all[all.size() - 1]
 
 
 func _hire(kind: String, at: Vector2, place := true):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	if place:
 		w.position = w.post
@@ -481,7 +481,7 @@ func _hire(kind: String, at: Vector2, place := true):
 ## Enemies standing in terrain right now (walking ones; a little slack for rounding).
 func _inside_terrain() -> Array:
 	var out := []
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.flying and main.paths.blocked(e.position, e.radius - 1.5):
 			out.append("%s at %s" % [e.kind, e.position.round()])
 	return out
@@ -502,9 +502,9 @@ func _enemies() -> void:
 				outside += 1
 		check(outside == 0, "E  %s: 200 spawns all inside the lanes" % mid)
 		# A big mixed wave, straight to the castle, checked every frame (no one to stop them).
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			w.free()
-		main.warriors_changed()
+		main.battlefield.warriors_changed()
 		main.wave_active = true
 		main.castle_hp = 1e9
 		main.castle_max = 1e9
@@ -523,16 +523,16 @@ func _enemies() -> void:
 				seen += 1
 				if worst.size() < 4:
 					worst.append_array(bad.slice(0, 1))
-			for e in main.get_enemies():
+			for e in main.battlefield.get_enemies():
 				spawned[e.get_instance_id()] = true
 				if e.sieging or e.position.y > main.CASTLE_Y - 175.0:
 					sieged[e.get_instance_id()] = true
 			if main.spawn_queue.is_empty() and sieged.size() >= spawned.size():
 				break
 		check(seen == 0, "E  %s: 64 mixed enemies (Skeleton Archers and Slimes too) walk the map without ever standing in terrain%s" % [mid, "" if seen == 0 else " (%d frames, e.g. %s)" % [seen, ", ".join(worst)]])
-		var late: Array = main.get_enemies().filter(func(e): return not sieged.has(e.get_instance_id())).map(func(e): return "%s at %s" % [e.kind, e.position.round()])
+		var late: Array = main.battlefield.get_enemies().filter(func(e): return not sieged.has(e.get_instance_id())).map(func(e): return "%s at %s" % [e.kind, e.position.round()])
 		check(spawned.size() == 64 and sieged.size() == 64, "E  %s: all %d reach the castle (archers: within bow range of it)%s" % [mid, sieged.size(), "" if late.is_empty() else " (not: %s; %d spawned)" % [", ".join(late), spawned.size()]])
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.queue_free()
 		await process_frame
 
@@ -582,9 +582,9 @@ func _enemies() -> void:
 
 	# Skeleton Archers in a tight channel: one wide enough for a goblin, too tight for a troop.
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.paths.set_map({"lanes": [[288, 352]], "terrain": [
 		{"kind": "rock", "poly": [Vector2(0, 0), Vector2(296, 0), Vector2(296, 380), Vector2(0, 380)]},
 		{"kind": "rock", "poly": [Vector2(344, 0), Vector2(640, 0), Vector2(640, 380), Vector2(344, 380)]}]})
@@ -666,11 +666,11 @@ func _enemies() -> void:
 ## Your units (and Engineers) standing in terrain right now.
 func _troops_inside() -> Array:
 	var out := []
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if not w.wall_guard and not w.is_emplacement() and main.paths.blocked(w.position, w.RADIUS - 1.5):
 			out.append("%s at %s" % [w.kind, w.position.round()])
 	for g in main.fx_layer.get_children():
-		if g.get_script() == preload("res://scripts/engineer.gd") and main.paths.blocked(g.position, g.RADIUS - 1.5):
+		if g.get_script() == preload("res://scripts/troops/engineer.gd") and main.paths.blocked(g.position, g.RADIUS - 1.5):
 			out.append("engineer at %s" % g.position.round())
 	return out
 
@@ -699,16 +699,16 @@ func _watch(units: Array, frames: int, until := Callable()) -> Dictionary:
 func _troops() -> void:
 	# New hires: out of the gate, round the ridge to posts on either side of it.
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.wave_active = false
 	var hires := []
 	for q in [Vector2(100, 460), Vector2(560, 470), Vector2(240, 250), Vector2(420, 230)]:
 		main.placing_type = "swordsman"
-		main.hire_at(q)
+		main.hiring.hire_at(q)
 		main.placing_type = ""
-		var all: Array = main.get_warriors()
+		var all: Array = main.battlefield.get_warriors()
 		hires.append(all[all.size() - 1])
 	var gate_ok: bool = hires.all(func(w): return w.position.distance_to(Vector2(320, main.CASTLE_Y - w.RADIUS)) < 2.0)
 	check(gate_ok, "T  new hires on a campaign map come out of the castle gate")
@@ -725,9 +725,9 @@ func _troops() -> void:
 	var sites := []
 	for q in [Vector2(150, 520), Vector2(510, 250), Vector2(330, 250)]:
 		main.placing_type = "tower"
-		main.hire_at(q)
+		main.hiring.hire_at(q)
 		main.placing_type = ""
-		var all: Array = main.get_warriors().filter(func(w): return w.kind == "tower")
+		var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "tower")
 		sites.append(all[all.size() - 1])
 	var eng_inside := 0
 	for f in 60 * 30:
@@ -740,9 +740,9 @@ func _troops() -> void:
 
 	# Backing away near rock: an Archer and a Healer with the ridge behind them, a troll coming.
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.wave_active = true
 	var archer = _hire("archer", Vector2(110, 430))
 	var healer = _hire("healer", Vector2(330, 430))
@@ -781,9 +781,9 @@ func _troops() -> void:
 	check(stand_bad == 0, "T  ...or into anywhere troops can't get to (%d)" % stand_bad)
 	# A Healer in the corner between the trees and the field edge: she stays put.
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.wave_active = true
 	var cornered = _hire("healer", Vector2(108, 690))
 	cornered.max_hp = 1e6
@@ -798,9 +798,9 @@ func _troops() -> void:
 
 	# Shoves into rock slide along it.
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	var pushed := []
 	for x in [90, 240, 330, 520]:
 		var w = _hire("swordsman", Vector2(x, 450))
@@ -817,9 +817,9 @@ func _troops() -> void:
 	# Archers, knockback, Engineers building; nobody ever inside terrain.
 	for mid in ["ashwatch", "stonehollow"]:
 		await _mission(mid)
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			w.free()
-		main.warriors_changed()
+		main.battlefield.warriors_changed()
 		for k in ["swordsman", "archer", "mage", "frost", "martial", "healer", "bard", "alchemist"]:
 			campaign.unlocked[k] = [3, 3, 3, 3]
 		var posts: Array = Maps.MAPS[CD.MISSIONS[mid]["map"]]["bot_posts"]
@@ -831,13 +831,13 @@ func _troops() -> void:
 			w.hp = w.max_hp
 			main.selected = w
 			for path in [0, 1, 0, 2, 0]:
-				main.upgrade_selected(path)
+				main.groups.upgrade_selected(path)
 			main.selected = null
 			army.append(w)
 		var trained_ok: bool = army.all(func(w): return w.tiers.max() >= 2)
 		check(trained_ok and army.all(func(w): return w.tiers.max() <= 3), "T  %s: trained troops take their tier II-III upgrades, and no further" % mid)
 		main.placing_type = "cannon"
-		main.hire_at(Vector2(320, 680) if mid == "ashwatch" else Vector2(320, 660))
+		main.hiring.hire_at(Vector2(320, 680) if mid == "ashwatch" else Vector2(320, 660))
 		main.placing_type = ""
 		main.wave_active = true
 		main.castle_hp = 1e9
@@ -851,7 +851,7 @@ func _troops() -> void:
 		for f in 60 * 45:
 			await process_frame
 			if f % 300 == 0:
-				for e in main.get_enemies():
+				for e in main.battlefield.get_enemies():
 					e.apply_knockback(Vector2(randf_range(-60, 60), randf_range(-60, 60)))
 			var bad := _troops_inside() + _inside_terrain()
 			if not bad.is_empty():
@@ -859,71 +859,71 @@ func _troops() -> void:
 				if example == "":
 					example = bad[0]
 		check(bad_frames == 0, "T  %s: a 45s battle (Slimes, Skeleton Archers, knockback every 5s) never leaves anyone inside terrain%s" % [mid, "" if bad_frames == 0 else " (%d frames, e.g. %s)" % [bad_frames, example]])
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.free()
-		main.enemies_changed()
+		main.battlefield.enemies_changed()
 
 
 # --- L: placement rules -------------------------------------------------------------------
 
 func _placement() -> void:
 	await _mission("ashwatch")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	var gold: int = main.gold
-	var count: int = main.get_warriors().size()
-	main._on_hire_pressed("swordsman")   # as the hotkey does
-	main.hire_at(Vector2(330, 350))      # the centre rock
-	check(main.get_warriors().size() == count and main.gold == gold, "L  a Swordsman can't be posted on the rock (and costs nothing)")
+	var count: int = main.battlefield.get_warriors().size()
+	main.hiring._on_hire_pressed("swordsman")   # as the hotkey does
+	main.hiring.hire_at(Vector2(330, 350))      # the centre rock
+	check(main.battlefield.get_warriors().size() == count and main.gold == gold, "L  a Swordsman can't be posted on the rock (and costs nothing)")
 	check(main.hud.message_label.text != "", "L  ...and a message says why (\"%s\")" % main.hud.message_label.text)
-	main._on_hire_pressed("tower")
-	main.hire_at(Vector2(560, 600))      # the trees
-	check(main.get_warriors().size() == count, "L  an Archer Tower can't be built in the trees")
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(320, 712))      # the gate
-	check(main.get_warriors().size() == count and "gate" in main.hud.message_label.text, "L  nothing goes in front of the gate (\"%s\")" % main.hud.message_label.text)
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(20, 330))       # tucked between the field edge and the ridge
-	check(main.get_warriors().size() == count, "L  nor where troops can't stand")
+	main.hiring._on_hire_pressed("tower")
+	main.hiring.hire_at(Vector2(560, 600))      # the trees
+	check(main.battlefield.get_warriors().size() == count, "L  an Archer Tower can't be built in the trees")
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(320, 712))      # the gate
+	check(main.battlefield.get_warriors().size() == count and "gate" in main.hud.message_label.text, "L  nothing goes in front of the gate (\"%s\")" % main.hud.message_label.text)
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(20, 330))       # tucked between the field edge and the ridge
+	check(main.battlefield.get_warriors().size() == count, "L  nor where troops can't stand")
 	main.placing_type = ""
 	var w = _hire("swordsman", Vector2(240, 470))
-	check(main.get_warriors().size() == count + 1, "L  open ground is fine")
+	check(main.battlefield.get_warriors().size() == count + 1, "L  open ground is fine")
 	# Move orders, drags and group moves.
 	main.selected = w
-	main.order_move(Vector2(330, 350))
+	main.groups.order_move(Vector2(330, 350))
 	check(w.post == Vector2(240, 470), "L  a move order onto the rock is refused")
-	main._start_drag(w)
+	main.groups._start_drag(w)
 	w.post = Vector2(110, 350)
 	w.position = w.post
-	main._end_drag()
+	main.groups._end_drag()
 	check(w.post == Vector2(240, 470) and w.position == Vector2(240, 470), "L  a unit dragged onto the rock goes back where it was")
 	main.selected = null
 	var w2 = _hire("archer", Vector2(300, 470))
-	main._set_group([w, w2])
-	main.order_group(Vector2(330, 350))
+	main.groups._set_group([w, w2])
+	main.groups.order_group(Vector2(330, 350))
 	await process_frame
-	var on_ground: bool = [w, w2].all(func(x): return main.ground_problem(x.post) == "")
+	var on_ground: bool = [w, w2].all(func(x): return main.hiring.ground_problem(x.post) == "")
 	check(on_ground, "L  a group sent onto the rock is given spots on open ground beside it (%s, %s)" % [w.post.round(), w2.post.round()])
 	main.group = []
-	for x in main.get_warriors():
+	for x in main.battlefield.get_warriors():
 		x.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	# Barricades: their ends may rest on rock, sealing a gap.
-	var walls_before: int = main.get_barricades().size()
+	var walls_before: int = main.battlefield.get_barricades().size()
 	main.placing_type = "barricade"
-	main.hire_at(Vector2(190, 360))   # in the left rock
-	main.hire_at(Vector2(290, 360))   # in the centre rock
+	main.hiring.hire_at(Vector2(190, 360))   # in the left rock
+	main.hiring.hire_at(Vector2(290, 360))   # in the centre rock
 	main.placing_type = ""
-	check(main.get_barricades().size() == walls_before + 1, "L  a barricade across the left gap may rest its ends on the rocks")
+	check(main.battlefield.get_barricades().size() == walls_before + 1, "L  a barricade across the left gap may rest its ends on the rocks")
 	await process_frame
 	check(main.paths.breach_at(Vector2(240, 250), 14.0) == null, "L  ...and enemies route through the other gap rather than break it")
 	# Classic: nothing changes.
 	await _fresh()
-	var n: int = main.get_warriors().size()
-	main._on_hire_pressed("swordsman")
-	main.hire_at(Vector2(330, 350))
-	check(main.get_warriors().size() == n + 1 and main.ground_problem(Vector2(330, 350)) == "", "L  Classic: the same spot is open meadow")
+	var n: int = main.battlefield.get_warriors().size()
+	main.hiring._on_hire_pressed("swordsman")
+	main.hiring.hire_at(Vector2(330, 350))
+	check(main.battlefield.get_warriors().size() == n + 1 and main.hiring.ground_problem(Vector2(330, 350)) == "", "L  Classic: the same spot is open meadow")
 
 
 # --- K: Classic on the campaign's battlefields --------------------------------------------
@@ -996,21 +996,21 @@ func _classic_maps() -> void:
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await _frames(3)
-	main._on_mode_chosen("normal|stonehollow_quarry")
+	main.missions._on_mode_chosen("normal|stonehollow_quarry")
 	await _frames(3)
 	check(not main.campaign and main.map_id == "stonehollow_quarry" and main.paths.has_terrain() and main.FIELD_W == main.get_viewport().get_visible_rect().size.x,
 			"K  Classic on Stonehollow Quarry: its terrain, across the whole %dpx field (no letterbox)" % main.FIELD_W)
 	check(main.castle.pal == main.castle.STYLES["guildhall"] and main.stage_music == "mountain", "K  ...its guildhall and its mountain music")
-	check(main.allowed("mage") and main.allowed("ability:fireball") and main.max_tier("swordsman", 0) == 4 and main.last_wave() == 20,
+	check(main.missions.allowed("mage") and main.missions.allowed("ability:fireball") and main.missions.max_tier("swordsman", 0) == 4 and main.missions.last_wave() == 20,
 			"K  ...and Classic's rules: every unit, every tier, 20 waves")
 	main.gold = 99999
-	main._on_hire_pressed("mage")
-	main.hire_at(Maps.fitted(Maps.MAPS["stonehollow_quarry"], main.FIELD_W)["bot_posts"][0])   # open ground on the stretched map
-	check(main.get_warriors().any(func(w): return w.kind == "mage"), "K  a Mage can be posted (no campaign locks)")
+	main.hiring._on_hire_pressed("mage")
+	main.hiring.hire_at(Maps.fitted(Maps.MAPS["stonehollow_quarry"], main.FIELD_W)["bot_posts"][0])   # open ground on the stretched map
+	check(main.battlefield.get_warriors().any(func(w): return w.kind == "mage"), "K  a Mage can be posted (no campaign locks)")
 	check(main.battle_xp.is_empty(), "K  ...and Classic earns no campaign XP")
 	# Its own best record, apart from the meadow's.
 	main.records_path = "user://terrain_test_records.cfg"
-	main._save_record(7)
+	main.modes._save_record(7)
 	var cfg := ConfigFile.new()
 	cfg.load(main.records_path)
 	check(cfg.get_value("best", "normal@stonehollow_quarry", 0) == 7 and cfg.get_value("best", "normal", 0) == 0, "K  its best is kept apart from the meadow's")
@@ -1021,7 +1021,7 @@ func _classic_maps() -> void:
 		main = load("res://main.tscn").instantiate()
 		root.add_child(main)
 		await _frames(3)
-		main._on_mode_chosen("normal|" + map_id)
+		main.missions._on_mode_chosen("normal|" + map_id)
 		await _frames(2)
 		var r: float = Data.ENEMIES["ogre_king"]["radius"]
 		var p := Vector2(main.FIELD_W / 2.0, -r)
@@ -1041,7 +1041,7 @@ func _classic_maps() -> void:
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await _frames(3)
-	main._on_mode_chosen("normal")
+	main.missions._on_mode_chosen("normal")
 	await _frames(2)
 	check(main.map_id == "" and not main.paths.has_terrain() and main.castle.pal == main.castle.STYLES["keep"] and main.stage_music == "calm",
 			"K  Classic picked without a battlefield is the open meadow, as before")
@@ -1053,10 +1053,10 @@ func _classic_maps() -> void:
 ## couldn't reach it (a wolf in the High Pass's cliff, once).
 func _set_spots() -> void:
 	await _fresh()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	var paths = main.paths
-	var CDm = load("res://scripts/campaign_data.gd")
+	var CDm = load("res://scripts/data/campaign_data.gd")
 	var Sc = load("res://scripts/mission/scenarios.gd")
 	var all := {}
 	for m in CDm.MISSIONS:
@@ -1086,7 +1086,7 @@ func _set_spots() -> void:
 	# And whatever a battle asks for: one set in rock comes out on the nearest open ground.
 	main.rules.change_field("convoy_pass") if main.rules.has_method("change_field") else null
 	paths.set_map(Maps.get_map("convoy_pass"))
-	main._spawn_enemy("wolf", 3, Vector2(80, 420))
+	main.waves._spawn_enemy("wolf", 3, Vector2(80, 420))
 	var wolf = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	check(wolf.kind == "wolf" and not paths.blocked(wolf.position, wolf.radius) and wolf.position.distance_to(Vector2(80, 420)) < 140.0,
 			"S  an enemy set in a cliff comes out on the nearest open ground (%s)" % wolf.position)

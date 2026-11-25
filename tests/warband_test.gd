@@ -1,5 +1,5 @@
 extends SceneTree
-## Enemy warbands (scripts/warband.gd): a wave is cut into bands (each squad a band of its
+## Enemy warbands (scripts/enemies/warband.gd): a wave is cut into bands (each squad a band of its
 ## own), a band comes on at one place, forms up in its ranks (shields and brutes in front,
 ## goblins and sappers next, drummers, then archers and Boltflingers, casters at the back,
 ## wolves on the wings), marches on at its slowest's pace keeping them, holds its ranks
@@ -7,7 +7,7 @@ extends SceneTree
 ##   Godot --headless --path . --fixed-fps 60 -s tests/warband_test.gd
 ## Exits 1 if anything failed. (Kept in the repository so it's always there to run.)
 
-const Warband = preload("res://scripts/warband.gd")
+const Warband = preload("res://scripts/enemies/warband.gd")
 
 var main
 var fails := 0
@@ -38,9 +38,9 @@ func _fresh(mode := "normal") -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	main.records_path = ""
-	main.choose_mode(mode)
+	main.setup.choose_mode(mode)
 	await _frames(2)
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	main.wave_active = true
 
@@ -48,11 +48,11 @@ func _fresh(mode := "normal") -> void:
 ## Sends these kinds in as one wave's worth of bands, and waits till they've all come on.
 func _send(kinds: Array) -> Array:
 	main.wave_squads = []
-	main.spawn_queue = main._banded(kinds, 1)
+	main.spawn_queue = main.waves._banded(kinds, 1)
 	main.spawn_interval = 0.2
 	main.spawn_timer = 0.0
 	await _frames(int(kinds.size() * 0.2 * 60.0) + 20)
-	return main.get_enemies()
+	return main.battlefield.get_enemies()
 
 
 func _of(list: Array, kind: String) -> Array:
@@ -166,9 +166,9 @@ func _charging() -> void:
 			break
 	main.gold = 100000
 	main.placing_type = "swordsman"
-	main.hire_at(Vector2(band.anchor.x, band.anchor.y + 260.0))
+	main.hiring.hire_at(Vector2(band.anchor.x, band.anchor.y + 260.0))
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	var charged := false
 	for i in 900:
 		await process_frame
@@ -184,5 +184,5 @@ func _charging() -> void:
 
 func _tutorial() -> void:
 	await _fresh("tutorial")
-	main.spawn_queue = main._banded(["goblin", "goblin", "orc"], 1)
+	main.spawn_queue = main.waves._banded(["goblin", "goblin", "orc"], 1)
 	check(main.spawn_queue.all(func(q): return int(q[2]) == -1), "The Tutorial's foes come on as before, in no band")

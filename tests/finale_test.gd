@@ -25,8 +25,8 @@ extends SceneTree
 ## Uses a scratch save path, never the player's own save.
 
 const TEST_SAVE := "user://finale_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
-const Data = preload("res://scripts/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
 const OathArts = preload("res://scripts/mission/oath_arts.gd")
 
 var main
@@ -106,10 +106,10 @@ func _start(zone: int, cp: Dictionary = {}) -> void:
 	main.hud.hide_mode_select()
 	campaign.op_resume_zone = zone
 	campaign.mission_id = "ds_assault"
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await process_frame
 	_skip_story()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	main.deploying = false
 	main.forced_auto = false
@@ -157,11 +157,11 @@ func _slam() -> void:
 	await _all_in()
 	var r = main.rules
 	var k = r.king
-	main.clear_enemies() if false else null
-	for e in main.get_enemies():
+	main.modes.clear_enemies() if false else null
+	for e in main.battlefield.get_enemies():
 		if e != k:
 			e.queue_free()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	k.remove_meta("guard")
@@ -191,12 +191,12 @@ func _slam() -> void:
 
 func _unit(kind: String, at: Vector2):
 	main.gold += 5000
-	var had: Array = main.get_warriors()
+	var had: Array = main.battlefield.get_warriors()
 	main.placing_type = kind
-	main.hire_at(main.paths.open_spot(at))
+	main.hiring.hire_at(main.paths.open_spot(at))
 	main.placing_type = ""
 	main.gold -= 5000
-	var fresh: Array = main.get_warriors().filter(func(x): return not had.has(x))
+	var fresh: Array = main.battlefield.get_warriors().filter(func(x): return not had.has(x))
 	if fresh.is_empty():
 		return null
 	fresh[0].build_left = 0.0
@@ -216,7 +216,7 @@ func _prepared() -> void:
 	check(campaign.beacon_count() == 9, "P  every region secured: all nine (%d)" % campaign.beacon_count())
 	await _start(0)
 	var r = main.rules
-	var guards: Array = main.get_enemies().filter(func(e): return e.has_meta("title"))
+	var guards: Array = main.battlefield.get_enemies().filter(func(e): return e.has_meta("title"))
 	check(r.united() and r.towers.size() == towers0 + 1, "P  all nine: he's ready: a tower more in the field (%d, not %d)" % [r.towers.size(), towers0])
 	var lines9: Array = campaign.story_lines("ds_assault_intro").map(func(l): return l["text"])
 	check(lines9.size() > lines0.size() and lines9.any(func(t): return "nine" in t.to_lower()), "P  ...and he says so (and Ysolde and Hale see it)")
@@ -232,7 +232,7 @@ func _prepared() -> void:
 	await _start(100 + _room("gallery"), {"zone": 100 + _room("gallery"), "room": _room("gallery"), "entry": "s", "name": "The Long Gallery",
 			"gold": 400, "wave": 12, "army": ARMY, "xp": {}, "owned": [], "standard": 1.0})
 	await _all_in()
-	var kg: Array = main.get_enemies().filter(func(e): return e.get_meta("title", "") == "King's Guard")
+	var kg: Array = main.battlefield.get_enemies().filter(func(e): return e.get_meta("title", "") == "King's Guard")
 	check(kg.size() >= 2, "P  ...and his King's Guard stand in the Long Gallery (%d)" % kg.size())
 
 
@@ -246,16 +246,16 @@ func _throne_and_standard() -> void:
 	await _start(100 + _room("throne"), _throne_cp())
 	# Marching in (not taken up again): he speaks the moment the army comes through the door.
 	var rr = main.rules
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.queue_free()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await process_frame
 	rr.told_throne = false
 	stories = 0
 	rr._enter_room(rr.room_i, ARMY.map(func(rec): return [rec, 4.0]), 1.0, "s", false)
 	await process_frame
-	check(main.hud.story != null and main.get_tree().paused and rr.phase == "enter" and main.get_warriors().is_empty(),
+	check(main.hud.story != null and main.get_tree().paused and rr.phase == "enter" and main.battlefield.get_warriors().is_empty(),
 			"T  his cutscene plays the moment the army comes into the throne room, the game held still (nobody in yet)")
 	_skip_story()
 	stories = 0
@@ -302,7 +302,7 @@ func _unbound_and_escape() -> void:
 	await _all_in()
 	var r = main.rules
 	var k = r.king
-	var guards: Array = main.get_enemies().filter(func(e): return e.get_meta("title", "") == "King's Guard")
+	var guards: Array = main.battlefield.get_enemies().filter(func(e): return e.get_meta("title", "") == "King's Guard")
 	check(guards.size() >= 2, "U  all nine: his King's Guard beside him in the throne room (%d)" % guards.size())
 	k.take_damage(1e9)
 	await _frames(30)
@@ -312,12 +312,12 @@ func _unbound_and_escape() -> void:
 	var cp: Dictionary = campaign.checkpoint("ds_assault", 200 + _room("throne"))
 	check(cp.get("escape", false), "U  ...a checkpoint for getting out")
 	# What of his is left runs for the way out: any that make it are counted.
-	var fleeing: Array = main.get_enemies().filter(func(e): return e.has_meta("fleeing"))
+	var fleeing: Array = main.battlefield.get_enemies().filter(func(e): return e.has_meta("fleeing"))
 	check(not fleeing.is_empty() and fleeing.all(func(e): return r.enemy_goal(e) == null), "U  ...the guard he leaves runs for the way out too (%d)" % fleeing.size())
 	var esc0: int = r.escaped
 	r.on_reached_bottom(fleeing[0])
 	check(r.escaped == esc0 + 1, "U  ...one that gets out is counted (it'll be outside)")
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.queue_free()
 	# Stone falls, shown first.
 	r.rock_t = 0.0
@@ -330,7 +330,7 @@ func _unbound_and_escape() -> void:
 		check(main.map_id == CD.MISSIONS["ds_assault"]["assault"]["castle"]["rooms"][_room(to)]["map"] and r.entry == "n" and r.escaping,
 				"U  ...into %s by its north door, on the way out" % to)
 		if to == "gatehall":
-			var cells: Array = main.get_enemies().filter(func(e): return e.has_meta("fleeing"))
+			var cells: Array = main.battlefield.get_enemies().filter(func(e): return e.has_meta("fleeing"))
 			check(cells.size() >= 4, "U  ...the Guardroom Cells weren't taken: their guards run for it through the hall (%d)" % cells.size())
 			var before: int = r.escaped
 			check(true, "U  (%d got out so far)" % before)
@@ -383,7 +383,7 @@ func _field() -> void:
 	await _frames(30)
 	var f = main.rules
 	check(f.get_script() == load("res://scripts/mission/rules_finale.gd") and main.map_id == "ds_dawnfield", "F  out of the castle: the Fields of Dawn")
-	var crews: Array = main.get_warriors().filter(func(w): return w.kind == "archer" and w.tiers == [2, 0, 0, 2] and not main.temp_allies.has(w))
+	var crews: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "archer" and w.tiers == [2, 0, 0, 2] and not main.missions.temp_allies.has(w))
 	check(crews.size() >= 1, "F  ...the crew who held a tower outside is back in the fight")
 	var want := 0
 	for fac in f.HELP:
@@ -392,7 +392,7 @@ func _field() -> void:
 	var here := 0
 	for fac in f.FIELDS[0]["help"]:
 		here += f.help_points(fac)
-	check(main.temp_allies.size() == here and here < want, "F  ...only the peoples waiting on this field are here at first (%d of %d)" % [main.temp_allies.size(), want])
+	check(main.missions.temp_allies.size() == here and here < want, "F  ...only the peoples waiting on this field are here at first (%d of %d)" % [main.missions.temp_allies.size(), want])
 	check(campaign.checkpoint("ds_assault", 300).get("zone", 0) == 300, "F  ...a checkpoint for the field")
 	# Out of the castle: it comes down, and he bursts out through the ruins, swelling to a giant.
 	var shook := false
@@ -415,11 +415,11 @@ func _field() -> void:
 			"F  ...and the broken oath swells him to a giant (x%.2f)" % (k.sprite_scale / float(d["scale"])))
 	check(main.position == Vector2.ZERO, "F  ...the view steady again after")
 	await _frames(5)
-	check(f.escaped >= 9 and main.get_enemies().filter(func(e): return e != k).size() == f.escaped, "F  ...and his that got out of the castle are on the field (%d: the Cells' guards among them)" % f.escaped)
-	main.clear_enemies() if false else null
+	check(f.escaped >= 9 and main.battlefield.get_enemies().filter(func(e): return e != k).size() == f.escaped, "F  ...and his that got out of the castle are on the field (%d: the Cells' guards among them)" % f.escaped)
+	main.modes.clear_enemies() if false else null
 	# His charge: its line first, then the rush, then he's exposed.
-	main.clear_enemies() if false else null
-	for w in main.get_warriors():
+	main.modes.clear_enemies() if false else null
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	k.position = Vector2(320, 300)
@@ -445,14 +445,14 @@ func _field() -> void:
 		await process_frame
 	# Worn down to his mark: he goes no lower, roars, and the army falls back.
 	k.charge_timer = 99.0
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if e != k:
 			e.queue_free()   # (the fire alone: nothing else fighting the army here)
 	var slow = f._make_unit({"kind": "alchemist", "post": k.position + Vector2(40, 170)})   # (the slowest troop there is, just outside his slam)
 	seed(5150)   # (where the bursts land is random: the same each run here)
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.hp = w.max_hp   # (the charge's bait mended: only what the fire does counts here)
-	var army0: int = main.get_warriors().size()
+	var army0: int = main.battlefield.get_warriors().size()
 	k.take_damage(1e9)
 	check(not k.dead and is_equal_approx(k.hp, k.max_hp * 0.66) and f.wrath != null, "F  worn to 2/3 on the first field, he goes no lower: he draws on the beacon")
 	await _frames(60)
@@ -460,11 +460,11 @@ func _field() -> void:
 	check(f.wrath.warning() and fires.is_empty() and "fall back" in f.status(), "F  ...a warning first, before any fire (%s)" % f.status())
 	for i in int(60 * (OathArts.BeaconWrath.WARN + 2.0)):
 		await process_frame
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			if e != k:
 				e.queue_free()
 	fires = main.corpse_layer.get_children().filter(func(n): return n is OathArts.WrathFire)
-	var burnt: Array = main.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and w.hp < w.max_hp * 0.5)
+	var burnt: Array = main.battlefield.get_warriors().filter(func(w): return w.is_active() and not w.is_emplacement() and w.hp < w.max_hp * 0.5)
 	check(f.field == 0 and not fires.is_empty() and fires.all(func(b): return b.position.y > k.position.y - 70.0) and burnt.is_empty(),
 			"F  ...then bursts of fire across the field from him, marked first, the army getting ahead of them (%d bursts; hurt: %s; king at %.0f, bursts from %.0f)" % [fires.size(), burnt.map(func(w): return "%s %.0f/%.0f" % [w.kind, w.hp, w.max_hp]), k.position.y, fires.map(func(b): return b.position.y).min() if not fires.is_empty() else 0.0])
 	var gap := 0.0
@@ -476,14 +476,14 @@ func _field() -> void:
 			break
 		if not is_instance_valid(slow) or not slow.is_active():
 			slow_fell = true
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if w.is_active() and not w.is_emplacement() and w.hp < w.max_hp * 0.5:
 				burnt_bad = true
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			if e != k:
 				e.queue_free()   # (the fire alone)
 		if f.wrath != null and is_instance_valid(f.wrath) and not f.wrath.warning():
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				if w.is_active() and not w.is_emplacement():
 					gap = maxf(gap, f.wrath.front - w.position.y)
 	check(gap < 70.0 and not slow_fell and not burnt_bad, "F  ...slow enough that nobody's caught as it creeps down the field, even an Alchemist that started just below him (worst %.0f px behind its front, getting round him)" % gap)
@@ -492,7 +492,7 @@ func _field() -> void:
 	here = 0
 	for fac in f.FIELDS[1]["help"]:
 		here += f.help_points(fac)
-	check(main.get_warriors().size() >= army0 + here - 1, "F  ...carried as it stood, and the peoples dug in there join it (%d, was %d, +%d)" % [main.get_warriors().size(), army0, here])
+	check(main.battlefield.get_warriors().size() >= army0 + here - 1, "F  ...carried as it stood, and the peoples dug in there join it (%d, was %d, +%d)" % [main.battlefield.get_warriors().size(), army0, here])
 	var cp1: Dictionary = campaign.checkpoint("ds_assault", 301)
 	check(cp1.get("field", -1) == 1 and is_equal_approx(float(cp1.get("king", 0.0)), 0.66), "F  ...a checkpoint for the Bailey (him at 66%)")
 	check(f.king == null and f.king_in > 10.0, "F  ...with a lead on him (%.0fs)" % f.king_in)
@@ -510,7 +510,7 @@ func _field() -> void:
 		near.move_mode = "hold"
 	k.embers_timer = 0.0
 	await _frames(3)
-	var patches: Array = main.corpse_layer.get_children().filter(func(n): return n.get_script() == load("res://scripts/ember_patch.gd"))
+	var patches: Array = main.corpse_layer.get_children().filter(func(n): return n.get_script() == load("res://scripts/enemies/ember_patch.gd"))
 	check(not patches.is_empty() and patches[0].t < patches[0].warn, "F  ...here his burning ground too, marked before it catches")
 	await _frames(int(60 * 1.6))
 	check(near == null or near.position.distance_to(patches[0].position) > patches[0].radius, "F  ...and the troop it was marked under gets off it")
@@ -552,7 +552,7 @@ func _field() -> void:
 	await _start(300, {"zone": 300, "name": "The Fields of Dawn", "gold": 333, "wave": 14, "army": ARMY, "xp": {}, "owned": [],
 			"standard": 0.8, "escaped": 3, "garrisons": []})
 	await _frames(10)
-	check(main.rules.get_script() == load("res://scripts/mission/rules_finale.gd") and main.gold == 333 and main.get_warriors().filter(func(w): return not main.temp_allies.has(w)).size() == ARMY.size(),
+	check(main.rules.get_script() == load("res://scripts/mission/rules_finale.gd") and main.gold == 333 and main.battlefield.get_warriors().filter(func(w): return not main.missions.temp_allies.has(w)).size() == ARMY.size(),
 			"F  taken up again on the field: as the army came out onto it")
 
 
@@ -565,8 +565,8 @@ func _arts() -> void:
 			"standard": 1.0, "king": 1.0, "escaped": 0, "garrisons": []})
 	await _frames(5)
 	var f = main.rules
-	main.clear_enemies()
-	for w in main.get_warriors():
+	main.modes.clear_enemies()
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	# His health, by the army.
@@ -595,10 +595,10 @@ func _arts() -> void:
 	await _frames(2)
 	var arrows: Array = main.fx_layer.get_children().filter(func(n): return n is OathArts.OathArrow)
 	check(arrows.size() >= 4, "O  Greenwood's art turned on you: fire arrows, one at each of the farthest troops (%d)" % arrows.size())
-	var t0: Array = main.get_warriors().map(func(w): return w.hp)
+	var t0: Array = main.battlefield.get_warriors().map(func(w): return w.hp)
 	await _frames(90)
 	var hurt := 0
-	var ws: Array = main.get_warriors()
+	var ws: Array = main.battlefield.get_warriors()
 	for i in mini(ws.size(), t0.size()):
 		if ws[i].hp < t0[i]:
 			hurt += 1
@@ -610,7 +610,7 @@ func _arts() -> void:
 	f.use_art("stonehollow")
 	await _frames(2)
 	var lances: Array = main.corpse_layer.get_children().filter(func(n): return n is OathArts.OathLance)
-	check(lances.size() == 1 and main.dangers().size() >= 1, "O  Stonehollow's: a ballista bolt's line shown on the ground first")
+	check(lances.size() == 1 and main.battlefield.dangers().size() >= 1, "O  Stonehollow's: a ballista bolt's line shown on the ground first")
 	await _frames(90)
 	check(pinned.hp < hp_p, "O  ...then the bolt, through whoever's still in its line")
 	# Frostmarch's: a ring of frost; whoever's still in it is frozen.
@@ -627,31 +627,31 @@ func _arts() -> void:
 	await _frames(110)
 	check(cold.dazed > 1.0 and cold.hp < cold.max_hp, "O  ...whoever's still in it when it lands is frozen")
 	# Deepdelve's and the Monastery's: shells and a Spirit Bomb, rings on the ground first.
-	var shells0: int = main.dangers().size()
+	var shells0: int = main.battlefield.dangers().size()
 	f.use_art("deepdelve")
 	f.use_art("monastery")
 	await _frames(2)
-	check(main.dangers().size() >= shells0 + 3, "O  Deepdelve's shells and the Monastery's Spirit Bomb, each marked on the ground (%d)" % (main.dangers().size() - shells0))
+	check(main.battlefield.dangers().size() >= shells0 + 3, "O  Deepdelve's shells and the Monastery's Spirit Bomb, each marked on the ground (%d)" % (main.battlefield.dangers().size() - shells0))
 	# The Spires': the dead rise round him.
-	var e0: int = main.get_enemies().size()
+	var e0: int = main.battlefield.get_enemies().size()
 	f.use_art("spires")
 	await _frames(2)
-	check(main.get_enemies().size() >= e0 + 3, "O  the Spires' necromancy: the dead rise round him (%d)" % (main.get_enemies().size() - e0))
+	check(main.battlefield.get_enemies().size() >= e0 + 3, "O  the Spires' necromancy: the dead rise round him (%d)" % (main.battlefield.get_enemies().size() - e0))
 	# The Free Cities': a dirge: the army round him weakened, his horde driven on.
 	var near = f._make_unit({"kind": "swordsman", "post": k.position + Vector2(60, 120)})
 	near.move_mode = "hold"
-	main._spawn_enemy("orc", 10, k.position + Vector2(-90, 60))
+	main.waves._spawn_enemy("orc", 10, k.position + Vector2(-90, 60))
 	var minion = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	minion.speed = 0.0
 	f.use_art("freecities")
 	await _frames(20)
 	check(near.hex_left > 0.0 and near.buff["damage"] < 0.0 and minion.rally > 0.0, "O  the Free Cities': a dirge: the army near him weakened, his horde driven on")
 	# Mercyvale's: Stolen Mercy, drawn first: hit him hard and it's broken off; let it be and it heals.
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	var keep = f._make_unit({"kind": "swordsman", "post": Vector2(600, 700)})   # (one left: the army isn't gone)
 	keep.move_mode = "hold"
-	main._spawn_enemy("orc", 10, k.position + Vector2(90, 60))
+	main.waves._spawn_enemy("orc", 10, k.position + Vector2(90, 60))
 	minion = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	minion.speed = 0.0
 	await _frames(2)

@@ -24,8 +24,8 @@ extends SceneTree
 ##    to its limit, on its cooldown; Crippling Charges slow; a dodge leaves one only if one's ready
 ## P  Prices and the six-upgrade limit as they were; old saves' path picks land on the new paths
 
-const Data = preload("res://scripts/data.gd")
-const Defense = preload("res://scripts/defense.gd")
+const Data = preload("res://scripts/data/data.gd")
+const Defense = preload("res://scripts/troops/defense.gd")
 var main
 var fails := 0
 var checks := 0
@@ -88,7 +88,7 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	main.deploying = false
 	main.wave_active = true
@@ -97,10 +97,10 @@ func _fresh() -> void:
 
 func _hire(kind: String, at: Vector2, tiers := [0, 0, 0, 0]):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -111,7 +111,7 @@ func _hire(kind: String, at: Vector2, tiers := [0, 0, 0, 0]):
 
 
 func _foe(kind: String, at: Vector2, hp := -1.0):
-	main._spawn_enemy(kind, 1, at)
+	main.waves._spawn_enemy(kind, 1, at)
 	var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	if hp > 0.0:
 		e.max_hp = hp
@@ -596,7 +596,7 @@ func _traps() -> void:
 		for t in al.my_traps:
 			if is_instance_valid(t) and not laid.has(t.get_instance_id()):
 				laid[t.get_instance_id()] = true
-				for e in main.get_enemies():
+				for e in main.battlefield.get_enemies():
 					if e.position.distance_to(t.position) < e.radius + 10.0:
 						under += 1
 	check(laid.size() >= 2 and moved < 3.0, "T  Trapcraft: standing at its post, it sets charges in the enemy's way (%d in 12s)" % laid.size())
@@ -604,13 +604,13 @@ func _traps() -> void:
 	check(al.my_traps.size() <= int(al.traps["max"]) and laid.size() <= int(12.0 / float(al.traps["every"])) + 2,
 			"T  ...no more than its limit (%d down of %d) or its cooldown allows" % [al.my_traps.size(), int(al.traps["max"])])
 	var slow_e = _foe("orc", Vector2(100, 400), 99999.0)
-	var t = preload("res://scripts/trap.gd").new()
+	var t = preload("res://scripts/troops/trap.gd").new()
 	t.main = main
 	t.slow = al.traps["slow"]
 	t.radius = 40.0
 	t.damage = 1.0
 	t.position = slow_e.position
-	main.add_projectile(t)
+	main.effects.add_projectile(t)
 	t._explode()
 	check(slow_e.slow_timer > 2.0 and slow_e.slow_factor < 0.7, "T  Crippling Charges: the blast slows what it catches 35%")
 	# A dodge leaves one only when one's ready.

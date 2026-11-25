@@ -36,8 +36,8 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://dawnspire_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
-const Data = preload("res://scripts/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 var main
 var fails := 0
@@ -81,11 +81,11 @@ func _assault(resume := 0) -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	campaign.op_resume_zone = resume
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	_quiet()
 
@@ -95,7 +95,7 @@ func _quiet() -> void:
 	main.forced_auto = false
 	main.auto_play = false
 	main.auto_timer = 9999.0
-	main.clear_enemies()
+	main.modes.clear_enemies()
 
 
 func _run() -> void:
@@ -119,19 +119,38 @@ func _run() -> void:
 
 func _unit(kind: String, at: Vector2):
 	main.gold = 99999
-	var had: Array = main.get_warriors()
+	var had: Array = main.battlefield.get_warriors()
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var fresh: Array = main.get_warriors().filter(func(x): return not had.has(x))
+	var fresh: Array = main.battlefield.get_warriors().filter(func(x): return not had.has(x))
 	if fresh.is_empty():
 		return null
 	fresh[0].position = fresh[0].post
 	return fresh[0]
 
 
+## The nearest spot to `near` a `kind` can be hired on (troops wander, so a fixed spot
+## may have one standing on it): rings out from `near`, 10px at a time.
+func _free_spot(kind: String, near: Vector2) -> Vector2:
+	main.placing_type = kind
+	var found := near
+	for ring in 8:
+		var done := false
+		for i in maxi(ring * 6, 1):
+			var p := near + Vector2.RIGHT.rotated(TAU * i / maxi(ring * 6, 1)) * ring * 10.0
+			if main.hiring.can_post_at(p):
+				found = p
+				done = true
+				break
+		if done:
+			break
+	main.placing_type = ""
+	return found
+
+
 func _foe(kind: String, at: Vector2):
-	main._spawn_enemy(kind, 8, at)
+	main.waves._spawn_enemy(kind, 8, at)
 	return main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 
 
@@ -174,12 +193,12 @@ func _opening() -> void:
 	await _assault()
 	check(main.rules.get_script().resource_path.ends_with("rules_assault.gd") and main.map_id == "ds_approach",
 			"O  the assault: on the Approach")
-	var lent: Array = main.temp_allies.map(func(w): return w.kind)
+	var lent: Array = main.missions.temp_allies.map(func(w): return w.kind)
 	check(lent.count("mage") == 1 and lent.has("archer") and lent.has("frost") and lent.has("martial"),
 			"O  help from every people that's joined (%s)" % ", ".join(lent))
 	check(main.rules.wagon.cargo == "ram" and main.rules.gate.is_solid() and main.rules.towers.size() == 2 and main.rules.caches.size() == 2,
 			"O  the ram, a shut gate, two archer towers and two caches of supplies")
-	check(main.wave_level(1) == 8 and main.wave_level(11) == 12, "O  the enemy grows slowly over the long fight (level %d at wave 11)" % main.wave_level(11))
+	check(main.missions.wave_level(1) == 8 and main.missions.wave_level(11) == 12, "O  the enemy grows slowly over the long fight (level %d at wave 11)" % main.missions.wave_level(11))
 
 
 # --- G ---------------------------------------------------------------------------------------
@@ -189,7 +208,7 @@ func _gates() -> void:
 	await _assault()
 	var rules = main.rules
 	var gate = rules.gate
-	check(main.paths.solid_objs.has(gate) and main.ground_problem(gate.position + Vector2(0, -10)) != "", "G  a shut gate blocks the way through the wall")
+	check(main.paths.solid_objs.has(gate) and main.hiring.ground_problem(gate.position + Vector2(0, -10)) != "", "G  a shut gate blocks the way through the wall")
 	await _ram_to_gate()
 	check(rules.wagon.arrived, "G  the ram reaches the gate")
 	var hp0: float = gate.hp
@@ -201,11 +220,11 @@ func _gates() -> void:
 	var hp1: float = gate.hp
 	await _frames(90)
 	check(rules.wagon.halted and gate.hp >= hp1 - 1.0, "G  not while an enemy's at the ram")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	await _frames(5)
 	gate.batter(99999.0)
 	await _frames(5)
-	check(gate.taken and not gate.is_solid() and main.ground_problem(gate.position + Vector2(0, -10)) == "", "G  broken, the gate's open: the way's clear")
+	check(gate.taken and not gate.is_solid() and main.hiring.ground_problem(gate.position + Vector2(0, -10)) == "", "G  broken, the gate's open: the way's clear")
 	# On into the Bailey, and its portcullis.
 	await _go_on("ds_bailey")
 	_quiet()
@@ -240,7 +259,7 @@ func _towers() -> void:
 		low = minf(low, sw.hp)
 	# A troop following the ram too closely isn't left under it, walking into it for good.
 	var close = _unit("swordsman", rules.wagon.position + Vector2(60, 0))
-	main.set_follow(rules.wagon, [close])
+	main.formation_ctl.set_follow(rules.wagon, [close])
 	close.anchor_off = Vector2(20, 0)
 	await _frames(60 * 2)
 	var room: float = rules.wagon.RADIUS + close.RADIUS
@@ -248,13 +267,13 @@ func _towers() -> void:
 			"T  a troop following the ram too close keeps just clear of it (and gets there)")
 	close.queue_free()
 	check(low < hp0, "T  an enemy tower shoots a troop in reach")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	main.wave_active = false
 	await _frames(2)
-	check(main.get_enemies().is_empty() and main.fighting(), "T  an enemy archer tower standing keeps the battle on (no troops picked up and moved meanwhile)")
+	check(main.battlefield.get_enemies().is_empty() and main.hiring.fighting(), "T  an enemy archer tower standing keeps the battle on (no troops picked up and moved meanwhile)")
 	# No tower stands on the ram's road (the nine-beacon route's extra ones too): the ram
 	# would roll through it.
-	var Maps = preload("res://scripts/maps.gd")
+	var Maps = preload("res://scripts/campaign/maps.gd")
 	var on_road := []
 	var zs: Array = CD.MISSIONS["ds_assault"]["assault"]["zones"]
 	var prep: Array = CD.MISSIONS["ds_assault"]["assault"]["prepared"]["towers"]
@@ -280,7 +299,7 @@ func _towers() -> void:
 	for i in 15:
 		await process_frame
 		for n in main.fx_layer.get_children():
-			if n.get_script() == preload("res://scripts/enemy_shot.gd") and is_instance_valid(n.target) and not shot_at.has(n.target):
+			if n.get_script() == preload("res://scripts/enemies/enemy_shot.gd") and is_instance_valid(n.target) and not shot_at.has(n.target):
 				shot_at.append(n.target)
 	check(shot_at.has(near) and not shot_at.has(far), "T  ...the moment one comes in reach (%.0f, a tower Archer's), not before" % reach)
 	near.queue_free()
@@ -292,7 +311,7 @@ func _towers() -> void:
 	check(tower.taken and not tower.is_solid(), "T  troops round it with no enemy there take it")
 	var shots := 0
 	for n in main.fx_layer.get_children():
-		if n.get_script() == preload("res://scripts/enemy_shot.gd"):
+		if n.get_script() == preload("res://scripts/enemies/enemy_shot.gd"):
 			shots += 1
 	await _frames(60 * 3)
 	var hp1: float = sw.hp
@@ -307,7 +326,7 @@ func _towers() -> void:
 	var base_range: float = archer.attack_range
 	archer.order_to(tower.position)
 	await _frames(60 * 3)
-	var plain: Array = main.get_warriors().filter(func(w): return w.kind == "tower" and w.has_meta("captured"))
+	var plain: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "tower" and w.has_meta("captured"))
 	check(plain.size() == 1 and plain[0].spent == 0 and plain[0].position.distance_to(tower.position) < 4.0 and tower.crewed,
 			"T  the tower taken: your plain Tower stands where it stood (free)")
 	check(plain.size() == 1 and archer.garrison == plain[0] and plain[0].crew_in == archer and is_instance_valid(archer),
@@ -319,9 +338,9 @@ func _towers() -> void:
 	await _frames(5)
 	rules.enter_next()
 	await _frames(5)
-	var archers: Array = main.get_warriors().filter(func(w): return w.kind == "archer" and not main.temp_allies.has(w))
+	var archers: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "archer" and not main.missions.temp_allies.has(w))
 	var held: Array = rules.garrisons
-	check(main.get_warriors().filter(func(w): return w.kind == "tower").is_empty() and archers.is_empty() and held.size() == 1
+	check(main.battlefield.get_warriors().filter(func(w): return w.kind == "tower").is_empty() and archers.is_empty() and held.size() == 1
 			and held[0]["zone"] == 0 and held[0]["tower"] == "tower" and held[0]["crew"]["kind"] == "archer" and held[0]["crew"]["tiers"] == [2, 0, 0, 2],
 			"T  moving on, the crew stays behind holding its tower, kept (as trained as it is) for the retreat (%s)" % str(held))
 	rules.checkpoint()
@@ -333,16 +352,16 @@ func _towers() -> void:
 func _side_orders() -> void:
 	_at_dawnspire()
 	await _assault()
-	var Warrior = preload("res://scripts/warrior.gd")
+	var Warrior = preload("res://scripts/troops/warrior.gd")
 	var rules = main.rules
 	check(Warrior.priorities_for(main).has("side") and Warrior.PRIORITY_NAMES["side"] == "Side Objectives",
 			"D  the assault offers a Side Objectives target priority, beside Objective")
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await process_frame
 	var a = _unit("swordsman", Vector2(300, 600))
 	var b = _unit("swordsman", Vector2(340, 600))
-	main.give_order("priority", "side", [a, b])
+	main.orders.give_order("priority", "side", [a, b])
 	await _frames(60)
 	var jobs: Array = [(a.get_meta("side_job") if a.has_meta("side_job") else null), (b.get_meta("side_job") if b.has_meta("side_job") else null)]
 	check(jobs.all(func(j): return j != null) and a.post.distance_to(jobs[0].position) < 70.0,
@@ -354,8 +373,11 @@ func _side_orders() -> void:
 		o.taken = true
 	await _frames(60 * 14)
 	check(tower.taken, "D  ...and take it")
-	var archer = _unit("archer", Vector2(320, 560))
-	main.give_order("priority", "side", [archer])
+	var archer = _unit("archer", _free_spot("archer", Vector2(320, 560)))   # (clear of the pair, back round the ram)
+	check(archer != null, "D  an Archer can be hired beside them")
+	if archer == null:
+		return
+	main.orders.give_order("priority", "side", [archer])
 	await _frames(60 * 8)
 	check(tower.crewed and archer.garrison != null, "D  an Archer on it climbs into a tower that's been taken")
 	await _frames(60)
@@ -384,7 +406,7 @@ func _prisoners_and_supplies() -> void:
 	sw.order_to(cache.position + Vector2(8, 10))
 	await _frames(20)
 	check(not cache.taken, "S  supplies with an enemy on them aren't claimed")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	main.gold = gold0
 	await _frames(60 * 2)
 	check(cache.taken and main.gold >= gold0 + cache.gold, "S  a troop that gets to them claims the gold (+%d)" % cache.gold)
@@ -395,11 +417,11 @@ func _prisoners_and_supplies() -> void:
 	rules._setup_zone()
 	_quiet()
 	var pen = rules.pens[0]
-	var before: int = main.temp_allies.size()
+	var before: int = main.missions.temp_allies.size()
 	for p in [Vector2(-40, 40), Vector2(40, 40)]:
 		_unit("swordsman", pen.position + p)
 	await _frames(60 * 8)
-	var freed: Array = main.temp_allies.slice(before)
+	var freed: Array = main.missions.temp_allies.slice(before)
 	var one_path := true
 	for w in freed:
 		var paths: Array = w.tiers.filter(func(t): return t > 0)
@@ -419,7 +441,7 @@ func _prisoners_and_supplies() -> void:
 func _volleys() -> void:
 	_at_dawnspire()
 	await _assault()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await process_frame
 	var rules = main.rules
@@ -464,7 +486,7 @@ func _clearing() -> void:
 	await _frames(5)
 	check(rules.phase == "clear" and rules.holds_waves(), "C  the gate open: no more waves")
 	var w0: int = main.wave
-	main.start_wave(true)
+	main.waves.start_wave(true)
 	check(main.wave == w0, "C  ...a wave won't start")
 	await _frames(60)
 	check(main.map_id == "ds_approach" and not rules.moving_on, "C  not on while an enemy's left")
@@ -501,7 +523,7 @@ func _crewed_tower():
 	rules._tower_taken(tower)
 	await _frames(5)
 	var t = null
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.has_meta("captured"):
 			t = w
 	var ar = _unit("archer", t.position + Vector2(30, 60))
@@ -529,12 +551,12 @@ func _moving_on() -> void:
 			if c is Button:
 				labels.append(c.text)
 	check(ar.garrison != null and box != null and is_instance_valid(box) and labels.size() == 3 and "crews hold" in labels[0] and "crews come too" in labels[1] and labels[2] == "Not yet",
-			"M  a crew up a tower: going on asks whether crews hold or come too (or not yet) %s (crew up %s, phase %s, foes %d, down %d)" % [str(labels), ar.garrison != null, rules.phase, main.get_enemies().size(), rules._downed()])
+			"M  a crew up a tower: going on asks whether crews hold or come too (or not yet) %s (crew up %s, phase %s, foes %d, down %d)" % [str(labels), ar.garrison != null, rules.phase, main.battlefield.get_enemies().size(), rules._downed()])
 	if box != null:
 		box.queue_free()
 	rules._go(false)
 	await _frames(60 * 3)
-	check(main.map_id == "ds_bailey" and rules.garrisons.is_empty() and main.get_warriors().any(func(w): return w.kind == "archer" and w.garrison == null and w.is_active()),
+	check(main.map_id == "ds_bailey" and rules.garrisons.is_empty() and main.battlefield.get_warriors().any(func(w): return w.kind == "archer" and w.garrison == null and w.is_active()),
 			"M  ...come too: the Archer's in the army in the Bailey, no tower held")
 	# Crews hold: supplies in the field after, paid once.
 	await _assault()
@@ -581,13 +603,13 @@ func _moving_on() -> void:
 	box.queue_free()
 	rules._go(true)
 	await _frames(60 * 3)
-	var gobs: Array = main.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead)
+	var gobs: Array = main.battlefield.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead)
 	check(main.map_id == "ds_bailey" and not is_instance_valid(sw) and gobs.size() == 1 and gobs[0].position.y < 400 and not is_nan(gobs[0].position.x),
 			"M  through: the fallen troop's left behind, the goblin came through after the army (%d, troop gone %s, at %s)" % [gobs.size(), not is_instance_valid(sw), gobs[0].position if gobs.size() > 0 else Vector2.ZERO])
 	check((campaign.checkpoint("ds_assault", 1).get("stragglers", []) as Array).size() == 1, "M  ...kept with the checkpoint")
 	await _assault(1)
 	await _frames(30)
-	check(main.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead).size() == 1, "M  ...taken up again there, it's there again (once)")
+	check(main.battlefield.get_enemies().filter(func(e): return e.kind == "goblin" and not e.dead).size() == 1, "M  ...taken up again there, it's there again (once)")
 
 
 # --- K ---------------------------------------------------------------------------------------
@@ -622,7 +644,7 @@ func _checkpoints() -> void:
 	campaign.load_game()
 	await _assault(1)
 	rules = main.rules
-	var sws: Array = main.get_warriors().filter(func(w): return w.kind == "swordsman" and w.tiers == [2, 1, 0, 0])
+	var sws: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "swordsman" and w.tiers == [2, 1, 0, 0])
 	check(main.map_id == "ds_bailey" and rules.zone_i == 1 and main.gold == 777 and sws.size() == 1,
 			"K  a retry picks up from the Bailey: the field, the gold, the army (from the save)")
 	check(is_equal_approx(float(main.battle_xp.get("swordsman", 0.0)), 1000.0) and rules.gate.style == "portcullis" and rules.pens.size() == 1,
@@ -641,7 +663,7 @@ func _checkpoints() -> void:
 	check(main.map_id == "ds_bailey" and main.gold == 777, "K  or from an earlier checkpoint than the last: the Bailey, as it stood")
 	# From the map: a choice of where to begin.
 	main.hud.show_world_map(campaign)
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await _frames(3)
 	var picks: Array = main.hud.find_children("*", "Button", true, false).filter(func(b): return b.text.begins_with("From "))
 	check(picks.map(func(b): return b.text) == ["From the beginning", "From The Outer Bailey", "From The Dawn Gate"],

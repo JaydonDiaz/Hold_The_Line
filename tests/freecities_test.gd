@@ -16,8 +16,8 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://freecities_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 var main
 var fails := 0
@@ -42,8 +42,8 @@ func _frames(n: int) -> void:
 
 
 func _foe(kind: String, at: Vector2, hp := 1e5):
-	main._spawn_enemy(kind, 1, at)
-	var e = main.get_enemies()[-1]
+	main.waves._spawn_enemy(kind, 1, at)
+	var e = main.battlefield.get_enemies()[-1]
 	e.position = at
 	e.speed = 0.0
 	e.damage = 0.0
@@ -67,11 +67,11 @@ func _mission(mid: String, south: Array, extra_done := [], extra_allies := []) -
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.start_mission(mid)
+	main.missions.start_mission(mid)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 
 
@@ -167,11 +167,11 @@ func _sellswords() -> void:
 	var k = main.contracts
 	main.deploying = false
 	main.gold = 1000
-	var before: int = main.get_warriors().size()
-	check(not main.allowed("archer") and k.merc_label().contains("[H]"), "S  sellswords for hire, in an army with no Archers")
+	var before: int = main.battlefield.get_warriors().size()
+	check(not main.missions.allowed("archer") and k.merc_label().contains("[H]"), "S  sellswords for hire, in an army with no Archers")
 	check(k.hire(), "S  ...hired")
 	await _frames(2)
-	var new_ones: Array = main.get_warriors().slice(before)
+	var new_ones: Array = main.battlefield.get_warriors().slice(before)
 	var squad: Array = CD.MISSIONS["fc_market"]["mercs"]["squad"]
 	check(new_ones.size() == squad.size() and main.gold == 1000 - int(CD.MISSIONS["fc_market"]["mercs"]["cost"]),
 			"S  ...%d turn up, for %dg" % [new_ones.size(), 1000 - main.gold])
@@ -190,7 +190,7 @@ func _exchange() -> void:
 	main.deploying = false
 	main.auto_timer = 1e9
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
 	await _frames(60)
 	var p0: float = ex.progress
@@ -214,15 +214,15 @@ func _night() -> void:
 	main.deploying = false
 	main.auto_timer = 1e9
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.free()
 	main.gold = 999
 	main.placing_type = "swordsman"
-	main.hire_at(Vector2(600, 420))
+	main.hiring.hire_at(Vector2(600, 420))
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	w.position = w.post
 	main.wave = 1
 	main.wave_active = true

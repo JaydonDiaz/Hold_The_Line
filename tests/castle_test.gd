@@ -40,9 +40,9 @@ extends SceneTree
 ## Prints one "ok"/"FAIL" line per check and a total; exits 1 if anything failed.
 
 const TEST_SAVE := "user://castle_test_campaign.cfg"
-const CD = preload("res://scripts/campaign_data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 const BANNERS := 2   # (the rooms' places: the Gatehouse Hall, its cells, the Hall of Banners...)
-const Maps = preload("res://scripts/maps.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 var main
 var fails := 0
@@ -108,18 +108,18 @@ func _castle(room: int, army: Array = ARMY, gold := 420, quiet := true) -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	campaign.op_resume_zone = 100 + room
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	main.deploying = false
 	main.forced_auto = false
 	main.auto_play = false
 	main.auto_timer = 9999.0
 	if quiet:
-		main.clear_enemies()
+		main.modes.clear_enemies()
 
 
 ## Everyone in: the room's arrivals done.
@@ -132,12 +132,12 @@ func _all_in() -> void:
 
 func _unit(kind: String, at: Vector2):
 	main.gold += 5000
-	var had: Array = main.get_warriors()
+	var had: Array = main.battlefield.get_warriors()
 	main.placing_type = kind
-	main.hire_at(main.paths.open_spot(at))
+	main.hiring.hire_at(main.paths.open_spot(at))
 	main.placing_type = ""
 	main.gold -= 5000
-	var fresh: Array = main.get_warriors().filter(func(x): return not had.has(x))
+	var fresh: Array = main.battlefield.get_warriors().filter(func(x): return not had.has(x))
 	if fresh.is_empty():
 		return null
 	fresh[0].build_left = 0.0
@@ -146,7 +146,7 @@ func _unit(kind: String, at: Vector2):
 
 
 func _foe(kind: String, at: Vector2):
-	main._spawn_enemy(kind, 8, at)
+	main.waves._spawn_enemy(kind, 8, at)
 	var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	e.max_hp = 1e5
 	e.hp = 1e5
@@ -178,7 +178,7 @@ func _run() -> void:
 func _sight() -> void:
 	await _castle(0)
 	await _all_in()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	var paths = main.paths
@@ -214,7 +214,7 @@ func _sight() -> void:
 	sw.queue_free()
 	await _frames(2)
 	# A shot into the wall stops there.
-	var P = preload("res://scripts/projectile.gd")
+	var P = preload("res://scripts/troops/projectile.gd")
 	var shot = P.new()
 	shot.main = main
 	shot.target = null
@@ -237,7 +237,7 @@ func _sight() -> void:
 	var v = O.new()
 	v.setup(main, {"id": "freed", "kind": "civilian", "name": "Townsfolk", "at": Vector2(110, 420), "variant": 1,
 			"route": [Vector2(110, 200), Vector2(110, 120)], "speed": 60.0, "hp": 40.0})
-	main.add_objective(v)
+	main.waves.add_objective(v)
 	for i in 60 * 20:
 		if v.arrived:
 			break
@@ -300,31 +300,31 @@ func _entering() -> void:
 	var first_hp := {}
 	for i in 60 * 6:
 		await process_frame
-		for w in main.get_warriors():
+		for w in main.battlefield.get_warriors():
 			if not first_hp.has(w):
 				first_hp[w] = w.hp / w.max_hp   # (as it came in: a Healer gets to work soon after)
 		if rules.phase != "enter" and first_hp.size() >= ARMY.size():
 			break
-	check(main.get_warriors().size() == ARMY.size(), "E  the whole army in (%d)" % main.get_warriors().size())
+	check(main.battlefield.get_warriors().size() == ARMY.size(), "E  the whole army in (%d)" % main.battlefield.get_warriors().size())
 	var by_kind := {}
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		by_kind[w.kind + str(w.tiers)] = w
 	var ok := true
 	var bad := []
 	for rec in ARMY:
 		var w = by_kind.get(rec["kind"] + str(rec["tiers"]))
 		if w == null or first_hp.get(w, -1.0) < rec["hp"] - 0.02 or first_hp.get(w, -1.0) > rec["hp"] + 0.02 and rec["kind"] != "archer" or w.priority != rec["priority"] or w.move_mode != rec["move_mode"] \
-				or main.temp_allies.has(w) != rec["lent"] or w.has_meta("freed") != rec["freed"]:
+				or main.missions.temp_allies.has(w) != rec["lent"] or w.has_meta("freed") != rec["freed"]:
 			ok = false
-			bad.append("%s: %s" % [rec["kind"], "missing" if w == null else "hp %.2f %s %s lent %s freed %s" % [w.hp / w.max_hp, w.priority, w.move_mode, main.temp_allies.has(w), w.has_meta("freed")]])
+			bad.append("%s: %s" % [rec["kind"], "missing" if w == null else "hp %.2f %s %s lent %s freed %s" % [w.hp / w.max_hp, w.priority, w.move_mode, main.missions.temp_allies.has(w), w.has_meta("freed")]])
 	check(ok, "E  each as it was: its kind, training, health (the Archer's topped up by the Healer at once), orders, on loan or freed %s" % str(bad))
 	# The garrison holds; then, the army near, it goes for the standard.
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.queue_free()
 	await _frames(2)
 	rules._woke = false
 	var g = null
-	main._spawn_enemy("orc", 8, Vector2(320, 200))
+	main.waves._spawn_enemy("orc", 8, Vector2(320, 200))
 	g = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	g.set_meta("guard", true)
 	g.goal = null
@@ -338,9 +338,9 @@ func _entering() -> void:
 	# Nobody's left waiting behind a wall: a garrison archer out of everyone's sight, and a
 	# troop on Guard that can't see it doesn't keep pressing at the wall for it; the
 	# garrison comes out on its own soon after the army's in.
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.queue_free()
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.queue_free()
 	await _frames(2)
 	rules._woke = false
@@ -348,7 +348,7 @@ func _entering() -> void:
 	main.spawn_queue.clear()   # (the room's first wave held off: only the hidden archer here)
 	main.wave_active = false
 	main.wave = rules.wave0
-	main._spawn_enemy("skeleton_archer", 8, Vector2(110, 240))
+	main.waves._spawn_enemy("skeleton_archer", 8, Vector2(110, 240))
 	var hid = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	hid.set_meta("guard", true)
 	hid.goal = null
@@ -373,16 +373,16 @@ func _through() -> void:
 	# The room's first wave comes at once; the battle music holds through the breathers until
 	# the room's taken.
 	check(main.wave == rules.wave0 + 1 and main.wave_active and rules.battle_on(), "M  in a room: its first wave at once, the battle music on")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	main.spawn_queue.clear()
 	main.wave_active = false
 	await _frames(5)
 	check(rules.phase == "fight" and rules.battle_on(), "M  ...between its waves, still the battle music (no peaceful music till the room's taken)")
-	var A = preload("res://scripts/audio.gd")
+	var A = preload("res://scripts/audio/audio.gd")
 	var siege := ["siege", "bailey", "dawngate", "gatehall", "banners", "cells", "stores", "chapel", "dungeon", "gallery", "treasury", "throne", "dawnfield"]
 	check(siege.all(func(k): return A.BATTLES[k].get("motif", false)) and not A.BATTLES["ridge"].get("motif", false),
 			"M  every battle of Dawnspire's siege carries the Dawnspire hymn (nowhere else does)")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	main.wave = rules.wave0 + int(rules.room()["waves"])
 	main.spawn_queue.clear()
 	main.wave_active = false
@@ -399,12 +399,12 @@ func _through() -> void:
 	check(rules.phase == "clear" and ways.has("banners") and ways.has("cells") and rules.action_label() != "", "T  the room taken: an arrow at each way on: the hall beyond, the cells (%s)" % str(ways))
 	check(not rules.battle_on(), "M  the room taken: the peaceful music at last")
 	var before := {}
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w != fallen:
 			before[w.kind + str(w.tiers)] = [w.hp / w.max_hp, w.priority, w.move_mode, w.position.distance_to(rules.arrows[0]["at"])]
 	var gold0: int = main.gold
 	# Click its arrow (a troop's down: asked first).
-	main.pointer_down(rules._arrow_point(rules._forward()), MOUSE_BUTTON_LEFT)
+	main.input.pointer_down(rules._arrow_point(rules._forward()), MOUSE_BUTTON_LEFT)
 	await _frames(2)
 	var box = main.hud.choice_box
 	check(box != null and is_instance_valid(box), "T  clicked, with a troop down: asked first (it'd be left behind)")
@@ -421,7 +421,7 @@ func _through() -> void:
 		if main.map_id == "dsc_banners":
 			if t0 < 0:
 				t0 = i
-			for w in main.get_warriors():
+			for w in main.battlefield.get_warriors():
 				var key: String = w.kind + str(w.tiers)
 				if not order.has(key):
 					order.append(key)
@@ -429,24 +429,24 @@ func _through() -> void:
 			if rules.phase == "fight":
 				break
 	check(main.map_id == "dsc_banners" and rules.room()["name"] == "The Hall of Banners", "T  into the Hall of Banners")
-	check(order.size() >= 5 and not main.get_warriors().any(func(w): return w.kind == "swordsman" and w.tiers == [0, 0, 0, 0]),
+	check(order.size() >= 5 and not main.battlefield.get_warriors().any(func(w): return w.kind == "swordsman" and w.tiers == [0, 0, 0, 0]),
 			"T  they came in a few at a time (%s); the troop that was down left behind" % ", ".join(order))
 	var span: float = when.values().max() - when.values().min() if not when.is_empty() else 0.0
 	check(span >= 0.5 and order[order.size() - 1] == "cannon[1, 0, 0, 0]", "T  ...over %.1fs as each would have got there, the Cannoneer hauled in last (%s)" % [span, str(when)])
 	var kept := true
 	var bad := []
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		var key: String = w.kind + str(w.tiers)
 		if before.has(key) and (w.hp / w.max_hp < before[key][0] - 0.05 or w.priority != before[key][1] or w.move_mode != before[key][2]):
 			kept = false
 			bad.append("%s hp %.2f/%.2f %s/%s %s/%s" % [key, w.hp / w.max_hp, before[key][0], w.priority, before[key][1], w.move_mode, before[key][2]])
-	var cannon = main.get_warriors().filter(func(w): return w.kind == "cannon")
+	var cannon = main.battlefield.get_warriors().filter(func(w): return w.kind == "cannon")
 	check(kept and cannon.size() == 1 and cannon[0].is_active() and main.gold == gold0,
 			"T  health, training and orders kept; the Cannoneer hauled through and set up; the gold the same %s gold %d/%d" % [str(bad), main.gold, gold0])
 	var cp: Dictionary = campaign.checkpoint("ds_assault", 100 + BANNERS)
-	check(cp.get("room", -1) == BANNERS and (cp.get("army", []) as Array).size() == main.get_warriors().size() and int(cp.get("gold", -1)) == main.gold,
+	check(cp.get("room", -1) == BANNERS and (cp.get("army", []) as Array).size() == main.battlefield.get_warriors().size() and int(cp.get("gold", -1)) == main.gold,
 			"T  a checkpoint for the Hall of Banners (army, gold)")
-	check(main.get_warriors().all(func(w): return w.position.y > 380.0 and main.paths.troop_can_stand(w.position)),
+	check(main.battlefield.get_warriors().all(func(w): return w.position.y > 380.0 and main.paths.troop_can_stand(w.position)),
 			"T  everyone came in at the south door and stands in the room")
 
 
@@ -465,7 +465,7 @@ func _through_to(to: String) -> void:
 			a = x
 	if a == null:
 		return
-	main.pointer_down(rules._arrow_point(a), MOUSE_BUTTON_LEFT)
+	main.input.pointer_down(rules._arrow_point(a), MOUSE_BUTTON_LEFT)
 	await _frames(2)
 	if main.hud.choice_box != null and is_instance_valid(main.hud.choice_box):
 		for c in main.hud.choice_box.get_children():
@@ -481,16 +481,16 @@ func _side_rooms() -> void:
 	await _castle(0, ARMY.slice(0, 3), 300)
 	var rules = main.rules
 	await _all_in()
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	main.wave = rules.wave0 + int(rules.room()["waves"])
 	main.spawn_queue.clear()
 	await _through_to("cells")
-	check(main.map_id == "dsc_cells" and rules.entry == "w" and main.get_warriors().all(func(w): return w.position.x < 400.0),
+	check(main.map_id == "dsc_cells" and rules.entry == "w" and main.battlefield.get_warriors().all(func(w): return w.position.x < 400.0),
 			"R  through the side door into the Guardroom Cells, the army in by its west door")
-	var warden: Array = main.get_enemies().filter(func(e): return e.has_meta("warden"))
-	check(main.get_enemies().size() == 8 and rules.pens.size() == 3 and warden.size() == 1 and warden[0].kind == "troll" and warden[0].max_hp > 2.0 * 200.0, "R  ...its jailers there with their Warden (a Troll, far tougher), three cells locked")
+	var warden: Array = main.battlefield.get_enemies().filter(func(e): return e.has_meta("warden"))
+	check(main.battlefield.get_enemies().size() == 8 and rules.pens.size() == 3 and warden.size() == 1 and warden[0].kind == "troll" and warden[0].max_hp > 2.0 * 200.0, "R  ...its jailers there with their Warden (a Troll, far tougher), three cells locked")
 	# The Warden holds the keys: troops round a cell get nowhere while he lives.
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		if not e.has_meta("warden"):
 			e.queue_free()
 	warden[0].position = Vector2(560, 650)
@@ -507,18 +507,18 @@ func _side_rooms() -> void:
 			break
 		await process_frame
 	check(locked.taken, "R  ...he's down: the cell opens")
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	await _frames(2)
 	var pen = rules.pens[0]
-	var lent0: int = main.temp_allies.size()
-	for w in main.get_warriors():
+	var lent0: int = main.missions.temp_allies.size()
+	for w in main.battlefield.get_warriors():
 		w.order_to(pen.position + Vector2(randf_range(-20, 20), 40))
 	for i in 60 * 14:
 		if pen.taken:
 			break
 		await process_frame
 	await _frames(5)
-	var joined: Array = main.temp_allies.slice(lent0).filter(func(w): return w.tiers[0] == 3)
+	var joined: Array = main.missions.temp_allies.slice(lent0).filter(func(w): return w.tiers[0] == 3)
 	joined = joined.filter(func(w): return w.kind == "swordsman")
 	check(pen.taken and joined.size() == 1 and joined[0].kind == "swordsman" and joined[0].has_meta("freed") and joined[0].tiers[0] == 3,
 			"R  a cell broken open: its soldier joins on loan (a Knight, trained to tier III)")
@@ -534,7 +534,7 @@ func _side_rooms() -> void:
 	await _through_to("gatehall")
 	await _frames(30)
 	var back_arrow = rules.arrows.filter(func(a): return a["to"] == "cells")
-	check(main.map_id == "dsc_gatehall" and rules.entry == "e" and main.get_enemies().is_empty() and rules.phase == "clear" and back_arrow.size() == 1,
+	check(main.map_id == "dsc_gatehall" and rules.entry == "e" and main.battlefield.get_enemies().is_empty() and rules.phase == "clear" and back_arrow.size() == 1,
 			"R  back in the Gatehouse Hall by its east door: still taken, nobody there, the ways on open at once")
 	var cp: Dictionary = campaign.checkpoint("ds_assault", 100)
 	check((cp.get("rooms", {}).get("cells", {}).get("taken", []) as Array).has("cells:pen0") and cp["rooms"]["gatehall"]["cleared"],
@@ -545,7 +545,7 @@ func _side_rooms() -> void:
 	await _castle_from(cp)
 	rules = main.rules
 	await _all_in()
-	check(rules.phase == "clear" and main.get_enemies().is_empty(), "R  taken up again in the hall: still taken")
+	check(rules.phase == "clear" and main.battlefield.get_enemies().is_empty(), "R  taken up again in the hall: still taken")
 	await _through_to("cells")
 	await _frames(10)
 	check(rules.pens.size() == 1 and rules.pens.all(func(p): return p.id != "cells:pen0" and p.id != "cells:pen2"), "R  ...and in the cells, the ones opened stay open (1 still locked)")
@@ -553,32 +553,32 @@ func _side_rooms() -> void:
 	await _castle(3, ARMY.slice(0, 3), 300)   # (room 3: the Quartermaster's Store)
 	rules = main.rules
 	await _all_in()
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	await _frames(2)
 	var c = rules.caches[0]
 	var g0: int = main.gold
 	main.gold += 500
 	main.placing_type = "swordsman"
-	main.hire_at(Vector2(320, 560))
+	main.hiring.hire_at(Vector2(320, 560))
 	main.placing_type = ""
-	var fresh = main.get_warriors()[-1]
+	var fresh = main.battlefield.get_warriors()[-1]
 	await _frames(2)
 	check(fresh.position.distance_to(rules.entry_point(Vector2.ZERO)) < 120.0 or fresh.position.x > 480.0,
 			"R  a troop hired in a side room comes in by its door (at %s)" % fresh.position.round())
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		w.move_mode = "hold"
-	main.give_order("priority", "side", [main.get_warriors()[0]])
+	main.orders.give_order("priority", "side", [main.battlefield.get_warriors()[0]])
 	for i in 60 * 10:
 		if c == null or not is_instance_valid(c) or c.taken:
 			break
 		await process_frame
 	await _frames(60 * 6)
 	var claimed: int = (rules._state("stores")["taken"] as Array).size()
-	check(claimed >= 2 and main.gold >= g0 + 90 - main.price(Data_cost("swordsman")), "R  a troop on Side Objectives goes after the stores' supplies on its own and claims them (%d of 3, gold %d -> %d)" % [claimed, g0, main.gold])
+	check(claimed >= 2 and main.gold >= g0 + 90 - main.hiring.price(Data_cost("swordsman")), "R  a troop on Side Objectives goes after the stores' supplies on its own and claims them (%d of 3, gold %d -> %d)" % [claimed, g0, main.gold])
 
 
 func Data_cost(kind: String) -> int:
-	return int(preload("res://scripts/data.gd").WARRIORS[kind]["cost"])
+	return int(preload("res://scripts/data/data.gd").WARRIORS[kind]["cost"])
 
 
 ## Into the castle from a checkpoint as it was saved.
@@ -590,11 +590,11 @@ func _castle_from(cp: Dictionary) -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	campaign.op_resume_zone = int(cp["zone"])
-	main.start_mission("ds_assault")
+	main.missions.start_mission("ds_assault")
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 	main.deploying = false
 	main.forced_auto = false
@@ -608,7 +608,7 @@ func _checkpoints() -> void:
 	await _castle(BANNERS, ARMY, 300)
 	var rules = main.rules
 	await _all_in()
-	check(main.map_id == "dsc_banners" and main.gold == 300 and main.get_warriors().size() == ARMY.size() and absf(rules.standard.hp / rules.standard.max_hp - 1.0) < 0.01,
+	check(main.map_id == "dsc_banners" and main.gold == 300 and main.battlefield.get_warriors().size() == ARMY.size() and absf(rules.standard.hp / rules.standard.max_hp - 1.0) < 0.01,
 			"K  taken up from the Hall of Banners as the army came in")
 	main.battle_xp = {"swordsman": 900.0}
 	var gains: Dictionary = rules.xp_gains(false, main.battle_xp)
@@ -632,7 +632,7 @@ func _stuck() -> void:
 	await _castle(0, [ARMY[0]], 300)
 	var rules = main.rules
 	await _all_in()
-	main.clear_enemies()
+	main.modes.clear_enemies()
 	# A troop walled in where it can't get out.
 	var boxed = _unit("archer", Vector2(560, 640))
 	await _frames(2)
@@ -661,7 +661,7 @@ func _stuck() -> void:
 		if rules.phase == "fight":
 			break
 		await process_frame
-	check(main.get_warriors().filter(func(w): return w.kind == "archer").size() == 1, "L  the walled-in Archer doesn't hold the army up: it comes in a little after")
+	check(main.battlefield.get_warriors().filter(func(w): return w.kind == "archer").size() == 1, "L  the walled-in Archer doesn't hold the army up: it comes in a little after")
 
 
 # --- W ---------------------------------------------------------------------------------------
@@ -674,7 +674,7 @@ func _standard() -> void:
 	await _frames(30)
 	check(main.game_over and not main.victory, "W  the standard falls: the army breaks, the battle's lost")
 	# The Ogre King's cutscenes: from Dawnspire's throne room once the citadel's open.
-	var C = preload("res://scripts/cutscene.gd")
+	var C = preload("res://scripts/campaign/cutscene.gd")
 	var c = C.new()
 	root.add_child(c)
 	var at_ds: bool = c._at_dawnspire()

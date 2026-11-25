@@ -62,9 +62,9 @@ func _fresh(map := MAP, mission := {}) -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	main.records_path = ""
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	await _frames(2)
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	main.gold = 99999
 	main.spawn_queue.clear()
@@ -74,8 +74,8 @@ func _fresh(map := MAP, mission := {}) -> void:
 
 
 func _foe(kind: String, at: Vector2, hp := 1e5):
-	main._spawn_enemy(kind, 1, at)
-	var e = main.get_enemies()[-1]
+	main.waves._spawn_enemy(kind, 1, at)
+	var e = main.battlefield.get_enemies()[-1]
 	e.position = at
 	e.speed = 0.0
 	e.damage = 0.0
@@ -86,9 +86,9 @@ func _foe(kind: String, at: Vector2, hp := 1e5):
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var w = main.get_warriors()[-1]
+	var w = main.battlefield.get_warriors()[-1]
 	w.position = w.post
 	return w
 
@@ -134,9 +134,9 @@ func _ice() -> void:
 	check(hz.ice_state(0) == "whole", "I  a Goblin and an Orc standing on it: it holds")
 	# Nothing is built on thin ice (an emplacement couldn't get off); troops may stand there.
 	main.placing_type = "tower"
-	check(not main.can_post_at(Vector2(320, 360)) and main.can_post_at(Vector2(320, 520)), "I  an emplacement can't be built on thin ice (it can elsewhere)")
+	check(not main.hiring.can_post_at(Vector2(320, 360)) and main.hiring.can_post_at(Vector2(320, 520)), "I  an emplacement can't be built on thin ice (it can elsewhere)")
 	main.placing_type = "swordsman"
-	check(main.can_post_at(Vector2(330, 340)), "I  ...a troop can be posted on it")
+	check(main.hiring.can_post_at(Vector2(330, 340)), "I  ...a troop can be posted on it")
 	main.placing_type = ""
 	# Two troops out on the ice, one of them stunned; then a Troll steps onto it.
 	var sw = _hire("swordsman", Vector2(400, 400))
@@ -222,8 +222,8 @@ func _blizzard() -> void:
 
 # --- Frostmarch's missions -------------------------------------------------------------------
 
-const CD = preload("res://scripts/campaign_data.gd")
-const Maps = preload("res://scripts/maps.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 ## Straight into a northern mission, with the south behind you (Sable won with `south`).
 func _mission(mid: String, south: Array, extra_done := [], extra_allies := []) -> void:
@@ -241,34 +241,34 @@ func _mission(mid: String, south: Array, extra_done := [], extra_allies := []) -
 	root.add_child(main)
 	await _frames(3)
 	main.hud.hide_mode_select()
-	main.start_mission(mid)
+	main.missions.start_mission(mid)
 	await process_frame
 	if main.hud.story != null:
 		main.hud.story.skip()
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(3)
 
 
 func _frostmarch() -> void:
 	# The Frozen Pass, coming north with Mercy Vale and Deepdelve (no Archers, no magic).
 	await _mission("fm_pass", ["mercyvale", "deepdelve"])
-	var lent: Array = main.get_warriors().filter(func(w): return w.kind == "frost")
+	var lent: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == "frost")
 	check(main.map_id == "frostmarch_pass" and lent.size() == 2 and not main.hazards.blizzard.is_empty(),
 			"F  the Frozen Pass: its map, two Frost Witches lent, blizzards blowing")
 	var m: Dictionary = CD.MISSIONS["fm_pass"]
 	var slimes := 0
 	for w in m["pool"]:
 		slimes += (m["pool"][w] as Array).count("slime")
-	check(slimes > 0 and main.allowed("frost") and not main.allowed("mage") and not main.allowed("martial"),
+	check(slimes > 0 and main.missions.allowed("frost") and not main.missions.allowed("mage") and not main.missions.allowed("martial"),
 			"F  ...Slimes come, and with no magic or ki of its own this army can hire Frost Witches here")
 	for w in lent:
 		w.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	main.gold = 999
 	main.placing_type = "frost"
-	main.hire_at(Vector2(320, 600))
+	main.hiring.hire_at(Vector2(320, 600))
 	main.placing_type = ""
-	var fresh = main.get_warriors().filter(func(w): return w.kind == "frost")
+	var fresh = main.battlefield.get_warriors().filter(func(w): return w.kind == "frost")
 	check(fresh.size() == 1, "F  ...the two lent fallen, another Frost Witch can still be hired")
 	main.wave_active = true
 	var slime = _foe("slime", fresh[0].position + Vector2(0, -60), 70.0)

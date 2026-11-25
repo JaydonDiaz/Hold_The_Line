@@ -5,7 +5,7 @@ extends SceneTree
 ##   Godot --headless --path . --fixed-fps 60 -s tests/progression_test.gd
 ## Uses a temporary save. Exits 1 if anything failed.
 
-const CD = preload("res://scripts/campaign_data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 const TEST_SAVE := "user://progression_test.cfg"
 
 var campaign
@@ -81,7 +81,7 @@ func _south() -> void:
 		check(not campaign.has_beacon("sable") and not campaign.beacon_lit("sable") and campaign.just_lit == "" and campaign.beacon_count() == lit_before,
 				"...Sable Crossing is only the bridge: held, but no beacon is lit there")
 	check(campaign.beacon_territories().size() == 9 and not campaign.beacon_territories().has("sable"), "Nine beacons: Ashwatch's and the eight peoples', none at Sable Crossing")
-	check(load("res://scripts/cutscene.gd").BEACONS.size() == 9, "...and the cutscene's ridge has all nine")
+	check(load("res://scripts/campaign/cutscene.gd").BEACONS.size() == 9, "...and the cutscene's ridge has all nine")
 	campaign.new_campaign("normal")
 	check(campaign.req_text(CD.TERRITORIES["frostmarch"]["requires"]) == "Hold Sable Crossing", "...the north opens on holding it (%s)" % campaign.req_text(CD.TERRITORIES["frostmarch"]["requires"]))
 	campaign.new_campaign("normal")

@@ -9,7 +9,7 @@ extends SceneTree
 ## Run from the project folder:  Godot --headless --path . -s tools/make_art.gd
 
 const HD = preload("res://tools/hd_troops.gd")   # the app icon's tower
-const Sprites = preload("res://scripts/sprites.gd")
+const Sprites = preload("res://scripts/art/sprites.gd")
 const SPRITE_SCALE := 3
 
 const W := 214   # the canvas: 640x1040 / 3 (rounded up; the extra pixel is trimmed)
@@ -37,8 +37,8 @@ func _make_splash() -> void:
 	_ground()
 	# Back row, middle row, front row, drawn back to front: [feet y, troops, light].
 	var rows := [
-		[362, [["bard", "serenade", 112, true], ["alchemist", "catch", 208, false]], 0.78],
-		[430, [["mage", "", 66, true], ["healer", "raise", 160, false], ["frost", "", 254, false]], 0.9],
+		[362, [["bard", "serenade", 64, true], ["healer", "raise", 160, false], ["alchemist", "catch", 256, false]], 0.78],
+		[430, [["mage", "", 52, true], ["pikeman", "", 125, false], ["assassin", "", 195, true], ["frost", "", 268, false]], 0.9],
 		[490, [["archer", "draw", 62, true], ["martial", "stance", 258, false]], 1.0],
 		[492, [["swordsman", "plant", 160, false]], 1.0],   # in the middle of the front row
 	]
@@ -231,7 +231,7 @@ func _spell_orb(at: Vector2, col: Color) -> void:
 	for i in 8:   # sparks drawn in
 		var a := i * TAU / 8.0 + 0.4
 		var p := at + Vector2(cos(a), sin(a)) * (9.0 + (i % 3) * 3.0)
-		canvas.set_pixel(int(p.x), int(p.y), col.lightened(0.35))
+		_dot(Vector2i(p), col.lightened(0.35))
 
 
 ## The Alchemist's flask tossed up out of his open hand (his idle animation), tilted as
@@ -278,7 +278,13 @@ func _snowflakes(at: Vector2) -> void:
 	for o in [Vector2(-16, -10), Vector2(13, -18), Vector2(17, 8), Vector2(-11, 14)]:
 		var c: Vector2i = Vector2i(at + o)
 		for d in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			canvas.set_pixelv(c + d, Color(0.9, 0.98, 1.0))
+			_dot(c + d, Color(0.9, 0.98, 1.0))
+
+
+## One pixel, if it's on the canvas (sparks round a staff near the edge can fall off it).
+func _dot(p: Vector2i, col: Color) -> void:
+	if p.x >= 0 and p.y >= 0 and p.x < W and p.y < H:
+		canvas.set_pixelv(p, col)
 
 
 ## A troop's game sprite (in a pose, if it has one by that name) as an image.

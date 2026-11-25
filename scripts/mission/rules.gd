@@ -102,7 +102,7 @@ func on_reached_bottom(_e) -> bool:
 ## Wave `n` has been cleared: whether that wins the battle. A mission is won by clearing
 ## its last wave; Classic carries on (main.gd offers endless at wave 20).
 func wave_cleared(n: int) -> bool:
-	return main.scripted() and not endless() and n >= main.last_wave()
+	return main.missions.scripted() and not endless() and n >= main.missions.last_wave()
 
 
 ## Whether the battle goes on until it's lost (a Battle Modes scenario).
@@ -209,7 +209,7 @@ func entry_point(_post: Vector2) -> Vector2:
 
 ## The HUD's wave counter ("Wave 3/5" by default).
 func wave_text() -> String:
-	return "Wave %d" % main.wave if main.survival() or endless() else "Wave %d/%d" % [main.wave, main.last_wave()]
+	return "Wave %d" % main.wave if main.waves.survival() or endless() else "Wave %d/%d" % [main.wave, main.missions.last_wave()]
 
 
 ## A battle-specific order the player can give (a button over the field, key Y): its
@@ -236,24 +236,24 @@ func change_field(map_id: String) -> void:
 		e.dead = true
 		e.queue_free()
 	main.spawn_queue.clear()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	for n in main.fx_layer.get_children():
 		if not n.has_method("gate"):   # (Engineers come along)
 			n.queue_free()
-	for g in main.get_graves():
+	for g in main.battlefield.get_graves():
 		g.queue_free()
 	for c in main.corpse_layer.get_children():
 		c.queue_free()
-	var maps = load("res://scripts/maps.gd")
+	var maps = load("res://scripts/campaign/maps.gd")
 	main.map_id = map_id
 	main.map_extra = {}
 	main.fallen = []   # (the fallen on the last field lie there)
 	main.paths.set_map(maps.get_map(map_id))
-	main._repaint_ground()
+	main.drawing._repaint_ground()
 	main.queue_redraw()
 	var m: Dictionary = maps.get_map(map_id)
 	main.stage_music = m.get("music", "mountain" if m.get("biome", "") == "mountain" else "calm")
-	main.set_battle_music(m)
+	main.waves.set_battle_music(m)
 
 
 ## The objectives on the field (objective.gd nodes).
@@ -270,9 +270,9 @@ const NONE: Array = []   # (asked every frame by every troop: no new array each 
 func _unit_record(w) -> Dictionary:
 	var k: float = main.FIELD_W / 640.0
 	var rec := {"kind": w.kind, "tiers": (w.tiers as Array).duplicate(), "hp": w.hp / maxf(w.max_hp, 1.0),
-			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.temp_allies.has(w),
+			"post": Vector2(w.post.x / k, w.post.y), "spent": w.spent, "lent": main.missions.temp_allies.has(w),
 			"freed": w.has_meta("freed"), "priority": w.priority, "move_mode": w.move_mode, "broken": w.broken}
-	var f = main.formation_of(w)
+	var f = main.formation_ctl.formation_of(w)
 	if f != null:
 		# Its formation (which, its layout and facing, its own slot): back in it on the next
 		# field, or after a load. (Records from before formations have none: no formation.)
@@ -285,11 +285,11 @@ func _unit_record(w) -> Dictionary:
 func _make_unit(rec: Dictionary):
 	var k: float = main.FIELD_W / 640.0
 	var kind: String = rec["kind"]
-	if not preload("res://scripts/data.gd").WARRIORS.has(kind):
+	if not preload("res://scripts/data/data.gd").WARRIORS.has(kind):
 		return null
 	var p: Vector2 = rec.get("post", Vector2(320, 600))
-	var w = preload("res://scripts/warrior.gd").new()
-	w.setup(kind, preload("res://scripts/data.gd").WARRIORS[kind], main, main.paths.open_spot(main._clamp_post(Vector2(p.x * k, p.y))))
+	var w = preload("res://scripts/troops/warrior.gd").new()
+	w.setup(kind, preload("res://scripts/data/data.gd").WARRIORS[kind], main, main.paths.open_spot(main.hiring._clamp_post(Vector2(p.x * k, p.y))))
 	w.tiers = (rec.get("tiers", [0, 0, 0, 0]) as Array).duplicate()
 	w._apply_upgrades()
 	w.hp = w.max_hp * clampf(float(rec.get("hp", 1.0)), 0.05, 1.0)
@@ -299,13 +299,13 @@ func _make_unit(rec: Dictionary):
 	w.position = w.post
 	main.warrior_layer.add_child(w)
 	if rec.get("lent", false):
-		main.temp_allies.append(w)
+		main.missions.temp_allies.append(w)
 	if rec.get("freed", false):
 		w.set_meta("freed", true)
 	if rec.get("broken", false):
 		w._break(true)   # (still rubble: rebuilding it costs gold, here as where it fell)
 	if rec.get("formation", {}) is Dictionary and not rec.get("formation", {}).is_empty():
-		main.join_formation(w, rec["formation"])
+		main.formation_ctl.join_formation(w, rec["formation"])
 	return w
 
 

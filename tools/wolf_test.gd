@@ -2,7 +2,7 @@ extends SceneTree
 ## Melee chase check: sends a pack of wolves past two swordsmen and counts how many escape.
 ## Run: godot --headless --path . --fixed-fps 60 -s tools/wolf_test.gd
 
-const Data = preload("res://scripts/data.gd")
+const Data = preload("res://scripts/data/data.gd")
 const WOLVES := 12
 
 var main
@@ -20,12 +20,12 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	frames += 1
 	if frames == 2:
-		main.choose_mode("normal")
+		main.setup.choose_mode("normal")
 		main.gold = 1000
 		for x in [250.0, 390.0]:
 			main.placing_type = "swordsman"
-			main.hire_at(Vector2(x, 400))
-		for w in main.get_warriors():
+			main.hiring.hire_at(Vector2(x, 400))
+		for w in main.battlefield.get_warriors():
 			w.position = w.post
 		main.wave = 3   # wolves get wave-3 health
 	# Release a wolf every 0.75s across the middle of the field.

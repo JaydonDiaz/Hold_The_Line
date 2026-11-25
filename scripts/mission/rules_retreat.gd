@@ -59,7 +59,7 @@ func stretches() -> Array:
 
 func stretch_name() -> String:
 	var st: Dictionary = stretches()[stretch % stretches().size()]
-	var m: Dictionary = load("res://scripts/maps.gd").get_map(st.get("map", ""))
+	var m: Dictionary = load("res://scripts/campaign/maps.gd").get_map(st.get("map", ""))
 	return st.get("name", m.get("name", "The Meadow"))
 
 
@@ -67,7 +67,7 @@ func start() -> void:
 	for l in lines():
 		var m := Objective.new()
 		m.setup(main, {"id": l["name"], "kind": "line", "name": l["name"], "at": Vector2(320, l["y"])})
-		main.add_objective(m)
+		main.waves.add_objective(m)
 		markers.append(m)
 	_first_line()
 	stream_in = STREAM_START
@@ -102,7 +102,7 @@ func process(delta: float) -> void:
 		settle -= delta
 		if settle <= 0.0:
 			main.hud.show_message("They've caught up! Hold the %s." % lines()[0]["name"].to_lower())
-			main.sfx("horn")
+			main.effects.sfx("horn")
 		return
 	# Stragglers on top of the waves, once the fighting's well under way: the enemy is
 	# never done.
@@ -111,7 +111,7 @@ func process(delta: float) -> void:
 		var gap := stream_gap()
 		stream_in = gap if gap != INF else 1.0
 		if gap != INF:
-			main._spawn_enemy(["goblin", "goblin", "orc", "wolf"].pick_random(), main.wave_level(maxi(main.wave, 1)))
+			main.waves._spawn_enemy(["goblin", "goblin", "orc", "wolf"].pick_random(), main.missions.wave_level(maxi(main.wave, 1)))
 	left -= delta
 	if left > 0.0:
 		return
@@ -124,7 +124,7 @@ func process(delta: float) -> void:
 		else:
 			left = float(_x()["time"])
 			main.hud.show_message("Fall back to the camp and get out! [Y]")
-		main.sfx("horn")
+		main.effects.sfx("horn")
 		return
 	# The extraction: whoever's in the camp gets out.
 	extracted = in_camp().size()
@@ -132,7 +132,7 @@ func process(delta: float) -> void:
 		_move_on()
 		return
 	finished = true
-	main.call_deferred("_finish", extracted >= int(_x()["need"]))
+	main.modes.call_deferred("_finish", extracted >= int(_x()["need"]))
 
 
 ## Your troops in the camp (emplacements stay where they're built): in it, or posted in it
@@ -140,7 +140,7 @@ func process(delta: float) -> void:
 func in_camp() -> Array:
 	var y := float(_x()["y"])
 	var out := []
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_active() and not w.is_emplacement() and (w.position.y >= y - 10.0 or (w.post.y >= y - 10.0 and w.position.y >= y - GATE)):
 			out.append(w)
 	return out
@@ -164,18 +164,18 @@ func enter_next() -> void:
 	# the field; the rest are left behind. Emplacements and walls are abandoned, for half
 	# what they cost.
 	var back := 0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if out.has(w):
 			continue
 		if w.is_emplacement():
 			back += int(w.spent) / 2
 		w.queue_free()
-	for b in main.get_barricades():
+	for b in main.battlefield.get_barricades():
 		back += int(b.spent) / 2
 		b.queue_free()
 	var y: float = float(lines()[0]["y"]) + 30.0 if not lines().is_empty() else 400.0
 	for w in out:
-		var p: Vector2 = main.paths.open_spot(main._clamp_post(Vector2(w.position.x, y + randf_range(-10.0, 10.0))))
+		var p: Vector2 = main.paths.open_spot(main.hiring._clamp_post(Vector2(w.position.x, y + randf_range(-10.0, 10.0))))
 		if w.guard_area.has_area():
 			w.guard_area.position += p - w.post   # its area comes down the road with it
 		w.position = p
@@ -188,15 +188,15 @@ func enter_next() -> void:
 	main.gold += pay + back
 	var forgiven := mini(through, REGROUP)
 	through -= forgiven   # (the ones that got past are left behind too, mostly)
-	main.walls_changed()
-	main.warriors_changed()
+	main.battlefield.walls_changed()
+	main.battlefield.warriors_changed()
 	main.paths.invalidate()
 	_first_line()
 	settle = SETTLE
 	moving_on = false
 	main.hud.show_message("%s (stretch %d): +%d gold%s%s. Dig in, they're coming!" % [stretch_name(), stretch + 1, pay,
 			", %dg back for what was left" % back if back > 0 else "", ", %d fewer got past" % forgiven if forgiven > 0 else ""])
-	main.sfx("horn")
+	main.effects.sfx("horn")
 
 
 func action_label() -> String:
@@ -213,10 +213,10 @@ func action() -> void:
 	called = true
 	var camp := phase >= lines().size()
 	var y: float = float(lines()[phase]["y"]) + 30.0 if not camp else float(_x()["y"]) + 24.0
-	for w in main.get_warriors():
+	for w in main.battlefield.get_warriors():
 		if w.is_active() and not w.is_emplacement() and not w.wall_guard and not w.summoned:
 			w.anchor = null
-			var p: Vector2 = main.paths.open_spot(main._clamp_post(Vector2(w.post.x, y + randf_range(-10.0, 10.0))))
+			var p: Vector2 = main.paths.open_spot(main.hiring._clamp_post(Vector2(w.post.x, y + randf_range(-10.0, 10.0))))
 			if w.guard_area.has_area():
 				w.guard_area.position += p - w.post   # its area falls back with it
 			w.order_to(p)

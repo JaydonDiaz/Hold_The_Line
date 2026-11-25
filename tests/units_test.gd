@@ -25,9 +25,9 @@ extends SceneTree
 ##   Godot --headless --path . --fixed-fps 60 -s tests/units_test.gd [-- <section>]
 ## Exits 1 if anything failed.
 
-const Warrior = preload("res://scripts/warrior.gd")
-const Sprites = preload("res://scripts/sprites.gd")
-const Data = preload("res://scripts/data.gd")
+const Warrior = preload("res://scripts/troops/warrior.gd")
+const Sprites = preload("res://scripts/art/sprites.gd")
+const Data = preload("res://scripts/data/data.gd")
 
 var main
 var fails := 0
@@ -61,9 +61,9 @@ func _fresh(mode := "normal") -> void:
 	await _frames(3)
 	main.hud.hide_mode_select()
 	main.records_path = ""
-	main.choose_mode(mode)
+	main.setup.choose_mode(mode)
 	await _frames(2)
-	main._lock_portrait(true)
+	main.missions._lock_portrait(true)
 	await _frames(2)
 	main.gold = 99999
 	main.spawn_queue.clear()
@@ -90,19 +90,19 @@ func _care() -> void:
 	var hp0: float = hurt.hp
 	await _frames(40)
 	check(h.rez_target == down and hurt.hp < hp0 + h.damage * 0.5, "Revive: it starts on the downed troop, not the hurt one (%s, %d -> %d)" % [h.rez_target, hp0, hurt.hp])
-	main.give_order("priority", "heal", [h])
+	main.orders.give_order("priority", "heal", [h])
 	h.cd_timer = 0.0
 	await _frames(40)
 	check(hurt.hp > hp0, "Heal: it mends the hurt one first")
 	# Stay with: a troop off on its own; the Healer keeps with it and looks after it first.
 	var lone = _hire("swordsman", Vector2(520, 420))
 	main.selected = h
-	main.give_order("priority", "stay", [h])
+	main.orders.give_order("priority", "stay", [h])
 	check(main.ward_pick == [h], "Stay with, on its own: it waits for a click on the troop")
 	main.ward_pick = []
 	main.selected = null
 	main.group = [h]
-	main.stay_with(main.order_units(), [lone])
+	main.orders.stay_with(main.orders.order_units(), [lone])
 	main.group = []
 	await _frames(60 * 9)
 	check(h.priority == "stay" and h.wards == [lone] and h.anchor == lone and h.position.distance_to(lone.position) < 90.0,
@@ -113,12 +113,12 @@ func _care() -> void:
 	await _frames(60 * 6)
 	check(h.position.distance_to(lone.position) < 90.0 and lone.hp > lone.max_hp * 0.5, "...follows it when it moves, and heals it")
 	main.selected = h
-	main.order_move(Vector2(320, 640))
+	main.groups.order_move(Vector2(320, 640))
 	main.selected = null
 	check(h.priority == "revive" and h.wards.is_empty() and h.anchor == null, "...sent somewhere else, it leaves its ward")
 	h.stay_with([lone])
 	lone.free()
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	await _frames(10)
 	check(h.priority == "revive" and h.wards.is_empty(), "...and with its ward gone it goes back to its post (%s %s)" % [h.priority, h.wards])
 	main.wave_active = false
@@ -126,9 +126,9 @@ func _care() -> void:
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
-	var w = main.get_warriors().filter(func(x): return x.kind == kind and x.post.distance_to(at) < 30.0)[-1]
+	var w = main.battlefield.get_warriors().filter(func(x): return x.kind == kind and x.post.distance_to(at) < 30.0)[-1]
 	w.position = w.post
 	if w.is_emplacement():
 		w.finish_build()
@@ -136,7 +136,7 @@ func _hire(kind: String, at: Vector2):
 
 
 func _foe(kind: String, at: Vector2, hp := -1.0):
-	main._spawn_enemy(kind, 1, at)
+	main.waves._spawn_enemy(kind, 1, at)
 	var e = main.enemy_layer.get_children()[-1]
 	e.position = at
 	if hp > 0.0:
@@ -166,14 +166,14 @@ func _upgrades() -> void:
 	var hp0: float = w.max_hp
 	main.selected = w
 	for i in 4:
-		main.upgrade_selected(0)
+		main.groups.upgrade_selected(0)
 	check(w.tiers[0] == 4 and w.path_state(0) == "max", "Upgrades: a path tops out at tier IV")
 	check(w.damage > dmg0, "...and each Damage tier hits harder (%.0f to %.0f)" % [dmg0, w.damage])
-	main.upgrade_selected(2)
-	main.upgrade_selected(2)
+	main.groups.upgrade_selected(2)
+	main.groups.upgrade_selected(2)
 	check(w.total_upgrades() == 6 and w.path_state(1) == "full", "...six upgrades in all, then the unit is full")
 	var gold: int = main.gold
-	main.upgrade_selected(1)
+	main.groups.upgrade_selected(1)
 	check(w.tiers[1] == 0 and main.gold == gold, "...a full unit can't take more, and pays nothing")
 	check(w.max_hp > hp0, "Health tiers give more health (%.0f to %.0f)" % [hp0, w.max_hp])
 	check(w.spent > Warrior.new().spent and w.sell_value() > 0, "Upgrades add to what selling it gives back")
@@ -183,11 +183,11 @@ func _upgrades() -> void:
 	var m = _hire("mage", Vector2(260, 560))
 	m.summon = {"hp": 40.0, "damage": 5.0, "armor": 0.0, "max": 3}
 	m.raise_skeleton(Vector2(260, 500))
-	var sk = main.get_warriors().filter(func(x): return x.kind == "skeleton")[0]
+	var sk = main.battlefield.get_warriors().filter(func(x): return x.kind == "skeleton")[0]
 	gold = main.gold
 	main.selected = sk
 	for p in 4:
-		main.upgrade_selected(p)
+		main.groups.upgrade_selected(p)
 	check(sk.path_state(0) == "none" and sk.total_upgrades() == 0 and main.gold == gold, "A raised Skeleton can't be upgraded (and nothing breaks trying)")
 	main.selected = null
 
@@ -206,9 +206,9 @@ func _statue() -> void:
 func _horn() -> void:
 	await _fresh()
 	var w = _hire("archer", Vector2(320, 560))
-	main.ability_item("horn")
+	main.castle_ctl.ability_item("horn")
 	check(main.powers.owned.has("horn"), "Rally Horn: bought")
-	main.ability_item("horn")
+	main.castle_ctl.ability_item("horn")
 	await _frames(10)
 	check(main.powers.rally("damage") > 0.0, "...sounded: every unit deals more damage (+%d%%)" % roundi(main.powers.rally("damage") * 100.0))
 	await _frames(60 * 9)
@@ -234,8 +234,8 @@ func _heal() -> void:
 	await _fresh()
 	var a = _hire("swordsman", Vector2(320, 560))
 	a.hp = a.max_hp * 0.2
-	main.ability_item("heal")
-	main.ability_item("heal")
+	main.castle_ctl.ability_item("heal")
+	main.castle_ctl.ability_item("heal")
 	main.powers.aim_click(Vector2(320, 560))
 	await _frames(10)
 	check(a.hp >= a.max_hp * 0.5, "Healing Light: heals the troops under it (%d%% now)" % roundi(a.hp / a.max_hp * 100.0))
@@ -310,36 +310,36 @@ func _wyvern() -> void:
 
 func _spawn() -> void:
 	await _fresh()
-	var w1: Array = main._build_wave(1)
-	var w5: Array = main._build_wave(5)
+	var w1: Array = main.waves._build_wave(1)
+	var w5: Array = main.waves._build_wave(5)
 	check(not w1.is_empty() and w1.all(func(k): return k == "goblin"), "Spawn: wave 1 is goblins (%d)" % w1.size())
 	check(w5.size() > w1.size() and w5.any(func(k): return k != "goblin"), "...later waves are bigger and mixed (%d on wave 5)" % w5.size())
-	main.start_wave()
+	main.waves.start_wave()
 	await _frames(60 * 4)
-	var es: Array = main.get_enemies()
+	var es: Array = main.battlefield.get_enemies()
 	check(not es.is_empty() and es.all(func(e): return e.position.x >= 0.0 and e.position.x <= main.FIELD_W and e.position.y < 300.0),
 			"...enemies come in from the top, across the field (%d so far)" % es.size())
 	main.wave = 19
 	main.wave_active = false
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
-	main.enemies_changed()
-	main.start_wave()
+	main.battlefield.enemies_changed()
+	main.waves.start_wave()
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
-	main.enemies_changed()
+	main.battlefield.enemies_changed()
 	await _frames(10)
-	check(main.get_enemies().any(func(e): return e.boss), "...and wave 20 ends with the Ogre King")
+	check(main.battlefield.get_enemies().any(func(e): return e.boss), "...and wave 20 ends with the Ogre King")
 
 
 func _engineer() -> void:
 	await _fresh()
 	main.placing_type = "cannon"
-	main.hire_at(Vector2(320, 560))
+	main.hiring.hire_at(Vector2(320, 560))
 	main.placing_type = ""
-	var t = main.get_warriors().filter(func(w): return w.kind == "cannon")[0]
+	var t = main.battlefield.get_warriors().filter(func(w): return w.kind == "cannon")[0]
 	check(t.under_construction(), "Engineer: a new Cannoneer starts as a building site")
 	var engineers: Array = main.fx_layer.get_children().filter(func(n): return n.get_script() != null and n.get_script().resource_path.ends_with("engineer.gd"))
 	check(engineers.size() >= 1, "...an Engineer sets out to build it")
@@ -355,13 +355,13 @@ func _engineer() -> void:
 func _route() -> void:
 	await _fresh()
 	main.placing_type = "barricade"
-	main._wall_click(Vector2(220, 450))
-	main._wall_click(Vector2(420, 450))
+	main.hiring._wall_click(Vector2(220, 450))
+	main.hiring._wall_click(Vector2(420, 450))
 	main.placing_type = ""
 	await _frames(3)
 	var w = _hire("swordsman", Vector2(320, 560))
 	main.selected = w
-	main.order_move(Vector2(320, 340))
+	main.groups.order_move(Vector2(320, 340))
 	main.selected = null
 	var crossed := false
 	for f in 60 * 8:
@@ -378,26 +378,26 @@ func _group() -> void:
 	var b = _hire("swordsman", Vector2(260, 560))
 	var c = _hire("archer", Vector2(320, 600))
 	_hire("tower", Vector2(500, 600))
-	main.select_all_troops()
+	main.groups.select_all_troops()
 	check(main.group.size() == 3 and main.selected == null, "Group: select all takes the three troops (not the tower)")
-	main.filter_group("swordsman", false)
+	main.groups.filter_group("swordsman", false)
 	check(main.group.size() == 2 and main.group.all(func(w): return w.kind == "swordsman"), "...keep only the Swordsmen")
 	main.wave_active = true
 	var gap: Vector2 = b.post - a.post
-	main.order_group(Vector2(300, 420))
+	main.groups.order_group(Vector2(300, 420))
 	await _frames(60 * 4)
 	check(a.post.y < 450.0 and b.post.y < 450.0 and (b.post - a.post).distance_to(gap) < 20.0, "...and they move together, keeping their formation")
-	main.filter_group("swordsman", true)
+	main.groups.filter_group("swordsman", true)
 	check(main.group.is_empty() or main.selected == null, "...dropping the Swordsmen leaves no group")
-	main._set_group([c])
+	main.groups._set_group([c])
 	check(main.selected == c and main.group.is_empty(), "A group of one is an ordinary selection")
 
 
 func _knight_with(paths: Array):
-	var w = _hire("swordsman", Vector2(80 + main.get_warriors().size() * 80, 600))
+	var w = _hire("swordsman", Vector2(80 + main.battlefield.get_warriors().size() * 80, 600))
 	main.selected = w
 	for p in paths:
-		main.upgrade_selected(p)
+		main.groups.upgrade_selected(p)
 	main.selected = null
 	return w
 
@@ -440,8 +440,8 @@ func _knight() -> void:
 	check(plate.back_weapon() == "" and Sprites.combo_source(plate.sprite_name(), "right") == 3, "Plate and Charge: the spear stays in hand, nothing on his back")
 	# It all still plays the same: a Charge Knight with the axe dashes and strikes.
 	var e_hp := 0.0
-	main._spawn_enemy("orc", 1, Vector2(320, 330))
-	var orc = main.get_enemies()[-1]
+	main.waves._spawn_enemy("orc", 1, Vector2(320, 330))
+	var orc = main.battlefield.get_enemies()[-1]
 	orc.speed = 0.0
 	e_hp = orc.hp
 	axe.position = Vector2(320, 560)
@@ -495,10 +495,10 @@ func _martial() -> void:
 	var ma = _hire("martial", Vector2(320, 560))
 	main.selected = ma
 	for i in 3:
-		main.upgrade_selected(3)
+		main.groups.upgrade_selected(3)
 	check(ma.sprite_name() == "martial_p3", "A Discipline III Martial Artist wears its own outfit (%s)" % ma.sprite_name())
 	for i in 3:
-		main.upgrade_selected(1)
+		main.groups.upgrade_selected(1)
 	main.selected = null
 	check(ma.sprite_name() == "martial_p1p3", "...Brawling III too: the two outfits mixed (%s)" % ma.sprite_name())
 	var own := true
@@ -514,7 +514,7 @@ func _martial() -> void:
 	var two = _hire("martial", Vector2(200, 560))
 	main.selected = two
 	for p in [1, 1, 1, 2, 2, 2]:
-		main.upgrade_selected(p)
+		main.groups.upgrade_selected(p)
 	main.selected = null
 	check(two.sprite_name() == "martial_dbz_p1p2", "...with its hand-drawn mix of two (%s)" % two.sprite_name())
 	Sprites.skin.erase("martial")
@@ -570,27 +570,27 @@ func _motion() -> void:
 	check(main.hovered == w and w.perk > 0.0, "Hovered between waves, it perks up")
 	Input.parse_input_event(_press(true))
 	await _frames(1)
-	main._start_drag(w)   # (as a left click on it does: the press itself lands at the real mouse)
+	main.groups._start_drag(w)   # (as a left click on it does: the press itself lands at the real mouse)
 	await _frames(4)
 	check(main.dragging == w and not w.held and w.lift == 0.0, "...a click (no drag) picks it out without lifting it")
 	for i in 10:
 		main.mouse_stand_in += Vector2(5, 0)
 		await _frames(1)
-	check(w.held and w.lift > 0.5 and w.position.x > main.drag_origin.x + 30.0, "...dragged, it's lifted and carried (%.0fpx)" % (w.position.x - main.drag_origin.x))
+	check(w.held and w.lift > 0.5 and w.position.x > main.groups.drag_origin.x + 30.0, "...dragged, it's lifted and carried (%.0fpx)" % (w.position.x - main.groups.drag_origin.x))
 	Input.parse_input_event(_press(false))
 	await _frames(20)
-	check(main.dragging == null and not w.held and w.lift == 0.0 and w.post.x > main.drag_origin.x + 30.0, "...let go, it's set down at its new post")
+	check(main.dragging == null and not w.held and w.lift == 0.0 and w.post.x > main.groups.drag_origin.x + 30.0, "...let go, it's set down at its new post")
 	main.mouse_stand_in = Vector2.INF
 	await _frames(40)
 	# Dropped where it can't stand: put back at its old post, it hops back from where it was let go.
 	main.dragging = w
-	main.drag_origin = w.post
+	main.groups.drag_origin = w.post
 	w.held = true
 	w.post = Vector2(w.post.x, main.CASTLE_Y + 40.0)
 	w.position = w.post
 	var let_go: Vector2 = w.position
-	main._end_drag()
-	check(not w.held and w.position == main.drag_origin and w.hop_t > 0.0 and w.position + w.hop_from == let_go,
+	main.groups._end_drag()
+	check(not w.held and w.position == main.groups.drag_origin and w.hop_t > 0.0 and w.position + w.hop_from == let_go,
 			"Dropped where it can't stand: it goes back to its old post, hopping back from where it was let go")
 	await _frames(30)
 	check(w.hop_t == 0.0 and w.land_t > 0.0, "...and lands there")
@@ -607,8 +607,8 @@ func _motion() -> void:
 	check(w.is_active() and w.land_t > 0.0 and w.down_for == 0.0, "...back on its feet, it bounces up")
 	# A wave held: everyone cheers, hopping on the spot (each starting at its own moment).
 	var b = _hire("archer", Vector2(200, 600))
-	main._end_wave()
-	check(w.cheer_t > 0.0 and b.cheer_t > 0.0 and main.get_warriors().all(func(x): return x.is_emplacement() or x.cheer_t > 0.0),
+	main.waves._end_wave()
+	check(w.cheer_t > 0.0 and b.cheer_t > 0.0 and main.battlefield.get_warriors().all(func(x): return x.is_emplacement() or x.cheer_t > 0.0),
 			"Wave held: the troops cheer")
 	var high := 0.0
 	for i in 60:

@@ -15,7 +15,7 @@ extends "res://scripts/mission/rules.gd"
 ## enter, the rest for any other still standing, so the attack spreads but has a weight.
 
 const Objective = preload("res://scripts/mission/objective.gd")
-const Maps = preload("res://scripts/maps.gd")
+const Maps = preload("res://scripts/campaign/maps.gd")
 
 var objs: Array = []
 var lost := 0
@@ -34,7 +34,7 @@ func start() -> void:
 	for d in mission.get("objectives", []):
 		var o := Objective.new()
 		o.setup(main, d)
-		main.add_objective(o)
+		main.waves.add_objective(o)
 		o.destroyed.connect(on_objective_lost)
 		objs.append(o)
 	main.paths.set_objectives(objs)
@@ -97,7 +97,7 @@ func wave_cleared(n: int) -> bool:
 				o.hp = minf(o.max_hp, o.hp + o.max_hp * float(mission.get("mend", 0.15)))
 				mended = true
 		if mended:
-			main.spawn_text(Vector2(main.FIELD_W / 2.0, 200), "The crews patch them up", Color(0.6, 1, 0.6))
+			main.effects.spawn_text(Vector2(main.FIELD_W / 2.0, 200), "The crews patch them up", Color(0.6, 1, 0.6))
 	return super.wave_cleared(n)
 
 
@@ -112,7 +112,7 @@ func on_objective_lost(o) -> void:
 	if lost > can_lose() and not over and not main.game_over:
 		over = true
 		main.hud.show_message("The %s has fallen. The line is broken!" % o.label)
-		main.call_deferred("_finish", false)
+		main.modes.call_deferred("_finish", false)
 	else:
 		var left := can_lose() - lost
 		main.hud.show_message("The %s has fallen! %s" % [o.label, "Lose one more and it's over." if left == 0 else "%d more can be lost." % left])

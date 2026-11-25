@@ -21,8 +21,8 @@ extends SceneTree
 ## F  Formations: in a Shield Wall, Pikemen stand in the second rank, in reach past the Knights
 ## B  The brief's mixed builds: each fights a mixed wave without a hitch
 
-const Data = preload("res://scripts/data.gd")
-const CD = preload("res://scripts/campaign_data.gd")
+const Data = preload("res://scripts/data/data.gd")
+const CD = preload("res://scripts/data/campaign_data.gd")
 var main
 var fails := 0
 var checks := 0
@@ -81,7 +81,7 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	main.deploying = false
 	main.wave_active = true
@@ -90,10 +90,10 @@ func _fresh() -> void:
 
 func _hire(kind: String, at: Vector2, tiers := [0, 0, 0, 0]):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	var w = all[all.size() - 1]
 	w.build_left = 0.0
 	w.position = w.post
@@ -104,7 +104,7 @@ func _hire(kind: String, at: Vector2, tiers := [0, 0, 0, 0]):
 
 
 func _foe(kind: String, at: Vector2, hp := -1.0):
-	main._spawn_enemy(kind, 1, at)
+	main.waves._spawn_enemy(kind, 1, at)
 	var e = main.enemy_layer.get_child(main.enemy_layer.get_child_count() - 1)
 	if hp > 0.0:
 		e.max_hp = hp
@@ -472,7 +472,7 @@ func _formation() -> void:
 	var army := []
 	for i in 6:
 		army.append(await _hire(["swordsman", "pikeman", "swordsman", "pikeman", "archer", "healer"][i], Vector2(80 + i * 60, 450)))
-	var f = main.make_formation(army, "shield_wall")
+	var f = main.formation_ctl.make_formation(army, "shield_wall")
 	await _frames(60 * 5)
 	var knights: Array = army.filter(func(w): return w.kind == "swordsman")
 	var pikes: Array = army.filter(func(w): return w.kind == "pikeman")
@@ -499,5 +499,5 @@ func _builds() -> void:
 		var dealt := 0.0
 		for f in 60 * 12:
 			await process_frame
-		var left: int = main.get_enemies().size()
+		var left: int = main.battlefield.get_enemies().size()
 		check(w.total_upgrades() == 6 and is_instance_valid(w) and left < 8, "B  %s (%s %s): fights a mixed wave (%d of 8 left after 12s)" % [name, b[0], str(b[1]), left])

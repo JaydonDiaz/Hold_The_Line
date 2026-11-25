@@ -30,11 +30,11 @@ func on_reached_bottom(e) -> bool:
 	var n := worth(e.kind)
 	through += n
 	spoil("Enemies got through")
-	main.spawn_text(Vector2(e.position.x, main.CASTLE_Y - 20), "Broke through!" if n == 1 else "Broke through! (x%d)" % n, Color(1, 0.4, 0.3))
-	main.sfx("castle")
+	main.effects.spawn_text(Vector2(e.position.x, main.CASTLE_Y - 20), "Broke through!" if n == 1 else "Broke through! (x%d)" % n, Color(1, 0.4, 0.3))
+	main.effects.sfx("castle")
 	if through > limit() and not lost and not main.game_over:
 		lost = true
-		main.call_deferred("_finish", false)
+		main.modes.call_deferred("_finish", false)
 	elif through * 2 > limit() and through - n <= limit() / 2:
 		main.hud.show_message("Half of what may pass has broken through. Hold the line!")
 	return true

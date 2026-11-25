@@ -52,23 +52,23 @@ func _fresh() -> void:
 	root.add_child(main)
 	await _frames(3)
 	main.hud.picking = true
-	main.choose_mode("normal")
+	main.setup.choose_mode("normal")
 	main.gold = 99999
 	await process_frame
 
 
 func _hire(kind: String, at: Vector2):
 	main.placing_type = kind
-	main.hire_at(at)
+	main.hiring.hire_at(at)
 	main.placing_type = ""
 	main.selected = null
-	var all: Array = main.get_warriors().filter(func(w): return w.kind == kind)
+	var all: Array = main.battlefield.get_warriors().filter(func(w): return w.kind == kind)
 	return all[all.size() - 1]
 
 
 func _spawn(kind: String, at: Vector2):
-	main._spawn_enemy(kind, 1, at)
-	var all: Array = main.get_enemies().filter(func(e): return e.kind == kind)
+	main.waves._spawn_enemy(kind, 1, at)
+	var all: Array = main.battlefield.get_enemies().filter(func(e): return e.kind == kind)
 	return all[all.size() - 1]
 
 
@@ -112,7 +112,7 @@ func _archers() -> void:
 	# Nobody about: it stops short of the castle and shoots the wall.
 	sw.queue_free()
 	await process_frame
-	main.warriors_changed()
+	main.battlefield.warriors_changed()
 	var castle: float = main.castle_hp
 	await _frames(900)
 	check(not sk.sieging and sk.position.y < main.CASTLE_Y - r * 0.7, "A  with no troop in range it stops short of the castle (y %.0f, wall at %d)" % [sk.position.y, main.CASTLE_Y])
@@ -165,9 +165,9 @@ func _slimes() -> void:
 	by.set_process(false)
 	var witch = _hire("frost", Vector2(320, 560))
 	main.selected = witch
-	main.upgrade_selected(1)   # Frost Nova
+	main.groups.upgrade_selected(1)   # Frost Nova
 	main.selected = null
-	var bolt = load("res://scripts/projectile.gd").new()
+	var bolt = load("res://scripts/troops/projectile.gd").new()
 	bolt.main = main
 	bolt.target = sl
 	bolt.position = sl.position
@@ -194,7 +194,7 @@ func _slimes() -> void:
 	var ki = _hire("martial", Vector2(600, 640))
 	_hold(ki)
 	main.selected = ki
-	main.upgrade_selected(0)   # Spirit Bolts
+	main.groups.upgrade_selected(0)   # Spirit Bolts
 	main.selected = null
 	var tower = _hire("tower", Vector2(320, 700))
 	var cannon = _hire("cannon", Vector2(160, 700))
@@ -258,16 +258,16 @@ func _waves() -> void:
 	var early := {}
 	var later := {}
 	for i in 40:
-		for k in main._build_wave(2):
+		for k in main.waves._build_wave(2):
 			early[k] = true
-		for k in main._build_wave(7):
+		for k in main.waves._build_wave(7):
 			later[k] = true
 	check(early.has("skeleton_archer") and not early.has("slime"), "W  Skeleton Archers come from wave 2; no Slimes yet")
 	var first_slime := 99
 	for n in range(1, 12):
 		var seen := false
 		for i in 40:
-			if main._build_wave(n).has("slime"):
+			if main.waves._build_wave(n).has("slime"):
 				seen = true
 				break
 		if seen:
@@ -275,18 +275,18 @@ func _waves() -> void:
 			break
 	check(first_slime == 6 and later.has("slime"), "W  Slimes first come on wave %d" % first_slime)
 	main.wave_active = true
-	main._spawn_enemy("slime", 6, Vector2(320, 100))
+	main.waves._spawn_enemy("slime", 6, Vector2(320, 100))
 	await process_frame
 	check(main.hud.foe_card != null and _foe_title() == "New foe: Slime", "W  the first Slime puts up a New foe card")
-	main._spawn_enemy("slime", 6, Vector2(300, 100))
-	main._spawn_enemy("goblin", 6, Vector2(340, 100))
+	main.waves._spawn_enemy("slime", 6, Vector2(300, 100))
+	main.waves._spawn_enemy("goblin", 6, Vector2(340, 100))
 	check(main.hud.foe_queue.is_empty(), "W  ...once: another Slime (or a goblin) doesn't")
-	main._spawn_enemy("wolf", 6, Vector2(360, 100))
+	main.waves._spawn_enemy("wolf", 6, Vector2(360, 100))
 	check(main.hud.foe_queue.size() == 1 and main.hud.foe_queue[0][1] == "Wolf", "W  a new kind waits its turn behind the card up")
 	await _frames(60 * 6)
 	check(main.hud.foe_card != null and _foe_title() == "New foe: Wolf", "W  ...and comes up when the first card goes")
 	# The fallen topple over and fade, on the ground under the troops.
-	var victim = main.get_enemies().filter(func(e): return e.kind != "slime")[0]   # (steel can't touch a Slime)
+	var victim = main.battlefield.get_enemies().filter(func(e): return e.kind != "slime")[0]   # (steel can't touch a Slime)
 	victim.take_damage(99999.0)
 	await process_frame
 	var falls: Array = main.corpse_layer.get_children().filter(func(f): return f.mode == "fall")
@@ -295,11 +295,11 @@ func _waves() -> void:
 	check(main.corpse_layer.get_child_count() == 0, "E  ...that fades away")
 	# An upgrade sends up motes of light in its path's colour.
 	main.gold = 9999
-	main._on_hire_pressed("archer")
-	main.hire_at(Vector2(320, 450))
+	main.hiring._on_hire_pressed("archer")
+	main.hiring.hire_at(Vector2(320, 450))
 	main.placing_type = ""
-	main.selected = main.get_warriors()[-1]
-	main.upgrade_selected(1)
+	main.selected = main.battlefield.get_warriors()[-1]
+	main.groups.upgrade_selected(1)
 	check(main.fx_layer.get_children().any(func(f): return "mode" in f and f.mode == "sparkle"), "E  an upgrade sparkles")
 	main.selected = null
 	# Buttons click when pressed.
@@ -325,8 +325,8 @@ func _on_sable() -> void:
 	main.hud.picking = true
 	main.records_path = ""
 	main.classic_map = "sable_crossing"
-	main.choose_mode("normal")
-	main._lock_portrait(true)
+	main.setup.choose_mode("normal")
+	main.missions._lock_portrait(true)
 	main.gold = 99999
 	await _frames(2)
 
@@ -335,10 +335,10 @@ func _marshal() -> void:
 	await _on_sable()
 	var paths = main.paths
 	check(main.map_id == "sable_crossing" and paths.in_ford(Vector2(325, 383)) and paths.blocked(Vector2(240, 383), 10.0), "M  Sable Crossing: the river, its bridges and the ford")
-	main.start_wave()
+	main.waves.start_wave()
 	await _frames(2)
 	main.spawn_queue.clear()
-	for e in main.get_enemies():
+	for e in main.battlefield.get_enemies():
 		e.free()
 	var doomed = _spawn("ash_marshal", Vector2(200, 200))
 	doomed.take_damage(1e9)
@@ -406,10 +406,10 @@ func _marshal() -> void:
 	# Over each bridge, with a crowd round him.
 	for bx in [150.0, 480.0]:
 		await _on_sable()
-		main.start_wave()
+		main.waves.start_wave()
 		await _frames(2)
 		main.spawn_queue.clear()
-		for e in main.get_enemies():
+		for e in main.battlefield.get_enemies():
 			e.free()
 		var mm = _spawn("ash_marshal", Vector2(bx, 120))
 		mm.position = Vector2(bx, 120)
